@@ -28,6 +28,9 @@ const Header = () => {
           <a href="/playlist" className="text-sm font-medium hover:text-primary transition-colors">
             Playlist
           </a>
+          <a href="/quiz" className="text-sm font-medium hover:text-primary transition-colors">
+            Quiz
+          </a>
           <a href="/social" className="text-sm font-medium hover:text-primary transition-colors">
             Social
           </a>
@@ -78,23 +81,20 @@ const Header = () => {
               />
             </div>
             <nav className="flex flex-col space-y-2">
-              <a href="#" className="text-sm font-medium hover:text-primary transition-colors py-2">
+              <a href="/" className="text-sm font-medium hover:text-primary transition-colors py-2">
                 Home
               </a>
-              <a href="#discover" className="text-sm font-medium hover:text-primary transition-colors py-2">
+              <a href="/discover" className="text-sm font-medium hover:text-primary transition-colors py-2">
                 Discover
               </a>
-              <a href="#playlist" className="text-sm font-medium hover:text-primary transition-colors py-2">
+              <a href="/playlist" className="text-sm font-medium hover:text-primary transition-colors py-2">
                 Playlist
               </a>
-              <a href="#album" className="text-sm font-medium hover:text-primary transition-colors py-2">
-                Album
-              </a>
-              <a href="#quiz" className="text-sm font-medium hover:text-primary transition-colors py-2">
+              <a href="/quiz" className="text-sm font-medium hover:text-primary transition-colors py-2">
                 Quiz
               </a>
-              <a href="#premium" className="text-sm font-medium hover:text-primary transition-colors py-2">
-                Premium
+              <a href="/social" className="text-sm font-medium hover:text-primary transition-colors py-2">
+                Social
               </a>
             </nav>
             <Button variant="ghost" size="sm" className="w-full justify-start">

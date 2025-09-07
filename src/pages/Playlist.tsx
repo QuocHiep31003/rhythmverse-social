@@ -1,4 +1,6 @@
 import { useState } from "react";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -16,7 +18,9 @@ import {
   Share2,
   MoreVertical,
   Clock,
-  Calendar
+  Calendar,
+  Search,
+  Filter
 } from "lucide-react";
 
 const Playlist = () => {
@@ -206,10 +210,10 @@ const Playlist = () => {
               )}
 
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" className="h-6 w-6">
+                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Share2 className="w-3 h-3" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-6 w-6">
+                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Heart className="w-3 h-3" />
                 </Button>
               </div>
@@ -221,120 +225,139 @@ const Playlist = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-dark pt-20 pb-24">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
-              Your Playlists
-            </h1>
-            <p className="text-muted-foreground">
-              Create, organize, and share your music collections
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-dark">
+      <Header />
+      
+      <div className="pt-20 pb-24">
+        <div className="container mx-auto px-4 py-8">
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
+            <div>
+              <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
+                Your Playlists
+              </h1>
+              <p className="text-muted-foreground">
+                Create, organize, and share your music collections
+              </p>
+            </div>
 
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="hero" className="gap-2 self-start md:self-auto">
-                <Plus className="w-4 h-4" />
-                Create Playlist
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Create New Playlist</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Playlist Name</label>
-                  <Input
-                    placeholder="My Awesome Playlist"
-                    value={newPlaylistName}
-                    onChange={(e) => setNewPlaylistName(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Description (Optional)</label>
-                  <Textarea
-                    placeholder="Describe your playlist..."
-                    value={newPlaylistDescription}
-                    onChange={(e) => setNewPlaylistDescription(e.target.value)}
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button variant="hero" onClick={handleCreatePlaylist}>
-                    Create
-                  </Button>
-                </div>
+            <div className="flex gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search playlists..."
+                  className="pl-10 w-64 bg-gradient-glass backdrop-blur-sm border-white/20"
+                />
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Navigation Tabs */}
-        <div className="flex border-b border-border/40 mb-6">
-          <Button
-            variant={selectedTab === "created" ? "default" : "ghost"}
-            className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
-            data-active={selectedTab === "created"}
-            onClick={() => setSelectedTab("created")}
-          >
-            Created ({createdPlaylists.length})
-          </Button>
-          <Button
-            variant={selectedTab === "liked" ? "default" : "ghost"}
-            className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
-            data-active={selectedTab === "liked"}
-            onClick={() => setSelectedTab("liked")}
-          >
-            Liked ({likedPlaylists.length})
-          </Button>
-          <Button
-            variant={selectedTab === "collaborative" ? "default" : "ghost"}
-            className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
-            data-active={selectedTab === "collaborative"}
-            onClick={() => setSelectedTab("collaborative")}
-          >
-            Collaborative ({collaborativePlaylists.length})
-          </Button>
-        </div>
-
-        {/* Playlist Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {selectedTab === "created" && createdPlaylists.map(playlist => renderPlaylistCard(playlist, "created"))}
-          {selectedTab === "liked" && likedPlaylists.map(playlist => renderPlaylistCard(playlist, "liked"))}
-          {selectedTab === "collaborative" && collaborativePlaylists.map(playlist => renderPlaylistCard(playlist, "collaborative"))}
-        </div>
-
-        {/* Empty State */}
-        {((selectedTab === "created" && createdPlaylists.length === 0) ||
-          (selectedTab === "liked" && likedPlaylists.length === 0) ||
-          (selectedTab === "collaborative" && collaborativePlaylists.length === 0)) && (
-          <div className="text-center py-12">
-            <Music className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">
-              {selectedTab === "created" && "No playlists yet"}
-              {selectedTab === "liked" && "No liked playlists"}
-              {selectedTab === "collaborative" && "No collaborative playlists"}
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              {selectedTab === "created" && "Create your first playlist to get started"}
-              {selectedTab === "liked" && "Explore and like playlists from other users"}
-              {selectedTab === "collaborative" && "Join collaborative playlists with friends"}
-            </p>
-            {selectedTab === "created" && (
-              <Button variant="hero" onClick={() => setIsCreateDialogOpen(true)}>
-                Create Your First Playlist
+              <Button variant="outline" className="gap-2">
+                <Filter className="w-4 h-4" />
+                Filter
               </Button>
-            )}
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="hero" className="gap-2">
+                    <Plus className="w-4 h-4" />
+                    Create Playlist
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Create New Playlist</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Playlist Name</label>
+                      <Input
+                        placeholder="My Awesome Playlist"
+                        value={newPlaylistName}
+                        onChange={(e) => setNewPlaylistName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Description (Optional)</label>
+                      <Textarea
+                        placeholder="Describe your playlist..."
+                        value={newPlaylistDescription}
+                        onChange={(e) => setNewPlaylistDescription(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="hero" onClick={handleCreatePlaylist}>
+                        Create
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
-        )}
+
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-border/40 mb-6">
+            <Button
+              variant={selectedTab === "created" ? "default" : "ghost"}
+              className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
+              data-active={selectedTab === "created"}
+              onClick={() => setSelectedTab("created")}
+            >
+              Created ({createdPlaylists.length})
+            </Button>
+            <Button
+              variant={selectedTab === "liked" ? "default" : "ghost"}
+              className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
+              data-active={selectedTab === "liked"}
+              onClick={() => setSelectedTab("liked")}
+            >
+              Liked ({likedPlaylists.length})
+            </Button>
+            <Button
+              variant={selectedTab === "collaborative" ? "default" : "ghost"}
+              className="rounded-b-none border-b-2 border-transparent data-[active=true]:border-primary"
+              data-active={selectedTab === "collaborative"}
+              onClick={() => setSelectedTab("collaborative")}
+            >
+              Collaborative ({collaborativePlaylists.length})
+            </Button>
+          </div>
+
+          {/* Playlist Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {selectedTab === "created" && createdPlaylists.map(playlist => renderPlaylistCard(playlist, "created"))}
+            {selectedTab === "liked" && likedPlaylists.map(playlist => renderPlaylistCard(playlist, "liked"))}
+            {selectedTab === "collaborative" && collaborativePlaylists.map(playlist => renderPlaylistCard(playlist, "collaborative"))}
+          </div>
+
+          {/* Empty State */}
+          {((selectedTab === "created" && createdPlaylists.length === 0) ||
+            (selectedTab === "liked" && likedPlaylists.length === 0) ||
+            (selectedTab === "collaborative" && collaborativePlaylists.length === 0)) && (
+            <div className="text-center py-12">
+              <Music className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                {selectedTab === "created" && "No playlists yet"}
+                {selectedTab === "liked" && "No liked playlists"}
+                {selectedTab === "collaborative" && "No collaborative playlists"}
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {selectedTab === "created" && "Create your first playlist to get started"}
+                {selectedTab === "liked" && "Explore and like playlists from other users"}
+                {selectedTab === "collaborative" && "Join collaborative playlists with friends"}
+              </p>
+              {selectedTab === "created" && (
+                <Button variant="hero" onClick={() => setIsCreateDialogOpen(true)}>
+                  Create Your First Playlist
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+      
+      <Footer />
     </div>
   );
 };
