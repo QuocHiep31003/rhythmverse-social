@@ -19,23 +19,20 @@ const Header = () => {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center space-x-6">
-          <a href="#" className="text-sm font-medium hover:text-primary transition-colors">
+          <a href="/" className="text-sm font-medium hover:text-primary transition-colors">
             Home
           </a>
-          <a href="#discover" className="text-sm font-medium hover:text-primary transition-colors">
+          <a href="/discover" className="text-sm font-medium hover:text-primary transition-colors">
             Discover
           </a>
-          <a href="#playlist" className="text-sm font-medium hover:text-primary transition-colors">
+          <a href="/playlist" className="text-sm font-medium hover:text-primary transition-colors">
             Playlist
           </a>
-          <a href="#album" className="text-sm font-medium hover:text-primary transition-colors">
-            Album
+          <a href="/social" className="text-sm font-medium hover:text-primary transition-colors">
+            Social
           </a>
-          <a href="#quiz" className="text-sm font-medium hover:text-primary transition-colors">
-            Quiz
-          </a>
-          <a href="#premium" className="text-sm font-medium hover:text-primary transition-colors">
-            Premium
+          <a href="/profile" className="text-sm font-medium hover:text-primary transition-colors">
+            Profile
           </a>
         </nav>
 
