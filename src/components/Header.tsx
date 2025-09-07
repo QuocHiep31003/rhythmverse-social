@@ -31,9 +31,6 @@ const Header = () => {
           <a href="/social" className="text-sm font-medium hover:text-primary transition-colors">
             Social
           </a>
-          <a href="/profile" className="text-sm font-medium hover:text-primary transition-colors">
-            Profile
-          </a>
         </nav>
 
         {/* Search Bar */}
