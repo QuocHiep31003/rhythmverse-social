@@ -38,7 +38,7 @@ const Header = ({ isAuthenticated = true }: { isAuthenticated?: boolean } = {}) 
             Quiz
           </a>
           <a href="/social" className="text-sm font-medium hover:text-primary transition-colors">
-            Social
+            Friends
           </a>
         </nav>
 
