@@ -93,7 +93,7 @@ const SearchResults = () => {
       <Header />
       
       {/* Search Bar */}
-      <div className="pt-24 pb-6">
+      {/* <div className="pt-24 pb-6">
         <div className="container mx-auto px-6">
           <div className="max-w-2xl mx-auto">
             <div className="relative">
@@ -107,7 +107,7 @@ const SearchResults = () => {
             </div>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Filter Tabs */}
       <div className="pb-6">
