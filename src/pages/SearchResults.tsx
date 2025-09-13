@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import PromotionCarousel from "@/components/PromotionCarousel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,22 +93,10 @@ const SearchResults = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
       <Header />
       
-      {/* Search Bar */}
-      {/* <div className="pt-24 pb-6">
-        <div className="container mx-auto px-6">
-          <div className="max-w-2xl mx-auto">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for songs, artists, albums..."
-                className="pl-12 h-14 text-base bg-slate-800/50 border-slate-700 rounded-full focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
-              />
-            </div>
-          </div>
-        </div>
-      </div> */}
+      {/* Promotion Carousel */}
+      <div className="pt-20">
+        <PromotionCarousel />
+      </div>
 
       {/* Filter Tabs */}
       <div className="pb-6">
