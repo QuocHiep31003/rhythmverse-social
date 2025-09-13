@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import PromotionCarousel from "@/components/PromotionCarousel";
 import FeaturedMusic from "@/components/FeaturedMusic";
 import GenreExplorer from "@/components/GenreExplorer";
 import TrendingSection from "@/components/TrendingSection";
@@ -38,6 +39,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-dark">
       <Header />
+      <PromotionCarousel />
       <main className="pt-16">
         {/* Quick Features */}
         <section className="py-8">
