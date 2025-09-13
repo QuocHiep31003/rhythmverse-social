@@ -306,7 +306,7 @@ const Quiz = () => {
 
           {/* Leaderboard */}
           <div>
-            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            {/* <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-yellow-500" />
@@ -337,7 +337,7 @@ const Quiz = () => {
                   </div>
                 ))}
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Quick Stats */}
             <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 mt-6">
