@@ -48,16 +48,14 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        /* Cosmic Theme Colors */
+        /* Music Platform Colors */
         neon: {
           pink: "hsl(var(--neon-pink))",
           blue: "hsl(var(--neon-blue))",
           green: "hsl(var(--neon-green))",
-          purple: "hsl(var(--neon-purple))",
         },
-        cosmic: {
-          dark: "hsl(var(--cosmic-dark))",
-          deep: "hsl(var(--cosmic-deep))",
+        music: {
+          dark: "hsl(var(--music-dark))",
         },
         glass: {
           bg: "hsl(var(--glass-bg))",
@@ -65,16 +63,13 @@ export default {
       },
       backgroundImage: {
         'gradient-primary': 'var(--gradient-primary)',
-        'gradient-cosmic': 'var(--gradient-cosmic)',
-        'gradient-neon': 'var(--gradient-neon)',
+        'gradient-secondary': 'var(--gradient-secondary)',
         'gradient-dark': 'var(--gradient-dark)',
         'gradient-glass': 'var(--gradient-glass)',
-        'gradient-glow': 'var(--gradient-glow)',
       },
       boxShadow: {
         'glow': 'var(--shadow-glow)',
         'neon': 'var(--shadow-neon)',
-        'cosmic': 'var(--shadow-cosmic)',
         'card': 'var(--shadow-card)',
       },
       transitionTimingFunction: {

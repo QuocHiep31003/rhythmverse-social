@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Music, User, Menu } from "lucide-react";
 import { useState } from "react";
-import CosmicSearchBar from "@/components/CosmicSearchBar";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -37,12 +36,15 @@ const Header = () => {
           </a>
         </nav>
 
-        {/* Cosmic Search Bar */}
-        <div className="hidden md:flex items-center flex-1 max-w-md mx-8">
-          <CosmicSearchBar 
-            placeholder="Tìm kiếm bài hát, nghệ sĩ..."
-            className="w-full"
-          />
+        {/* Search Bar */}
+        <div className="hidden md:flex items-center space-x-4 flex-1 max-w-sm mx-8">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search songs, artists, genres..."
+              className="pl-10 bg-muted/50 border-border/40"
+            />
+          </div>
         </div>
 
         {/* Auth Buttons */}

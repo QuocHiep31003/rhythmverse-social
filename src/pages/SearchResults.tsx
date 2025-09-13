@@ -1,13 +1,14 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import CosmicSearchBar from "@/components/CosmicSearchBar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { 
   Play, 
+  Search, 
   Clock, 
   Heart, 
   MoreHorizontal, 
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 
 const SearchResults = () => {
-  const [searchQuery, setSearchQuery] = useState("cosmic vibes");
+  const [searchQuery, setSearchQuery] = useState("love songs");
   const [activeFilter, setActiveFilter] = useState("all");
 
   const searchResults = {
@@ -64,56 +65,57 @@ const SearchResults = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-cosmic">
+    <div className="min-h-screen bg-gradient-dark">
       <Header />
       <div className="pt-20 pb-8 container mx-auto px-4">
-        {/* Cosmic Search Header */}
+        {/* Search Header */}
         <div className="mb-8">
-          <div className="mb-6">
-            <CosmicSearchBar 
-              placeholder="Tìm kiếm bài hát, nghệ sĩ, album..."
-              onSearch={(query) => setSearchQuery(query)}
-              className="max-w-3xl"
+          <div className="relative mb-6">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search for songs, artists, albums..."
+              className="pl-12 h-12 text-lg bg-gradient-glass backdrop-blur-sm border-white/10"
             />
           </div>
           
           <div className="flex items-center gap-2 mb-4">
-            <h1 className="text-2xl font-bold">Kết quả tìm kiếm cho</h1>
-            <span className="text-2xl font-bold bg-gradient-neon bg-clip-text text-transparent">"{searchQuery}"</span>
+            <h1 className="text-2xl font-bold">Search results for</h1>
+            <span className="text-2xl font-bold text-primary">"{searchQuery}"</span>
           </div>
           
-          <p className="text-muted-foreground">Tìm thấy {searchResults.songs.length + searchResults.artists.length + searchResults.albums.length + searchResults.playlists.length} kết quả</p>
+          <p className="text-muted-foreground">Found {searchResults.songs.length + searchResults.artists.length + searchResults.albums.length + searchResults.playlists.length} results</p>
         </div>
 
         <div className="flex gap-8">
           {/* Main Results */}
           <div className="flex-1">
             <Tabs value={activeFilter} onValueChange={setActiveFilter}>
-              <TabsList className="grid w-full grid-cols-5 mb-6 bg-gradient-glass backdrop-blur-sm border-border/30">
-                <TabsTrigger value="all" className="data-[state=active]:bg-primary data-[state=active]:text-white">Tất cả</TabsTrigger>
-                <TabsTrigger value="songs" className="data-[state=active]:bg-primary data-[state=active]:text-white">Bài hát</TabsTrigger>
-                <TabsTrigger value="artists" className="data-[state=active]:bg-primary data-[state=active]:text-white">Nghệ sĩ</TabsTrigger>
-                <TabsTrigger value="albums" className="data-[state=active]:bg-primary data-[state=active]:text-white">Album</TabsTrigger>
-                <TabsTrigger value="playlists" className="data-[state=active]:bg-primary data-[state=active]:text-white">Playlist</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-5 mb-6">
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="songs">Songs</TabsTrigger>
+                <TabsTrigger value="artists">Artists</TabsTrigger>
+                <TabsTrigger value="albums">Albums</TabsTrigger>
+                <TabsTrigger value="playlists">Playlists</TabsTrigger>
               </TabsList>
 
               <TabsContent value="all" className="space-y-8">
                 {/* Songs */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-border/30 hover:shadow-glow transition-all">
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <Music className="w-5 h-5 text-primary" />
-                      <span className="bg-gradient-neon bg-clip-text text-transparent">Bài hát</span>
+                      <Music className="w-5 h-5" />
+                      Songs
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
                       {searchResults.songs.slice(0, 5).map((song, index) => (
-                        <div key={song.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-muted/20 group cursor-pointer transition-all">
+                        <div key={song.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-100/5 group cursor-pointer">
                           <span className="w-6 text-sm text-muted-foreground text-center">{index + 1}</span>
-                          <div className="w-12 h-12 bg-gradient-cosmic rounded-lg flex items-center justify-center relative">
+                          <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
                             <Play className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <div className="absolute inset-0 bg-gradient-glow rounded-lg opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-foreground truncate">{song.title}</p>
@@ -123,7 +125,7 @@ const SearchResults = () => {
                             {song.album}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-neon-pink">
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
                               <Heart className="w-4 h-4" />
                             </Button>
                             <span className="text-sm text-muted-foreground w-12 text-right">{song.duration}</span>
@@ -134,7 +136,7 @@ const SearchResults = () => {
                         </div>
                       ))}
                     </div>
-                    <Button variant="outline" className="w-full mt-4 border-primary/30 hover:border-primary hover:shadow-glow">Xem tất cả bài hát</Button>
+                    <Button variant="outline" className="w-full mt-4">Show all songs</Button>
                   </CardContent>
                 </Card>
 
