@@ -1,6 +1,8 @@
 import { useState } from "react";
-import Header from "@/components/Header";
+import AuthenticatedHeader from "@/components/AuthenticatedHeader";
 import Footer from "@/components/Footer";
+import ChatBubble from "@/components/ChatBubble";
+import PromotionCarousel from "@/components/PromotionCarousel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,7 +92,13 @@ const SearchResults = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
-      <Header />
+      <AuthenticatedHeader />
+      <ChatBubble />
+      
+      <div className="pt-20 pb-6 container mx-auto px-4">
+        {/* Promotion Carousel */}
+        <PromotionCarousel />
+      </div>
       
       {/* Filter Tabs */}
       <div className="pb-6">
