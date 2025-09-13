@@ -15,6 +15,7 @@ import {
   Send,
   Search,
   UserPlus,
+  UserMinus,
   Music,
   Clock,
   Flame,
@@ -130,47 +131,32 @@ const Social = () => {
     ]
   };
 
- 
   const suggestedFriends = [
     { id: "5", name: "Jordan Kim", username: "@jordank", mutualFriends: 3 },
     { id: "6", name: "Taylor Swift", username: "@taylor", mutualFriends: 8 },
     { id: "7", name: "David Wilson", username: "@davidw", mutualFriends: 1 }
   ];
 
-  const activities = [
-    {
-      id: "1",
-      user: "Sarah Chen",
-      action: "liked your playlist 'Midnight Vibes'",
-      type: "like",
-      timestamp: "2 hours ago"
-    },
-    {
-      id: "2", 
-      user: "Mike Rodriguez",
-      action: "shared a song with you",
-      type: "share",
-      timestamp: "5 hours ago",
-      songData: {
-        title: "Bohemian Rhapsody",
-        artist: "Queen"
-      }
-    },
-    {
-      id: "3",
-      user: "Emma Davis", 
-      action: "started following you",
-      type: "follow",
-      timestamp: "1 day ago"
-    },
-    {
-      id: "4",
-      user: "Alex Johnson",
-      action: "achieved a 25-day listening streak!",
-      type: "streak", 
-      timestamp: "2 days ago"
-    }
+  const friendRequests = [
+    { id: "8", name: "Chris Brown", username: "@chrisb", mutualFriends: 2 },
+    { id: "9", name: "Amy Wilson", username: "@amyw", mutualFriends: 5 },
+    { id: "10", name: "Jake Thompson", username: "@jaket", mutualFriends: 1 }
   ];
+
+  const handleAcceptFriendRequest = (requestId: string) => {
+    console.log('Accepted friend request:', requestId);
+    // Handle accept friend request logic
+  };
+
+  const handleRejectFriendRequest = (requestId: string) => {
+    console.log('Rejected friend request:', requestId);
+    // Handle reject friend request logic
+  };
+
+  const handleSendFriendRequest = (userId: string) => {
+    console.log('Sent friend request to:', userId);
+    // Handle send friend request logic
+  };
 
   const handleSendMessage = () => {
     if (newMessage.trim() && selectedChat) {
@@ -299,14 +285,6 @@ const Social = () => {
                 <Users className="w-4 h-4" />
                 Friends
               </TabsTrigger>
-              {/* <TabsTrigger value="activity" className="gap-2">
-                <Heart className="w-4 h-4" />
-                Activity
-              </TabsTrigger>
-              <TabsTrigger value="discover" className="gap-2">
-                <UserPlus className="w-4 h-4" />
-                Discover
-              </TabsTrigger> */}
             </TabsList>
 
             <TabsContent value="chat">
@@ -388,6 +366,53 @@ const Social = () => {
             </TabsContent>
 
             <TabsContent value="friends">
+              {/* Friend Requests */}
+              {friendRequests.length > 0 && (
+                <div className="mb-6">
+                  <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <UserPlus className="w-5 h-5" />
+                        Friend Requests ({friendRequests.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {friendRequests.map((request) => (
+                        <div key={request.id} className="flex items-center gap-3 p-3 bg-muted/10 rounded-lg">
+                          <Avatar className="w-10 h-10">
+                            <AvatarFallback className="bg-gradient-accent text-white">
+                              {request.name.split(' ').map(n => n[0]).join('')}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <h4 className="font-medium">{request.name}</h4>
+                            <p className="text-sm text-muted-foreground">{request.username}</p>
+                            <p className="text-xs text-muted-foreground">{request.mutualFriends} mutual friends</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm" 
+                              variant="hero"
+                              onClick={() => handleAcceptFriendRequest(request.id)}
+                            >
+                              Accept
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleRejectFriendRequest(request.id)}
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* My Profile */}
               <div className="mb-6">
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardHeader>
@@ -424,7 +449,44 @@ const Social = () => {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Suggested Friends */}
+              <div className="mb-6">
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <UserPlus className="w-5 h-5" />
+                      Suggested Friends
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {suggestedFriends.map((person) => (
+                      <div key={person.id} className="flex items-center gap-3 p-3 bg-muted/10 rounded-lg">
+                        <Avatar className="w-10 h-10">
+                          <AvatarFallback className="bg-gradient-neon text-white">
+                            {person.name.split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <h4 className="font-medium">{person.name}</h4>
+                          <p className="text-sm text-muted-foreground">{person.username}</p>
+                          <p className="text-xs text-muted-foreground">{person.mutualFriends} mutual friends</p>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleSendFriendRequest(person.id)}
+                        >
+                          <UserPlus className="w-4 h-4 mr-2" />
+                          Add Friend
+                        </Button>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
               
+              {/* Friends List */}
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {friends.map((friend) => (
                   <Card key={friend.id} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300">
@@ -469,75 +531,12 @@ const Social = () => {
                           Message
                         </Button>
                         <Button variant="outline" size="sm">
-                          <Share2 className="w-4 h-4" />
+                          <Heart className="w-4 h-4" />
                         </Button>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="activity">
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {activities.map((activity) => (
-                    <div key={activity.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/10">
-                      <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
-                        {activity.type === "like" && <Heart className="w-5 h-5 text-white" />}
-                        {activity.type === "share" && <Share2 className="w-5 h-5 text-white" />}
-                        {activity.type === "follow" && <Users className="w-5 h-5 text-white" />}
-                        {activity.type === "streak" && <Flame className="w-5 h-5 text-white" />}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{activity.user}</p>
-                        <p className="text-sm text-muted-foreground">{activity.action}</p>
-                        {activity.songData && (
-                          <div className="mt-2 p-2 bg-muted/10 rounded">
-                            <p className="text-sm font-medium">{activity.songData.title}</p>
-                            <p className="text-xs text-muted-foreground">{activity.songData.artist}</p>
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground">{activity.timestamp}</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="discover">
-              <div className="space-y-6">
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle>Suggested Friends</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {suggestedFriends.map((user) => (
-                        <div key={user.id} className="p-4 rounded-lg bg-muted/10 text-center">
-                          <Avatar className="w-16 h-16 mx-auto mb-3">
-                            <AvatarFallback className="bg-gradient-secondary text-white text-lg">
-                              {user.name.split(' ').map(n => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <h3 className="font-semibold mb-1">{user.name}</h3>
-                          <p className="text-sm text-muted-foreground mb-2">{user.username}</p>
-                          <p className="text-xs text-muted-foreground mb-3">
-                            {user.mutualFriends} mutual friends
-                          </p>
-                          <Button variant="hero" size="sm" className="w-full">
-                            <UserPlus className="w-4 h-4 mr-2" />
-                            Add Friend
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </TabsContent>
           </Tabs>

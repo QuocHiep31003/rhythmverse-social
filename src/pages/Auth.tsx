@@ -15,6 +15,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import Footer from "@/components/Footer";
 
 const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
@@ -362,6 +363,7 @@ const Auth = () => {
           <p>Join over 500K+ music lovers worldwide</p>
         </div>
       </div>
+      <Footer />
     </div>
   );
 };

@@ -4,23 +4,30 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { 
   Play, 
   Search, 
-  Clock, 
   Heart, 
   MoreHorizontal, 
   Music,
   User,
   Album,
-  ListMusic
+  ListMusic,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Repeat,
+  Shuffle,
+  Volume2,
+  Share2
 } from "lucide-react";
 
 const SearchResults = () => {
   const [searchQuery, setSearchQuery] = useState("love songs");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [currentSong, setCurrentSong] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const searchResults = {
     songs: [
@@ -58,139 +65,116 @@ const SearchResults = () => {
   ];
 
   const genreTrending = [
-    { genre: "Pop", songs: 1240 },
-    { genre: "Rock", songs: 890 },
-    { genre: "Hip Hop", songs: 750 },
-    { genre: "Electronic", songs: 620 }
+    { genre: "Pop", songs: 1240, icon: "🎵" },
+    { genre: "Rock", songs: 890, icon: "🎸" },
+    { genre: "Hip Hop", songs: 750, icon: "🎤" },
+    { genre: "Electronic", songs: 620, icon: "🔊" }
   ];
 
-  return (
-    <div className="min-h-screen bg-gradient-dark">
-      <Header />
-      <div className="pt-20 pb-8 container mx-auto px-4">
-        {/* Search Header */}
-        <div className="mb-8">
-          <div className="relative mb-6">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search for songs, artists, albums..."
-              className="pl-12 h-12 text-lg bg-gradient-glass backdrop-blur-sm border-white/10"
-            />
-          </div>
-          
-          <div className="flex items-center gap-2 mb-4">
-            <h1 className="text-2xl font-bold">Search results for</h1>
-            <span className="text-2xl font-bold text-primary">"{searchQuery}"</span>
-          </div>
-          
-          <p className="text-muted-foreground">Found {searchResults.songs.length + searchResults.artists.length + searchResults.albums.length + searchResults.playlists.length} results</p>
-        </div>
+  const filters = [
+    { id: "all", label: "All", count: searchResults.songs.length + searchResults.artists.length + searchResults.albums.length + searchResults.playlists.length },
+    { id: "songs", label: "Songs", count: searchResults.songs.length },
+    { id: "artists", label: "Artists", count: searchResults.artists.length },
+    { id: "albums", label: "Albums", count: searchResults.albums.length },
+    { id: "playlists", label: "Playlists", count: searchResults.playlists.length }
+  ];
 
+  const playSong = (song) => {
+    setCurrentSong(song);
+    setIsPlaying(true);
+  };
+
+  const togglePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+      <Header />
+      
+      {/* Search Bar */}
+      <div className="pt-24 pb-6">
+        <div className="container mx-auto px-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search for songs, artists, albums..."
+                className="pl-12 h-14 text-base bg-slate-800/50 border-slate-700 rounded-full focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="pb-6">
+        <div className="container mx-auto px-6">
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+            {filters.map((filter) => (
+              <Button
+                key={filter.id}
+                variant={activeFilter === filter.id ? "default" : "outline"}
+                onClick={() => setActiveFilter(filter.id)}
+                className={`rounded-full px-4 py-2 whitespace-nowrap ${
+                  activeFilter === filter.id 
+                    ? "bg-blue-600 text-white hover:bg-blue-700" 
+                    : "bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
+                }`}
+              >
+                {filter.label}
+                <Badge variant="secondary" className="ml-2 bg-slate-700 text-slate-300">
+                  {filter.count}
+                </Badge>
+              </Button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-6 pb-32">
         <div className="flex gap-8">
           {/* Main Results */}
           <div className="flex-1">
-            <Tabs value={activeFilter} onValueChange={setActiveFilter}>
-              <TabsList className="grid w-full grid-cols-5 mb-6">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="songs">Songs</TabsTrigger>
-                <TabsTrigger value="artists">Artists</TabsTrigger>
-                <TabsTrigger value="albums">Albums</TabsTrigger>
-                <TabsTrigger value="playlists">Playlists</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="all" className="space-y-8">
-                {/* Songs */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Music className="w-5 h-5" />
-                      Songs
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {searchResults.songs.slice(0, 5).map((song, index) => (
-                        <div key={song.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-slate-100/5 group cursor-pointer">
-                          <span className="w-6 text-sm text-muted-foreground text-center">{index + 1}</span>
-                          <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
-                            <Play className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-foreground truncate">{song.title}</p>
-                            <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                          </div>
-                          <div className="hidden md:block text-sm text-muted-foreground truncate max-w-32">
-                            {song.album}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
-                              <Heart className="w-4 h-4" />
-                            </Button>
-                            <span className="text-sm text-muted-foreground w-12 text-right">{song.duration}</span>
-                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <Button variant="outline" className="w-full mt-4">Show all songs</Button>
-                  </CardContent>
-                </Card>
-
-                {/* Artists */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <User className="w-5 h-5" />
-                      Artists
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid md:grid-cols-3 gap-4">
-                      {searchResults.artists.map((artist) => (
-                        <div key={artist.id} className="text-center p-4 rounded-lg hover:bg-slate-100/5 cursor-pointer">
-                          <div className="w-20 h-20 bg-gradient-primary rounded-full mx-auto mb-3 flex items-center justify-center">
-                            <User className="w-10 h-10 text-white" />
-                          </div>
-                          <h3 className="font-bold mb-1 flex items-center justify-center gap-1">
-                            {artist.name}
-                            {artist.verified && <Badge variant="secondary" className="text-xs">✓</Badge>}
-                          </h3>
-                          <p className="text-sm text-muted-foreground">{artist.followers} followers</p>
-                          <Button variant="outline" size="sm" className="mt-2">Follow</Button>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="songs">
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            {(activeFilter === "all" || activeFilter === "songs") && (
+              <div className="mb-8">
+                <Card className="bg-slate-900/50 border-slate-800">
                   <CardContent className="p-0">
                     <div className="space-y-1">
-                      {searchResults.songs.map((song, index) => (
-                        <div key={song.id} className="flex items-center gap-4 p-4 hover:bg-slate-100/5 group cursor-pointer">
-                          <span className="w-6 text-sm text-muted-foreground text-center">{index + 1}</span>
-                          <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
-                            <Play className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      {searchResults.songs.slice(0, activeFilter === "all" ? 5 : searchResults.songs.length).map((song, index) => (
+                        <div 
+                          key={song.id} 
+                          className="flex items-center gap-4 p-3 hover:bg-slate-800/50 group cursor-pointer rounded-lg transition-colors"
+                          onClick={() => playSong(song)}
+                        >
+                          <span className="w-6 text-sm text-slate-500 text-center group-hover:hidden">
+                            {index + 1}
+                          </span>
+                          <div className="w-6 flex justify-center hidden group-hover:block">
+                            <Play className="w-4 h-4 text-white" />
                           </div>
+                          
+                          <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center">
+                            <Music className="w-6 h-6 text-slate-400" />
+                          </div>
+                          
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-foreground truncate">{song.title}</p>
-                            <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
+                            <p className="font-semibold text-white truncate">{song.title}</p>
+                            <p className="text-sm text-slate-400 truncate">{song.artist}</p>
                           </div>
-                          <div className="hidden md:block text-sm text-muted-foreground truncate max-w-40">
+                          
+                          <div className="hidden md:block text-sm text-slate-400 truncate max-w-40">
                             {song.album}
                           </div>
+                          
                           <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white">
                               <Heart className="w-4 h-4" />
                             </Button>
-                            <span className="text-sm text-muted-foreground w-12 text-right">{song.duration}</span>
-                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
+                            <span className="text-sm text-slate-500 w-12 text-right">{song.duration}</span>
+                            <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-white">
                               <MoreHorizontal className="w-4 h-4" />
                             </Button>
                           </div>
@@ -199,96 +183,72 @@ const SearchResults = () => {
                     </div>
                   </CardContent>
                 </Card>
-              </TabsContent>
+              </div>
+            )}
 
-              <TabsContent value="artists">
+            {(activeFilter === "all" || activeFilter === "artists") && searchResults.artists.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold mb-4">Artists</h3>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {searchResults.artists.map((artist) => (
-                    <Card key={artist.id} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all">
+                    <Card key={artist.id} className="bg-slate-900/50 border-slate-800 hover:bg-slate-800/50 transition-colors cursor-pointer">
                       <CardContent className="p-6 text-center">
-                        <div className="w-24 h-24 bg-gradient-primary rounded-full mx-auto mb-4 flex items-center justify-center">
-                          <User className="w-12 h-12 text-white" />
+                        <div className="w-24 h-24 bg-slate-700 rounded-full mx-auto mb-4 flex items-center justify-center">
+                          <User className="w-12 h-12 text-slate-400" />
                         </div>
                         <h3 className="font-bold text-lg mb-2 flex items-center justify-center gap-2">
                           {artist.name}
-                          {artist.verified && <Badge variant="secondary">✓</Badge>}
+                          {artist.verified && <Badge variant="secondary" className="bg-blue-600 text-white">✓</Badge>}
                         </h3>
-                        <p className="text-muted-foreground mb-4">{artist.followers} followers</p>
-                        <Button variant="hero" className="w-full">Follow</Button>
+                        <p className="text-slate-400 mb-4">{artist.followers} followers</p>
+                        <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-700">
+                          Follow
+                        </Button>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
-              </TabsContent>
-
-              <TabsContent value="albums">
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {searchResults.albums.map((album) => (
-                    <Card key={album.id} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer">
-                      <CardContent className="p-6">
-                        <div className="w-full aspect-square bg-gradient-accent rounded-lg mb-4 flex items-center justify-center">
-                          <Album className="w-16 h-16 text-white" />
-                        </div>
-                        <h3 className="font-bold truncate mb-1">{album.title}</h3>
-                        <p className="text-sm text-muted-foreground mb-1">{album.artist}</p>
-                        <p className="text-xs text-muted-foreground">{album.year} • {album.tracks} tracks</p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="playlists">
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {searchResults.playlists.map((playlist) => (
-                    <Card key={playlist.id} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer">
-                      <CardContent className="p-6">
-                        <div className="w-full aspect-square bg-gradient-neon rounded-lg mb-4 flex items-center justify-center">
-                          <ListMusic className="w-16 h-16 text-white" />
-                        </div>
-                        <h3 className="font-bold truncate mb-1">{playlist.title}</h3>
-                        <p className="text-sm text-muted-foreground mb-1">by {playlist.creator}</p>
-                        <p className="text-xs text-muted-foreground">{playlist.tracks} tracks • {playlist.followers} followers</p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
           </div>
 
-          {/* Sidebar */}
+          {/* Compact Sidebar */}
           <div className="w-80 space-y-6">
-            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-              <CardHeader>
-                <CardTitle className="text-lg">Trending Now</CardTitle>
+            <Card className="bg-slate-900/50 border-slate-800">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg text-white">Trending Now</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {trendingSongs.map((song, index) => (
-                  <div key={song.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 cursor-pointer">
-                    <span className="w-6 text-sm text-muted-foreground text-center">{index + 1}</span>
-                    <div className="w-8 h-8 bg-gradient-primary rounded flex items-center justify-center">
-                      <Play className="w-3 h-3 text-white" />
+                  <div key={song.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer transition-colors">
+                    <span className="w-6 text-sm text-slate-500 text-center">{index + 1}</span>
+                    <div className="w-8 h-8 bg-slate-700 rounded flex items-center justify-center">
+                      <Play className="w-3 h-3 text-slate-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{song.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                      <p className="font-medium text-sm truncate text-white">{song.title}</p>
+                      <p className="text-xs text-slate-400 truncate">{song.artist}</p>
                     </div>
-                    <span className="text-xs font-medium text-green-500">{song.trend}</span>
+                    <span className="text-xs font-medium text-green-400">{song.trend}</span>
                   </div>
                 ))}
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-              <CardHeader>
-                <CardTitle className="text-lg">Popular Genres</CardTitle>
+            <Card className="bg-slate-900/50 border-slate-800">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg text-white">Popular Genres</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {genreTrending.map((item, index) => (
-                  <div key={index} className="flex justify-between items-center p-2 rounded-lg hover:bg-muted/10 cursor-pointer">
-                    <span className="font-medium">{item.genre}</span>
-                    <Badge variant="secondary">{item.songs}</Badge>
+                  <div key={index} className="flex justify-between items-center p-2 rounded-lg hover:bg-slate-800/50 cursor-pointer transition-colors">
+                    <div className="flex items-center gap-3">
+                      <span className="text-lg">{item.icon}</span>
+                      <span className="font-medium text-white">{item.genre}</span>
+                    </div>
+                    <Badge variant="secondary" className="bg-slate-700 text-slate-300">
+                      {item.songs}
+                    </Badge>
                   </div>
                 ))}
               </CardContent>
@@ -296,6 +256,65 @@ const SearchResults = () => {
           </div>
         </div>
       </div>
+
+      {/* Player Bar */}
+      {currentSong && (
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-800 p-4">
+          <div className="flex items-center justify-between max-w-7xl mx-auto">
+            {/* Now Playing Info */}
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="w-14 h-14 bg-slate-700 rounded-lg flex items-center justify-center">
+                <Music className="w-6 h-6 text-slate-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-white truncate">{currentSong.title}</p>
+                <p className="text-sm text-slate-400 truncate">{currentSong.artist}</p>
+              </div>
+              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                <Heart className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                <Shuffle className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                <SkipBack className="w-6 h-6" />
+              </Button>
+              <Button 
+                variant="default" 
+                size="icon" 
+                className="w-12 h-12 bg-white text-black hover:bg-gray-200"
+                onClick={togglePlayPause}
+              >
+                {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+              </Button>
+              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                <SkipForward className="w-6 h-6" />
+              </Button>
+              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                <Repeat className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Secondary Controls */}
+            <div className="flex items-center gap-2 flex-1 justify-end">
+              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white">
+                <Share2 className="w-4 h-4" />
+              </Button>
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-5 h-5 text-slate-400" />
+                <div className="w-20 h-1 bg-slate-700 rounded-full">
+                  <div className="w-1/2 h-full bg-blue-500 rounded-full"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );
