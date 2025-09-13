@@ -262,7 +262,7 @@ const Quiz = () => {
           {/* Quiz Types */}
           <div className="lg:col-span-2">
             <h2 className="text-2xl font-bold mb-6">Choose Your Challenge</h2>
-            <div className="grid gap-6">
+            <div className="grid gap-8">
               {quizTypes.map((quiz) => {
                 const Icon = quiz.icon;
                 return (
