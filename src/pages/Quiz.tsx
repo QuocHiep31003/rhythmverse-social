@@ -15,7 +15,8 @@ import {
   Zap,
   Target,
   Award,
-  Crown
+  Crown,
+  Plus
 } from "lucide-react";
 
 const Quiz = () => {
@@ -262,13 +263,20 @@ const Quiz = () => {
           {/* Quiz Types */}
           <div className="lg:col-span-2">
             <h2 className="text-2xl font-bold mb-6">Choose Your Challenge</h2>
+            <div className="mb-6">
+              <Button variant="hero" className="mb-4">
+                <Plus className="w-4 h-4 mr-2" />
+                Create New Quiz
+              </Button>
+            </div>
+
             <div className="grid gap-8">
               {quizTypes.map((quiz) => {
                 const Icon = quiz.icon;
                 return (
                   <Card key={quiz.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
                     <CardContent className="p-6">
-                      <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-6 mb-4">
                         <div className={`w-16 h-16 rounded-2xl ${quiz.color} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                           <Icon className="w-8 h-8 text-white" />
                         </div>
@@ -296,6 +304,37 @@ const Quiz = () => {
                           <Play className="w-4 h-4 mr-2" />
                           Start Quiz
                         </Button>
+                      </div>
+                      
+                      {/* Individual Quiz Leaderboard */}
+                      <div className="border-t border-border/20 pt-4">
+                        <h4 className="font-medium mb-3 flex items-center gap-2">
+                          <Trophy className="w-4 h-4 text-yellow-500" />
+                          Top Players
+                        </h4>
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-bold text-black">1</span>
+                            <div>
+                              <p className="font-medium">Alex_M</p>
+                              <p className="text-xs text-muted-foreground">2,450 pts</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center text-xs font-bold text-black">2</span>
+                            <div>
+                              <p className="font-medium">Sarah_K</p>
+                              <p className="text-xs text-muted-foreground">2,200 pts</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 bg-amber-600 rounded-full flex items-center justify-center text-xs font-bold text-white">3</span>
+                            <div>
+                              <p className="font-medium">Mike_R</p>
+                              <p className="text-xs text-muted-foreground">1,980 pts</p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

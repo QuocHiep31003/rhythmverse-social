@@ -7,6 +7,9 @@ import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
 import Quiz from "./pages/Quiz";
+import CreateQuiz from "./pages/CreateQuiz";
+import SearchResults from "./pages/SearchResults";
+import Auth from "./pages/Auth";
 import Premium from "./pages/Premium";
 import Profile from "./pages/Profile";
 import Social from "./pages/Social";
@@ -28,7 +31,10 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/playlist" element={<Playlist />} />
-          <Route path="/quiz" element={<Quiz />} />
+        <Route path="/quiz" element={<Quiz />} />
+        <Route path="/quiz/create" element={<CreateQuiz />} />
+        <Route path="/search" element={<SearchResults />} />
+        <Route path="/auth" element={<Auth />} />
           <Route path="/premium" element={<Premium />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/social" element={<Social />} />

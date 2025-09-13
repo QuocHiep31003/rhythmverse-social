@@ -388,6 +388,43 @@ const Social = () => {
             </TabsContent>
 
             <TabsContent value="friends">
+              <div className="mb-6">
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Share2 className="w-5 h-5" />
+                      My Profile
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-4 p-4 bg-muted/10 rounded-lg">
+                      <Avatar className="w-16 h-16">
+                        <AvatarFallback className="bg-gradient-primary text-white text-lg">
+                          YU
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold">Your Username</h3>
+                        <p className="text-muted-foreground">@yourusername</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="secondary">154 friends</Badge>
+                          <Badge variant="outline">Premium</Badge>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Button variant="hero" size="sm" className="mb-2">
+                          <Share2 className="w-4 h-4 mr-2" />
+                          Share Profile
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                          Share: echoverse.app/user/yourusername
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {friends.map((friend) => (
                   <Card key={friend.id} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300">
