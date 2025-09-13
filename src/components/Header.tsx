@@ -43,7 +43,7 @@ const Header = ({ isAuthenticated = true }: { isAuthenticated?: boolean } = {}) 
         </nav>
 
         {/* Search Bar */}
-        {/* <div className="hidden md:flex items-center space-x-4 flex-1 max-w-sm mx-8">
+         <div className="hidden md:flex items-center space-x-4 flex-1 max-w-sm mx-8">
           <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -51,7 +51,7 @@ const Header = ({ isAuthenticated = true }: { isAuthenticated?: boolean } = {}) 
               className="pl-10 bg-muted/50 border-border/40"
             />
           </div>
-        </div> */}
+        </div> 
 
         {/* Auth Buttons */}
         <div className="flex items-center space-x-2">
