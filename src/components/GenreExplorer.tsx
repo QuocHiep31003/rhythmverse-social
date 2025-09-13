@@ -22,7 +22,7 @@ const GenreExplorer = () => {
   return (
     <section id="discover" className=" bg-gradient-to-br from-background to-music-dark">
       <div className="container px-6">
-        <div className="text-center mb-12">
+        {/* <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-bold mb-4">
             <span className="bg-gradient-secondary bg-clip-text text-transparent">
               Discover
@@ -32,10 +32,10 @@ const GenreExplorer = () => {
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Explore millions of songs across genres and moods. Find your perfect soundtrack for any moment.
           </p>
-        </div>
+        </div> */}
 
         {/* Genre Grid */}
-        {/* <div className="mb-16">
+        <div className="mb-16">
           <h3 className="text-2xl font-semibold mb-8 text-center">Browse by Genre</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {genres.map((genre) => {
@@ -56,10 +56,10 @@ const GenreExplorer = () => {
               );
             })}
           </div>
-        </div> */}
+        </div>
 
         {/* Mood Explorer */}
-        {/* <div className="mb-16">
+        <div className="mb-16">
           <h3 className="text-2xl font-semibold mb-8 text-center">Music for Every Mood</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {moods.map((mood) => {
@@ -81,7 +81,7 @@ const GenreExplorer = () => {
               );
             })}
           </div>
-        </div> */}
+        </div>
 
         {/* Trending Section */}
         <div className="text-center">
