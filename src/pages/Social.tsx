@@ -290,7 +290,7 @@ const Social = () => {
           </div>
 
           <Tabs defaultValue="chat" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="chat" className="gap-2">
                 <MessageCircle className="w-4 h-4" />
                 Chat
@@ -299,8 +299,14 @@ const Social = () => {
                 <Users className="w-4 h-4" />
                 Friends
               </TabsTrigger>
-            
-             
+              {/* <TabsTrigger value="activity" className="gap-2">
+                <Heart className="w-4 h-4" />
+                Activity
+              </TabsTrigger>
+              <TabsTrigger value="discover" className="gap-2">
+                <UserPlus className="w-4 h-4" />
+                Discover
+              </TabsTrigger> */}
             </TabsList>
 
             <TabsContent value="chat">
