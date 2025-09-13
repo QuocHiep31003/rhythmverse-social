@@ -130,41 +130,7 @@ const Social = () => {
     ]
   };
 
-  const activities = [
-    {
-      id: "1",
-      user: "Sarah Chen",
-      action: "liked your playlist 'Chill Vibes'",
-      timestamp: "2 hours ago",
-      type: "like"
-    },
-    {
-      id: "2",
-      user: "Mike Rodriguez",
-      action: "shared a song with you",
-      timestamp: "4 hours ago",
-      type: "share",
-      songData: {
-        title: "Don't Stop Believin'",
-        artist: "Journey"
-      }
-    },
-    {
-      id: "3",
-      user: "Emma Davis",
-      action: "started following you",
-      timestamp: "1 day ago",
-      type: "follow"
-    },
-    {
-      id: "4",
-      user: "Alex Johnson",
-      action: "reached a 25-day listening streak!",
-      timestamp: "2 days ago",
-      type: "streak"
-    }
-  ];
-
+ 
   const suggestedFriends = [
     { id: "5", name: "Jordan Kim", username: "@jordank", mutualFriends: 3 },
     { id: "6", name: "Taylor Swift", username: "@taylor", mutualFriends: 8 },
