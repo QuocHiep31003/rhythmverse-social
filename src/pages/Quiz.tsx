@@ -340,7 +340,7 @@ const Quiz = () => {
             </Card> */}
 
             {/* Quick Stats */}
-            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 mt-6">
+            {/* <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 mt-6">
               <CardHeader>
                 <CardTitle>Your Stats</CardTitle>
               </CardHeader>
@@ -365,7 +365,7 @@ const Quiz = () => {
                   <span className="font-semibold">#156</span>
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
           </div>
         </div>
       </div>
