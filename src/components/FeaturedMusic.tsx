@@ -249,7 +249,7 @@ const FeaturedMusic = () => {
         </div>
 
         {/* Quick Actions */}
-        <div className="flex flex-wrap gap-4 mt-8 justify-center">
+        {/* <div className="flex flex-wrap gap-4 mt-8 justify-center">
           <Button variant="outline" className="gap-2">
             <Zap className="w-4 h-4" />
             AI Song Discovery
@@ -262,7 +262,7 @@ const FeaturedMusic = () => {
             <Headphones className="w-4 h-4" />
             Start Radio
           </Button>
-        </div>
+        </div> */}
       </div>
     </section>
   );
