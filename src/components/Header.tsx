@@ -2,9 +2,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Music, User, Menu } from "lucide-react";
 import { useState } from "react";
+import AuthenticatedHeader from "./AuthenticatedHeader";
 
-const Header = () => {
+const Header = ({ isAuthenticated = true }: { isAuthenticated?: boolean } = {}) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Show authenticated header if user is logged in
+  if (isAuthenticated) {
+    return <AuthenticatedHeader />;
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -49,9 +55,11 @@ const Header = () => {
 
         {/* Auth Buttons */}
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="sm" className="hidden md:flex">
-            <User className="h-4 w-4 mr-2" />
-            Login
+          <Button variant="ghost" size="sm" className="hidden md:flex" asChild>
+            <a href="/login">
+              <User className="h-4 w-4 mr-2" />
+              Login
+            </a>
           </Button>
           <Button variant="hero" size="sm">
             Get Premium
@@ -97,9 +105,11 @@ const Header = () => {
                 Social
               </a>
             </nav>
-            <Button variant="ghost" size="sm" className="w-full justify-start">
-              <User className="h-4 w-4 mr-2" />
-              Login
+            <Button variant="ghost" size="sm" className="w-full justify-start" asChild>
+              <a href="/login">
+                <User className="h-4 w-4 mr-2" />
+                Login
+              </a>
             </Button>
           </div>
         </div>

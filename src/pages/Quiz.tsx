@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import Header from "@/components/Header";
+import AuthenticatedHeader from "@/components/AuthenticatedHeader";
 import Footer from "@/components/Footer";
+import Pagination from "@/components/Pagination";
+import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,39 +29,53 @@ const Quiz = () => {
   const [gameFinished, setGameFinished] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(30);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [quizzes, setQuizzes] = useState<any[]>([]);
+  
+  const itemsPerPage = 6;
 
-  const quizTypes = [
-    {
-      id: 1,
-      title: "Guess the Song",
-      description: "Listen to 10 seconds and guess the song",
-      difficulty: "Easy",
-      questions: 10,
-      time: 30,
-      icon: Music,
-      color: "bg-gradient-primary"
-    },
-    {
-      id: 2,
-      title: "Lyrics Challenge",
-      description: "Complete the missing lyrics",
-      difficulty: "Medium",
-      questions: 15,
-      time: 25,
-      icon: Star,
-      color: "bg-gradient-accent"
-    },
-    {
-      id: 3,
-      title: "Artist Match",
-      description: "Match songs to their artists",
-      difficulty: "Hard",
-      questions: 20,
-      time: 20,
-      icon: Crown,
-      color: "bg-gradient-neon"
+  // Generate 100 quizzes
+  const generateQuizzes = () => {
+    const baseTypes = [
+      { title: "Guess the Song", description: "Listen to 10 seconds and guess the song", icon: Music, color: "bg-gradient-primary" },
+      { title: "Lyrics Challenge", description: "Complete the missing lyrics", icon: Star, color: "bg-gradient-accent" },
+      { title: "Artist Match", description: "Match songs to their artists", icon: Crown, color: "bg-gradient-neon" },
+      { title: "Genre Master", description: "Identify music genres", icon: Trophy, color: "bg-gradient-secondary" },
+      { title: "Decade Quiz", description: "Match songs to their decades", icon: Award, color: "bg-gradient-primary" },
+    ];
+    
+    const difficulties = ["Easy", "Medium", "Hard"];
+    const questions = [10, 15, 20, 25];
+    const times = [15, 20, 25, 30];
+    
+    const generated = [];
+    for (let i = 1; i <= 100; i++) {
+      const baseType = baseTypes[(i - 1) % baseTypes.length];
+      const difficulty = difficulties[Math.floor(Math.random() * difficulties.length)];
+      const questionCount = questions[Math.floor(Math.random() * questions.length)];
+      const timeLimit = times[Math.floor(Math.random() * times.length)];
+      
+      generated.push({
+        id: i,
+        title: `${baseType.title} ${i}`,
+        description: baseType.description,
+        difficulty,
+        questions: questionCount,
+        time: timeLimit,
+        icon: baseType.icon,
+        color: baseType.color
+      });
     }
-  ];
+    return generated;
+  };
+
+  useEffect(() => {
+    setQuizzes(generateQuizzes());
+  }, []);
+
+  const totalPages = Math.ceil(quizzes.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentQuizzes = quizzes.slice(startIndex, startIndex + itemsPerPage);
 
   const sampleQuestions = [
     {
@@ -137,7 +153,8 @@ const Quiz = () => {
     
     return (
       <div className="min-h-screen bg-gradient-dark">
-        <Header />
+        <AuthenticatedHeader />
+        <ChatBubble />
         <div className="pt-20 pb-24 container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             {/* Game Header */}
@@ -204,9 +221,10 @@ const Quiz = () => {
   if (gameFinished) {
     const finalScore = Math.round((score / (sampleQuestions.length * 100)) * 100);
     
-    return (
-      <div className="min-h-screen bg-gradient-dark">
-        <Header />
+  return (
+    <div className="min-h-screen bg-gradient-dark">
+      <AuthenticatedHeader />
+      <ChatBubble />
         <div className="pt-20 pb-24 container mx-auto px-4">
           <div className="max-w-2xl mx-auto text-center">
             <div className="mb-8">
@@ -245,9 +263,10 @@ const Quiz = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-dark">
-      <Header />
+    return (
+      <div className="min-h-screen bg-gradient-dark">
+        <AuthenticatedHeader />
+        <ChatBubble />
       <div className="pt-20 pb-24 container mx-auto px-4">
         {/* Hero Section */}
         <div className="text-center mb-12">
@@ -270,8 +289,8 @@ const Quiz = () => {
               </Button>
             </div>
 
-            <div className="grid gap-8">
-              {quizTypes.map((quiz) => {
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {currentQuizzes.map((quiz) => {
                 const Icon = quiz.icon;
                 return (
                   <Card key={quiz.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
@@ -341,6 +360,12 @@ const Quiz = () => {
                 );
               })}
             </div>
+            
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
 
           {/* Leaderboard */}

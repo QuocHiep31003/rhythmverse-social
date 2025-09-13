@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import ChatBubble from "@/components/ChatBubble";
 import PromotionCarousel from "@/components/PromotionCarousel";
 import FeaturedMusic from "@/components/FeaturedMusic";
 import GenreExplorer from "@/components/GenreExplorer";
@@ -39,6 +40,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-dark">
       <Header />
+      <ChatBubble />
       <PromotionCarousel />
       <main className="pt-16">
         {/* Quick Features */}

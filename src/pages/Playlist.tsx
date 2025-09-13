@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Header from "@/components/Header";
+import ChatBubble from "@/components/ChatBubble";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -163,6 +164,7 @@ const Playlist = () => {
   return (
     <div className="min-h-screen bg-gradient-dark">
       <Header />
+      <ChatBubble />
       
       <div className="pt-20 pb-24">
         <div className="container mx-auto px-4 py-6">

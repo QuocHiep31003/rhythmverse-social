@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { 
@@ -26,6 +27,7 @@ interface Song {
 }
 
 const MusicPlayer = () => {
+  const location = useLocation();
   const [isPlaying, setIsPlaying] = useState(true);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([30]);
@@ -63,6 +65,11 @@ const MusicPlayer = () => {
     const currentIndex = modes.indexOf(repeatMode);
     setRepeatMode(modes[(currentIndex + 1) % modes.length]);
   };
+
+  // Hide player on login page
+  if (location.pathname === '/login') {
+    return null;
+  }
 
   return (
     <>

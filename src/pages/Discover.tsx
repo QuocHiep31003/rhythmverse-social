@@ -159,6 +159,7 @@ const Discover = () => {
   return (
     <div className="min-h-screen bg-gradient-dark">
       <Header />
+      <ChatBubble />
       <div className="pt-20 pb-24">
         <div className="container mx-auto px-4 py-8">
           {/* Header */}
