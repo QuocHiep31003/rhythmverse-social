@@ -137,6 +137,41 @@ const Social = () => {
     { id: "7", name: "David Wilson", username: "@davidw", mutualFriends: 1 }
   ];
 
+  const activities = [
+    {
+      id: "1",
+      user: "Sarah Chen",
+      action: "liked your playlist 'Midnight Vibes'",
+      type: "like",
+      timestamp: "2 hours ago"
+    },
+    {
+      id: "2", 
+      user: "Mike Rodriguez",
+      action: "shared a song with you",
+      type: "share",
+      timestamp: "5 hours ago",
+      songData: {
+        title: "Bohemian Rhapsody",
+        artist: "Queen"
+      }
+    },
+    {
+      id: "3",
+      user: "Emma Davis", 
+      action: "started following you",
+      type: "follow",
+      timestamp: "1 day ago"
+    },
+    {
+      id: "4",
+      user: "Alex Johnson",
+      action: "achieved a 25-day listening streak!",
+      type: "streak", 
+      timestamp: "2 days ago"
+    }
+  ];
+
   const handleSendMessage = () => {
     if (newMessage.trim() && selectedChat) {
       // Add message to chat
