@@ -189,8 +189,9 @@ const Index = () => {
         </section>
 
         <FeaturedMusic />
+                <TrendingSection />
         <GenreExplorer />
-        <TrendingSection />
+
       </main>
       <Footer />
     </div>
