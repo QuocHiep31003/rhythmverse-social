@@ -1,7 +1,6 @@
 import { useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import PromotionCarousel from "@/components/PromotionCarousel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,11 +92,6 @@ const SearchResults = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
       <Header />
       
-      {/* Promotion Carousel */}
-      <div className="pt-20">
-        <PromotionCarousel />
-      </div>
-
       {/* Filter Tabs */}
       <div className="pb-6">
         <div className="container mx-auto px-6">
