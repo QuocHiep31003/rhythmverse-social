@@ -10,7 +10,7 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-dark">
       <Header />
       <main>
-        {/* <HeroSection /> */}
+        <HeroSection />
         <FeaturedMusic />
         <GenreExplorer />
         <TrendingSection />
