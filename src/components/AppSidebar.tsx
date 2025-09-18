@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { 
   Home, 
@@ -6,9 +5,6 @@ import {
   ListMusic, 
   Brain, 
   Users, 
-  Search, 
-  Paperclip, 
-  Mic, 
   Music 
 } from "lucide-react";
 import {
@@ -19,10 +15,9 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 const menuItems = [
   { title: "Home", url: "/", icon: Home },
@@ -45,15 +40,18 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className={collapsed ? "w-16" : "w-64"}>
       <SidebarContent className="bg-background/95 backdrop-blur-sm border-r border-border/40">
-        {/* Logo and App Name */}
+        {/* Trigger and Logo */}
         <div className="p-6 border-b border-border/40">
-          <div className="flex items-center space-x-3">
-            <Music className="h-8 w-8 text-primary flex-shrink-0" />
-            {!collapsed && (
-              <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                EchoVerse
-              </span>
-            )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Music className="h-8 w-8 text-primary flex-shrink-0" />
+              {!collapsed && (
+                <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                  EchoVerse
+                </span>
+              )}
+            </div>
+            <SidebarTrigger className="h-6 w-6" />
           </div>
         </div>
 
@@ -82,25 +80,6 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Search Bar */}
-        <div className="px-6 py-4 border-t border-border/40">
-          <div className="text-sm text-muted-foreground mb-2">Quick Search</div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search songs, artists..."
-              className="pl-10 pr-20 bg-muted/50 border-border/40"
-            />
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <Paperclip className="h-3 w-3" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <Mic className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
-        </div>
       </SidebarContent>
     </Sidebar>
   );
