@@ -6,21 +6,22 @@ import {
   Brain, 
   Users, 
   Music,
-  Menu,
-  ChevronRight
+  ChevronLeft,
+  PanelLeft
 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -46,73 +47,97 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
-  const { state, toggleSidebar } = useSidebar();
+  const { state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
   const collapsed = state === "collapsed";
-  const isMobile = useIsMobile();
 
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
 
   return (
-    <Sidebar collapsible="icon" className={collapsed ? "w-16" : "w-64"}>
-      <SidebarContent className="bg-background/95 backdrop-blur-sm border-r border-border/40">
-        {/* Logo and Toggle */}
-        <div className="p-6 border-b border-border/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Music className="h-8 w-8 text-primary flex-shrink-0" />
-              {!collapsed && (
-                <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                  EchoVerse
-                </span>
-              )}
-            </div>
-            
-            {/* Desktop toggle button */}
-            {!isMobile && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleSidebar}
-                className="h-6 w-6 hover:bg-muted/50"
-              >
-                {collapsed ? <ChevronRight className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-              </Button>
-            )}
+    <Sidebar 
+      variant="sidebar" 
+      collapsible="icon"
+    >
+      <SidebarHeader className="p-6 border-b border-border/40">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Music className="h-8 w-8 text-primary flex-shrink-0" />
+            <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent group-data-[collapsible=icon]:hidden">
+              EchoVerse
+            </span>
           </div>
+          
+          {/* Desktop toggle - only show on desktop */}
+          <SidebarTrigger className="lg:flex hidden h-6 w-6">
+            <PanelLeft className="h-4 w-4" />
+          </SidebarTrigger>
+          
+          {/* Mobile close button - only show on mobile */}
+          {isMobile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setOpenMobile(false)}
+              className="lg:hidden h-6 w-6"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+          )}
         </div>
+      </SidebarHeader>
 
-        {/* Navigation Menu */}
+      <SidebarContent className="bg-background/95 backdrop-blur-sm">
         <SidebarGroup>
+          <SidebarGroupLabel className="px-6 pb-2 text-sm font-medium text-muted-foreground group-data-[collapsible=icon]:hidden">
+            Navigation
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="px-3 space-y-1">
               {menuItems.map((item) => {
                 const notificationCount = getNotificationCount(item.url);
+                const itemIsActive = isActive(item.url);
+                
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild>
+                    <SidebarMenuButton 
+                      asChild
+                      isActive={itemIsActive}
+                      tooltip={item.title}
+                    >
                       <NavLink 
                         to={item.url} 
                         end 
                         className={({ isActive }) => `
-                          flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200
+                          flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 relative
                           ${getNavCls({ isActive })}
                         `}
+                        onClick={() => {
+                          // Close mobile sidebar when navigating
+                          if (isMobile) {
+                            setOpenMobile(false);
+                          }
+                        }}
                       >
-                        <div className="flex items-center gap-3 flex-1">
-                          <item.icon className="h-5 w-5 flex-shrink-0" />
-                          {!collapsed && <span className="font-medium">{item.title}</span>}
-                        </div>
-                        {notificationCount > 0 && !collapsed && (
-                          <Badge variant="destructive" className="ml-auto h-5 min-w-5 text-xs">
-                            {notificationCount}
-                          </Badge>
-                        )}
-                        {notificationCount > 0 && collapsed && (
-                          <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
+                        <item.icon className="h-5 w-5 flex-shrink-0" />
+                        <span className="font-medium group-data-[collapsible=icon]:hidden">
+                          {item.title}
+                        </span>
+                        
+                        {/* Desktop notification badge */}
+                        {notificationCount > 0 && (
+                          <>
+                            <Badge 
+                              variant="destructive" 
+                              className="ml-auto h-5 min-w-5 text-xs group-data-[collapsible=icon]:hidden"
+                            >
+                              {notificationCount}
+                            </Badge>
+                            {/* Icon mode notification dot */}
+                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full group-data-[collapsible=icon]:block hidden" />
+                          </>
                         )}
                       </NavLink>
                     </SidebarMenuButton>
@@ -122,7 +147,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
       </SidebarContent>
     </Sidebar>
   );

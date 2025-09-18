@@ -1,4 +1,4 @@
-import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import TopBar from "./TopBar";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -10,17 +10,11 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const MobileToggle = () => {
-  const { toggleSidebar } = useSidebar();
+const MobileTrigger = () => {
   const totalNotifications = 5; // This would come from global state
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleSidebar}
-      className="fixed top-4 left-4 z-50 lg:hidden h-10 w-10 bg-background/80 backdrop-blur-sm border border-border/40"
-    >
+    <SidebarTrigger className="fixed top-4 left-4 z-50 lg:hidden h-10 w-10 bg-background/80 backdrop-blur-sm border border-border/40">
       <div className="relative">
         <Menu className="h-5 w-5" />
         {totalNotifications > 0 && (
@@ -32,7 +26,7 @@ const MobileToggle = () => {
           </Badge>
         )}
       </div>
-    </Button>
+    </SidebarTrigger>
   );
 };
 
@@ -43,13 +37,13 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-dark">
         <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
+        <SidebarInset className="flex flex-col min-w-0">
           {!isMobile && <TopBar />}
           <main className="flex-1 overflow-auto p-0">
             {children}
           </main>
-        </div>
-        {isMobile && <MobileToggle />}
+        </SidebarInset>
+        <MobileTrigger />
       </div>
     </SidebarProvider>
   );
