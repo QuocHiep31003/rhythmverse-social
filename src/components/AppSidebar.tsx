@@ -93,9 +93,9 @@ export function AppSidebar() {
       </SidebarHeader>
 
       {/* Desktop toggle button - hidden when expanded, shows on hover when collapsed */}
-      <div className="hidden group-data-[collapsible=icon]:block px-3 py-2">
+      {/* <div className="hidden group-data-[collapsible=icon]:block px-3 py-2">
         <SidebarTrigger className="h-8 w-8 opacity-0 group-hover/sidebar-hover:opacity-100 transition-opacity duration-200" />
-      </div>
+      </div> */}
 
       <SidebarContent className="bg-background/95 backdrop-blur-sm">
         <SidebarGroup>
