@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -139,8 +138,7 @@ const CreateQuiz = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <Header />
-      <div className="pt-20 pb-8 container mx-auto px-4">
+      <div className="pt-6 pb-8 container mx-auto px-4">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-4 mb-8">

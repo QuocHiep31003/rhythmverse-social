@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import AuthenticatedHeader from "@/components/AuthenticatedHeader";
 import Footer from "@/components/Footer";
 import ShareButton from "@/components/ShareButton";
 import ChatBubble from "@/components/ChatBubble";
@@ -73,10 +72,9 @@ const ArtistDetail = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <AuthenticatedHeader />
       <ChatBubble />
       
-      <div className="pt-20 pb-24 container mx-auto px-4">
+      <div className="pt-6 pb-24 container mx-auto px-4">
         {/* Artist Header */}
         <div className="flex flex-col md:flex-row gap-8 mb-12">
           <div className="w-full md:w-80 h-80 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">

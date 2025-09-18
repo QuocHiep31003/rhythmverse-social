@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import AuthenticatedHeader from "@/components/AuthenticatedHeader";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
 import ChatBubble from "@/components/ChatBubble";
@@ -153,9 +152,8 @@ const Quiz = () => {
     
     return (
       <div className="min-h-screen bg-gradient-dark">
-        <AuthenticatedHeader />
         <ChatBubble />
-        <div className="pt-20 pb-24 container mx-auto px-4">
+        <div className="pt-6 pb-24 container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             {/* Game Header */}
             <div className="text-center mb-8">
@@ -223,9 +221,8 @@ const Quiz = () => {
     
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <AuthenticatedHeader />
       <ChatBubble />
-        <div className="pt-20 pb-24 container mx-auto px-4">
+        <div className="pt-6 pb-24 container mx-auto px-4">
           <div className="max-w-2xl mx-auto text-center">
             <div className="mb-8">
               <Trophy className="w-20 h-20 text-yellow-500 mx-auto mb-4" />
@@ -265,9 +262,8 @@ const Quiz = () => {
 
     return (
       <div className="min-h-screen bg-gradient-dark">
-        <AuthenticatedHeader />
         <ChatBubble />
-      <div className="pt-20 pb-24 container mx-auto px-4">
+      <div className="pt-6 pb-24 container mx-auto px-4">
         {/* Hero Section */}
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">

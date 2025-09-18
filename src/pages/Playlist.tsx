@@ -1,5 +1,4 @@
 import { useState } from "react";
-import AuthenticatedHeader from "@/components/AuthenticatedHeader";
 import Footer from "@/components/Footer";
 import ChatBubble from "@/components/ChatBubble";
 import ShareButton from "@/components/ShareButton";
@@ -108,10 +107,9 @@ const Playlist = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <AuthenticatedHeader />
       <ChatBubble />
       
-      <div className="pt-20 pb-24 container mx-auto px-4">
+      <div className="pt-6 pb-24 container mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">

@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { 
   Edit, 
@@ -88,7 +87,6 @@ const Profile = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <Header />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
           {/* Profile Header */}
