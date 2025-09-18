@@ -1,5 +1,3 @@
-import Header from "@/components/Header";
-import ChatBubble from "@/components/ChatBubble";
 import PromotionCarousel from "@/components/PromotionCarousel";
 import FeaturedMusic from "@/components/FeaturedMusic";
 import GenreExplorer from "@/components/GenreExplorer";
@@ -39,10 +37,8 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <Header />
-      <ChatBubble />
       <PromotionCarousel />
-      <main className="pt-16">
+      <main className="pt-4">
         {/* Quick Features */}
         <section className="py-8">
           <div className="container px-6">

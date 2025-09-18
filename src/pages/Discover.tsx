@@ -4,9 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import ChatBubble from "@/components/ChatBubble";
 import { 
   Search, 
   Filter, 
@@ -159,9 +157,7 @@ const Discover = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <Header />
-      <ChatBubble />
-      <div className="pt-20 pb-24">
+      <div className="pt-4 pb-24">
         <div className="container mx-auto px-4 py-8">
           {/* Header */}
           <div className="mb-8 text-center">
