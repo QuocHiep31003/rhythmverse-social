@@ -50,7 +50,6 @@ export function AppSidebar() {
   const { state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
-  const collapsed = state === "collapsed";
 
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
@@ -60,6 +59,11 @@ export function AppSidebar() {
     <Sidebar 
       variant="sidebar" 
       collapsible="icon"
+      className="transition-all duration-200 ease-linear data-[collapsible=icon]:w-20 w-64"
+      style={{
+        "--sidebar-width": "16rem", // 64 -> w-64 = 256px = 16rem
+        "--sidebar-width-icon": "5rem", // 20 -> w-20 = 80px = 5rem
+      } as React.CSSProperties}
     >
       <SidebarHeader className="p-6 border-b border-border/40">
         <div className="flex items-center justify-between">
