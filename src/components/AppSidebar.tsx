@@ -57,7 +57,7 @@ export function AppSidebar() {
 
   return (
     <div
-      className="group/sidebar-hover"
+      className="group/sidebar-hover lg:min-w-[80px]"
       onMouseEnter={() => !isMobile && setOpen(true)}
       onMouseLeave={() => !isMobile && setOpen(false)}
     >
@@ -91,6 +91,11 @@ export function AppSidebar() {
           )}
         </div>
       </SidebarHeader>
+
+      {/* Desktop toggle button - hidden when expanded, shows on hover when collapsed */}
+      <div className="hidden group-data-[collapsible=icon]:block px-3 py-2">
+        <SidebarTrigger className="h-8 w-8 opacity-0 group-hover/sidebar-hover:opacity-100 transition-opacity duration-200" />
+      </div>
 
       <SidebarContent className="bg-background/95 backdrop-blur-sm">
         <SidebarGroup>
