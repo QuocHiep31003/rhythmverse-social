@@ -56,17 +56,19 @@ export function AppSidebar() {
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
 
   return (
-    <Sidebar 
-      variant="sidebar" 
-      collapsible="icon"
-      className="transition-all duration-200 ease-linear data-[collapsible=icon]:w-20 w-64 group/sidebar hover:w-64"
-      style={{
-        "--sidebar-width": "16rem", // 64 -> w-64 = 256px = 16rem
-        "--sidebar-width-icon": "5rem", // 20 -> w-20 = 80px = 5rem
-      } as React.CSSProperties}
+    <div
+      className="group/sidebar-hover"
       onMouseEnter={() => !isMobile && setOpen(true)}
       onMouseLeave={() => !isMobile && setOpen(false)}
     >
+      <Sidebar 
+        variant="sidebar" 
+        collapsible="icon"
+        style={{
+          "--sidebar-width": "16rem", // 64 -> w-64 = 256px = 16rem
+          "--sidebar-width-icon": "5rem", // 20 -> w-20 = 80px = 5rem
+        } as React.CSSProperties}
+      >
       <SidebarHeader className="p-6 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
@@ -147,5 +149,6 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
+    </div>
   );
 }
