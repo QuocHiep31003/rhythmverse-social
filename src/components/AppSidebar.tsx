@@ -57,7 +57,7 @@ export function AppSidebar() {
 
   return (
     <div
-      className="group/sidebar-hover min-w-[80px]"
+      className="group/sidebar-hover lg:min-w-[80px]"
       onMouseEnter={() => !isMobile && setOpen(true)}
       onMouseLeave={() => !isMobile && setOpen(false)}
     >
