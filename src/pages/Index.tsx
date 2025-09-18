@@ -1,13 +1,17 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import PromotionCarousel from "@/components/PromotionCarousel";
 import FeaturedMusic from "@/components/FeaturedMusic";
 import GenreExplorer from "@/components/GenreExplorer";
 import TrendingSection from "@/components/TrendingSection";
 import Footer from "@/components/Footer";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { MobileNotifications } from "@/components/MobileNotifications";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Play, Headphones, Star, TrendingUp, Sparkles, Music } from "lucide-react";
 
 const Index = () => {
+  const isMobile = useIsMobile();
   const topHits100 = [
     { id: 1, title: "Flowers", artist: "Miley Cyrus", duration: "3:20", plays: "1.2B" },
     { id: 2, title: "Anti-Hero", artist: "Taylor Swift", duration: "3:24", plays: "987M" },
@@ -194,6 +198,9 @@ const Index = () => {
 
       </main>
       <Footer />
+      
+      {/* Mobile Notifications */}
+      {isMobile && <MobileNotifications />}
     </div>
   );
 };
