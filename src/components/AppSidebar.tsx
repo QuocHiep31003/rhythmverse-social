@@ -59,11 +59,13 @@ export function AppSidebar() {
     <Sidebar 
       variant="sidebar" 
       collapsible="icon"
-      className="transition-all duration-200 ease-linear data-[collapsible=icon]:w-20 w-64"
+      className="transition-all duration-200 ease-linear data-[collapsible=icon]:w-20 w-64 group/sidebar hover:w-64"
       style={{
         "--sidebar-width": "16rem", // 64 -> w-64 = 256px = 16rem
         "--sidebar-width-icon": "5rem", // 20 -> w-20 = 80px = 5rem
       } as React.CSSProperties}
+      onMouseEnter={() => !isMobile && setOpen(true)}
+      onMouseLeave={() => !isMobile && setOpen(false)}
     >
       <SidebarHeader className="p-6 border-b border-border/40">
         <div className="flex items-center justify-between">
@@ -73,11 +75,6 @@ export function AppSidebar() {
               EchoVerse
             </span>
           </div>
-          
-          {/* Desktop toggle - only show on desktop */}
-          <SidebarTrigger className="lg:flex hidden h-6 w-6">
-            <PanelLeft className="h-4 w-4" />
-          </SidebarTrigger>
           
           {/* Mobile close button - only show on mobile */}
           {isMobile && (
