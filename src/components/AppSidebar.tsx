@@ -91,10 +91,7 @@ export function AppSidebar() {
 
       <SidebarContent className="bg-background/95 backdrop-blur-sm">
         <SidebarGroup>
-          <SidebarGroupLabel className="px-6 pb-2 text-sm font-medium text-muted-foreground group-data-[collapsible=icon]:hidden">
-            Navigation
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
+          <SidebarGroupContent> 
             <SidebarMenu className="px-3 space-y-1">
               {menuItems.map((item) => {
                 const notificationCount = getNotificationCount(item.url);
