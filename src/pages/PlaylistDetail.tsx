@@ -33,18 +33,19 @@ const PlaylistDetail = () => {
   // Mock playlist data - would come from API based on id
   const playlist = {
     id: "1",
-    title: "My Awesome Playlist",
-    description: "A collection of my favorite songs for any mood",
-    cover: "/placeholder.svg",
+    title: "Summer Vibes Collection 🌞",
+    description: "The perfect soundtrack for sunny days, beach trips, and good times with friends. Featuring the hottest summer hits and feel-good classics.",
+    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=600&fit=crop",
     owner: {
-      name: "John Doe",
-      avatar: "/placeholder.svg"
+      name: "Alex Rivera",
+      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop&crop=face"
     },
     isPublic: true,
     likes: 1247,
     collaborators: [
-      { id: "1", name: "Alice", avatar: "/placeholder.svg" },
-      { id: "2", name: "Bob", avatar: "/placeholder.svg" }
+      { id: "1", name: "Alice Chen", avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b5c5?w=100&h=100&fit=crop&crop=face" },
+      { id: "2", name: "Bob Martinez", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face" },
+      { id: "3", name: "Sarah Kim", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face" }
     ],
     songs: [
       {
@@ -53,9 +54,9 @@ const PlaylistDetail = () => {
         artist: "The Weeknd",
         album: "After Hours",
         duration: "3:20",
-        addedBy: "John Doe",
+        addedBy: "Alex Rivera",
         addedAt: "2 days ago",
-        cover: "/placeholder.svg"
+        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
       },
       {
         id: "2",
@@ -63,9 +64,9 @@ const PlaylistDetail = () => {
         artist: "Harry Styles",
         album: "Fine Line",
         duration: "2:54",
-        addedBy: "Alice",
+        addedBy: "Alice Chen",
         addedAt: "1 week ago",
-        cover: "/placeholder.svg"
+        cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop"
       },
       {
         id: "3",
@@ -73,9 +74,29 @@ const PlaylistDetail = () => {
         artist: "Dua Lipa",
         album: "Future Nostalgia",
         duration: "3:23",
-        addedBy: "Bob",
+        addedBy: "Bob Martinez",
         addedAt: "3 days ago",
-        cover: "/placeholder.svg"
+        cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop"
+      },
+      {
+        id: "4",
+        title: "Good 4 U",
+        artist: "Olivia Rodrigo",
+        album: "SOUR",
+        duration: "2:58",
+        addedBy: "Sarah Kim",
+        addedAt: "4 days ago",
+        cover: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop"
+      },
+      {
+        id: "5",
+        title: "Heat Waves",
+        artist: "Glass Animals",
+        album: "Dreamland",
+        duration: "3:58",
+        addedBy: "Alex Rivera",
+        addedAt: "1 week ago",
+        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
       }
     ]
   };
@@ -124,7 +145,7 @@ const PlaylistDetail = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-dark text-white">
+    <div className="min-h-screen bg-gradient-dark text-foreground">
       <div className="container mx-auto px-4 py-8">
         {/* Back Button */}
         <Button
@@ -155,7 +176,7 @@ const PlaylistDetail = () => {
               {playlist.isPublic ? "Public Playlist" : "Private Playlist"}
             </Badge>
             
-            <h1 className="text-4xl lg:text-6xl font-bold mb-4 bg-gradient-to-r from-white to-white/80 bg-clip-text text-transparent">
+            <h1 className="text-4xl lg:text-6xl font-bold mb-4 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
               {playlist.title}
             </h1>
             
@@ -251,7 +272,25 @@ const PlaylistDetail = () => {
                     <DialogTitle>Add Collaborators</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4">
-                    <Input placeholder="Enter username or email..." />
+                    <Input placeholder="Search friends by username..." />
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Suggested Friends</p>
+                      <div className="space-y-2">
+                        {["alice_music", "bob_beats", "charlie_vibes"].map((username) => (
+                          <div key={username} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="w-8 h-8">
+                                <AvatarFallback>{username.charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm">{username}</span>
+                            </div>
+                            <Button size="sm" variant="outline">
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                     <p className="text-sm text-muted-foreground">
                       Invite friends to collaborate on this playlist
                     </p>
