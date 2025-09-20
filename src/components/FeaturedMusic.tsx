@@ -2,17 +2,17 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Play, 
-  Heart, 
-  Share2, 
+import {
+  Play,
+  Heart,
+  Share2,
   Plus,
   Headphones,
   Clock,
   TrendingUp,
   Music,
   Sparkles,
-  Zap
+  Zap,
 } from "lucide-react";
 
 interface Song {
@@ -23,6 +23,7 @@ interface Song {
   duration: string;
   cover?: string;
   genre: string;
+  mood?: string[];
   plays: string;
   isNew?: boolean;
   isAIRecommended?: boolean;
@@ -30,7 +31,26 @@ interface Song {
 
 const FeaturedMusic = () => {
   const [activeCategory, setActiveCategory] = useState("trending");
+  const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
+  // toggle helper
+  const toggleSelection = (
+    current: string[],
+    item: string,
+    setter: (val: string[]) => void
+  ) => {
+    if (current.includes(item)) {
+      setter(current.filter((i) => i !== item));
+    } else {
+      setter([...current, item]);
+    }
+  };
+
+  const moods = ["Happy", "Chill", "Focus", "Party"];
+  const genres = ["Electronic", "Synthwave", "Ambient", "EDM", "Indie Rock"];
+
+  // Data
   const featuredSongs: Record<string, Song[]> = {
     trending: [
       {
@@ -40,17 +60,19 @@ const FeaturedMusic = () => {
         album: "Galactic Soundscapes",
         duration: "3:42",
         genre: "Electronic",
+        mood: ["Happy", "Party"],
         plays: "2.1M",
-        isAIRecommended: true
+        isAIRecommended: true,
       },
       {
-        id: "2", 
+        id: "2",
         title: "Midnight City",
         artist: "M83",
         album: "Hurry Up, We're Dreaming",
         duration: "4:03",
         genre: "Synthwave",
-        plays: "18.7M"
+        mood: ["Chill", "Focus"],
+        plays: "18.7M",
       },
       {
         id: "3",
@@ -59,29 +81,22 @@ const FeaturedMusic = () => {
         album: "Serenity",
         duration: "5:12",
         genre: "Ambient",
+        mood: ["Chill"],
         plays: "956K",
-        isNew: true
+        isNew: true,
       },
-      {
-        id: "4",
-        title: "Electric Pulse",
-        artist: "DJ ElectroFlow",
-        duration: "3:28",
-        genre: "EDM",
-        plays: "3.4M",
-        isAIRecommended: true
-      }
     ],
     newReleases: [
       {
         id: "5",
-        title: "Neon Nights", 
+        title: "Neon Nights",
         artist: "Synth Masters",
         album: "Digital Dreams",
         duration: "4:15",
         genre: "Synthpop",
+        mood: ["Happy"],
         plays: "125K",
-        isNew: true
+        isNew: true,
       },
       {
         id: "6",
@@ -89,19 +104,11 @@ const FeaturedMusic = () => {
         artist: "Echo Chamber",
         duration: "3:58",
         genre: "Indie Rock",
+        mood: ["Focus"],
         plays: "89K",
         isNew: true,
-        isAIRecommended: true
+        isAIRecommended: true,
       },
-      {
-        id: "7",
-        title: "Quantum Leap",
-        artist: "Future Bass Co.",
-        duration: "4:32",
-        genre: "Future Bass",
-        plays: "234K",
-        isNew: true
-      }
     ],
     aiRecommended: [
       {
@@ -110,8 +117,9 @@ const FeaturedMusic = () => {
         artist: "Neural Network",
         duration: "3:45",
         genre: "Experimental",
+        mood: ["Focus"],
         plays: "567K",
-        isAIRecommended: true
+        isAIRecommended: true,
       },
       {
         id: "9",
@@ -119,30 +127,42 @@ const FeaturedMusic = () => {
         artist: "AI Composer",
         duration: "4:21",
         genre: "Electronic",
+        mood: ["Chill"],
         plays: "892K",
-        isAIRecommended: true
+        isAIRecommended: true,
       },
-      {
-        id: "10",
-        title: "Algorithmic Love",
-        artist: "Code Symphony",
-        duration: "3:33",
-        genre: "Ambient Tech",
-        plays: "445K",
-        isAIRecommended: true
-      }
-    ]
+    ],
   };
 
   const categories = [
     { key: "trending", label: "Trending Now", icon: TrendingUp },
     { key: "newReleases", label: "New Releases", icon: Sparkles },
-    { key: "aiRecommended", label: "AI Picks for You", icon: Zap }
+    { key: "aiRecommended", label: "AI Pick for You", icon: Zap },
   ];
+
+  // filter logic
+  const songsInCategory = featuredSongs[activeCategory] ?? [];
+  const filteredSongs =
+    activeCategory === "aiRecommended"
+      ? songsInCategory.filter((song) => {
+          if (
+            selectedGenres.length > 0 &&
+            !selectedGenres.includes(song.genre)
+          )
+            return false;
+          if (
+            selectedMoods.length > 0 &&
+            !selectedMoods.some((m) => song.mood?.includes(m))
+          )
+            return false;
+          return true;
+        })
+      : songsInCategory;
 
   return (
     <section className="py-12">
       <div className="container px-6">
+        {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
             <h2 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
@@ -164,30 +184,74 @@ const FeaturedMusic = () => {
             <Button
               key={category.key}
               variant={activeCategory === category.key ? "default" : "outline"}
-              onClick={() => setActiveCategory(category.key)}
+              onClick={() => {
+                setActiveCategory(category.key);
+                setSelectedMoods([]);
+                setSelectedGenres([]);
+              }}
               className="gap-2"
             >
               <category.icon className="w-4 h-4" />
               {category.label}
-              {category.key === "aiRecommended" && (
-                <Badge variant="secondary" className="ml-1">AI</Badge>
-              )}
             </Button>
           ))}
         </div>
 
+        {/* Mood + Genre filters only for AI Pick */}
+        {activeCategory === "aiRecommended" && (
+          <>
+            <div className="mb-4">
+              <h3 className="text-sm font-medium mb-2">Select Mood</h3>
+              <div className="flex gap-2 flex-wrap">
+                {moods.map((m) => (
+                  <Button
+                    key={m}
+                    variant={
+                      selectedMoods.includes(m) ? "default" : "outline"
+                    }
+                    onClick={() =>
+                      toggleSelection(selectedMoods, m, setSelectedMoods)
+                    }
+                  >
+                    {m}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h3 className="text-sm font-medium mb-2">Select Genre</h3>
+              <div className="flex gap-2 flex-wrap">
+                {genres.map((g) => (
+                  <Button
+                    key={g}
+                    variant={
+                      selectedGenres.includes(g) ? "default" : "outline"
+                    }
+                    onClick={() =>
+                      toggleSelection(selectedGenres, g, setSelectedGenres)
+                    }
+                  >
+                    {g}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Music Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {featuredSongs[activeCategory]?.map((song) => (
-            <Card 
-              key={song.id} 
+          {filteredSongs.map((song) => (
+            <Card
+              key={song.id}
               className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300 group cursor-pointer"
             >
               <CardContent className="p-4">
                 <div className="relative mb-4">
                   <div className="w-full aspect-square bg-gradient-primary rounded-lg flex items-center justify-center relative overflow-hidden">
                     <Music className="w-8 h-8 text-white/80" />
-                    
+
                     {/* Play button overlay */}
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="hero" size="icon" className="h-12 w-12">
@@ -247,22 +311,6 @@ const FeaturedMusic = () => {
             </Card>
           ))}
         </div>
-
-        {/* Quick Actions */}
-        {/* <div className="flex flex-wrap gap-4 mt-8 justify-center">
-          <Button variant="outline" className="gap-2">
-            <Zap className="w-4 h-4" />
-            AI Song Discovery
-          </Button>
-          <Button variant="outline" className="gap-2">
-            <Music className="w-4 h-4" />
-            Create Playlist
-          </Button>
-          <Button variant="outline" className="gap-2">
-            <Headphones className="w-4 h-4" />
-            Start Radio
-          </Button>
-        </div> */}
       </div>
     </section>
   );
