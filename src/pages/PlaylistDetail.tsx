@@ -4,8 +4,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { useMusicContext } from "@/contexts/MusicContext";
+import { mockPlaylists, mockSongs } from "@/data/mockData";
 import { 
   Play, 
   Heart, 
@@ -16,7 +16,8 @@ import {
   Search,
   ArrowLeft,
   Edit,
-  UserPlus
+  UserPlus,
+  Music
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
@@ -25,364 +26,199 @@ import Footer from "@/components/Footer";
 const PlaylistDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { playSong } = useMusicContext();
   const [isLiked, setIsLiked] = useState(false);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
-  const [isCollaborating, setIsCollaborating] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
-  // Mock playlist data - would come from API based on id
-  const playlist = {
-    id: "1",
-    title: "Summer Vibes Collection 🌞",
-    description: "The perfect soundtrack for sunny days, beach trips, and good times with friends. Featuring the hottest summer hits and feel-good classics.",
-    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=600&fit=crop",
-    owner: {
-      name: "Alex Rivera",
-      avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop&crop=face"
-    },
-    isPublic: true,
-    likes: 1247,
-    collaborators: [
-      { id: "1", name: "Alice Chen", avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b5c5?w=100&h=100&fit=crop&crop=face" },
-      { id: "2", name: "Bob Martinez", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face" },
-      { id: "3", name: "Sarah Kim", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face" }
-    ],
-    songs: [
-      {
-        id: "1",
-        title: "Blinding Lights",
-        artist: "The Weeknd",
-        album: "After Hours",
-        duration: "3:20",
-        addedBy: "Alex Rivera",
-        addedAt: "2 days ago",
-        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
-      },
-      {
-        id: "2",
-        title: "Watermelon Sugar",
-        artist: "Harry Styles",
-        album: "Fine Line",
-        duration: "2:54",
-        addedBy: "Alice Chen",
-        addedAt: "1 week ago",
-        cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop"
-      },
-      {
-        id: "3",
-        title: "Levitating",
-        artist: "Dua Lipa",
-        album: "Future Nostalgia",
-        duration: "3:23",
-        addedBy: "Bob Martinez",
-        addedAt: "3 days ago",
-        cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop"
-      },
-      {
-        id: "4",
-        title: "Good 4 U",
-        artist: "Olivia Rodrigo",
-        album: "SOUR",
-        duration: "2:58",
-        addedBy: "Sarah Kim",
-        addedAt: "4 days ago",
-        cover: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop"
-      },
-      {
-        id: "5",
-        title: "Heat Waves",
-        artist: "Glass Animals",
-        album: "Dreamland",
-        duration: "3:58",
-        addedBy: "Alex Rivera",
-        addedAt: "1 week ago",
-        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
-      }
-    ]
-  };
+  // Get playlist from mock data
+  const playlist = mockPlaylists.find(p => p.id === id) || mockPlaylists[0];
 
-  const totalDuration = playlist.songs.reduce((acc, song) => {
-    const [minutes, seconds] = song.duration.split(':').map(Number);
-    return acc + minutes * 60 + seconds;
-  }, 0);
-
-  const formatTotalDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${mins}m`;
-  };
-
-  const togglePlaylistLike = () => {
-    setIsLiked(!isLiked);
-    toast({
-      title: isLiked ? "Removed from your playlists" : "Added to your playlists",
-      duration: 2000,
+  const handlePlaySong = (song: any) => {
+    playSong({
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      album: song.album || "Unknown Album",
+      duration: song.duration,
+      cover: song.cover,
+      genre: song.genre,
+      plays: song.plays,
+      likes: song.likes
     });
   };
 
-  const toggleSongLike = (songId: string) => {
-    setLikedSongs(prev =>
-      prev.includes(songId)
-        ? prev.filter(id => id !== songId)
-        : [...prev, songId]
-    );
-  };
-
-  const playAllSongs = () => {
-    toast({
-      title: `Playing ${playlist.title}`,
-      description: `${playlist.songs.length} songs`,
-      duration: 3000,
-    });
-  };
-
-  const playSong = (song: any) => {
-    toast({
-      title: `Now playing: ${song.title}`,
-      description: `by ${song.artist}`,
-      duration: 3000,
-    });
+  const handlePlayAll = () => {
+    if (playlist.songs && playlist.songs.length > 0) {
+      handlePlaySong(playlist.songs[0]);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-dark text-foreground">
-      <div className="container mx-auto px-4 py-8">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          onClick={() => navigate(-1)}
-          className="mb-6"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-
-        {/* Playlist Header */}
-        <div className="flex flex-col lg:flex-row gap-8 mb-8">
-          {/* Cover Image */}
-          <div className="flex-shrink-0">
-            <div className="w-64 h-64 lg:w-80 lg:h-80 rounded-lg overflow-hidden bg-gradient-to-br from-primary to-primary-glow shadow-2xl">
-              <img
-                src={playlist.cover}
-                alt={playlist.title}
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
-
-          {/* Playlist Info */}
-          <div className="flex-1 flex flex-col justify-end">
-            <Badge variant="secondary" className="w-fit mb-2">
-              {playlist.isPublic ? "Public Playlist" : "Private Playlist"}
-            </Badge>
-            
-            <h1 className="text-4xl lg:text-6xl font-bold mb-4 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-              {playlist.title}
-            </h1>
-            
-            <p className="text-muted-foreground text-lg mb-6 max-w-2xl">
-              {playlist.description}
-            </p>
-
-            {/* Owner and Stats */}
-            <div className="flex items-center gap-4 mb-6">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={playlist.owner.avatar} alt={playlist.owner.name} />
-                <AvatarFallback>{playlist.owner.name.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <span className="font-medium">{playlist.owner.name}</span>
-              <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground">{playlist.likes.toLocaleString()} likes</span>
-              <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground">{playlist.songs.length} songs</span>
-              <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
-            </div>
-
-            {/* Collaborators */}
-            {playlist.collaborators.length > 0 && (
-              <div className="flex items-center gap-2 mb-6">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Collaborators:</span>
-                <div className="flex -space-x-2">
-                  {playlist.collaborators.map((collaborator) => (
-                    <Avatar key={collaborator.id} className="w-6 h-6 border-2 border-background">
-                      <AvatarImage src={collaborator.avatar} alt={collaborator.name} />
-                      <AvatarFallback className="text-xs">{collaborator.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                  ))}
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center space-x-4 mb-6">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="flex items-center space-x-4 flex-1">
+            <div className="w-48 h-48 rounded-xl overflow-hidden shadow-lg bg-gradient-primary">
+              {playlist.cover ? (
+                <img 
+                  src={playlist.cover} 
+                  alt={playlist.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Music className="w-20 h-20 text-white" />
                 </div>
+              )}
+            </div>
+            
+            <div className="flex-1 space-y-4">
+              <div>
+                <Badge variant="secondary" className="mb-2">
+                  Playlist
+                </Badge>
+                <h1 className="text-4xl font-bold text-foreground mb-2">
+                  {playlist.title}
+                </h1>
+                <p className="text-muted-foreground mb-4">
+                  {playlist.description}
+                </p>
               </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-4">
-              <Button size="lg" onClick={playAllSongs} className="bg-primary hover:bg-primary/90">
-                <Play className="w-5 h-5 mr-2" />
-                Play All
-              </Button>
               
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={togglePlaylistLike}
-                className={isLiked ? "text-red-500 border-red-500" : ""}
-              >
-                <Heart className={`w-5 h-5 mr-2 ${isLiked ? 'fill-current' : ''}`} />
-                {isLiked ? 'Liked' : 'Like'}
-              </Button>
-
-              <ShareButton title={playlist.title} type="playlist" />
-
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="lg">
-                    <Plus className="w-5 h-5 mr-2" />
-                    Add Song
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Song to Playlist</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Search for songs..."
-                        className="pl-10"
-                      />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Search and add songs to this playlist
-                    </p>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Collaborate
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Collaborators</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <Input placeholder="Search friends by username..." />
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Suggested Friends</p>
-                      <div className="space-y-2">
-                        {["alice_music", "bob_beats", "charlie_vibes"].map((username) => (
-                          <div key={username} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="w-8 h-8">
-                                <AvatarFallback>{username.charAt(0).toUpperCase()}</AvatarFallback>
-                              </Avatar>
-                              <span className="text-sm">{username}</span>
-                            </div>
-                            <Button size="sm" variant="outline">
-                              Add
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Invite friends to collaborate on this playlist
-                    </p>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              <Button variant="outline">
-                <Edit className="w-4 h-4 mr-2" />
-                Edit
-              </Button>
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                <Avatar className="w-6 h-6">
+                  <AvatarImage src={playlist.owner.avatar} />
+                  <AvatarFallback>{playlist.owner.name[0]}</AvatarFallback>
+                </Avatar>
+                <span className="font-medium text-foreground">{playlist.owner.name}</span>
+                <span>•</span>
+                <span>{playlist.songCount || playlist.songs?.length || 0} bài hát</span>
+                <span>•</span>
+                <span>{playlist.likes.toLocaleString()} lượt thích</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Songs List */}
-        <Card className="bg-card/50 border-border/50">
+        {/* Actions */}
+        <div className="flex items-center space-x-4">
+          <Button 
+            variant="hero" 
+            size="lg" 
+            className="min-w-[120px]"
+            onClick={handlePlayAll}
+          >
+            <Play className="w-5 h-5 mr-2" />
+            Phát tất cả
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="lg"
+          >
+            <Edit className="w-4 h-4 mr-2" />
+            Chỉnh sửa
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsLiked(!isLiked)}
+          >
+            <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+          </Button>
+          
+          <ShareButton />
+          
+          <Button variant="ghost" size="icon">
+            <MoreHorizontal className="w-5 h-5" />
+          </Button>
+        </div>
+
+        {/* Song List */}
+        <Card>
           <CardContent className="p-6">
-            {/* Search in playlist */}
-            <div className="relative mb-6">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search in playlist..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-background/50"
-              />
-            </div>
-
-            {/* Songs */}
             <div className="space-y-2">
-              {playlist.songs.map((song, index) => (
-                <div
+              {playlist.songs?.map((song, index) => (
+                <div 
                   key={song.id}
-                  className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group"
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-accent/50 group cursor-pointer transition-colors"
+                  onClick={() => handlePlaySong(song)}
                 >
-                  {/* Track Number / Play Button */}
-                  <div className="w-8 text-center">
-                    <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="hidden group-hover:flex w-8 h-8"
-                      onClick={() => playSong(song)}
-                    >
-                      <Play className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  {/* Cover */}
-                  <Avatar className="w-12 h-12">
-                    <AvatarImage src={song.cover} alt={song.title} />
-                    <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
-                  </Avatar>
-
-                  {/* Song Info */}
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{song.title}</h4>
-                    <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                  </div>
-
-                  {/* Album */}
-                  <div className="hidden md:block flex-1 min-w-0">
-                    <p className="text-sm text-muted-foreground truncate">{song.album}</p>
-                  </div>
-
-                  {/* Added by */}
-                  <div className="hidden lg:block w-32">
-                    <p className="text-sm text-muted-foreground">Added by {song.addedBy}</p>
-                    <p className="text-xs text-muted-foreground">{song.addedAt}</p>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center space-x-3 flex-1 min-w-0">
+                    <div className="w-5 text-center text-sm text-muted-foreground group-hover:hidden">
+                      {index + 1}
+                    </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => toggleSongLike(song.id)}
-                      className={`h-8 w-8 ${likedSongs.includes(song.id) ? 'text-red-500' : 'text-muted-foreground opacity-0 group-hover:opacity-100'}`}
+                      className="w-5 h-5 hidden group-hover:flex"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlaySong(song);
+                      }}
                     >
-                      <Heart className={`w-4 h-4 ${likedSongs.includes(song.id) ? 'fill-current' : ''}`} />
+                      <Play className="w-3 h-3" />
                     </Button>
+                    
+                    <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
+                      {song.cover ? (
+                        <img 
+                          src={song.cover} 
+                          alt={song.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-primary flex items-center justify-center">
+                          <Music className="w-4 h-4 text-white" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate text-foreground">
+                        {song.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {song.artist}
+                      </p>
+                    </div>
+                  </div>
 
-                    {/* Duration */}
-                    <span className="text-sm text-muted-foreground w-12 text-right">
-                      {song.duration}
+                  <div className="flex items-center space-x-3 text-muted-foreground">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 opacity-0 group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const newLiked = likedSongs.includes(song.id)
+                          ? likedSongs.filter(id => id !== song.id)
+                          : [...likedSongs, song.id];
+                        setLikedSongs(newLiked);
+                      }}
+                    >
+                      <Heart 
+                        className={`w-4 h-4 ${
+                          likedSongs.includes(song.id) 
+                            ? 'fill-red-500 text-red-500' 
+                            : ''
+                        }`} 
+                      />
+                    </Button>
+                    
+                    <span className="text-xs w-12 text-right">
+                      {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}
                     </span>
-
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                    
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 opacity-0 group-hover:opacity-100"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
@@ -392,8 +228,9 @@ const PlaylistDetail = () => {
             </div>
           </CardContent>
         </Card>
+
+        <Footer />
       </div>
-      <Footer />
     </div>
   );
 };
