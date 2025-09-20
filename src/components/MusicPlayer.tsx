@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { useMusicContext } from "@/contexts/MusicContext";
 import {
   Play,
   Pause,
@@ -18,6 +17,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+interface Song {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  duration: number;
+  cover?: string;
+}
 
 const lyricsMock = [
   { time: 0, text: "♪ Instrumental intro..." },
@@ -29,7 +36,7 @@ const lyricsMock = [
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, isPlaying, setIsPlaying } = useMusicContext();
+  const [isPlaying, setIsPlaying] = useState(true);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
   const [isMuted, setIsMuted] = useState(false);
@@ -39,6 +46,15 @@ const MusicPlayer = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
 
+  const currentSong: Song = {
+    id: "1",
+    title: "Cosmic Dreams",
+    artist: "EchoVerse Artists",
+    album: "Space Vibes",
+    duration: 60, // demo ngắn 60s
+    cover: "https://i.imgur.com/Vy1r2zP.jpeg", // ảnh demo
+  };
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -46,7 +62,7 @@ const MusicPlayer = () => {
   };
 
   const getCurrentTime = () => {
-    return Math.floor((progress[0] / 100) * (currentSong?.duration || 60));
+    return Math.floor((progress[0] / 100) * currentSong.duration);
   };
 
   // Auto update lyrics highlight
@@ -71,8 +87,8 @@ const MusicPlayer = () => {
     setRepeatMode(modes[(currentIndex + 1) % modes.length]);
   };
 
-  // Hide player on login page or if no current song
-  if (location.pathname === "/login" || !currentSong) {
+  // Hide player on login page
+  if (location.pathname === "/login") {
     return null;
   }
 
@@ -193,7 +209,7 @@ const MusicPlayer = () => {
                   className="flex-1"
                 />
                 <span className="text-xs text-muted-foreground w-8 hidden sm:block">
-                  {formatTime(currentSong?.duration || 60)}
+                  {formatTime(currentSong.duration)}
                 </span>
               </div>
             </div>
@@ -278,7 +294,7 @@ const MusicPlayer = () => {
                   className="flex-1"
                 />
                 <span className="text-xs text-muted-foreground">
-                  {formatTime(currentSong?.duration || 60)}
+                  {formatTime(currentSong.duration)}
                 </span>
               </div>
 
