@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Outlet } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -19,7 +19,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<AppLayout />}>
+            <Route path="/" element={<AppLayout><Outlet /></AppLayout>}>
               <Route index element={<Index />} />
               <Route path="trending" element={<TrendingMusic />} />
               <Route path="top100" element={<Top100 />} />

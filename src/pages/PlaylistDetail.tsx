@@ -132,7 +132,7 @@ const PlaylistDetail = () => {
             <Heart className={`w-5 h-5 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
           </Button>
           
-          <ShareButton />
+          <ShareButton title={playlist.title} type="playlist" />
           
           <Button variant="ghost" size="icon">
             <MoreHorizontal className="w-5 h-5" />
