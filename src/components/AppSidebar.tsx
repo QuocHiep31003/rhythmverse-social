@@ -7,7 +7,10 @@ import {
   Users, 
   Music,
   ChevronLeft,
-  PanelLeft
+  PanelLeft,
+  TrendingUp,
+  Trophy,
+  Library
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,6 +44,9 @@ const getTotalNotifications = () => {
 const menuItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Discover", url: "/discover", icon: Compass },
+  { title: "My Library", url: "/playlists", icon: Library },
+  { title: "Trending", url: "/trending", icon: TrendingUp },
+  { title: "Top 100", url: "/top100", icon: Trophy },
   { title: "Playlist", url: "/playlist", icon: ListMusic },
   { title: "Quiz", url: "/quiz", icon: Brain },
   { title: "Social", url: "/social", icon: Users },

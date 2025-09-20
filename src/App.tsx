@@ -8,6 +8,11 @@ import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
+import TrendingMusic from "./pages/TrendingMusic";
+import Top100 from "./pages/Top100";
+import PlaylistDetail from "./pages/PlaylistDetail";
+import CreatePlaylist from "./pages/CreatePlaylist";
+import PlaylistLibrary from "./pages/PlaylistLibrary";
 import Quiz from "./pages/Quiz";
 import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
@@ -41,6 +46,11 @@ const App = () => (
                   <Route path="/" element={<Index />} />
                   <Route path="/discover" element={<Discover />} />
                   <Route path="/playlist" element={<Playlist />} />
+                  <Route path="/playlists" element={<PlaylistLibrary />} />
+                  <Route path="/playlist/:id" element={<PlaylistDetail />} />
+                  <Route path="/create-playlist" element={<CreatePlaylist />} />
+                  <Route path="/trending" element={<TrendingMusic />} />
+                  <Route path="/top100" element={<Top100 />} />
                   <Route path="/quiz" element={<Quiz />} />
                   <Route path="/quiz/create" element={<CreateQuiz />} />
                   <Route path="/search" element={<SearchResults />} />
