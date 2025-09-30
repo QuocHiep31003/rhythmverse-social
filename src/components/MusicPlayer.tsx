@@ -14,17 +14,20 @@ import {
   Shuffle,
   Repeat,
   Music,
+  Users,
+  ListPlus,
+  Copy,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-
-interface Song {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-  duration: number;
-  cover?: string;
-}
+import { useMusic } from "@/contexts/MusicContext";
+import { toast } from "@/hooks/use-toast";
 
 const lyricsMock = [
   { time: 0, text: "♪ Instrumental intro..." },
@@ -36,7 +39,7 @@ const lyricsMock = [
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const [isPlaying, setIsPlaying] = useState(true);
+  const { currentSong, isPlaying, togglePlay, playNext, playPrevious } = useMusic();
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
   const [isMuted, setIsMuted] = useState(false);
@@ -46,15 +49,6 @@ const MusicPlayer = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
 
-  const currentSong: Song = {
-    id: "1",
-    title: "Cosmic Dreams",
-    artist: "EchoVerse Artists",
-    album: "Space Vibes",
-    duration: 60, // demo ngắn 60s
-    cover: "https://i.imgur.com/Vy1r2zP.jpeg", // ảnh demo
-  };
-
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -62,6 +56,7 @@ const MusicPlayer = () => {
   };
 
   const getCurrentTime = () => {
+    if (!currentSong) return 0;
     return Math.floor((progress[0] / 100) * currentSong.duration);
   };
 
@@ -76,10 +71,41 @@ const MusicPlayer = () => {
     if (index !== -1) setCurrentLyric(index);
   }, [progress]);
 
-  const togglePlay = () => setIsPlaying(!isPlaying);
   const toggleMute = () => setIsMuted(!isMuted);
   const toggleShuffle = () => setIsShuffled(!isShuffled);
-  const toggleLike = () => setIsLiked(!isLiked);
+  const toggleLike = () => {
+    setIsLiked(!isLiked);
+    toast({
+      title: isLiked ? "Removed from favorites" : "Added to favorites",
+      duration: 2000,
+    });
+  };
+
+  const handleShare = (type: string) => {
+    if (!currentSong) return;
+    
+    switch (type) {
+      case "friends":
+        toast({
+          title: "Share with friends",
+          description: `Sharing "${currentSong.title}" with your friends`,
+        });
+        break;
+      case "playlist":
+        toast({
+          title: "Add to playlist",
+          description: `Adding "${currentSong.title}" to your playlist`,
+        });
+        break;
+      case "copy":
+        navigator.clipboard.writeText(`${window.location.origin}/song/${currentSong.id}`);
+        toast({
+          title: "Link copied!",
+          description: "Song link copied to clipboard",
+        });
+        break;
+    }
+  };
 
   const cycleRepeat = () => {
     const modes: Array<"off" | "one" | "all"> = ["off", "one", "all"];
@@ -87,8 +113,8 @@ const MusicPlayer = () => {
     setRepeatMode(modes[(currentIndex + 1) % modes.length]);
   };
 
-  // Hide player on login page
-  if (location.pathname === "/login") {
+  // Hide player on login page or if no song is playing
+  if (location.pathname === "/login" || !currentSong) {
     return null;
   }
 
@@ -155,7 +181,12 @@ const MusicPlayer = () => {
                   />
                 </Button>
 
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={playPrevious}
+                >
                   <SkipBack className="w-4 h-4" />
                 </Button>
 
@@ -172,7 +203,12 @@ const MusicPlayer = () => {
                   )}
                 </Button>
 
-                <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-8 w-8"
+                  onClick={playNext}
+                >
                   <SkipForward className="w-4 h-4" />
                 </Button>
 
@@ -209,16 +245,35 @@ const MusicPlayer = () => {
                   className="flex-1"
                 />
                 <span className="text-xs text-muted-foreground w-8 hidden sm:block">
-                  {formatTime(currentSong.duration)}
+                  {formatTime(currentSong?.duration || 0)}
                 </span>
               </div>
             </div>
 
             {/* Volume & Actions */}
             <div className="flex items-center space-x-2 flex-1 justify-end order-2 sm:order-none">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Share2 className="w-4 h-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Share2 className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuItem onClick={() => handleShare("friends")}>
+                    <Users className="w-4 h-4 mr-2" />
+                    Share with friends
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleShare("playlist")}>
+                    <ListPlus className="w-4 h-4 mr-2" />
+                    Add to playlist
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleShare("copy")}>
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy link
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               <div className="hidden sm:flex items-center space-x-2">
                 <Button
@@ -294,7 +349,7 @@ const MusicPlayer = () => {
                   className="flex-1"
                 />
                 <span className="text-xs text-muted-foreground">
-                  {formatTime(currentSong.duration)}
+                  {formatTime(currentSong?.duration || 0)}
                 </span>
               </div>
 
@@ -304,7 +359,7 @@ const MusicPlayer = () => {
                     className={cn("w-6 h-6", isShuffled && "text-primary")}
                   />
                 </Button>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={playPrevious}>
                   <SkipBack className="w-6 h-6" />
                 </Button>
                 <Button
@@ -319,7 +374,7 @@ const MusicPlayer = () => {
                     <Play className="w-6 h-6" />
                   )}
                 </Button>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={playNext}>
                   <SkipForward className="w-6 h-6" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={cycleRepeat}>

@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { MusicProvider } from "@/contexts/MusicContext";
 import AppLayout from "@/components/AppLayout";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
@@ -34,10 +35,11 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="echoverse-ui-theme">
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+      <MusicProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="*" element={
@@ -70,7 +72,8 @@ const App = () => (
           <MusicPlayer />
           <ChatBubble />
         </BrowserRouter>
-      </TooltipProvider>
+        </TooltipProvider>
+      </MusicProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

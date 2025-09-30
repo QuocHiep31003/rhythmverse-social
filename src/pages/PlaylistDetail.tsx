@@ -21,21 +21,32 @@ import {
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
+import { useMusic } from "@/contexts/MusicContext";
+import { mockSongs } from "@/data/mockData";
+import { Song } from "@/contexts/MusicContext";
 
 const PlaylistDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { playSong, setQueue } = useMusic();
   const [isLiked, setIsLiked] = useState(false);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
   const [isCollaborating, setIsCollaborating] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Convert mockSongs to playlist songs format
+  const playlistSongs: (Song & { addedBy: string; addedAt: string })[] = mockSongs.slice(0, 5).map((song, idx) => ({
+    ...song,
+    addedBy: ["Alex Rivera", "Alice Chen", "Bob Martinez", "Sarah Kim", "Alex Rivera"][idx],
+    addedAt: ["2 days ago", "1 week ago", "3 days ago", "4 days ago", "1 week ago"][idx],
+  }));
 
   // Mock playlist data - would come from API based on id
   const playlist = {
     id: "1",
     title: "Summer Vibes Collection 🌞",
     description: "The perfect soundtrack for sunny days, beach trips, and good times with friends. Featuring the hottest summer hits and feel-good classics.",
-    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=600&fit=crop",
+    cover: mockSongs[0].cover,
     owner: {
       name: "Alex Rivera",
       avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop&crop=face"
@@ -47,63 +58,11 @@ const PlaylistDetail = () => {
       { id: "2", name: "Bob Martinez", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face" },
       { id: "3", name: "Sarah Kim", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop&crop=face" }
     ],
-    songs: [
-      {
-        id: "1",
-        title: "Blinding Lights",
-        artist: "The Weeknd",
-        album: "After Hours",
-        duration: "3:20",
-        addedBy: "Alex Rivera",
-        addedAt: "2 days ago",
-        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
-      },
-      {
-        id: "2",
-        title: "Watermelon Sugar",
-        artist: "Harry Styles",
-        album: "Fine Line",
-        duration: "2:54",
-        addedBy: "Alice Chen",
-        addedAt: "1 week ago",
-        cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop"
-      },
-      {
-        id: "3",
-        title: "Levitating",
-        artist: "Dua Lipa",
-        album: "Future Nostalgia",
-        duration: "3:23",
-        addedBy: "Bob Martinez",
-        addedAt: "3 days ago",
-        cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop"
-      },
-      {
-        id: "4",
-        title: "Good 4 U",
-        artist: "Olivia Rodrigo",
-        album: "SOUR",
-        duration: "2:58",
-        addedBy: "Sarah Kim",
-        addedAt: "4 days ago",
-        cover: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop"
-      },
-      {
-        id: "5",
-        title: "Heat Waves",
-        artist: "Glass Animals",
-        album: "Dreamland",
-        duration: "3:58",
-        addedBy: "Alex Rivera",
-        addedAt: "1 week ago",
-        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop"
-      }
-    ]
+    songs: playlistSongs
   };
 
   const totalDuration = playlist.songs.reduce((acc, song) => {
-    const [minutes, seconds] = song.duration.split(':').map(Number);
-    return acc + minutes * 60 + seconds;
+    return acc + song.duration;
   }, 0);
 
   const formatTotalDuration = (seconds: number) => {
@@ -129,6 +88,8 @@ const PlaylistDetail = () => {
   };
 
   const playAllSongs = () => {
+    setQueue(playlist.songs);
+    playSong(playlist.songs[0]);
     toast({
       title: `Playing ${playlist.title}`,
       description: `${playlist.songs.length} songs`,
@@ -136,12 +97,9 @@ const PlaylistDetail = () => {
     });
   };
 
-  const playSong = (song: any) => {
-    toast({
-      title: `Now playing: ${song.title}`,
-      description: `by ${song.artist}`,
-      duration: 3000,
-    });
+  const handlePlaySong = (song: Song) => {
+    setQueue(playlist.songs);
+    playSong(song);
   };
 
   return (
@@ -334,7 +292,7 @@ const PlaylistDetail = () => {
                       size="icon"
                       variant="ghost"
                       className="hidden group-hover:flex w-8 h-8"
-                      onClick={() => playSong(song)}
+                      onClick={() => handlePlaySong(song)}
                     >
                       <Play className="w-4 h-4" />
                     </Button>
@@ -376,7 +334,7 @@ const PlaylistDetail = () => {
 
                     {/* Duration */}
                     <span className="text-sm text-muted-foreground w-12 text-right">
-                      {song.duration}
+                      {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}
                     </span>
 
                     <Button 

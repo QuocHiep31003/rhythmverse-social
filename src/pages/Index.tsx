@@ -9,29 +9,16 @@ import Footer from "@/components/Footer";
 import { MobileNotifications } from "@/components/MobileNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Play, Headphones, Star, TrendingUp, Sparkles, Music } from "lucide-react";
+import { useMusic } from "@/contexts/MusicContext";
+import { mockSongs } from "@/data/mockData";
 
 const Index = () => {
   const isMobile = useIsMobile();
-  const topHits100 = [
-    { id: 1, title: "Flowers", artist: "Miley Cyrus", duration: "3:20", plays: "1.2B" },
-    { id: 2, title: "Anti-Hero", artist: "Taylor Swift", duration: "3:24", plays: "987M" },
-    { id: 3, title: "As It Was", artist: "Harry Styles", duration: "2:47", plays: "1.5B" },
-    { id: 4, title: "Unholy", artist: "Sam Smith ft. Kim Petras", duration: "2:36", plays: "856M" },
-    { id: 5, title: "Bad Habit", artist: "Steve Lacy", duration: "3:51", plays: "743M" }
-  ];
-
-  const topHitsToday = [
-    { id: 1, title: "Vampire", artist: "Olivia Rodrigo", duration: "3:39", trend: "+15%" },
-    { id: 2, title: "Paint The Town Red", artist: "Doja Cat", duration: "3:50", trend: "+22%" },
-    { id: 3, title: "Cruel Summer", artist: "Taylor Swift", duration: "2:58", trend: "+8%" },
-    { id: 4, title: "Seven", artist: "Jung Kook ft. Latto", duration: "3:03", trend: "+31%" }
-  ];
-
-  const aiPicks = [
-    { id: 1, title: "Summertime Sadness", artist: "Lana Del Rey", reason: "Based on your mood", match: "94%" },
-    { id: 2, title: "Blinding Lights", artist: "The Weeknd", reason: "Similar to your likes", match: "89%" },
-    { id: 3, title: "Good 4 U", artist: "Olivia Rodrigo", reason: "Popular in your area", match: "91%" }
-  ];
+  const { playSong, setQueue } = useMusic();
+  
+  const topHits100 = mockSongs.slice(0, 5);
+  const topHitsToday = mockSongs.slice(5, 9);
+  const aiPicks = mockSongs.slice(0, 3);
 
   const editorsChoice = [
     { id: 1, title: "Chill Vibes Collection", tracks: 25, editor: "Music Team" },
@@ -85,10 +72,21 @@ const Index = () => {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {topHits100.map((song, index) => (
-                    <div key={song.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer">
+                    <div 
+                      key={song.id} 
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer"
+                      onClick={() => {
+                        setQueue(topHits100);
+                        playSong(song);
+                      }}
+                    >
                       <span className="w-6 text-sm text-muted-foreground text-center">{index + 1}</span>
-                      <div className="w-10 h-10 bg-gradient-primary rounded flex items-center justify-center">
-                        <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="w-10 h-10 bg-gradient-primary rounded flex items-center justify-center overflow-hidden">
+                        {song.cover ? (
+                          <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm">{song.title}</p>
@@ -96,7 +94,7 @@ const Index = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">{song.plays}</p>
-                        <p className="text-xs text-muted-foreground">{song.duration}</p>
+                        <p className="text-xs text-muted-foreground">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</p>
                       </div>
                     </div>
                   ))}
@@ -114,18 +112,28 @@ const Index = () => {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {topHitsToday.map((song, index) => (
-                    <div key={song.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer">
+                    <div 
+                      key={song.id} 
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer"
+                      onClick={() => {
+                        setQueue(topHitsToday);
+                        playSong(song);
+                      }}
+                    >
                       <span className="w-6 text-sm text-muted-foreground text-center">{index + 1}</span>
-                      <div className="w-10 h-10 bg-gradient-accent rounded flex items-center justify-center">
-                        <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="w-10 h-10 bg-gradient-accent rounded flex items-center justify-center overflow-hidden">
+                        {song.cover ? (
+                          <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm">{song.title}</p>
                         <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-medium text-green-500">{song.trend}</p>
-                        <p className="text-xs text-muted-foreground">{song.duration}</p>
+                        <p className="text-xs text-muted-foreground">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</p>
                       </div>
                     </div>
                   ))}
@@ -143,17 +151,28 @@ const Index = () => {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {aiPicks.map((song) => (
-                    <div key={song.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer">
-                      <div className="w-10 h-10 bg-gradient-neon rounded flex items-center justify-center">
-                        <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div 
+                      key={song.id} 
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer"
+                      onClick={() => {
+                        setQueue(aiPicks);
+                        playSong(song);
+                      }}
+                    >
+                      <div className="w-10 h-10 bg-gradient-neon rounded flex items-center justify-center overflow-hidden">
+                        {song.cover ? (
+                          <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                        ) : (
+                          <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm">{song.title}</p>
                         <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
-                        <p className="text-xs text-primary">{song.reason}</p>
+                        <p className="text-xs text-primary">{song.genre}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-medium text-green-500">{song.match}</p>
+                        <p className="text-xs font-medium text-green-500">{song.plays}</p>
                       </div>
                     </div>
                   ))}

@@ -14,22 +14,12 @@ import {
   Sparkles,
   Zap,
 } from "lucide-react";
-
-interface Song {
-  id: string;
-  title: string;
-  artist: string;
-  album?: string;
-  duration: string;
-  cover?: string;
-  genre: string;
-  mood?: string[];
-  plays: string;
-  isNew?: boolean;
-  isAIRecommended?: boolean;
-}
+import { useMusic } from "@/contexts/MusicContext";
+import { mockSongs } from "@/data/mockData";
+import { Song } from "@/contexts/MusicContext";
 
 const FeaturedMusic = () => {
+  const { playSong, setQueue } = useMusic();
   const [activeCategory, setActiveCategory] = useState("trending");
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
@@ -48,90 +38,13 @@ const FeaturedMusic = () => {
   };
 
   const moods = ["Happy", "Chill", "Focus", "Party"];
-  const genres = ["Electronic", "Synthwave", "Ambient", "EDM", "Indie Rock"];
+  const genres = ["Electronic", "Synthpop", "Ambient", "Pop", "Indie Pop"];
 
   // Data
   const featuredSongs: Record<string, Song[]> = {
-    trending: [
-      {
-        id: "1",
-        title: "Cosmic Dreams",
-        artist: "StarGazer",
-        album: "Galactic Soundscapes",
-        duration: "3:42",
-        genre: "Electronic",
-        mood: ["Happy", "Party"],
-        plays: "2.1M",
-        isAIRecommended: true,
-      },
-      {
-        id: "2",
-        title: "Midnight City",
-        artist: "M83",
-        album: "Hurry Up, We're Dreaming",
-        duration: "4:03",
-        genre: "Synthwave",
-        mood: ["Chill", "Focus"],
-        plays: "18.7M",
-      },
-      {
-        id: "3",
-        title: "Ocean Waves",
-        artist: "Chill Collective",
-        album: "Serenity",
-        duration: "5:12",
-        genre: "Ambient",
-        mood: ["Chill"],
-        plays: "956K",
-        isNew: true,
-      },
-    ],
-    newReleases: [
-      {
-        id: "5",
-        title: "Neon Nights",
-        artist: "Synth Masters",
-        album: "Digital Dreams",
-        duration: "4:15",
-        genre: "Synthpop",
-        mood: ["Happy"],
-        plays: "125K",
-        isNew: true,
-      },
-      {
-        id: "6",
-        title: "Lost in Time",
-        artist: "Echo Chamber",
-        duration: "3:58",
-        genre: "Indie Rock",
-        mood: ["Focus"],
-        plays: "89K",
-        isNew: true,
-        isAIRecommended: true,
-      },
-    ],
-    aiRecommended: [
-      {
-        id: "8",
-        title: "Mind Reader",
-        artist: "Neural Network",
-        duration: "3:45",
-        genre: "Experimental",
-        mood: ["Focus"],
-        plays: "567K",
-        isAIRecommended: true,
-      },
-      {
-        id: "9",
-        title: "Digital Soul",
-        artist: "AI Composer",
-        duration: "4:21",
-        genre: "Electronic",
-        mood: ["Chill"],
-        plays: "892K",
-        isAIRecommended: true,
-      },
-    ],
+    trending: mockSongs.slice(0, 4),
+    newReleases: mockSongs.slice(4, 8),
+    aiRecommended: mockSongs.slice(6, 10),
   };
 
   const categories = [
@@ -147,12 +60,8 @@ const FeaturedMusic = () => {
       ? songsInCategory.filter((song) => {
           if (
             selectedGenres.length > 0 &&
+            song.genre &&
             !selectedGenres.includes(song.genre)
-          )
-            return false;
-          if (
-            selectedMoods.length > 0 &&
-            !selectedMoods.some((m) => song.mood?.includes(m))
           )
             return false;
           return true;
@@ -246,30 +155,25 @@ const FeaturedMusic = () => {
             <Card
               key={song.id}
               className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300 group cursor-pointer"
+              onClick={() => {
+                setQueue(filteredSongs);
+                playSong(song);
+              }}
             >
               <CardContent className="p-4">
                 <div className="relative mb-4">
                   <div className="w-full aspect-square bg-gradient-primary rounded-lg flex items-center justify-center relative overflow-hidden">
-                    <Music className="w-8 h-8 text-white/80" />
+                    {song.cover ? (
+                      <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <Music className="w-8 h-8 text-white/80" />
+                    )}
 
                     {/* Play button overlay */}
                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button variant="hero" size="icon" className="h-12 w-12">
                         <Play className="w-6 h-6" />
                       </Button>
-                    </div>
-
-                    {/* Badges */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1">
-                      {song.isNew && (
-                        <Badge variant="secondary" className="text-xs">New</Badge>
-                      )}
-                      {song.isAIRecommended && (
-                        <Badge className="bg-gradient-primary text-white text-xs gap-1">
-                          <Zap className="w-3 h-3" />
-                          AI
-                        </Badge>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -281,7 +185,7 @@ const FeaturedMusic = () => {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {song.duration}
+                      {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}
                     </div>
                     <div className="flex items-center gap-1">
                       <Headphones className="w-3 h-3" />
@@ -296,13 +200,13 @@ const FeaturedMusic = () => {
                   </div>
 
                   <div className="flex items-center gap-1 pt-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                       <Heart className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                       <Plus className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                       <Share2 className="w-4 h-4" />
                     </Button>
                   </div>
