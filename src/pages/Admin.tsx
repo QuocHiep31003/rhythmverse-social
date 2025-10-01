@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { 
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 import { 
   Shield,
   Users,
@@ -25,151 +31,33 @@ import {
   UserCheck,
   Crown,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  ListMusic,
+  DollarSign,
+  Play
 } from "lucide-react";
+import {
+  mockAdminUsers,
+  mockAdminSongs,
+  mockAdminPlaylists,
+  mockAdminReports,
+  mockAnalytics
+} from "@/data/mockData";
 
 const Admin = () => {
   const [selectedTab, setSelectedTab] = useState("overview");
   const [searchQuery, setSearchQuery] = useState("");
 
   const stats = {
-    totalUsers: 15678,
-    activeUsers: 12456,
-    premiumUsers: 3421,
+    totalUsers: 72000,
+    activeUsers: 52340,
+    premiumUsers: 16800,
     totalSongs: 45892,
     totalPlaylists: 78945,
     reportsToday: 12,
     newUsersToday: 234,
-    streamingHours: 89567
-  };
-
-  const users = [
-    {
-      id: 1,
-      name: "Alex Johnson",
-      email: "alex@example.com",
-      role: "Premium",
-      status: "active",
-      joinDate: "2023-12-15",
-      lastActive: "2 hours ago",
-      reportsCount: 0
-    },
-    {
-      id: 2,
-      name: "Sarah Chen",
-      email: "sarah@example.com",
-      role: "Free",
-      status: "active",
-      joinDate: "2024-01-10",
-      lastActive: "30 minutes ago",
-      reportsCount: 0
-    },
-    {
-      id: 3,
-      name: "Mike Rodriguez",
-      email: "mike@example.com",
-      role: "Moderator",
-      status: "active",
-      joinDate: "2023-11-20",
-      lastActive: "1 hour ago",
-      reportsCount: 0
-    },
-    {
-      id: 4,
-      name: "Emma Davis",
-      email: "emma@example.com",
-      role: "Free",
-      status: "suspended",
-      joinDate: "2024-01-08",
-      lastActive: "3 days ago",
-      reportsCount: 3
-    }
-  ];
-
-  const songs = [
-    {
-      id: 1,
-      title: "Cosmic Dreams",
-      artist: "StarGazer",
-      album: "Galaxy Sounds",
-      duration: "3:45",
-      uploadDate: "2024-01-15",
-      plays: 12567,
-      status: "approved",
-      reports: 0
-    },
-    {
-      id: 2,
-      title: "Night Vibes",
-      artist: "Chill Collective",
-      duration: "4:12",
-      uploadDate: "2024-01-14",
-      plays: 8934,
-      status: "pending",
-      reports: 2
-    },
-    {
-      id: 3,
-      title: "Electronic Pulse",
-      artist: "TechBeats",
-      duration: "5:23",
-      uploadDate: "2024-01-13",
-      plays: 15432,
-      status: "approved",
-      reports: 0
-    }
-  ];
-
-  const reports = [
-    {
-      id: 1,
-      type: "Inappropriate Content",
-      targetType: "song",
-      targetTitle: "Night Vibes",
-      reporter: "User123",
-      reason: "Contains explicit lyrics not marked as such",
-      date: "2024-01-15 14:30",
-      status: "pending"
-    },
-    {
-      id: 2,
-      type: "Copyright Violation",
-      targetType: "song",
-      targetTitle: "Popular Hit Copy",
-      reporter: "MusicLover456",
-      reason: "This appears to be a copyrighted song",
-      date: "2024-01-15 12:15",
-      status: "under_review"
-    },
-    {
-      id: 3,
-      type: "Spam",
-      targetType: "user",
-      targetTitle: "SpamUser99",
-      reporter: "CleanMusic",
-      reason: "User is spamming playlists with promotional content",
-      date: "2024-01-14 18:45",
-      status: "resolved"
-    }
-  ];
-
-  const analytics = {
-    dailyActiveUsers: [
-      { day: "Mon", users: 8500 },
-      { day: "Tue", users: 9200 },
-      { day: "Wed", users: 8800 },
-      { day: "Thu", users: 9600 },
-      { day: "Fri", users: 10200 },
-      { day: "Sat", users: 12100 },
-      { day: "Sun", users: 11800 }
-    ],
-    topGenres: [
-      { genre: "Electronic", percentage: 28 },
-      { genre: "Pop", percentage: 24 },
-      { genre: "Rock", percentage: 18 },
-      { genre: "Hip Hop", percentage: 15 },
-      { genre: "Other", percentage: 15 }
-    ]
+    streamingHours: 89567,
+    monthlyRevenue: 168000
   };
 
   const getStatusColor = (status: string) => {
@@ -206,7 +94,7 @@ const Admin = () => {
         </div>
 
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-6">
+          <TabsList className="grid w-full grid-cols-6 mb-6">
             <TabsTrigger value="overview" className="gap-2">
               <BarChart3 className="w-4 h-4" />
               Overview
@@ -217,7 +105,11 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="content" className="gap-2">
               <Music className="w-4 h-4" />
-              Content
+              Songs
+            </TabsTrigger>
+            <TabsTrigger value="playlists" className="gap-2">
+              <ListMusic className="w-4 h-4" />
+              Playlists
             </TabsTrigger>
             <TabsTrigger value="reports" className="gap-2">
               <AlertTriangle className="w-4 h-4" />
@@ -263,10 +155,10 @@ const Admin = () => {
 
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardContent className="p-4 text-center">
-                  <AlertTriangle className="w-8 h-8 text-primary mx-auto mb-2" />
-                  <div className="text-2xl font-bold">{stats.reportsToday}</div>
-                  <div className="text-xs text-muted-foreground">Reports Today</div>
-                  <div className="text-xs text-orange-500 mt-1">Needs attention</div>
+                  <DollarSign className="w-8 h-8 text-primary mx-auto mb-2" />
+                  <div className="text-2xl font-bold">${(stats.monthlyRevenue / 1000).toFixed(0)}k</div>
+                  <div className="text-xs text-muted-foreground">Monthly Revenue</div>
+                  <div className="text-xs text-green-500 mt-1">+12% vs last month</div>
                 </CardContent>
               </Card>
             </div>
@@ -275,23 +167,110 @@ const Admin = () => {
             <div className="grid md:grid-cols-2 gap-6">
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
-                  <CardTitle>Daily Active Users</CardTitle>
+                  <CardTitle>User Growth</CardTitle>
+                  <CardDescription>Monthly user statistics</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {analytics.dailyActiveUsers.map((day, index) => (
-                      <div key={index} className="flex items-center gap-3">
-                        <div className="w-12 text-sm">{day.day}</div>
-                        <div className="flex-1">
-                          <div className="w-full bg-muted/20 rounded-full h-2">
+                  <ChartContainer
+                    config={{
+                      users: {
+                        label: "Total Users",
+                        color: "hsl(var(--primary))",
+                      },
+                      premium: {
+                        label: "Premium Users",
+                        color: "hsl(var(--accent))",
+                      },
+                    }}
+                    className="h-[300px]"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={mockAnalytics.monthlyStats}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+                        <YAxis stroke="hsl(var(--muted-foreground))" />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Line 
+                          type="monotone" 
+                          dataKey="users" 
+                          stroke="hsl(var(--primary))" 
+                          strokeWidth={2}
+                          dot={{ fill: "hsl(var(--primary))", r: 4 }}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="premium" 
+                          stroke="hsl(var(--accent))" 
+                          strokeWidth={2}
+                          dot={{ fill: "hsl(var(--accent))", r: 4 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                <CardHeader>
+                  <CardTitle>Top Songs This Week</CardTitle>
+                  <CardDescription>Most played tracks</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChartContainer
+                    config={{
+                      plays: {
+                        label: "Plays",
+                        color: "hsl(var(--neon-pink))",
+                      },
+                    }}
+                    className="h-[300px]"
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={mockAnalytics.topSongs}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis 
+                          dataKey="title" 
+                          stroke="hsl(var(--muted-foreground))" 
+                          angle={-15}
+                          textAnchor="end"
+                          height={80}
+                          fontSize={12}
+                        />
+                        <YAxis stroke="hsl(var(--muted-foreground))" />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Bar 
+                          dataKey="plays" 
+                          fill="hsl(var(--neon-pink))"
+                          radius={[8, 8, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Additional Stats */}
+            <div className="grid md:grid-cols-3 gap-6">
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-lg">Genre Distribution</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {mockAnalytics.topGenres.map((genre, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <span className="text-sm">{genre.genre}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 bg-muted/20 rounded-full h-1.5">
                             <div 
-                              className="bg-gradient-primary h-2 rounded-full transition-all duration-500"
-                              style={{ width: `${(day.users / 12100) * 100}%` }}
+                              className="bg-gradient-primary h-1.5 rounded-full"
+                              style={{ width: `${genre.percentage}%` }}
                             />
                           </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground w-16 text-right">
-                          {day.users.toLocaleString()}
+                          <span className="text-sm text-muted-foreground w-12 text-right">
+                            {genre.percentage}%
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -301,26 +280,48 @@ const Admin = () => {
 
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
-                  <CardTitle>Popular Genres</CardTitle>
+                  <CardTitle className="text-lg">Platform Activity</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {analytics.topGenres.map((genre, index) => (
-                      <div key={index} className="flex items-center gap-3">
-                        <div className="w-20 text-sm">{genre.genre}</div>
-                        <div className="flex-1">
-                          <div className="w-full bg-muted/20 rounded-full h-2">
-                            <div 
-                              className="bg-gradient-secondary h-2 rounded-full transition-all duration-500"
-                              style={{ width: `${genre.percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground w-12 text-right">
-                          {genre.percentage}%
-                        </div>
-                      </div>
-                    ))}
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Active Now</span>
+                    <span className="font-bold text-green-500">8,432</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Streaming Hours</span>
+                    <span className="font-bold">{stats.streamingHours.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Playlists Created</span>
+                    <span className="font-bold">124</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Songs Uploaded</span>
+                    <span className="font-bold">45</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-lg">System Health</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Server Status</span>
+                    <Badge className="bg-green-500/10 text-green-500">Online</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">API Response</span>
+                    <span className="font-bold">42ms</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Uptime</span>
+                    <span className="font-bold">99.9%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Storage Used</span>
+                    <span className="font-bold">67%</span>
                   </div>
                 </CardContent>
               </Card>
@@ -354,8 +355,8 @@ const Admin = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {users.map((user) => (
-                    <div key={user.id} className="flex items-center gap-4 p-4 rounded-lg bg-muted/10">
+                  {mockAdminUsers.map((user) => (
+                    <div key={user.id} className="flex items-center gap-4 p-4 rounded-lg bg-muted/10 hover:bg-muted/20 transition-colors">
                       <Avatar className="w-10 h-10">
                         <AvatarFallback className="bg-gradient-primary text-white">
                           {user.name.split(' ').map(n => n[0]).join('')}
@@ -376,7 +377,9 @@ const Admin = () => {
                         <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                         <div className="flex gap-4 text-xs text-muted-foreground mt-1">
                           <span>Joined: {new Date(user.joinDate).toLocaleDateString()}</span>
-                          <span>Last active: {user.lastActive}</span>
+                          <span>Last: {user.lastActive}</span>
+                          <span>{user.playlists} playlists</span>
+                          <span>{user.followers} followers</span>
                           {user.reportsCount > 0 && (
                             <span className="text-red-500">{user.reportsCount} reports</span>
                           )}
@@ -391,11 +394,11 @@ const Admin = () => {
                           <Edit className="w-4 h-4" />
                         </Button>
                         {user.status === "active" ? (
-                          <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-destructive">
                             <Ban className="w-4 h-4" />
                           </Button>
                         ) : (
-                          <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-green-500">
                             <UserCheck className="w-4 h-4" />
                           </Button>
                         )}
@@ -412,7 +415,7 @@ const Admin = () => {
             <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <CardTitle>Content Management</CardTitle>
+                  <CardTitle>Song Management</CardTitle>
                   <div className="flex gap-2">
                     <Button variant="hero" size="sm">
                       <Music className="w-4 h-4 mr-2" />
@@ -427,8 +430,8 @@ const Admin = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {songs.map((song) => (
-                    <div key={song.id} className="flex items-center gap-4 p-4 rounded-lg bg-muted/10">
+                  {mockAdminSongs.map((song) => (
+                    <div key={song.id} className="flex items-center gap-4 p-4 rounded-lg bg-muted/10 hover:bg-muted/20 transition-colors">
                       <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
                         <Music className="w-6 h-6 text-white" />
                       </div>
@@ -446,11 +449,16 @@ const Admin = () => {
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {song.artist} • {song.duration} • {song.plays.toLocaleString()} plays
+                          {song.artist} • {song.album || "Single"} • {song.duration}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          Uploaded: {new Date(song.uploadDate).toLocaleDateString()}
-                        </p>
+                        <div className="flex gap-3 text-xs text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1">
+                            <Play className="w-3 h-3" />
+                            {song.plays.toLocaleString()} plays
+                          </span>
+                          <span>Genre: {song.genre}</span>
+                          <span>Uploaded: {new Date(song.uploadDate).toLocaleDateString()}</span>
+                        </div>
                       </div>
                       
                       <div className="flex gap-2">
@@ -481,15 +489,99 @@ const Admin = () => {
             </Card>
           </TabsContent>
 
+          <TabsContent value="playlists" className="space-y-6">
+            {/* Playlist Management */}
+            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <CardTitle>Playlist Management</CardTitle>
+                  <div className="flex gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search playlists..."
+                        className="pl-10 w-64"
+                      />
+                    </div>
+                    <Button variant="outline" size="icon">
+                      <Filter className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {mockAdminPlaylists.map((playlist) => (
+                    <div key={playlist.id} className="flex items-center gap-4 p-4 rounded-lg bg-muted/10 hover:bg-muted/20 transition-colors">
+                      <div className="w-12 h-12 bg-gradient-secondary rounded-lg flex items-center justify-center">
+                        <ListMusic className="w-6 h-6 text-white" />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-medium truncate">{playlist.name}</h3>
+                          <Badge variant={playlist.isPublic ? "default" : "secondary"}>
+                            {playlist.isPublic ? "Public" : "Private"}
+                          </Badge>
+                          <Badge className={getStatusColor(playlist.status)}>
+                            {playlist.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          By {playlist.creator}
+                        </p>
+                        <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                          <span>{playlist.songs} songs</span>
+                          <span>{playlist.followers.toLocaleString()} followers</span>
+                          <span>Created: {new Date(playlist.createdDate).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="icon" className="h-8 w-8">
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        {playlist.status === "reported" ? (
+                          <Button variant="outline" size="icon" className="h-8 w-8 text-destructive">
+                            <Ban className="w-4 h-4" />
+                          </Button>
+                        ) : (
+                          <Button variant="outline" size="icon" className="h-8 w-8">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="reports" className="space-y-6">
             {/* Reports Management */}
             <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
               <CardHeader>
-                <CardTitle>Content Reports</CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <CardTitle>Content Reports</CardTitle>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm">
+                      <Filter className="w-4 h-4 mr-2" />
+                      Filter
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {reports.map((report) => (
+                  {mockAdminReports.map((report) => (
                     <div key={report.id} className="p-4 rounded-lg bg-muted/10 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -536,10 +628,11 @@ const Admin = () => {
 
           <TabsContent value="settings" className="space-y-6">
             {/* System Settings */}
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-6 mb-6">
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
                   <CardTitle>System Configuration</CardTitle>
+                  <CardDescription>Configure system-wide settings</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -566,6 +659,7 @@ const Admin = () => {
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
                   <CardTitle>Security Settings</CardTitle>
+                  <CardDescription>Configure security and authentication</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -589,6 +683,153 @@ const Admin = () => {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Roles & Permissions */}
+            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+              <CardHeader>
+                <CardTitle>Roles & Permissions</CardTitle>
+                <CardDescription>Manage user roles and their permissions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {/* Admin Role */}
+                  <div className="p-4 rounded-lg bg-muted/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-primary flex items-center justify-center">
+                          <Shield className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Admin</h3>
+                          <p className="text-xs text-muted-foreground">Full system access</p>
+                        </div>
+                      </div>
+                      <Badge className="bg-red-500/10 text-red-500">Highest</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Manage Users</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Manage Content</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Handle Reports</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>System Settings</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Moderator Role */}
+                  <div className="p-4 rounded-lg bg-muted/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gradient-secondary flex items-center justify-center">
+                          <UserCheck className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Moderator</h3>
+                          <p className="text-xs text-muted-foreground">Content moderation access</p>
+                        </div>
+                      </div>
+                      <Badge className="bg-orange-500/10 text-orange-500">High</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Review Content</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Handle Reports</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Ban Users</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <X className="w-3 h-3 text-red-500" />
+                        <span>System Settings</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Premium Role */}
+                  <div className="p-4 rounded-lg bg-muted/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                          <Crown className="w-5 h-5 text-yellow-500" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">Premium</h3>
+                          <p className="text-xs text-muted-foreground">Enhanced features for paying users</p>
+                        </div>
+                      </div>
+                      <Badge className="bg-yellow-500/10 text-yellow-500">Standard</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Unlimited Playlists</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>HD Streaming</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>No Ads</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Offline Downloads</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* User Role */}
+                  <div className="p-4 rounded-lg bg-muted/10 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                          <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">User</h3>
+                          <p className="text-xs text-muted-foreground">Basic access</p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary">Basic</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Browse Music</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Check className="w-3 h-3 text-green-500" />
+                        <span>Create Playlists</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <X className="w-3 h-3 text-red-500" />
+                        <span>HD Streaming</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <X className="w-3 h-3 text-red-500" />
+                        <span>Offline Downloads</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
