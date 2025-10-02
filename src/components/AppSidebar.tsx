@@ -10,8 +10,7 @@ import {
   PanelLeft,
   TrendingUp,
   Trophy,
-  Library,
-  Shield
+  Library
 } from "lucide-react";
 import {
   Sidebar,
@@ -51,7 +50,6 @@ const menuItems = [
   { title: "Playlist", url: "/playlist", icon: ListMusic },
   { title: "Quiz", url: "/quiz", icon: Brain },
   { title: "Social", url: "/social", icon: Users },
-  { title: "Admin", url: "/admin", icon: Shield },
 ];
 
 export function AppSidebar() {

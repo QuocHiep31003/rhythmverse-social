@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,13 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Music, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, user } = useAuth();
-  const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -29,85 +25,35 @@ const Login = () => {
     confirmPassword: ""
   });
 
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user) {
-      navigate("/");
-    }
-  }, [user, navigate]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
-    const { error } = await signIn(loginData.email, loginData.password);
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to sign in. Please check your credentials.",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Signed in successfully!",
-      });
-    }
-
-    setIsLoading(false);
+    
+    // Mock login process
+    setTimeout(() => {
+      setIsLoading(false);
+      navigate('/');
+    }, 1500);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (registerData.password !== registerData.confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Passwords do not match!",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (registerData.password.length < 6) {
-      toast({
-        title: "Error",
-        description: "Password must be at least 6 characters long.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsLoading(true);
-
-    const { error } = await signUp(
-      registerData.email,
-      registerData.password,
-      registerData.name
-    );
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create account.",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Account created! Please check your email to verify your account.",
-      });
-    }
-
-    setIsLoading(false);
+    
+    // Mock registration process
+    setTimeout(() => {
+      setIsLoading(false);
+      navigate('/');
+    }, 1500);
   };
 
   const handleSocialLogin = (provider: string) => {
-    toast({
-      title: "Coming Soon",
-      description: `${provider} login will be available soon.`,
-    });
+    setIsLoading(true);
+    // Mock social login
+    setTimeout(() => {
+      setIsLoading(false);
+      navigate('/');
+    }, 1000);
   };
 
   return (
