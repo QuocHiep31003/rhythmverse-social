@@ -1,1 +1,4 @@
 project_id = "kbnqkfxrhkaabxmydugk"
+
+[functions.recognize-audio]
+verify_jwt = false
