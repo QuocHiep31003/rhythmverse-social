@@ -5,9 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
-import { AuthProvider } from "@/contexts/AuthContext";
 import AppLayout from "@/components/AppLayout";
-import Auth from "./pages/Auth";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
@@ -19,6 +17,7 @@ import PlaylistLibrary from "./pages/PlaylistLibrary";
 import Quiz from "./pages/Quiz";
 import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
+import Login from "./pages/Login";
 import Premium from "./pages/Premium";
 import Profile from "./pages/Profile";
 import Social from "./pages/Social";
@@ -36,47 +35,45 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="echoverse-ui-theme">
-      <AuthProvider>
-        <MusicProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/auth" element={<Auth />} />
-                <Route path="*" element={
-                  <AppLayout>
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/discover" element={<Discover />} />
-                      <Route path="/playlist" element={<Playlist />} />
-                      <Route path="/playlists" element={<PlaylistLibrary />} />
-                      <Route path="/playlist/:id" element={<PlaylistDetail />} />
-                      <Route path="/create-playlist" element={<CreatePlaylist />} />
-                      <Route path="/trending" element={<TrendingMusic />} />
-                      <Route path="/top100" element={<Top100 />} />
-                      <Route path="/quiz" element={<Quiz />} />
-                      <Route path="/quiz/create" element={<CreateQuiz />} />
-                      <Route path="/search" element={<SearchResults />} />
-                      <Route path="/premium" element={<Premium />} />
-                      <Route path="/profile" element={<Profile />} />
-                      <Route path="/social" element={<Social />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="/admin" element={<Admin />} />
-                      <Route path="/song/:id" element={<SongDetail />} />
-                      <Route path="/album/:id" element={<AlbumDetail />} />
-                      <Route path="/artist/:id" element={<ArtistDetail />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
-                  </AppLayout>
-                } />
-              </Routes>
-              <MusicPlayer />
-              <ChatBubble />
-            </BrowserRouter>
-          </TooltipProvider>
-        </MusicProvider>
-      </AuthProvider>
+      <MusicProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="*" element={
+              <AppLayout>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/discover" element={<Discover />} />
+                  <Route path="/playlist" element={<Playlist />} />
+                  <Route path="/playlists" element={<PlaylistLibrary />} />
+                  <Route path="/playlist/:id" element={<PlaylistDetail />} />
+                  <Route path="/create-playlist" element={<CreatePlaylist />} />
+                  <Route path="/trending" element={<TrendingMusic />} />
+                  <Route path="/top100" element={<Top100 />} />
+                  <Route path="/quiz" element={<Quiz />} />
+                  <Route path="/quiz/create" element={<CreateQuiz />} />
+                  <Route path="/search" element={<SearchResults />} />
+                  <Route path="/premium" element={<Premium />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/social" element={<Social />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/song/:id" element={<SongDetail />} />
+                  <Route path="/album/:id" element={<AlbumDetail />} />
+                  <Route path="/artist/:id" element={<ArtistDetail />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AppLayout>
+            } />
+          </Routes>
+          <MusicPlayer />
+          <ChatBubble />
+        </BrowserRouter>
+        </TooltipProvider>
+      </MusicProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

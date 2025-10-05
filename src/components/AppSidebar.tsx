@@ -10,8 +10,7 @@ import {
   PanelLeft,
   TrendingUp,
   Trophy,
-  Library,
-  Shield
+  Library
 } from "lucide-react";
 import {
   Sidebar,
@@ -28,7 +27,6 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useAdminCheck } from "@/hooks/useAdminCheck";
 
 // Mock notification data - in real app, this would come from context/state
 const getNotificationCount = (url: string) => {
@@ -58,16 +56,10 @@ export function AppSidebar() {
   const { state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
-  const { isAdmin } = useAdminCheck();
 
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
-
-  const allMenuItems = [
-    ...menuItems,
-    ...(isAdmin ? [{ title: "Admin", url: "/admin", icon: Shield }] : [])
-  ];
 
   return (
     <div
@@ -115,7 +107,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent> 
             <SidebarMenu className="px-3 space-y-1">
-              {allMenuItems.map((item) => {
+              {menuItems.map((item) => {
                 const notificationCount = getNotificationCount(item.url);
                 const itemIsActive = isActive(item.url);
                 

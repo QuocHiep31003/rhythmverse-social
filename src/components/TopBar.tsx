@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, MessageCircle, Settings, LogOut, User, Search, Paperclip, Mic, Shield } from "lucide-react";
+import { Bell, MessageCircle, Settings, LogOut, User, Search, Paperclip, Mic } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,36 +10,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { Link } from "react-router-dom";
 
 const TopBar = () => {
-  const { user, signOut } = useAuth();
-  const { isAdmin } = useAdminCheck();
-  const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    await signOut();
-    navigate("/auth");
-  };
-
-  const getInitials = () => {
-    if (!user?.email) return "U";
-    return user.email[0].toUpperCase();
-  };
-
-  if (!user) {
-    return (
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center justify-end px-4 gap-4">
-          <Button variant="hero" size="sm" asChild>
-            <Link to="/auth">Sign In</Link>
-          </Button>
-        </div>
-      </header>
-    );
-  }
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center justify-between px-4 gap-4">
@@ -91,16 +64,16 @@ const TopBar = () => {
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
                 <AvatarImage src="/placeholder.svg" alt="User" />
-                <AvatarFallback className="bg-primary text-primary-foreground">{getInitials()}</AvatarFallback>
+                <AvatarFallback className="bg-primary text-primary-foreground">U</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56 bg-background/95 backdrop-blur-sm border-border/40" align="end">
             <div className="flex items-center justify-start gap-2 p-2">
               <div className="flex flex-col space-y-1 leading-none">
-                <p className="font-medium">{user.user_metadata?.full_name || "User"}</p>
+                <p className="font-medium">John Doe</p>
                 <p className="w-[200px] truncate text-sm text-muted-foreground">
-                  {user.email}
+                  john.doe@example.com
                 </p>
               </div>
             </div>
@@ -111,14 +84,6 @@ const TopBar = () => {
                 Profile
               </Link>
             </DropdownMenuItem>
-            {isAdmin && (
-              <DropdownMenuItem asChild>
-                <Link to="/admin" className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  Admin Panel
-                </Link>
-              </DropdownMenuItem>
-            )}
             <DropdownMenuItem asChild>
               <Link to="/settings" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
@@ -126,7 +91,7 @@ const TopBar = () => {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 text-destructive cursor-pointer">
+            <DropdownMenuItem className="flex items-center gap-2 text-destructive">
               <LogOut className="h-4 w-4" />
               Log out
             </DropdownMenuItem>

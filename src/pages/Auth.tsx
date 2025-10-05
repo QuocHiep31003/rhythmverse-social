@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { useToast } from "@/hooks/use-toast";
 import { 
   Eye, 
   EyeOff, 
@@ -15,14 +14,10 @@ import {
   User,
   ArrowLeft
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "react-router-dom";
 import Footer from "@/components/Footer";
 
 const Auth = () => {
-  const { signIn, signUp, user } = useAuth();
-  const navigate = useNavigate();
-  const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
@@ -36,93 +31,47 @@ const Auth = () => {
   const [activeTab, setActiveTab] = useState("login");
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      navigate("/");
-    }
-  }, [user, navigate]);
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    const { error } = await signIn(loginData.email, loginData.password);
-    
-    if (error) {
-      toast({
-        title: "Login Failed",
-        description: error.message,
-        variant: "destructive"
-      });
-    } else {
-      toast({
-        title: "Welcome back!",
-        description: "You've successfully logged in."
-      });
-      navigate("/");
-    }
-    
-    setIsLoading(false);
+    // Mock login logic
+    setTimeout(() => {
+      console.log("Login:", loginData);
+      setIsLoading(false);
+    }, 1000);
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (registerData.password !== registerData.confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Passwords don't match!",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    if (registerData.password.length < 6) {
-      toast({
-        title: "Error",
-        description: "Password must be at least 6 characters.",
-        variant: "destructive"
-      });
+      alert("Passwords don't match!");
       return;
     }
     
     setIsLoading(true);
     
-    const { error } = await signUp(registerData.email, registerData.password, registerData.name);
-    
-    if (error) {
-      toast({
-        title: "Registration Failed",
-        description: error.message,
-        variant: "destructive"
-      });
-    } else {
-      toast({
-        title: "Account created!",
-        description: "Please check your email to confirm your account."
-      });
-      setActiveTab("login");
-    }
-    
-    setIsLoading(false);
+    // Mock register logic
+    setTimeout(() => {
+      console.log("Register:", registerData);
+      setIsLoading(false);
+    }, 1000);
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    toast({
-      title: "Feature Coming Soon",
-      description: "Password reset functionality will be available soon."
-    });
-    
-    setIsLoading(false);
+    // Mock reset logic
+    setTimeout(() => {
+      console.log("Reset password for:", resetEmail);
+      alert("Password reset link sent to your email!");
+      setIsLoading(false);
+    }, 1000);
   };
 
   const handleSocialLogin = (provider: string) => {
-    toast({
-      title: "Coming Soon",
-      description: `${provider} login will be available soon.`
-    });
+    console.log(`${provider} login`);
   };
 
   return (
