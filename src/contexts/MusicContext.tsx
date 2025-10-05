@@ -9,6 +9,7 @@ export interface Song {
   cover: string;
   genre?: string;
   plays?: string;
+  url?: string;
 }
 
 interface MusicContextType {

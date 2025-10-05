@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
 import AppLayout from "@/components/AppLayout";
+import AdminLayout from "@/components/AdminLayout";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
@@ -29,6 +30,12 @@ import ArtistDetail from "./pages/ArtistDetail";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminHome from "./pages/admin/AdminHome";
+import AdminSongs from "./pages/admin/AdminSongs";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminPlaylists from "./pages/admin/AdminPlaylists";
+import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +49,22 @@ const App = () => (
           <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin/*" element={
+              <AdminLayout>
+                <Routes>
+                  <Route path="login" element={<AdminLogin />} />
+                  <Route path="home" element={<AdminHome />} />
+                  <Route path="songs" element={<AdminSongs />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="playlists" element={<AdminPlaylists />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                </Routes>
+              </AdminLayout>
+            } />
+
+            {/* Main App Routes */}
             <Route path="*" element={
               <AppLayout>
                 <Routes>
@@ -60,7 +83,6 @@ const App = () => (
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/social" element={<Social />} />
                   <Route path="/settings" element={<Settings />} />
-                  <Route path="/admin" element={<Admin />} />
                   <Route path="/song/:id" element={<SongDetail />} />
                   <Route path="/album/:id" element={<AlbumDetail />} />
                   <Route path="/artist/:id" element={<ArtistDetail />} />

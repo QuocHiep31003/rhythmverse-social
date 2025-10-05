@@ -1,0 +1,123 @@
+import { ReactNode, useEffect } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu } from "lucide-react";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { toast } from "sonner";
+
+interface AdminLayoutProps {
+  children: ReactNode;
+}
+
+const AdminLayout = ({ children }: AdminLayoutProps) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem("adminAuth");
+    if (!isAuthenticated && location.pathname !== "/admin/login") {
+      navigate("/admin/login");
+    }
+  }, [navigate, location]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("adminAuth");
+    toast.success("Đã đăng xuất");
+    navigate("/admin/login");
+  };
+
+  if (location.pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
+  const menuItems = [
+    { icon: Home, label: "Dashboard", path: "/admin/home" },
+    { icon: Music, label: "Bài hát", path: "/admin/songs" },
+    { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
+    { icon: Users, label: "Người dùng", path: "/admin/users" },
+    { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
+  ];
+
+  const Sidebar = () => (
+    <div className="flex flex-col h-full bg-card border-r">
+      <div className="p-6 border-b">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Music className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg">Echoverse</h2>
+            <p className="text-xs text-muted-foreground">Admin Panel</p>
+          </div>
+        </div>
+      </div>
+
+      <nav className="flex-1 p-4 space-y-2">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname === item.path;
+          return (
+            <Link key={item.path} to={item.path}>
+              <Button
+                variant={isActive ? "secondary" : "ghost"}
+                className="w-full justify-start"
+              >
+                <Icon className="w-4 h-4 mr-3" />
+                {item.label}
+              </Button>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="p-4 border-t">
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-destructive hover:text-destructive"
+          onClick={handleLogout}
+        >
+          <LogOut className="w-4 h-4 mr-3" />
+          Đăng xuất
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex w-64 flex-col">
+        <Sidebar />
+      </aside>
+
+      {/* Mobile Header */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-2">
+            <Music className="w-6 h-6 text-primary" />
+            <h2 className="font-bold">Admin Panel</h2>
+          </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="w-6 h-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0">
+              <Sidebar />
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="pt-16 md:pt-0 p-6 md:p-8">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default AdminLayout;
