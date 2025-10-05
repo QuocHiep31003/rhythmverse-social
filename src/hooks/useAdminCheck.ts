@@ -3,12 +3,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 export const useAdminCheck = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const checkAdminRole = async () => {
+      if (authLoading) {
+        return;
+      }
+
       if (!user) {
         setIsAdmin(false);
         setLoading(false);
@@ -23,7 +27,7 @@ export const useAdminCheck = () => {
           .eq("role", "admin")
           .single();
 
-        if (error) {
+        if (error && error.code !== "PGRST116") {
           console.error("Error checking admin role:", error);
           setIsAdmin(false);
         } else {
@@ -38,7 +42,7 @@ export const useAdminCheck = () => {
     };
 
     checkAdminRole();
-  }, [user]);
+  }, [user, authLoading]);
 
-  return { isAdmin, loading };
+  return { isAdmin, loading: loading || authLoading };
 };
