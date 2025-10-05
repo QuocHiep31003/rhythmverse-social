@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
 import ChatBubble from "@/components/ChatBubble";
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 
 const Quiz = () => {
+  const navigate = useNavigate();
   const [selectedQuiz, setSelectedQuiz] = useState<number | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [score, setScore] = useState(0);
@@ -276,10 +278,10 @@ const Quiz = () => {
 
         <div className="grid gap-8">
           {/* Quiz Types */}
-          <div className="lg:col-span-2">
+            <div className="lg:col-span-2">
             <h2 className="text-2xl font-bold mb-6">Choose Your Challenge</h2>
             <div className="mb-6">
-              <Button variant="hero" className="mb-4">
+              <Button variant="hero" className="mb-4" onClick={() => navigate('/quiz/create')}>
                 <Plus className="w-4 h-4 mr-2" />
                 Create New Quiz
               </Button>

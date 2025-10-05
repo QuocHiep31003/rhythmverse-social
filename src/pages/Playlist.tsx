@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
 import ChatBubble from "@/components/ChatBubble";
 import ShareButton from "@/components/ShareButton";
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 
 const Playlist = () => {
+  const navigate = useNavigate();
   const [likedSongs, setLikedSongs] = useState<string[]>(["1", "3", "5"]);
 
   // Mock data for liked songs
@@ -120,7 +122,7 @@ const Playlist = () => {
 
         {/* Quick Actions */}
         <div className="flex gap-4 mb-8">
-          <Button variant="hero" className="gap-2">
+          <Button variant="hero" className="gap-2" onClick={() => navigate('/create-playlist')}>
             <Plus className="w-4 h-4" />
             Create Playlist
           </Button>
@@ -231,7 +233,7 @@ const Playlist = () => {
         <div>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold">Made by You</h2>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => navigate('/create-playlist')}>
               <Plus className="w-4 h-4" />
               New Playlist
             </Button>
@@ -239,7 +241,11 @@ const Playlist = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {userPlaylists.map((playlist) => (
-              <Card key={playlist.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
+              <Card 
+                key={playlist.id} 
+                className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                onClick={() => navigate(`/playlist/${playlist.id}`)}
+              >
                 <CardContent className="p-4">
                   <div className="aspect-square rounded-lg bg-gradient-primary mb-4 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 relative">
                     <Music className="w-12 h-12 text-white" />
@@ -248,6 +254,10 @@ const Playlist = () => {
                         variant="hero"
                         size="icon"
                         className="opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('Play playlist:', playlist.id);
+                        }}
                       >
                         <Play className="w-5 h-5" />
                       </Button>
@@ -258,8 +268,18 @@ const Playlist = () => {
                     <div className="flex items-center justify-between">
                       <h3 className="font-semibold truncate">{playlist.name}</h3>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <ShareButton title={playlist.name} type="playlist" />
-                        <Button variant="ghost" size="icon" className="h-6 w-6">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <ShareButton title={playlist.name} type="playlist" />
+                        </div>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('More options for:', playlist.id);
+                          }}
+                        >
                           <MoreHorizontal className="w-4 h-4" />
                         </Button>
                       </div>

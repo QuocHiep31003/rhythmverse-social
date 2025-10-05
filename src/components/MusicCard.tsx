@@ -1,7 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Play, Heart, MoreHorizontal, Clock } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Play, Heart, MoreHorizontal, Clock, Share2, ListPlus, Download } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface MusicCardProps {
   title: string;
@@ -11,6 +18,7 @@ interface MusicCardProps {
   imageUrl?: string;
   isPlaying?: boolean;
   variant?: "default" | "compact" | "featured";
+  songId?: string;
 }
 
 const MusicCard = ({ 
@@ -20,10 +28,18 @@ const MusicCard = ({
   duration = "3:24", 
   imageUrl, 
   isPlaying = false,
-  variant = "default" 
+  variant = "default",
+  songId
 }: MusicCardProps) => {
+  const navigate = useNavigate();
   const [isLiked, setIsLiked] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+
+  const handleCardClick = () => {
+    if (songId) {
+      navigate(`/song/${songId}`);
+    }
+  };
 
   if (variant === "compact") {
     return (
@@ -65,6 +81,7 @@ const MusicCard = ({
       className="bg-card/50 border-border/40 hover:bg-card/80 transition-all duration-300 group cursor-pointer hover:shadow-card"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onClick={handleCardClick}
     >
       <CardContent className="p-4">
         {/* Album Art */}
@@ -99,13 +116,32 @@ const MusicCard = ({
             >
               <Heart className={`h-4 w-4 ${isLiked ? 'fill-neon-pink text-neon-pink' : ''}`} />
             </Button>
-            <Button
-              variant="glass"
-              size="icon"
-              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="glass"
+                  size="icon"
+                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); console.log('Add to playlist'); }}>
+                  <ListPlus className="mr-2 h-4 w-4" />
+                  Add to Playlist
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); console.log('Share'); }}>
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Share
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); console.log('Download'); }}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

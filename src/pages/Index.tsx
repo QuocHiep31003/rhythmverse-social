@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ import { useMusic } from "@/contexts/MusicContext";
 import { mockSongs } from "@/data/mockData";
 
 const Index = () => {
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { playSong, setQueue } = useMusic();
   
@@ -34,25 +36,25 @@ const Index = () => {
         <section className="py-8">
           <div className="container px-6">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer">
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer" onClick={() => navigate('/discover')}>
                 <CardContent className="p-4 text-center">
                   <Sparkles className="w-8 h-8 text-primary mx-auto mb-2" />
                   <p className="text-sm font-medium">AI Search</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer">
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer" onClick={() => navigate('/trending')}>
                 <CardContent className="p-4 text-center">
                   <TrendingUp className="w-8 h-8 text-neon-pink mx-auto mb-2" />
                   <p className="text-sm font-medium">Trending</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer">
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer" onClick={() => navigate('/discover')}>
                 <CardContent className="p-4 text-center">
                   <Music className="w-8 h-8 text-neon-blue mx-auto mb-2" />
                   <p className="text-sm font-medium">Genres</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer">
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer" onClick={() => navigate('/discover')}>
                 <CardContent className="p-4 text-center">
                   <Headphones className="w-8 h-8 text-neon-green mx-auto mb-2" />
                   <p className="text-sm font-medium">Radio</p>
@@ -98,7 +100,7 @@ const Index = () => {
                       </div>
                     </div>
                   ))}
-                  <Button variant="outline" className="w-full mt-4" size="sm">View All 100</Button>
+                  <Button variant="outline" className="w-full mt-4" size="sm" onClick={() => navigate('/top100')}>View All 100</Button>
                 </CardContent>
               </Card>
 
@@ -137,7 +139,7 @@ const Index = () => {
                       </div>
                     </div>
                   ))}
-                  <Button variant="outline" className="w-full mt-4" size="sm">See More Trending</Button>
+                  <Button variant="outline" className="w-full mt-4" size="sm" onClick={() => navigate('/trending')}>See More Trending</Button>
                 </CardContent>
               </Card>
 
@@ -176,7 +178,7 @@ const Index = () => {
                       </div>
                     </div>
                   ))}
-                  <Button variant="hero" className="w-full mt-4" size="sm">Get More AI Picks</Button>
+                  <Button variant="hero" className="w-full mt-4" size="sm" onClick={() => navigate('/discover')}>Get More AI Picks</Button>
                 </CardContent>
               </Card>
 
@@ -204,7 +206,7 @@ const Index = () => {
                       </Button>
                     </div>
                   ))}
-                  <Button variant="outline" className="w-full mt-4" size="sm">Browse All Albums</Button>
+                  <Button variant="outline" className="w-full mt-4" size="sm" onClick={() => navigate('/discover')}>Browse All Albums</Button>
                 </CardContent>
               </Card>
             </div>

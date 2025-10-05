@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 
 const TrendingMusic = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
   const [filter, setFilter] = useState("all");
@@ -189,7 +191,11 @@ const TrendingMusic = () => {
         {/* Trending Songs List */}
         <div className="space-y-4">
           {filteredSongs.map((song) => (
-            <Card key={song.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
+            <Card 
+              key={song.id} 
+              className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group cursor-pointer"
+              onClick={() => navigate(`/song/${song.id}`)}
+            >
               <CardContent className="p-6">
                 <div className="flex items-center gap-4">
                   {/* Rank */}
@@ -206,7 +212,10 @@ const TrendingMusic = () => {
                     <Button
                       size="icon"
                       className="absolute inset-0 w-16 h-16 rounded-full bg-primary/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => playSong(song)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        playSong(song);
+                      }}
                     >
                       <Play className="w-6 h-6" />
                     </Button>
@@ -233,13 +242,26 @@ const TrendingMusic = () => {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => toggleLike(song.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLike(song.id);
+                      }}
                       className={`h-8 w-8 ${likedSongs.includes(song.id) ? 'text-red-500' : 'text-muted-foreground'}`}
                     >
                       <Heart className={`w-4 h-4 ${likedSongs.includes(song.id) ? 'fill-current' : ''}`} />
                     </Button>
-                    <ShareButton title={song.title} type="song" />
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ShareButton title={song.title} type="song" />
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log('More options');
+                      }}
+                    >
                       <MoreHorizontal className="w-4 h-4" />
                     </Button>
                   </div>

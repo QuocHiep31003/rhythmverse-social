@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 
 const Discover = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -237,6 +239,11 @@ const Discover = () => {
                       variant={feature.status === "premium" ? "hero" : "outline"}
                       className="w-full gap-2"
                       disabled={feature.status === "demo"}
+                      onClick={() => {
+                        if (feature.status !== "demo") {
+                          console.log('Feature clicked:', feature.title);
+                        }
+                      }}
                     >
                       <Zap className="w-4 h-4" />
                       {feature.action}
@@ -255,7 +262,7 @@ const Discover = () => {
                   <p className="text-muted-foreground">
                     Get unlimited access to melody search, advanced lyrics analysis, and AI-powered recommendations
                   </p>
-                  <Button variant="hero" size="lg" className="gap-2">
+                  <Button variant="hero" size="lg" className="gap-2" onClick={() => navigate('/premium')}>
                     <Sparkles className="w-4 h-4" />
                     Upgrade to Premium
                   </Button>
@@ -356,7 +363,11 @@ const Discover = () => {
               <h2 className="text-2xl font-bold mb-4">Trending Now</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {trendingSongs.map((song) => (
-                  <Card key={song.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <Card 
+                    key={song.id} 
+                    className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                    onClick={() => navigate(`/song/${song.id}`)}
+                  >
                     <CardContent className="p-4">
                       <div className="aspect-square bg-gradient-primary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
                         <Music className="w-8 h-8 text-white" />
@@ -379,7 +390,11 @@ const Discover = () => {
               <h2 className="text-2xl font-bold mb-4">Fresh Releases</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {newReleases.map((song) => (
-                  <Card key={song.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <Card 
+                    key={song.id} 
+                    className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                    onClick={() => navigate(`/song/${song.id}`)}
+                  >
                     <CardContent className="p-4">
                       <div className="aspect-square bg-gradient-secondary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
                         <Music className="w-8 h-8 text-white" />
@@ -407,7 +422,11 @@ const Discover = () => {
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {recommendations.map((song) => (
-                    <Card key={song.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
+                    <Card 
+                      key={song.id} 
+                      className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                      onClick={() => navigate(`/song/${song.id}`)}
+                    >
                       <CardContent className="p-4">
                         <div className="aspect-square bg-gradient-primary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 relative">
                           <Brain className="w-8 h-8 text-white" />
