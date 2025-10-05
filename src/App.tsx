@@ -23,7 +23,6 @@ import Premium from "./pages/Premium";
 import Profile from "./pages/Profile";
 import Social from "./pages/Social";
 import Settings from "./pages/Settings";
-import Admin from "./pages/Admin";
 import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
