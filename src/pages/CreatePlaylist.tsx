@@ -12,26 +12,34 @@ import { ArrowLeft, Upload, Music, Lock, Globe, AlertCircle } from "lucide-react
 import { toast } from "@/hooks/use-toast";
 import Footer from "@/components/Footer";
 
+interface PlaylistForm {
+  name: string;
+  description: string;
+  isPublic: boolean;
+  songLimit: number;
+  coverImage: File | null;
+}
+
 const CreatePlaylist = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<PlaylistForm>({
     name: "",
     description: "",
     isPublic: true,
-    coverImage: null as File | null,
-    songLimit: 500
+    songLimit: 500,
+    coverImage: null,
   });
   const [coverPreview, setCoverPreview] = useState<string>("");
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: keyof PlaylistForm, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "File too large",
           description: "Please choose an image smaller than 5MB",
@@ -39,12 +47,9 @@ const CreatePlaylist = () => {
         });
         return;
       }
-
       setFormData(prev => ({ ...prev, coverImage: file }));
       const reader = new FileReader();
-      reader.onload = (e) => {
-        setCoverPreview(e.target?.result as string);
-      };
+      reader.onload = (e) => setCoverPreview(e.target?.result as string);
       reader.readAsDataURL(file);
     }
   };
@@ -60,22 +65,41 @@ const CreatePlaylist = () => {
     }
 
     setIsLoading(true);
-    
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
+      // Lấy ngày hiện tại theo format YYYY-MM-DD
+      const today = new Date().toISOString().split("T")[0];
+
+      const body = {
+        name: formData.name,
+        description: formData.description || "",
+        isPublic: formData.isPublic,
+        songLimit: formData.songLimit,
+        songIds: [], // chưa có bài hát
+        dateUpdate: today, // gửi luôn dateUpdate
+        coverImage: coverPreview || null, // giả lập gửi URL preview, thực tế upload lên server xử lý
+      };
+
+      const res = await fetch("http://localhost:8080/api/playlists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error("Failed to create playlist");
+
+      const data = await res.json();
+
       toast({
         title: "Playlist created successfully!",
-        description: `"${formData.name}" has been added to your library`,
+        description: `"${data.name}" has been added to your library`,
       });
-      
-      // Navigate to the new playlist (would use real ID from API)
-      navigate("/playlist/new-playlist-id");
-    } catch (error) {
+
+      navigate(`/playlist/${data.id}`);
+    } catch (err: any) {
       toast({
-        title: "Failed to create playlist",
-        description: "Please try again later",
+        title: "Error",
+        description: err.message || "Please try again later",
         variant: "destructive",
       });
     } finally {
@@ -86,24 +110,16 @@ const CreatePlaylist = () => {
   return (
     <div className="min-h-screen bg-gradient-dark text-white">
       <div className="container mx-auto px-4 py-8 max-w-2xl">
-        {/* Back Button */}
-        <Button
-          variant="ghost"
-          onClick={() => navigate(-1)}
-          className="mb-6"
-        >
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back
         </Button>
 
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
             Create New Playlist
           </h1>
-          <p className="text-muted-foreground">
-            Build your perfect music collection
-          </p>
+          <p className="text-muted-foreground">Build your perfect music collection</p>
         </div>
 
         <Card className="bg-card/50 border-border/50">
@@ -113,6 +129,7 @@ const CreatePlaylist = () => {
               Playlist Details
             </CardTitle>
           </CardHeader>
+
           <CardContent className="space-y-6">
             {/* Cover Image Upload */}
             <div className="space-y-2">
@@ -120,11 +137,7 @@ const CreatePlaylist = () => {
               <div className="flex items-center gap-4">
                 <div className="w-32 h-32 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
                   {coverPreview ? (
-                    <img
-                      src={coverPreview}
-                      alt="Playlist cover"
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={coverPreview} alt="Playlist cover" className="w-full h-full object-cover" />
                   ) : (
                     <div className="text-center">
                       <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
@@ -158,9 +171,7 @@ const CreatePlaylist = () => {
                 className="bg-background/50"
                 maxLength={100}
               />
-              <p className="text-xs text-muted-foreground">
-                {formData.name.length}/100 characters
-              </p>
+              <p className="text-xs text-muted-foreground">{formData.name.length}/100 characters</p>
             </div>
 
             {/* Description */}
@@ -174,9 +185,7 @@ const CreatePlaylist = () => {
                 className="bg-background/50 min-h-[100px] resize-none"
                 maxLength={300}
               />
-              <p className="text-xs text-muted-foreground">
-                {formData.description.length}/300 characters
-              </p>
+              <p className="text-xs text-muted-foreground">{formData.description.length}/300 characters</p>
             </div>
 
             {/* Privacy Settings */}
@@ -190,14 +199,11 @@ const CreatePlaylist = () => {
                     <Lock className="w-5 h-5 text-orange-500" />
                   )}
                   <div>
-                    <p className="font-medium">
-                      {formData.isPublic ? "Public" : "Private"}
-                    </p>
+                    <p className="font-medium">{formData.isPublic ? "Public" : "Private"}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formData.isPublic 
+                      {formData.isPublic
                         ? "Anyone can search and view this playlist"
-                        : "Only you can see this playlist"
-                      }
+                        : "Only you can see this playlist"}
                     </p>
                   </div>
                 </div>
@@ -215,8 +221,8 @@ const CreatePlaylist = () => {
                 <Input
                   id="song-limit"
                   type="number"
-                  min="1"
-                  max="1000"
+                  min={1}
+                  max={1000}
                   value={formData.songLimit}
                   onChange={(e) => handleInputChange("songLimit", parseInt(e.target.value) || 500)}
                   className="bg-background/50 w-32"
@@ -249,17 +255,13 @@ const CreatePlaylist = () => {
                     <div className="flex-1">
                       <h3 className="font-medium text-lg">{formData.name}</h3>
                       {formData.description && (
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {formData.description}
-                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">{formData.description}</p>
                       )}
                       <div className="flex items-center gap-2 mt-2">
                         <Badge variant={formData.isPublic ? "default" : "secondary"}>
                           {formData.isPublic ? "Public" : "Private"}
                         </Badge>
-                        <Badge variant="outline">
-                          0/{formData.songLimit} songs
-                        </Badge>
+                        <Badge variant="outline">0/{formData.songLimit} songs</Badge>
                       </div>
                     </div>
                   </div>
