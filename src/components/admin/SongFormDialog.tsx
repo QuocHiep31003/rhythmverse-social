@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -18,14 +18,24 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { genresApi, artistsApi } from "@/services/api";
 
 const songFormSchema = z.object({
-  title: z.string().min(1, "Tiêu đề không được để trống").max(200),
-  artist: z.string().min(1, "Nghệ sĩ không được để trống").max(200),
+  name: z.string().min(1, "Tên bài hát không được để trống").max(200),
+  releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
+  genre: z.string().min(1, "Vui lòng chọn thể loại"),
+  artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
   album: z.string().max(200).optional().or(z.literal("")),
-  genre: z.string().max(100).optional().or(z.literal("")),
   duration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
   cover: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
   audio: z.string().url("URL audio không hợp lệ"),
@@ -50,13 +60,17 @@ export const SongFormDialog = ({
   isLoading = false,
   mode,
 }: SongFormDialogProps) => {
+  const [genres, setGenres] = useState<any[]>([]);
+  const [artists, setArtists] = useState<any[]>([]);
+
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
     defaultValues: {
-      title: "",
-      artist: "",
-      album: "",
+      name: "",
+      releaseYear: new Date().getFullYear(),
       genre: "",
+      artistIds: [],
+      album: "",
       duration: 180,
       cover: "",
       audio: "",
@@ -65,14 +79,31 @@ export const SongFormDialog = ({
   });
 
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [genresData, artistsData] = await Promise.all([
+          genresApi.getAll(),
+          artistsApi.getAll(),
+        ]);
+        setGenres(genresData);
+        setArtists(artistsData);
+      } catch (error) {
+        console.error("Error loading genres/artists:", error);
+      }
+    };
+    loadData();
+  }, []);
+
+  useEffect(() => {
     if (open && defaultValues) {
       form.reset(defaultValues);
     } else if (open) {
       form.reset({
-        title: "",
-        artist: "",
-        album: "",
+        name: "",
+        releaseYear: new Date().getFullYear(),
         genre: "",
+        artistIds: [],
+        album: "",
         duration: 180,
         cover: "",
         audio: "",
@@ -83,6 +114,8 @@ export const SongFormDialog = ({
   const handleSubmit = (data: SongFormValues) => {
     onSubmit(data);
   };
+
+  const selectedArtistIds = form.watch("artistIds") || [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,10 +135,10 @@ export const SongFormDialog = ({
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <FormField
               control={form.control}
-              name="title"
+              name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tiêu đề</FormLabel>
+                  <FormLabel>Tên bài hát *</FormLabel>
                   <FormControl>
                     <Input placeholder="Tên bài hát" {...field} />
                   </FormControl>
@@ -116,13 +149,87 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="artist"
+              name="releaseYear"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nghệ sĩ</FormLabel>
+                  <FormLabel>Năm phát hành *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Tên nghệ sĩ" {...field} />
+                    <Input type="number" placeholder="2024" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="genre"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Thể loại *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Chọn thể loại" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {genres.map((genre) => (
+                        <SelectItem key={genre.id} value={genre.name}>
+                          {genre.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="artistIds"
+              render={() => (
+                <FormItem>
+                  <FormLabel>Nghệ sĩ * (chọn ít nhất 1)</FormLabel>
+                  <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto space-y-2">
+                    {artists.map((artist) => (
+                      <FormField
+                        key={artist.id}
+                        control={form.control}
+                        name="artistIds"
+                        render={({ field }) => {
+                          return (
+                            <FormItem
+                              key={artist.id}
+                              className="flex flex-row items-center space-x-3 space-y-0"
+                            >
+                              <FormControl>
+                                <Checkbox
+                                  checked={field.value?.includes(artist.id)}
+                                  onCheckedChange={(checked) => {
+                                    return checked
+                                      ? field.onChange([...field.value, artist.id])
+                                      : field.onChange(
+                                          field.value?.filter(
+                                            (value) => value !== artist.id
+                                          )
+                                        );
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className="font-normal cursor-pointer">
+                                {artist.name} ({artist.country})
+                              </FormLabel>
+                            </FormItem>
+                          );
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Đã chọn: {selectedArtistIds.length} nghệ sĩ
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}
@@ -144,24 +251,10 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="genre"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Thể loại (không bắt buộc)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Pop, Rock, Jazz..." {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
               name="duration"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Thời lượng (giây)</FormLabel>
+                  <FormLabel>Thời lượng (giây) *</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="180" {...field} />
                   </FormControl>
@@ -192,7 +285,7 @@ export const SongFormDialog = ({
               name="audio"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Audio URL</FormLabel>
+                  <FormLabel>Audio URL *</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="https://example.com/audio.mp3"
