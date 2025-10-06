@@ -1,4 +1,4 @@
-import { mockSongs, mockUsers, mockPlaylists, mockAlbums } from "@/data/mockData";
+import { mockSongs, mockUsers, mockPlaylists, mockAlbums, mockArtists, mockGenres } from "@/data/mockData";
 
 const API_BASE_URL = "http://localhost:8080/api";
 
@@ -129,6 +129,80 @@ export const albumsApi = {
   },
 };
 
+// Artists API
+export const artistsApi = {
+  getAll: async () => {
+    await delay(300);
+    return mockArtists;
+  },
+  
+  getById: async (id: number) => {
+    await delay(200);
+    return mockArtists.find(a => a.id === id);
+  },
+  
+  create: async (data: any) => {
+    await delay(500);
+    // TODO: Call POST ${API_BASE_URL}/artists
+    return { id: Date.now(), ...data };
+  },
+  
+  update: async (id: number, data: any) => {
+    await delay(500);
+    // TODO: Call PUT ${API_BASE_URL}/artists/${id}
+    return { id, ...data };
+  },
+  
+  delete: async (id: number) => {
+    await delay(500);
+    // TODO: Call DELETE ${API_BASE_URL}/artists/${id}
+    return { success: true };
+  },
+  
+  getCount: async () => {
+    await delay(200);
+    // TODO: Call GET ${API_BASE_URL}/artists/count
+    return mockArtists.length;
+  },
+};
+
+// Genres API
+export const genresApi = {
+  getAll: async () => {
+    await delay(300);
+    return mockGenres;
+  },
+  
+  getById: async (id: number) => {
+    await delay(200);
+    return mockGenres.find(g => g.id === id);
+  },
+  
+  create: async (data: any) => {
+    await delay(500);
+    // TODO: Call POST ${API_BASE_URL}/genres
+    return { id: Date.now(), ...data };
+  },
+  
+  update: async (id: number, data: any) => {
+    await delay(500);
+    // TODO: Call PUT ${API_BASE_URL}/genres/${id}
+    return { id, ...data };
+  },
+  
+  delete: async (id: number) => {
+    await delay(500);
+    // TODO: Call DELETE ${API_BASE_URL}/genres/${id}
+    return { success: true };
+  },
+  
+  getCount: async () => {
+    await delay(200);
+    // TODO: Call GET ${API_BASE_URL}/genres/count
+    return mockGenres.length;
+  },
+};
+
 // Stats API
 export const statsApi = {
   getDashboard: async () => {
@@ -138,6 +212,8 @@ export const statsApi = {
       totalSongs: mockSongs.length,
       totalPlaylists: mockPlaylists.length,
       totalAlbums: mockAlbums.length,
+      totalArtists: mockArtists.length,
+      totalGenres: mockGenres.length,
       totalPlays: mockSongs.reduce((acc, song) => acc + parseInt(song.plays.replace(/[^\d]/g, '')), 0),
     };
   },
