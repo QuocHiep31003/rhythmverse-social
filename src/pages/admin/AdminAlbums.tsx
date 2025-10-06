@@ -463,7 +463,7 @@ const AdminAlbums = () => {
                 <>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {albums.map((album) => (
-                      <Card key={album.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300 cursor-pointer" onClick={() => navigate(`/admin/albums/${album.id}`)}>
+                      <Card key={album.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
                         <div className="relative aspect-square group">
                           <img
                             src={getAlbumCover(album)}
@@ -483,10 +483,7 @@ const AdminAlbums = () => {
                             <Button 
                               variant="secondary" 
                               size="sm" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(album);
-                              }}
+                              onClick={() => handleEdit(album)}
                               className="bg-white/20 hover:bg-white/30 text-white border-0"
                             >
                               <Pencil className="w-3 h-3 mr-1" />
@@ -495,10 +492,7 @@ const AdminAlbums = () => {
                             <Button 
                               variant="destructive" 
                               size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteClick(album);
-                              }}
+                              onClick={() => handleDeleteClick(album)}
                               className="bg-red-500/20 hover:bg-red-500/30 text-white border-0"
                             >
                               <Trash2 className="w-3 h-3 mr-1" />
