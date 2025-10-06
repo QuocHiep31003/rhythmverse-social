@@ -99,39 +99,37 @@ export const ArtistFormDialog = ({
     }
 
     setUploading(true);
+     const cloudName = "dhylbhwvb";
+const uploadPreset = "EchoVerse";
+try {
+  setUploading(true);
 
-    try {
-      // TODO: Replace with actual Cloudinary upload
-      // For now, create a local preview URL
-      const localPreviewUrl = URL.createObjectURL(file);
-      setPreviewUrl(localPreviewUrl);
-      
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // TODO: After Cloudinary integration, use the returned URL
-      // const formData = new FormData();
-      // formData.append('file', file);
-      // formData.append('upload_preset', 'YOUR_UPLOAD_PRESET');
-      // const response = await fetch('https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload', {
-      //   method: 'POST',
-      //   body: formData
-      // });
-      // const data = await response.json();
-      // form.setValue('avatar', data.secure_url);
-      
-      // For now, use a placeholder URL
-      const placeholderUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${file.name}`;
-      form.setValue('avatar', placeholderUrl);
-      
-      toast.success("Upload ảnh thành công (demo mode)");
-    } catch (error) {
-      toast.error("Lỗi khi upload ảnh");
-      console.error(error);
-    } finally {
-      setUploading(false);
-    }
-  };
+  const formData = new FormData();
+  formData.append("file", file);
+
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: formData
+  });
+
+  const data = await response.json();
+
+  if (data.secure_url) {
+    setPreviewUrl(data.secure_url);
+    form.setValue("avatar", data.secure_url);
+    toast.success("Upload ảnh thành công!");
+  } else {
+    toast.error("Không lấy được URL từ Cloudinary");
+  }
+
+} catch (error) {
+  toast.error("Lỗi khi upload ảnh");
+  console.error(error);
+} finally {
+  setUploading(false);
+}}
 
   const handleRemoveImage = () => {
     setPreviewUrl("");
