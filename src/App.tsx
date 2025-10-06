@@ -34,6 +34,7 @@ import AdminHome from "./pages/admin/AdminHome";
 import AdminSongs from "./pages/admin/AdminSongs";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminPlaylists from "./pages/admin/AdminPlaylists";
+import AdminAlbums from "./pages/admin/AdminAlbums";
 import AdminSettings from "./pages/admin/AdminSettings";
 
 const queryClient = new QueryClient();
@@ -56,6 +57,7 @@ const App = () => (
                   <Route path="login" element={<AdminLogin />} />
                   <Route path="home" element={<AdminHome />} />
                   <Route path="songs" element={<AdminSongs />} />
+                  <Route path="albums" element={<AdminAlbums />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="playlists" element={<AdminPlaylists />} />
                   <Route path="settings" element={<AdminSettings />} />

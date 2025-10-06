@@ -281,7 +281,9 @@ export const mockAlbums = [
     artist: "The Weeknd",
     cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
     year: 2020,
-    tracks: 14
+    tracks: 14,
+    genre: "Synthpop",
+    description: "The fourth studio album by Canadian singer The Weeknd"
   },
   {
     id: "alb-2",
@@ -289,7 +291,49 @@ export const mockAlbums = [
     artist: "Harry Styles",
     cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
     year: 2019,
-    tracks: 12
+    tracks: 12,
+    genre: "Pop Rock",
+    description: "The second studio album by English singer Harry Styles"
+  },
+  {
+    id: "alb-3",
+    title: "Future Nostalgia",
+    artist: "Dua Lipa",
+    cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
+    year: 2020,
+    tracks: 11,
+    genre: "Disco-Pop",
+    description: "The second studio album by English singer Dua Lipa"
+  },
+  {
+    id: "alb-4",
+    title: "SOUR",
+    artist: "Olivia Rodrigo",
+    cover: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop",
+    year: 2021,
+    tracks: 11,
+    genre: "Pop Rock",
+    description: "The debut studio album by American singer-songwriter Olivia Rodrigo"
+  },
+  {
+    id: "alb-5",
+    title: "Midnights",
+    artist: "Taylor Swift",
+    cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
+    year: 2022,
+    tracks: 13,
+    genre: "Pop",
+    description: "The tenth studio album by American singer-songwriter Taylor Swift"
+  },
+  {
+    id: "alb-6",
+    title: "30",
+    artist: "Adele",
+    cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
+    year: 2021,
+    tracks: 12,
+    genre: "Soul",
+    description: "The fourth studio album by English singer-songwriter Adele"
   }
 ];
 

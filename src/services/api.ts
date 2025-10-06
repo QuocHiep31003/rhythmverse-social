@@ -1,4 +1,4 @@
-import { mockSongs, mockUsers, mockPlaylists } from "@/data/mockData";
+import { mockSongs, mockUsers, mockPlaylists, mockAlbums } from "@/data/mockData";
 
 const API_BASE_URL = "http://localhost:8080/api";
 
@@ -98,6 +98,37 @@ export const playlistsApi = {
   },
 };
 
+// Albums API
+export const albumsApi = {
+  getAll: async () => {
+    await delay(300);
+    return mockAlbums;
+  },
+  
+  getById: async (id: string) => {
+    await delay(200);
+    return mockAlbums.find(a => a.id === id);
+  },
+  
+  create: async (data: any) => {
+    await delay(500);
+    // TODO: Call POST ${API_BASE_URL}/albums
+    return { id: Date.now().toString(), ...data };
+  },
+  
+  update: async (id: string, data: any) => {
+    await delay(500);
+    // TODO: Call PUT ${API_BASE_URL}/albums/${id}
+    return { id, ...data };
+  },
+  
+  delete: async (id: string) => {
+    await delay(500);
+    // TODO: Call DELETE ${API_BASE_URL}/albums/${id}
+    return { success: true };
+  },
+};
+
 // Stats API
 export const statsApi = {
   getDashboard: async () => {
@@ -106,6 +137,7 @@ export const statsApi = {
       totalUsers: mockUsers.length,
       totalSongs: mockSongs.length,
       totalPlaylists: mockPlaylists.length,
+      totalAlbums: mockAlbums.length,
       totalPlays: mockSongs.reduce((acc, song) => acc + parseInt(song.plays.replace(/[^\d]/g, '')), 0),
     };
   },
