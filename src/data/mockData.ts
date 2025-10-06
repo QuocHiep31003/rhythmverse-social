@@ -250,71 +250,28 @@ export const mockPlaylists = [
   }
 ];
 
-export const mockGenres = [
-  { id: 1, name: "Pop" },
-  { id: 2, name: "Rock" },
-  { id: 3, name: "Jazz" },
-  { id: 4, name: "Hip Hop" },
-  { id: 5, name: "R&B" },
-  { id: 6, name: "Electronic" },
-  { id: 7, name: "Classical" },
-  { id: 8, name: "Country" },
-  { id: 9, name: "Synthpop" },
-  { id: 10, name: "Soul" },
-  { id: 11, name: "Disco-Pop" },
-  { id: 12, name: "Pop Punk" },
-  { id: 13, name: "Indie Pop" },
-];
-
 export const mockArtists = [
   {
-    id: 1,
+    id: "ar-1",
     name: "The Weeknd",
-    country: "Canada",
-    debutYear: 2010,
-    description: "Canadian singer, songwriter, and record producer known for his sonic versatility and dark lyricism.",
-    avatar: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
+    image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
+    followers: "85M",
+    genres: ["Pop", "R&B", "Synthpop"]
   },
   {
-    id: 2,
+    id: "ar-2",
     name: "Harry Styles",
-    country: "United Kingdom",
-    debutYear: 2010,
-    description: "English singer, songwriter, and actor. Former member of One Direction.",
-    avatar: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
+    image: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
+    followers: "62M",
+    genres: ["Pop", "Rock"]
   },
   {
-    id: 3,
+    id: "ar-3",
     name: "Dua Lipa",
-    country: "United Kingdom",
-    debutYear: 2015,
-    description: "English and Albanian singer and songwriter known for her disco-pop sound.",
-    avatar: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
-  },
-  {
-    id: 4,
-    name: "Taylor Swift",
-    country: "United States",
-    debutYear: 2006,
-    description: "American singer-songwriter known for narrative songwriting about her personal life.",
-    avatar: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-  },
-  {
-    id: 5,
-    name: "Olivia Rodrigo",
-    country: "United States",
-    debutYear: 2021,
-    description: "American singer-songwriter and actress who gained recognition with her debut single 'drivers license'.",
-    avatar: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop",
-  },
-  {
-    id: 6,
-    name: "Ed Sheeran",
-    country: "United Kingdom",
-    debutYear: 2011,
-    description: "English singer-songwriter known for his acoustic pop and folk-influenced music.",
-    avatar: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
-  },
+    image: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
+    followers: "58M",
+    genres: ["Pop", "Dance"]
+  }
 ];
 
 export const mockAlbums = [

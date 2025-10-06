@@ -35,8 +35,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { icon: Music, label: "Bài hát", path: "/admin/songs" },
     { icon: Disc3, label: "Albums", path: "/admin/albums" },
     { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
-    { icon: Users, label: "Nghệ sĩ", path: "/admin/artists" },
-    { icon: Music, label: "Thể loại", path: "/admin/genres" },
     { icon: Users, label: "Người dùng", path: "/admin/users" },
     { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
   ];
