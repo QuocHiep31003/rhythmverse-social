@@ -439,7 +439,7 @@ const AdminPlaylists = () => {
                 <>
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {playlists.map((playlist) => (
-                      <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
+                      <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300 cursor-pointer" onClick={() => navigate(`/admin/playlists/${playlist.id}`)}>
                         <div className="relative aspect-square group">
                           <img
                             src={getPlaylistCover(playlist)}
@@ -467,7 +467,10 @@ const AdminPlaylists = () => {
                             <Button 
                               variant="secondary" 
                               size="sm" 
-                              onClick={() => handleEdit(playlist)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEdit(playlist);
+                              }}
                               className="bg-white/20 hover:bg-white/30 text-white border-0"
                             >
                               <Pencil className="w-3 h-3 mr-1" />
@@ -476,7 +479,10 @@ const AdminPlaylists = () => {
                             <Button 
                               variant="destructive" 
                               size="sm"
-                              onClick={() => handleDeleteClick(playlist)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteClick(playlist);
+                              }}
                               className="bg-red-500/20 hover:bg-red-500/30 text-white border-0"
                             >
                               <Trash2 className="w-3 h-3 mr-1" />
