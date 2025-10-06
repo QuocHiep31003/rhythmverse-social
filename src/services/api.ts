@@ -39,31 +39,74 @@ export const usersApi = {
 // Songs API
 export const songsApi = {
   getAll: async () => {
-    await delay(300);
-    return mockSongs;
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs`);
+      const data = await response.json();
+      return data.content || [];
+    } catch (error) {
+      console.error("Error fetching songs:", error);
+      return mockSongs;
+    }
   },
   
   getById: async (id: string) => {
-    await delay(200);
-    return mockSongs.find(s => s.id === id);
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs/${id}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching song:", error);
+      return mockSongs.find(s => s.id === id);
+    }
   },
   
   create: async (data: any) => {
-    await delay(500);
-    // TODO: Call POST ${API_BASE_URL}/songs
-    return { id: Date.now().toString(), ...data, plays: 0 };
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error creating song:", error);
+      throw error;
+    }
   },
   
   update: async (id: string, data: any) => {
-    await delay(500);
-    // TODO: Call PUT ${API_BASE_URL}/songs/${id}
-    return { id, ...data };
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error updating song:", error);
+      throw error;
+    }
   },
   
   delete: async (id: string) => {
-    await delay(500);
-    // TODO: Call DELETE ${API_BASE_URL}/songs/${id}
-    return { success: true };
+    try {
+      await fetch(`${API_BASE_URL}/songs/${id}`, {
+        method: 'DELETE'
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting song:", error);
+      throw error;
+    }
+  },
+  
+  getCount: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs/count`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching songs count:", error);
+      return mockSongs.length;
+    }
   },
 };
 
@@ -132,37 +175,74 @@ export const albumsApi = {
 // Artists API
 export const artistsApi = {
   getAll: async () => {
-    await delay(300);
-    return mockArtists;
+    try {
+      const response = await fetch(`${API_BASE_URL}/artists`);
+      const data = await response.json();
+      return data.content || [];
+    } catch (error) {
+      console.error("Error fetching artists:", error);
+      return mockArtists;
+    }
   },
   
   getById: async (id: number) => {
-    await delay(200);
-    return mockArtists.find(a => a.id === id);
+    try {
+      const response = await fetch(`${API_BASE_URL}/artists/${id}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching artist:", error);
+      return mockArtists.find(a => a.id === id);
+    }
   },
   
   create: async (data: any) => {
-    await delay(500);
-    // TODO: Call POST ${API_BASE_URL}/artists
-    return { id: Date.now(), ...data };
+    try {
+      const response = await fetch(`${API_BASE_URL}/artists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error creating artist:", error);
+      throw error;
+    }
   },
   
   update: async (id: number, data: any) => {
-    await delay(500);
-    // TODO: Call PUT ${API_BASE_URL}/artists/${id}
-    return { id, ...data };
+    try {
+      const response = await fetch(`${API_BASE_URL}/artists/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error updating artist:", error);
+      throw error;
+    }
   },
   
   delete: async (id: number) => {
-    await delay(500);
-    // TODO: Call DELETE ${API_BASE_URL}/artists/${id}
-    return { success: true };
+    try {
+      await fetch(`${API_BASE_URL}/artists/${id}`, {
+        method: 'DELETE'
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting artist:", error);
+      throw error;
+    }
   },
   
   getCount: async () => {
-    await delay(200);
-    // TODO: Call GET ${API_BASE_URL}/artists/count
-    return mockArtists.length;
+    try {
+      const response = await fetch(`${API_BASE_URL}/artists/count`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching artists count:", error);
+      return mockArtists.length;
+    }
   },
 };
 
