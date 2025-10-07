@@ -93,27 +93,27 @@ const AdminArtists = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gradient-dark text-white p-6">
+      <div className="max-w-7xl mx-auto">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
-        <div className="space-y-6 flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div><h1 className="text-3xl font-bold">Quản lý Nghệ sĩ</h1><p className="text-muted-foreground">Tổng số: {totalElements} nghệ sĩ • Trang {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
-              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
+              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export Excel</Button>
+              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import Excel</Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
               <Button onClick={handleCreate}><Plus className="w-4 h-4 mr-2" />Thêm nghệ sĩ</Button>
             </div>
           </div>
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
+          <Card className="bg-card/50 border-border/50">
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm nghệ sĩ..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
                 <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+            <CardContent>
               {loading ? <div className="text-center py-8">Đang tải...</div> : artists.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy nghệ sĩ" : "Chưa có nghệ sĩ nào"}</div> : (
                 <>
                   <Table><TableHeader><TableRow><TableHead>Nghệ sĩ</TableHead><TableHead>Quốc gia</TableHead><TableHead>Năm ra mắt</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist) => (<TableRow key={artist.id}><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || "https://via.placeholder.com/40"} alt={artist.name} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>

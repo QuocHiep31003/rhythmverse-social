@@ -160,14 +160,14 @@ const AdminSongs = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gradient-dark text-white p-6">
+      <div className="max-w-7xl mx-auto">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại
         </Button>
 
-        <div className="space-y-6 flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Bài hát</h1>
@@ -177,10 +177,10 @@ const AdminSongs = () => {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}>
-                <Download className="w-4 h-4 mr-2" />Export
+                <Download className="w-4 h-4 mr-2" />Export Excel
               </Button>
               <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}>
-                <Upload className="w-4 h-4 mr-2" />Import
+                <Upload className="w-4 h-4 mr-2" />Import Excel
               </Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
               <Button onClick={handleCreate}>
@@ -189,7 +189,7 @@ const AdminSongs = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
+          <Card className="bg-card/50 border-border/50">
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
@@ -208,7 +208,7 @@ const AdminSongs = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+            <CardContent>
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : songs.length === 0 ? (

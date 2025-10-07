@@ -89,27 +89,27 @@ const AdminGenres = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gradient-dark text-white p-6">
+      <div className="max-w-7xl mx-auto">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
-        <div className="space-y-6 flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div><h1 className="text-3xl font-bold">Quản lý Thể loại</h1><p className="text-muted-foreground">Tổng số: {totalElements} thể loại • Trang {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
-              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
+              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export Excel</Button>
+              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import Excel</Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
               <Button onClick={handleCreate}><Plus className="w-4 h-4 mr-2" />Thêm thể loại</Button>
             </div>
           </div>
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
+          <Card className="bg-card/50 border-border/50">
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
                 <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+            <CardContent>
               {loading ? <div className="text-center py-8">Đang tải...</div> : genres.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div> : (
                 <>
                   <Table><TableHeader><TableRow><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre) => (<TableRow key={genre.id}><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>

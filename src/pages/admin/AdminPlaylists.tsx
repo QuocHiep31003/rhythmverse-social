@@ -361,8 +361,8 @@ const AdminPlaylists = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gradient-dark text-white p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Navigation */}
         <Button 
           variant="ghost" 
@@ -373,7 +373,7 @@ const AdminPlaylists = () => {
           Quay lại
         </Button>
 
-        <div className="space-y-6 flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Playlists</h1>
@@ -384,11 +384,11 @@ const AdminPlaylists = () => {
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}>
                 <Download className="w-4 h-4 mr-2" />
-                Export
+                Export Excel
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="w-4 h-4 mr-2" />
-                Import
+                Import Excel
               </Button>
               <Button onClick={handleCreate}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -397,7 +397,7 @@ const AdminPlaylists = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
+          <Card className="bg-card/50 border-border/50">
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
@@ -428,7 +428,7 @@ const AdminPlaylists = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+            <CardContent>
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : playlists.length === 0 ? (

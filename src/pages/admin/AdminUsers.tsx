@@ -302,7 +302,7 @@ const AdminUsers = () => {
   );
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col space-y-6 p-6">
+    <div className="space-y-6">
       {/* Header Section with Modern Design */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10">
         <div className="flex items-center gap-4">
@@ -362,7 +362,7 @@ const AdminUsers = () => {
         </div>
       </div>
 
-      <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden">
+      <Card className="border-none shadow-lg">
         <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
@@ -380,7 +380,7 @@ const AdminUsers = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0 flex-1 overflow-auto">
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-b">
