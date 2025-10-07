@@ -384,6 +384,7 @@ const AdminUsers = () => {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-b">
+                <TableHead className="w-16 font-semibold">STT</TableHead>
                 <TableHead className="font-semibold">User</TableHead>
                 <TableHead className="font-semibold">Email</TableHead>
                 <TableHead className="font-semibold">Role</TableHead>
@@ -393,7 +394,7 @@ const AdminUsers = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
                       <p className="text-sm text-muted-foreground">Loading users...</p>
@@ -402,7 +403,7 @@ const AdminUsers = () => {
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <div className="flex flex-col items-center gap-2">
                       <UsersIcon className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-sm font-medium">No users found</p>
@@ -413,8 +414,9 @@ const AdminUsers = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredUsers.map((user) => (
+                filteredUsers.map((user, index) => (
                   <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
+                    <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10 border-2 border-primary/10">

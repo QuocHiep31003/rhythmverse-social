@@ -218,6 +218,7 @@ const AdminSongs = () => {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-16">STT</TableHead>
                         <TableHead className="w-12"></TableHead>
                         <TableHead>Bài hát</TableHead>
                         <TableHead>Nghệ sĩ</TableHead>
@@ -227,8 +228,9 @@ const AdminSongs = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {songs.map((song) => (
+                      {songs.map((song, index) => (
                         <TableRow key={song.id}>
+                          <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="icon" onClick={() => handlePlayClick(song)}>
                               {currentSong?.id === song.id && isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
