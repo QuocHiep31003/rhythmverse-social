@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Trash2 } from "lucide-react";
+import { Trash2, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -27,9 +27,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn, debounce } from "@/lib/utils";
 import { genresApi, artistsApi } from "@/services/api";
 
 const songFormSchema = z.object({
@@ -65,8 +79,12 @@ export const SongFormDialog = ({
 }: SongFormDialogProps) => {
   const [genres, setGenres] = useState<any[]>([]);
   const [artists, setArtists] = useState<any[]>([]);
+  const [artistSearchQuery, setArtistSearchQuery] = useState("");
+  const [artistSearchResults, setArtistSearchResults] = useState<any[]>([]);
+  const [isSearchingArtists, setIsSearchingArtists] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -84,17 +102,44 @@ export const SongFormDialog = ({
     },
   });
 
+  const searchArtists = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setArtistSearchResults([]);
+      return;
+    }
+    
+    try {
+      setIsSearchingArtists(true);
+      const data = await artistsApi.getAll({
+        page: 0,
+        size: 20,
+        sort: "name,asc",
+        search: query
+      });
+      const results = Array.isArray(data) ? data : data.content || [];
+      setArtistSearchResults(results);
+    } catch (error) {
+      console.error("Error searching artists:", error);
+      setArtistSearchResults([]);
+    } finally {
+      setIsSearchingArtists(false);
+    }
+  }, []);
+
+  const debouncedSearchArtists = useCallback(
+    debounce((query: string) => {
+      searchArtists(query);
+    }, 2000),
+    [searchArtists]
+  );
+
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [genresData, artistsData] = await Promise.all([
-          genresApi.getAll(),
-          artistsApi.getAll(),
-        ]);
+        const genresData = await genresApi.getAll();
         setGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
-        setArtists(Array.isArray(artistsData) ? artistsData : artistsData.content || []);
       } catch (error) {
-        console.error("Error loading genres/artists:", error);
+        console.error("Error loading genres:", error);
       }
     };
     loadData();
@@ -248,47 +293,117 @@ export const SongFormDialog = ({
             <FormField
               control={form.control}
               name="artistIds"
-              render={() => (
+              render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nghệ sĩ * (chọn ít nhất 1)</FormLabel>
-                  <div className="border rounded-md p-3 max-h-[200px] overflow-y-auto space-y-2">
-                    {artists.map((artist) => (
-                      <FormField
-                        key={artist.id}
-                        control={form.control}
-                        name="artistIds"
-                        render={({ field }) => {
-                          return (
-                            <FormItem
+                  <Popover open={artistPopoverOpen} onOpenChange={setArtistPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between",
+                            !field.value?.length && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value?.length
+                            ? `Đã chọn ${field.value.length} nghệ sĩ`
+                            : "Tìm kiếm và chọn nghệ sĩ..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Tìm kiếm nghệ sĩ..."
+                          value={artistSearchQuery}
+                          onValueChange={(value) => {
+                            setArtistSearchQuery(value);
+                            if (value) {
+                              debouncedSearchArtists(value);
+                            } else {
+                              setArtistSearchResults([]);
+                            }
+                          }}
+                        />
+                        <CommandEmpty>
+                          {isSearchingArtists ? "Đang tìm kiếm..." : "Không tìm thấy nghệ sĩ"}
+                        </CommandEmpty>
+                        <CommandGroup className="max-h-[300px] overflow-y-auto">
+                          {artistSearchResults.map((artist) => (
+                            <CommandItem
                               key={artist.id}
-                              className="flex flex-row items-center space-x-3 space-y-0"
+                              value={artist.id.toString()}
+                              onSelect={() => {
+                                const isSelected = field.value?.includes(artist.id);
+                                if (isSelected) {
+                                  field.onChange(
+                                    field.value?.filter((id: number) => id !== artist.id)
+                                  );
+                                } else {
+                                  field.onChange([...(field.value || []), artist.id]);
+                                }
+                              }}
                             >
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value?.includes(artist.id)}
-                                  onCheckedChange={(checked) => {
-                                    return checked
-                                      ? field.onChange([...field.value, artist.id])
-                                      : field.onChange(
-                                          field.value?.filter(
-                                            (value) => value !== artist.id
-                                          )
-                                        );
-                                  }}
-                                />
-                              </FormControl>
-                              <FormLabel className="font-normal cursor-pointer">
-                                {artist.name} ({artist.country})
-                              </FormLabel>
-                            </FormItem>
-                          );
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Đã chọn: {selectedArtistIds.length} nghệ sĩ
-                  </p>
+                              <div className="flex items-center gap-2 flex-1">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={artist.avatar} alt={artist.name} />
+                                  <AvatarFallback>{artist.name[0]}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{artist.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    ID: {artist.id} • {artist.country || "N/A"}
+                                  </span>
+                                </div>
+                              </div>
+                              <Check
+                                className={cn(
+                                  "ml-2 h-4 w-4",
+                                  field.value?.includes(artist.id)
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {field.value?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {field.value.map((artistId: number) => {
+                        const artist = artistSearchResults.find((a) => a.id === artistId);
+                        if (!artist) return null;
+                        return (
+                          <div
+                            key={artistId}
+                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
+                          >
+                            <Avatar className="h-4 w-4">
+                              <AvatarImage src={artist.avatar} alt={artist.name} />
+                              <AvatarFallback className="text-xs">{artist.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <span>{artist.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                field.onChange(
+                                  field.value?.filter((id: number) => id !== artistId)
+                                );
+                              }}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

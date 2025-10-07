@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { ArtistFormDialog } from "@/components/admin/ArtistFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { artistsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
+import { debounce } from "@/lib/utils";
 
 const AdminArtists = () => {
   const navigate = useNavigate();
@@ -26,7 +27,20 @@ const AdminArtists = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadArtists(); }, [currentPage, pageSize, searchQuery]);
+  const debouncedLoadArtists = useCallback(
+    debounce(() => {
+      loadArtists();
+    }, 2000),
+    []
+  );
+
+  useEffect(() => {
+    if (searchQuery) {
+      debouncedLoadArtists();
+    } else {
+      loadArtists();
+    }
+  }, [currentPage, pageSize, searchQuery]);
 
   const loadArtists = async () => {
     try {

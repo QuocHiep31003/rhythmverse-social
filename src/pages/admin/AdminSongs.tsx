@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { SongFormDialog } from "@/components/admin/SongFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { songsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
+import { debounce } from "@/lib/utils";
 
 const AdminSongs = () => {
   const navigate = useNavigate();
@@ -28,8 +29,19 @@ const AdminSongs = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const debouncedLoadSongs = useCallback(
+    debounce(() => {
+      loadSongs();
+    }, 2000),
+    []
+  );
+
   useEffect(() => {
-    loadSongs();
+    if (searchQuery) {
+      debouncedLoadSongs();
+    } else {
+      loadSongs();
+    }
   }, [currentPage, pageSize, searchQuery]);
 
   const loadSongs = async () => {

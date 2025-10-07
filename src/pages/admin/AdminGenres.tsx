@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { GenreFormDialog } from "@/components/admin/GenreFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { genresApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
+import { debounce } from "@/lib/utils";
 
 const AdminGenres = () => {
   const navigate = useNavigate();
@@ -26,7 +27,20 @@ const AdminGenres = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadGenres(); }, [currentPage, pageSize, searchQuery]);
+  const debouncedLoadGenres = useCallback(
+    debounce(() => {
+      loadGenres();
+    }, 2000),
+    []
+  );
+
+  useEffect(() => {
+    if (searchQuery) {
+      debouncedLoadGenres();
+    } else {
+      loadGenres();
+    }
+  }, [currentPage, pageSize, searchQuery]);
 
   const loadGenres = async () => {
     try {
