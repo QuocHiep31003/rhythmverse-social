@@ -49,7 +49,7 @@ import { genresApi, artistsApi } from "@/services/api";
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
-  genre: z.string().min(1, "Vui lòng chọn thể loại"),
+  genres: z.array(z.string()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
   album: z.string().max(200).optional().or(z.literal("")),
   duration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
@@ -85,13 +85,17 @@ export const SongFormDialog = ({
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
+  const [genreSearchQuery, setGenreSearchQuery] = useState("");
+  const [genreSearchResults, setGenreSearchResults] = useState<any[]>([]);
+  const [isSearchingGenres, setIsSearchingGenres] = useState(false);
+  const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
     defaultValues: {
       name: "",
       releaseYear: new Date().getFullYear(),
-      genre: "",
+      genres: [],
       artistIds: [],
       album: "",
       duration: 180,
@@ -133,6 +137,37 @@ export const SongFormDialog = ({
     [searchArtists]
   );
 
+  const searchGenres = useCallback(async (query: string) => {
+    if (!query.trim()) {
+      setGenreSearchResults([]);
+      return;
+    }
+    
+    try {
+      setIsSearchingGenres(true);
+      const data = await genresApi.getAll({
+        page: 0,
+        size: 20,
+        sort: "name,asc",
+        search: query
+      });
+      const results = Array.isArray(data) ? data : data.content || [];
+      setGenreSearchResults(results);
+    } catch (error) {
+      console.error("Error searching genres:", error);
+      setGenreSearchResults([]);
+    } finally {
+      setIsSearchingGenres(false);
+    }
+  }, []);
+
+  const debouncedSearchGenres = useCallback(
+    debounce((query: string) => {
+      searchGenres(query);
+    }, 2000),
+    [searchGenres]
+  );
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -153,7 +188,7 @@ export const SongFormDialog = ({
       form.reset({
         name: "",
         releaseYear: new Date().getFullYear(),
-        genre: "",
+        genres: [],
         artistIds: [],
         album: "",
         duration: 180,
@@ -267,24 +302,104 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="genre"
+              name="genres"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Thể loại *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Chọn thể loại" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {genres.map((genre) => (
-                        <SelectItem key={genre.id} value={genre.name}>
-                          {genre.name}
-                        </SelectItem>
+                  <FormLabel>Thể loại * (chọn ít nhất 1)</FormLabel>
+                  <Popover open={genrePopoverOpen} onOpenChange={setGenrePopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between",
+                            !field.value?.length && "text-muted-foreground"
+                          )}
+                        >
+                          {field.value?.length
+                            ? `Đã chọn ${field.value.length} thể loại`
+                            : "Tìm kiếm và chọn thể loại..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0" align="start">
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Tìm kiếm thể loại..."
+                          value={genreSearchQuery}
+                          onValueChange={(value) => {
+                            setGenreSearchQuery(value);
+                            if (value) {
+                              debouncedSearchGenres(value);
+                            } else {
+                              setGenreSearchResults([]);
+                            }
+                          }}
+                        />
+                        <CommandEmpty>
+                          {isSearchingGenres ? "Đang tìm kiếm..." : "Không tìm thấy thể loại"}
+                        </CommandEmpty>
+                        <CommandGroup className="max-h-[300px] overflow-y-auto">
+                          {genreSearchResults.map((genre) => (
+                            <CommandItem
+                              key={genre.id}
+                              value={genre.name}
+                              onSelect={() => {
+                                const isSelected = field.value?.includes(genre.name);
+                                if (isSelected) {
+                                  field.onChange(
+                                    field.value?.filter((name: string) => name !== genre.name)
+                                  );
+                                } else {
+                                  field.onChange([...(field.value || []), genre.name]);
+                                }
+                              }}
+                            >
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="font-medium">{genre.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ID: {genre.id}
+                                </span>
+                              </div>
+                              <Check
+                                className={cn(
+                                  "ml-2 h-4 w-4",
+                                  field.value?.includes(genre.name)
+                                    ? "opacity-100"
+                                    : "opacity-0"
+                                )}
+                              />
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {field.value?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {field.value.map((genreName: string) => (
+                        <div
+                          key={genreName}
+                          className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
+                        >
+                          <span>{genreName}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              field.onChange(
+                                field.value?.filter((name: string) => name !== genreName)
+                              );
+                            }}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            ×
+                          </button>
+                        </div>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

@@ -437,23 +437,53 @@ export const genresApi = {
   },
   
   getById: async (id: number) => {
-    await delay(200);
-    return mockGenres.find(g => g.id === id);
+    try {
+      const response = await fetch(`${API_BASE_URL}/genres/${id}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching genre:", error);
+      return mockGenres.find(g => g.id === id);
+    }
   },
   
   create: async (data: any) => {
-    await delay(500);
-    return { id: Date.now(), ...data };
+    try {
+      const response = await fetch(`${API_BASE_URL}/genres`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error creating genre:", error);
+      throw error;
+    }
   },
   
   update: async (id: number, data: any) => {
-    await delay(500);
-    return { id, ...data };
+    try {
+      const response = await fetch(`${API_BASE_URL}/genres/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error("Error updating genre:", error);
+      throw error;
+    }
   },
   
   delete: async (id: number) => {
-    await delay(500);
-    return { success: true };
+    try {
+      await fetch(`${API_BASE_URL}/genres/${id}`, {
+        method: 'DELETE'
+      });
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting genre:", error);
+      throw error;
+    }
   },
   
   getCount: async (search?: string) => {
