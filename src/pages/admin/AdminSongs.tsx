@@ -277,10 +277,10 @@ const AdminSongs = () => {
                     <div className="flex items-center gap-3">
                       <img
                         src={song.cover || song.avatar || "https://via.placeholder.com/40"}
-                        alt={song.title || song.name}
+                        alt={song.name}
                         className="w-10 h-10 rounded object-cover"
                       />
-                      <span className="font-medium">{song.title || song.name}</span>
+                      <span className="font-medium">{song.name}</span>
                     </div>
                   </TableCell>
                   <TableCell>{song.artist || song.artists?.map((a: any) => a.name).join(', ') || '—'}</TableCell>
@@ -331,7 +331,7 @@ const AdminSongs = () => {
         onOpenChange={setDeleteOpen}
         onConfirm={handleDelete}
         title="Xóa bài hát?"
-        description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.title || selectedSong?.name}"? Hành động này không thể hoàn tác.`}
+        description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.name}"? Hành động này không thể hoàn tác.`}
         isLoading={isSubmitting}
       />
     </div>
