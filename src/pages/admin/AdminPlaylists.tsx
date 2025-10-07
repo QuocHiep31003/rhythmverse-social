@@ -438,7 +438,50 @@ const AdminPlaylists = () => {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {playlists.map((playlist) => (
                     <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
-...
+                      <div className="aspect-square relative">
+                        <img 
+                          src={getPlaylistCover(playlist)} 
+                          alt={playlist.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <CardContent className="p-4 space-y-3">
+                        <div>
+                          <h3 className="font-semibold text-lg line-clamp-1">{playlist.name}</h3>
+                          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+                            {playlist.description || 'Không có mô tả'}
+                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
+                            <Music className="w-3 h-3" />
+                            <span>{playlist.songs?.length || 0} bài hát</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                            <span className={playlist.isPublic ? "text-green-400" : "text-yellow-400"}>
+                              {playlist.isPublic ? "Công khai" : "Riêng tư"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleEdit(playlist)}
+                            className="flex-1"
+                          >
+                            <Pencil className="w-3 h-3 mr-1" />
+                            Sửa
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={() => handleDeleteClick(playlist)}
+                            className="flex-1"
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Xóa
+                          </Button>
+                        </div>
+                      </CardContent>
                     </Card>
                   ))}
                 </div>
