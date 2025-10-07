@@ -1,14 +1,15 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useMusic } from "@/contexts/MusicContext";
-import { Play, Pause, Pencil, Trash2, Plus, Search } from "lucide-react";
+import { Play, Pause, Pencil, Trash2, Plus, Search, Download, Upload } from "lucide-react";
 import { SongFormDialog } from "@/components/admin/SongFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { songsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
+import Pagination from "@/components/Pagination";
 
 const AdminSongs = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -20,16 +21,28 @@ const AdminSongs = () => {
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { currentSong, isPlaying, playSong, togglePlay } = useMusic();
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadSongs();
-  }, []);
+    loadSongs(0);
+  }, [searchQuery]);
 
-  const loadSongs = async () => {
+  const loadSongs = async (page = 0) => {
     try {
       setLoading(true);
-      const data = await songsApi.getAll();
-      setSongs(data);
+      const data = await songsApi.getAll({
+        page,
+        size: 10,
+        sort: "name,asc",
+        search: searchQuery || undefined
+      });
+      setSongs(data.content || []);
+      setTotalPages(data.totalPages || 0);
+      setTotalElements(data.totalElements || 0);
+      setCurrentPage(page);
     } catch (error) {
       toast({
         title: "Lỗi",
@@ -78,7 +91,7 @@ const AdminSongs = () => {
         });
       }
       setFormOpen(false);
-      loadSongs();
+      loadSongs(currentPage);
     } catch (error) {
       toast({
         title: "Lỗi",
@@ -99,7 +112,7 @@ const AdminSongs = () => {
         description: "Đã xóa bài hát",
       });
       setDeleteOpen(false);
-      loadSongs();
+      loadSongs(currentPage);
     } catch (error) {
       toast({
         title: "Lỗi",
@@ -111,10 +124,60 @@ const AdminSongs = () => {
     }
   };
 
-  const filteredSongs = songs.filter((song) =>
-    song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    song.artist.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleExport = async () => {
+    try {
+      await songsApi.exportExcel();
+      toast({
+        title: "Thành công",
+        description: "Xuất file Excel thành công",
+      });
+    } catch (error) {
+      toast({
+        title: "Lỗi",
+        description: "Lỗi khi xuất file Excel",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast({
+        title: "Lỗi",
+        description: "Vui lòng chọn file Excel (.xlsx hoặc .xls)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const result = await songsApi.importExcel(file);
+      toast({
+        title: "Thành công",
+        description: result,
+      });
+      loadSongs(0);
+    } catch (error: any) {
+      toast({
+        title: "Lỗi",
+        description: error.message || "Lỗi khi nhập file Excel",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handlePlayClick = (song: any) => {
     if (currentSong?.id === song.id) {
@@ -129,12 +192,29 @@ const AdminSongs = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Quản lý bài hát</h1>
-          <p className="text-muted-foreground">Tổng số: {songs.length} bài hát</p>
+          <p className="text-muted-foreground">Tổng số: {totalElements} bài hát</p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          Thêm bài hát
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+          />
+          <Button onClick={handleCreate}>
+            <Plus className="w-4 h-4 mr-2" />
+            Thêm bài hát
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -171,14 +251,14 @@ const AdminSongs = () => {
                     Đang tải...
                   </TableCell>
                 </TableRow>
-              ) : filteredSongs.length === 0 ? (
+              ) : songs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
                     Không tìm thấy bài hát
                   </TableCell>
                 </TableRow>
-              ) : (
-                filteredSongs.map((song) => (
+            ) : (
+              songs.map((song) => (
                 <TableRow key={song.id}>
                   <TableCell>
                     <Button
@@ -196,21 +276,21 @@ const AdminSongs = () => {
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <img
-                        src={song.cover}
-                        alt={song.title}
+                        src={song.cover || song.avatar || "https://via.placeholder.com/40"}
+                        alt={song.title || song.name}
                         className="w-10 h-10 rounded object-cover"
                       />
-                      <span className="font-medium">{song.title}</span>
+                      <span className="font-medium">{song.title || song.name}</span>
                     </div>
                   </TableCell>
-                  <TableCell>{song.artist}</TableCell>
-                  <TableCell>{song.album}</TableCell>
+                  <TableCell>{song.artist || song.artists?.map((a: any) => a.name).join(', ') || '—'}</TableCell>
+                  <TableCell>{song.album || '—'}</TableCell>
                   <TableCell>
                     <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs">
                       {song.genre}
                     </span>
                   </TableCell>
-                  <TableCell>{song.plays}</TableCell>
+                  <TableCell>{song.plays || '0'}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(song)}>
@@ -229,6 +309,14 @@ const AdminSongs = () => {
         </CardContent>
       </Card>
 
+      {totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage + 1}
+          totalPages={totalPages}
+          onPageChange={(page) => loadSongs(page - 1)}
+        />
+      )}
+
       <SongFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
@@ -243,7 +331,7 @@ const AdminSongs = () => {
         onOpenChange={setDeleteOpen}
         onConfirm={handleDelete}
         title="Xóa bài hát?"
-        description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.title}"? Hành động này không thể hoàn tác.`}
+        description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.title || selectedSong?.name}"? Hành động này không thể hoàn tác.`}
         isLoading={isSubmitting}
       />
     </div>

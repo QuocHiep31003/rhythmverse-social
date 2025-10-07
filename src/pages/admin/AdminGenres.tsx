@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Plus, Pencil, Trash2, Search, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import Pagination from "@/components/Pagination";
 import { genresApi } from "@/services/api";
 import { GenreFormDialog } from "@/components/admin/GenreFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
@@ -26,12 +27,24 @@ const AdminGenres = () => {
   const [selectedGenre, setSelectedGenre] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadGenres = async () => {
+  const loadGenres = async (page = 0) => {
     try {
       setLoading(true);
-      const data = await genresApi.getAll();
-      setGenres(data);
+      const data = await genresApi.getAll({
+        page,
+        size: 10,
+        sort: "name,asc",
+        search: searchQuery || undefined
+      });
+      setGenres(data.content || []);
+      setTotalPages(data.totalPages || 0);
+      setTotalElements(data.totalElements || 0);
+      setCurrentPage(page);
     } catch (error) {
       toast.error("Lỗi khi tải danh sách thể loại");
       console.error(error);
@@ -41,12 +54,8 @@ const AdminGenres = () => {
   };
 
   useEffect(() => {
-    loadGenres();
-  }, []);
-
-  const filteredGenres = genres.filter((genre) =>
-    genre.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    loadGenres(0);
+  }, [searchQuery]);
 
   const handleCreate = () => {
     setFormMode("create");
@@ -91,12 +100,51 @@ const AdminGenres = () => {
       await genresApi.delete(selectedGenre.id);
       toast.success("Xóa thể loại thành công");
       setDeleteDialogOpen(false);
-      loadGenres();
+      loadGenres(currentPage);
     } catch (error) {
       toast.error("Lỗi khi xóa thể loại");
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      await genresApi.exportExcel();
+      toast.success("Xuất file Excel thành công");
+    } catch (error) {
+      toast.error("Lỗi khi xuất file Excel");
+      console.error(error);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast.error("Vui lòng chọn file Excel (.xlsx hoặc .xls)");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const result = await genresApi.importExcel(file);
+      toast.success(result);
+      loadGenres(0);
+    } catch (error: any) {
+      toast.error(error.message || "Lỗi khi nhập file Excel");
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -106,13 +154,30 @@ const AdminGenres = () => {
         <div>
           <h1 className="text-3xl font-bold">Quản lý Thể loại</h1>
           <p className="text-muted-foreground mt-2">
-            Tổng số: {genres.length} thể loại
+            Tổng số: {totalElements} thể loại
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          Thêm Thể loại
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+          />
+          <Button onClick={handleCreate}>
+            <Plus className="w-4 h-4 mr-2" />
+            Thêm Thể loại
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4">
@@ -143,14 +208,14 @@ const AdminGenres = () => {
                   Đang tải...
                 </TableCell>
               </TableRow>
-            ) : filteredGenres.length === 0 ? (
+            ) : genres.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
                   Không tìm thấy thể loại nào
                 </TableCell>
               </TableRow>
             ) : (
-              filteredGenres.map((genre) => (
+              genres.map((genre) => (
                 <TableRow key={genre.id}>
                   <TableCell className="font-mono text-muted-foreground">
                     {genre.id}
@@ -182,6 +247,14 @@ const AdminGenres = () => {
           </TableBody>
         </Table>
       </Card>
+
+      {totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage + 1}
+          totalPages={totalPages}
+          onPageChange={(page) => loadGenres(page - 1)}
+        />
+      )}
 
       <GenreFormDialog
         open={formOpen}

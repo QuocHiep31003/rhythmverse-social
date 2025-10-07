@@ -2,8 +2,43 @@ import { mockSongs, mockUsers, mockPlaylists, mockAlbums, mockArtists, mockGenre
 
 const API_BASE_URL = "http://localhost:8080/api";
 
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+interface PaginationParams {
+  page?: number;
+  size?: number;
+  sort?: string;
+  search?: string;
+}
+
+interface PaginatedResponse<T> {
+  content: T[];
+  pageable: {
+    pageNumber: number;
+    pageSize: number;
+    sort: {
+      empty: boolean;
+      sorted: boolean;
+      unsorted: boolean;
+    };
+    offset: number;
+    paged: boolean;
+    unpaged: boolean;
+  };
+  last: boolean;
+  totalElements: number;
+  totalPages: number;
+  size: number;
+  number: number;
+  sort: {
+    empty: boolean;
+    sorted: boolean;
+    unsorted: boolean;
+  };
+  first: boolean;
+  numberOfElements: number;
+  empty: boolean;
+}
 
 // Users API
 export const usersApi = {
@@ -19,33 +54,49 @@ export const usersApi = {
   
   create: async (data: any) => {
     await delay(500);
-    // TODO: Call POST ${API_BASE_URL}/users
     return { id: Date.now().toString(), ...data };
   },
   
   update: async (id: string, data: any) => {
     await delay(500);
-    // TODO: Call PUT ${API_BASE_URL}/users/${id}
     return { id, ...data };
   },
   
   delete: async (id: string) => {
     await delay(500);
-    // TODO: Call DELETE ${API_BASE_URL}/users/${id}
     return { success: true };
   },
 };
 
 // Songs API
 export const songsApi = {
-  getAll: async () => {
+  getAll: async (params?: PaginationParams) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/songs`);
-      const data = await response.json();
-      return data.content || [];
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+      
+      const response = await fetch(`${API_BASE_URL}/songs?${queryParams.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch songs");
+      }
+      const data: PaginatedResponse<any> = await response.json();
+      return data;
     } catch (error) {
       console.error("Error fetching songs:", error);
-      return mockSongs;
+      await delay(500);
+      return {
+        content: mockSongs,
+        totalElements: mockSongs.length,
+        totalPages: 1,
+        size: 10,
+        number: 0,
+        first: true,
+        last: true,
+        empty: false
+      } as PaginatedResponse<any>;
     }
   },
   
@@ -99,13 +150,60 @@ export const songsApi = {
     }
   },
   
-  getCount: async () => {
+  getCount: async (search?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/songs/count`);
+      const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await fetch(`${API_BASE_URL}/songs/count${queryParams}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch song count");
+      }
       return await response.json();
     } catch (error) {
-      console.error("Error fetching songs count:", error);
+      console.error("Error fetching song count:", error);
       return mockSongs.length;
+    }
+  },
+  
+  exportExcel: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs/export`);
+      if (!response.ok) {
+        throw new Error("Failed to export songs");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'songs.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting songs:", error);
+      throw error;
+    }
+  },
+  
+  importExcel: async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_BASE_URL}/songs/import`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to import songs");
+      }
+      
+      return await response.text();
+    } catch (error) {
+      console.error("Error importing songs:", error);
+      throw error;
     }
   },
 };
@@ -124,19 +222,16 @@ export const playlistsApi = {
   
   create: async (data: any) => {
     await delay(500);
-    // TODO: Call POST ${API_BASE_URL}/playlists
     return { id: Date.now().toString(), ...data, songs: [] };
   },
   
   update: async (id: string, data: any) => {
     await delay(500);
-    // TODO: Call PUT ${API_BASE_URL}/playlists/${id}
     return { id, ...data };
   },
   
   delete: async (id: string) => {
     await delay(500);
-    // TODO: Call DELETE ${API_BASE_URL}/playlists/${id}
     return { success: true };
   },
 };
@@ -155,33 +250,49 @@ export const albumsApi = {
   
   create: async (data: any) => {
     await delay(500);
-    // TODO: Call POST ${API_BASE_URL}/albums
     return { id: Date.now().toString(), ...data };
   },
   
   update: async (id: string, data: any) => {
     await delay(500);
-    // TODO: Call PUT ${API_BASE_URL}/albums/${id}
     return { id, ...data };
   },
   
   delete: async (id: string) => {
     await delay(500);
-    // TODO: Call DELETE ${API_BASE_URL}/albums/${id}
     return { success: true };
   },
 };
 
 // Artists API
 export const artistsApi = {
-  getAll: async () => {
+  getAll: async (params?: PaginationParams) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/artists`);
-      const data = await response.json();
-      return data.content || [];
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+      
+      const response = await fetch(`${API_BASE_URL}/artists?${queryParams.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch artists");
+      }
+      const data: PaginatedResponse<any> = await response.json();
+      return data;
     } catch (error) {
       console.error("Error fetching artists:", error);
-      return mockArtists;
+      await delay(500);
+      return {
+        content: mockArtists,
+        totalElements: mockArtists.length,
+        totalPages: 1,
+        size: 10,
+        number: 0,
+        first: true,
+        last: true,
+        empty: false
+      } as PaginatedResponse<any>;
     }
   },
   
@@ -235,22 +346,94 @@ export const artistsApi = {
     }
   },
   
-  getCount: async () => {
+  getCount: async (search?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/artists/count`);
+      const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await fetch(`${API_BASE_URL}/artists/count${queryParams}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch artist count");
+      }
       return await response.json();
     } catch (error) {
-      console.error("Error fetching artists count:", error);
+      console.error("Error fetching artist count:", error);
       return mockArtists.length;
+    }
+  },
+  
+  exportExcel: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/artists/export`);
+      if (!response.ok) {
+        throw new Error("Failed to export artists");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'artists.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting artists:", error);
+      throw error;
+    }
+  },
+  
+  importExcel: async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_BASE_URL}/artists/import`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to import artists");
+      }
+      
+      return await response.text();
+    } catch (error) {
+      console.error("Error importing artists:", error);
+      throw error;
     }
   },
 };
 
 // Genres API
 export const genresApi = {
-  getAll: async () => {
-    await delay(300);
-    return mockGenres;
+  getAll: async (params?: PaginationParams) => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+      
+      const response = await fetch(`${API_BASE_URL}/genres?${queryParams.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch genres");
+      }
+      const data: PaginatedResponse<any> = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error fetching genres:", error);
+      await delay(300);
+      return {
+        content: mockGenres,
+        totalElements: mockGenres.length,
+        totalPages: 1,
+        size: 10,
+        number: 0,
+        first: true,
+        last: true,
+        empty: false
+      } as PaginatedResponse<any>;
+    }
   },
   
   getById: async (id: number) => {
@@ -260,26 +443,75 @@ export const genresApi = {
   
   create: async (data: any) => {
     await delay(500);
-    // TODO: Call POST ${API_BASE_URL}/genres
     return { id: Date.now(), ...data };
   },
   
   update: async (id: number, data: any) => {
     await delay(500);
-    // TODO: Call PUT ${API_BASE_URL}/genres/${id}
     return { id, ...data };
   },
   
   delete: async (id: number) => {
     await delay(500);
-    // TODO: Call DELETE ${API_BASE_URL}/genres/${id}
     return { success: true };
   },
   
-  getCount: async () => {
-    await delay(200);
-    // TODO: Call GET ${API_BASE_URL}/genres/count
-    return mockGenres.length;
+  getCount: async (search?: string) => {
+    try {
+      const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await fetch(`${API_BASE_URL}/genres/count${queryParams}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch genre count");
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching genre count:", error);
+      await delay(300);
+      return mockGenres.length;
+    }
+  },
+  
+  exportExcel: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/genres/export`);
+      if (!response.ok) {
+        throw new Error("Failed to export genres");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'genres.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting genres:", error);
+      throw error;
+    }
+  },
+  
+  importExcel: async (file: File) => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_BASE_URL}/genres/import`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Failed to import genres");
+      }
+      
+      return await response.text();
+    } catch (error) {
+      console.error("Error importing genres:", error);
+      throw error;
+    }
   },
 };
 

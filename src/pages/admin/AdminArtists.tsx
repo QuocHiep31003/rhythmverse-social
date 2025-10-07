@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Plus, Pencil, Trash2, Search, Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +16,7 @@ import { ArtistFormDialog } from "@/components/admin/ArtistFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import Pagination from "@/components/Pagination";
 
 const AdminArtists = () => {
   const [artists, setArtists] = useState<any[]>([]);
@@ -26,12 +27,24 @@ const AdminArtists = () => {
   const [selectedArtist, setSelectedArtist] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadArtists = async () => {
+  const loadArtists = async (page = 0) => {
     try {
       setLoading(true);
-      const data = await artistsApi.getAll();
-      setArtists(data);
+      const data = await artistsApi.getAll({
+        page,
+        size: 10,
+        sort: "name,asc",
+        search: searchQuery || undefined
+      });
+      setArtists(data.content || []);
+      setTotalPages(data.totalPages || 0);
+      setTotalElements(data.totalElements || 0);
+      setCurrentPage(page);
     } catch (error) {
       toast.error("Lỗi khi tải danh sách nghệ sĩ");
       console.error(error);
@@ -41,14 +54,8 @@ const AdminArtists = () => {
   };
 
   useEffect(() => {
-    loadArtists();
-  }, []);
-
-  const filteredArtists = artists.filter(
-    (artist) =>
-      artist.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      artist.country.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    loadArtists(0);
+  }, [searchQuery]);
 
   const handleCreate = () => {
     setFormMode("create");
@@ -78,7 +85,7 @@ const AdminArtists = () => {
         toast.success("Cập nhật nghệ sĩ thành công");
       }
       setFormOpen(false);
-      loadArtists();
+      loadArtists(currentPage);
     } catch (error) {
       toast.error(`Lỗi khi ${formMode === "create" ? "tạo" : "cập nhật"} nghệ sĩ`);
       console.error(error);
@@ -93,12 +100,51 @@ const AdminArtists = () => {
       await artistsApi.delete(selectedArtist.id);
       toast.success("Xóa nghệ sĩ thành công");
       setDeleteDialogOpen(false);
-      loadArtists();
+      loadArtists(currentPage);
     } catch (error) {
       toast.error("Lỗi khi xóa nghệ sĩ");
       console.error(error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      await artistsApi.exportExcel();
+      toast.success("Xuất file Excel thành công");
+    } catch (error) {
+      toast.error("Lỗi khi xuất file Excel");
+      console.error(error);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast.error("Vui lòng chọn file Excel (.xlsx hoặc .xls)");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const result = await artistsApi.importExcel(file);
+      toast.success(result);
+      loadArtists(0);
+    } catch (error: any) {
+      toast.error(error.message || "Lỗi khi nhập file Excel");
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -108,13 +154,30 @@ const AdminArtists = () => {
         <div>
           <h1 className="text-3xl font-bold">Quản lý Nghệ sĩ</h1>
           <p className="text-muted-foreground mt-2">
-            Tổng số: {artists.length} nghệ sĩ
+            Tổng số: {totalElements} nghệ sĩ
           </p>
         </div>
-        <Button onClick={handleCreate}>
-          <Plus className="w-4 h-4 mr-2" />
-          Thêm Nghệ sĩ
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export Excel
+          </Button>
+          <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImport}
+            style={{ display: 'none' }}
+          />
+          <Button onClick={handleCreate}>
+            <Plus className="w-4 h-4 mr-2" />
+            Thêm Nghệ sĩ
+          </Button>
+        </div>
       </div>
 
       <Card className="p-4">
@@ -148,14 +211,14 @@ const AdminArtists = () => {
                   Đang tải...
                 </TableCell>
               </TableRow>
-            ) : filteredArtists.length === 0 ? (
+            ) : artists.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   Không tìm thấy nghệ sĩ nào
                 </TableCell>
               </TableRow>
             ) : (
-              filteredArtists.map((artist) => (
+              artists.map((artist) => (
                 <TableRow key={artist.id}>
                   <TableCell>
                     <Avatar className="w-10 h-10">
@@ -193,6 +256,14 @@ const AdminArtists = () => {
           </TableBody>
         </Table>
       </Card>
+
+      {totalPages > 1 && (
+        <Pagination
+          currentPage={currentPage + 1}
+          totalPages={totalPages}
+          onPageChange={(page) => loadArtists(page - 1)}
+        />
+      )}
 
       <ArtistFormDialog
         open={formOpen}

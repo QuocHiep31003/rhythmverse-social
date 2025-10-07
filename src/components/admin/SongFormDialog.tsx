@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +41,7 @@ const songFormSchema = z.object({
   duration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
   cover: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
   audio: z.string().url("URL audio không hợp lệ"),
+  avatar: z.string().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -62,6 +65,8 @@ export const SongFormDialog = ({
 }: SongFormDialogProps) => {
   const [genres, setGenres] = useState<any[]>([]);
   const [artists, setArtists] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -74,6 +79,7 @@ export const SongFormDialog = ({
       duration: 180,
       cover: "",
       audio: "",
+      avatar: "",
       ...defaultValues,
     },
   });
@@ -85,8 +91,8 @@ export const SongFormDialog = ({
           genresApi.getAll(),
           artistsApi.getAll(),
         ]);
-        setGenres(genresData);
-        setArtists(artistsData);
+        setGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
+        setArtists(Array.isArray(artistsData) ? artistsData : artistsData.content || []);
       } catch (error) {
         console.error("Error loading genres/artists:", error);
       }
@@ -97,6 +103,7 @@ export const SongFormDialog = ({
   useEffect(() => {
     if (open && defaultValues) {
       form.reset(defaultValues);
+      setPreviewUrl(defaultValues.avatar || "");
     } else if (open) {
       form.reset({
         name: "",
@@ -107,9 +114,61 @@ export const SongFormDialog = ({
         duration: 180,
         cover: "",
         audio: "",
+        avatar: "",
       });
+      setPreviewUrl("");
     }
   }, [open, defaultValues, form]);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error("Vui lòng chọn file ảnh");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Kích thước file không được vượt quá 5MB");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', 'ml_default');
+      
+      const response = await fetch(
+        'https://api.cloudinary.com/v1_1/doa8bsmwv/image/upload',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const data = await response.json();
+      form.setValue('avatar', data.secure_url);
+      setPreviewUrl(data.secure_url);
+      toast.success("Tải ảnh lên thành công");
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error("Lỗi khi tải ảnh lên");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    form.setValue('avatar', '');
+    setPreviewUrl('');
+  };
 
   const handleSubmit = (data: SongFormValues) => {
     onSubmit(data);
@@ -230,6 +289,49 @@ export const SongFormDialog = ({
                   <p className="text-xs text-muted-foreground">
                     Đã chọn: {selectedArtistIds.length} nghệ sĩ
                   </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="avatar"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ảnh bài hát</FormLabel>
+                  <FormControl>
+                    <div className="space-y-4">
+                      {previewUrl ? (
+                        <div className="relative w-32 h-32">
+                          <img
+                            src={previewUrl}
+                            alt="Preview"
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2"
+                            onClick={handleRemoveImage}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4">
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileUpload}
+                            disabled={uploading}
+                          />
+                          {uploading && <span className="text-sm text-muted-foreground">Đang tải...</span>}
+                        </div>
+                      )}
+                    </div>
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
