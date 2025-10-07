@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Trash2, Check, ChevronsUpDown } from "lucide-react";
-import { toast } from "sonner";
+import { Check, ChevronsUpDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn, debounce } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { genresApi, artistsApi } from "@/services/api";
 
 const songFormSchema = z.object({
@@ -77,17 +76,11 @@ export const SongFormDialog = ({
   isLoading = false,
   mode,
 }: SongFormDialogProps) => {
-  const [genres, setGenres] = useState<any[]>([]);
-  const [artists, setArtists] = useState<any[]>([]);
+  const [allGenres, setAllGenres] = useState<any[]>([]);
+  const [allArtists, setAllArtists] = useState<any[]>([]);
   const [artistSearchQuery, setArtistSearchQuery] = useState("");
-  const [artistSearchResults, setArtistSearchResults] = useState<any[]>([]);
-  const [isSearchingArtists, setIsSearchingArtists] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genreSearchQuery, setGenreSearchQuery] = useState("");
-  const [genreSearchResults, setGenreSearchResults] = useState<any[]>([]);
-  const [isSearchingGenres, setIsSearchingGenres] = useState(false);
+  const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
 
   const form = useForm<SongFormValues>({
@@ -106,75 +99,32 @@ export const SongFormDialog = ({
     },
   });
 
-  const searchArtists = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setArtistSearchResults([]);
-      return;
-    }
-    
-    try {
-      setIsSearchingArtists(true);
-      const data = await artistsApi.getAll({
-        page: 0,
-        size: 20,
-        sort: "name,asc",
-        search: query
-      });
-      const results = Array.isArray(data) ? data : data.content || [];
-      setArtistSearchResults(results);
-    } catch (error) {
-      console.error("Error searching artists:", error);
-      setArtistSearchResults([]);
-    } finally {
-      setIsSearchingArtists(false);
-    }
-  }, []);
+  // Filter local data thay vì call API
+  const filteredArtists = artistSearchQuery.trim()
+    ? allArtists.filter((artist) =>
+        artist.name.toLowerCase().includes(artistSearchQuery.toLowerCase())
+      )
+    : allArtists;
 
-  const debouncedSearchArtists = useCallback(
-    debounce((query: string) => {
-      searchArtists(query);
-    }, 300),
-    [searchArtists]
-  );
+  const filteredGenres = genreSearchQuery.trim()
+    ? allGenres.filter((genre) =>
+        genre.name.toLowerCase().includes(genreSearchQuery.toLowerCase())
+      )
+    : allGenres;
 
-  const searchGenres = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setGenreSearchResults([]);
-      return;
-    }
-    
-    try {
-      setIsSearchingGenres(true);
-      const data = await genresApi.getAll({
-        page: 0,
-        size: 20,
-        sort: "name,asc",
-        search: query
-      });
-      const results = Array.isArray(data) ? data : data.content || [];
-      setGenreSearchResults(results);
-    } catch (error) {
-      console.error("Error searching genres:", error);
-      setGenreSearchResults([]);
-    } finally {
-      setIsSearchingGenres(false);
-    }
-  }, []);
-
-  const debouncedSearchGenres = useCallback(
-    debounce((query: string) => {
-      searchGenres(query);
-    }, 300),
-    [searchGenres]
-  );
-
+  // Load toàn bộ artists và genres khi component mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const genresData = await genresApi.getAll();
-        setGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
+        const [artistsData, genresData] = await Promise.all([
+          artistsApi.getAll({ page: 0, size: 1000, sort: "name,asc" }),
+          genresApi.getAll({ page: 0, size: 1000, sort: "name,asc" })
+        ]);
+        
+        setAllArtists(Array.isArray(artistsData) ? artistsData : artistsData.content || []);
+        setAllGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
       } catch (error) {
-        console.error("Error loading genres:", error);
+        console.error("Error loading data:", error);
       }
     };
     loadData();
@@ -190,7 +140,6 @@ export const SongFormDialog = ({
         genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
       };
       form.reset(formValues);
-      setPreviewUrl(defaultValues.avatar || "");
     } else if (open) {
       form.reset({
         name: "",
@@ -203,59 +152,8 @@ export const SongFormDialog = ({
         audio: "",
         avatar: "",
       });
-      setPreviewUrl("");
     }
   }, [open, defaultValues, form]);
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error("Vui lòng chọn file ảnh");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Kích thước file không được vượt quá 5MB");
-      return;
-    }
-
-    try {
-      setUploading(true);
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', 'ml_default');
-      
-      const response = await fetch(
-        'https://api.cloudinary.com/v1_1/doa8bsmwv/image/upload',
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      const data = await response.json();
-      form.setValue('avatar', data.secure_url);
-      setPreviewUrl(data.secure_url);
-      toast.success("Tải ảnh lên thành công");
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast.error("Lỗi khi tải ảnh lên");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleRemoveImage = () => {
-    form.setValue('avatar', '');
-    setPreviewUrl('');
-  };
 
   const handleSubmit = (data: SongFormValues) => {
     onSubmit(data);
@@ -336,20 +234,13 @@ export const SongFormDialog = ({
                         <CommandInput
                           placeholder="Tìm kiếm thể loại..."
                           value={genreSearchQuery}
-                          onValueChange={(value) => {
-                            setGenreSearchQuery(value);
-                            if (value) {
-                              debouncedSearchGenres(value);
-                            } else {
-                              setGenreSearchResults([]);
-                            }
-                          }}
+                          onValueChange={setGenreSearchQuery}
                         />
                         <CommandEmpty>
-                          {isSearchingGenres ? "Đang tìm kiếm..." : "Không tìm thấy thể loại"}
+                          Không tìm thấy thể loại
                         </CommandEmpty>
                         <CommandGroup className="max-h-[300px] overflow-y-auto">
-                          {genreSearchResults.map((genre) => (
+                          {filteredGenres.map((genre) => (
                             <CommandItem
                               key={genre.id}
                               value={genre.id.toString()}
@@ -387,7 +278,7 @@ export const SongFormDialog = ({
                   {field.value?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {field.value.map((genreId: number) => {
-                        const genre = genreSearchResults.find(g => g.id === genreId);
+                        const genre = allGenres.find(g => g.id === genreId);
                         return (
                           <div
                             key={genreId}
@@ -444,20 +335,13 @@ export const SongFormDialog = ({
                         <CommandInput
                           placeholder="Tìm kiếm nghệ sĩ..."
                           value={artistSearchQuery}
-                          onValueChange={(value) => {
-                            setArtistSearchQuery(value);
-                            if (value) {
-                              debouncedSearchArtists(value);
-                            } else {
-                              setArtistSearchResults([]);
-                            }
-                          }}
+                          onValueChange={setArtistSearchQuery}
                         />
                         <CommandEmpty>
-                          {isSearchingArtists ? "Đang tìm kiếm..." : "Không tìm thấy nghệ sĩ"}
+                          Không tìm thấy nghệ sĩ
                         </CommandEmpty>
                         <CommandGroup className="max-h-[300px] overflow-y-auto">
-                          {artistSearchResults.map((artist) => (
+                          {filteredArtists.map((artist) => (
                             <CommandItem
                               key={artist.id}
                               value={artist.id.toString()}
@@ -501,7 +385,7 @@ export const SongFormDialog = ({
                   {field.value?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {field.value.map((artistId: number) => {
-                        const artist = artistSearchResults.find((a) => a.id === artistId);
+                        const artist = allArtists.find((a) => a.id === artistId);
                         if (!artist) return null;
                         return (
                           <div
@@ -534,7 +418,8 @@ export const SongFormDialog = ({
               )}
             />
 
-            <FormField
+            {/* Tạm thời disable trường ảnh bài hát */}
+            {/* <FormField
               control={form.control}
               name="avatar"
               render={({ field }) => (
@@ -575,7 +460,7 @@ export const SongFormDialog = ({
                   <FormMessage />
                 </FormItem>
               )}
-            />
+            /> */}
 
             <FormField
               control={form.control}
