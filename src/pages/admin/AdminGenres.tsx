@@ -1,286 +1,124 @@
-import { useEffect, useState, useRef } from "react";
-import { Plus, Pencil, Trash2, Search, Download, Upload } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import Pagination from "@/components/Pagination";
-import { genresApi } from "@/services/api";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { GenreFormDialog } from "@/components/admin/GenreFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
-import { toast } from "sonner";
+import { genresApi } from "@/services/api";
+import { toast } from "@/hooks/use-toast";
 
 const AdminGenres = () => {
-  const [genres, setGenres] = useState<any[]>([]);
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [genres, setGenres] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadGenres = async (page = 0) => {
+  useEffect(() => { loadGenres(); }, [currentPage, pageSize, searchQuery]);
+
+  const loadGenres = async () => {
     try {
       setLoading(true);
-      const data = await genresApi.getAll({
-        page,
-        size: 10,
-        sort: "name,asc",
-        search: searchQuery || undefined
-      });
-      setGenres(data.content || []);
-      setTotalPages(data.totalPages || 0);
-      setTotalElements(data.totalElements || 0);
-      setCurrentPage(page);
-    } catch (error) {
-      toast.error("Lỗi khi tải danh sách thể loại");
-      console.error(error);
-    } finally {
-      setLoading(false);
-    }
+      const data = await genresApi.getAll({ page: currentPage, size: pageSize, sort: "name,asc", search: searchQuery || undefined });
+      setGenres(data.content || []); setTotalPages(data.totalPages || 0); setTotalElements(data.totalElements || 0);
+    } catch (error) { toast({ title: "Lỗi", description: "Không thể tải danh sách thể loại", variant: "destructive" }); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    loadGenres(0);
-  }, [searchQuery]);
-
-  const handleCreate = () => {
-    setFormMode("create");
-    setSelectedGenre(null);
-    setFormOpen(true);
-  };
-
-  const handleEdit = (genre: any) => {
-    setFormMode("edit");
-    setSelectedGenre(genre);
-    setFormOpen(true);
-  };
-
-  const handleDeleteClick = (genre: any) => {
-    setSelectedGenre(genre);
-    setDeleteDialogOpen(true);
-  };
-
+  const handleCreate = () => { setFormMode("create"); setSelectedGenre(null); setFormOpen(true); };
+  const handleEdit = (genre: any) => { setFormMode("edit"); setSelectedGenre(genre); setFormOpen(true); };
+  const handleDeleteClick = (genre: any) => { setSelectedGenre(genre); setDeleteOpen(true); };
   const handleFormSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
-      if (formMode === "create") {
-        await genresApi.create(data);
-        toast.success("Tạo thể loại thành công");
-      } else {
-        await genresApi.update(selectedGenre.id, data);
-        toast.success("Cập nhật thể loại thành công");
-      }
-      setFormOpen(false);
-      loadGenres();
-    } catch (error) {
-      toast.error(`Lỗi khi ${formMode === "create" ? "tạo" : "cập nhật"} thể loại`);
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
+      if (formMode === "create") { await genresApi.create(data); toast({ title: "Thành công", description: "Đã tạo thể loại mới" }); }
+      else { await genresApi.update(selectedGenre.id, data); toast({ title: "Thành công", description: "Đã cập nhật thể loại" }); }
+      setFormOpen(false); loadGenres();
+    } catch (error) { toast({ title: "Lỗi", description: "Không thể lưu thể loại", variant: "destructive" }); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleDelete = async () => {
-    try {
-      setIsSubmitting(true);
-      await genresApi.delete(selectedGenre.id);
-      toast.success("Xóa thể loại thành công");
-      setDeleteDialogOpen(false);
-      loadGenres(currentPage);
-    } catch (error) {
-      toast.error("Lỗi khi xóa thể loại");
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    try { setIsSubmitting(true); await genresApi.delete(selectedGenre.id); toast({ title: "Thành công", description: "Đã xóa thể loại" }); setDeleteOpen(false); loadGenres(); }
+    catch (error) { toast({ title: "Lỗi", description: "Không thể xóa thể loại", variant: "destructive" }); }
+    finally { setIsSubmitting(false); }
   };
 
   const handleExport = async () => {
-    try {
-      await genresApi.exportExcel();
-      toast.success("Xuất file Excel thành công");
-    } catch (error) {
-      toast.error("Lỗi khi xuất file Excel");
-      console.error(error);
-    }
+    try { await genresApi.exportExcel(); toast({ title: "Thành công", description: "Xuất file Excel thành công" }); }
+    catch (error) { toast({ title: "Lỗi", description: "Lỗi khi xuất file Excel", variant: "destructive" }); }
   };
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
+  const handleImportClick = () => fileInputRef.current?.click();
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const file = event.target.files?.[0]; if (!file) return;
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Lỗi", description: "Vui lòng chọn file Excel", variant: "destructive" }); return; }
+    try { setIsSubmitting(true); const result = await genresApi.importExcel(file); toast({ title: "Thành công", description: result }); loadGenres(); }
+    catch (error: any) { toast({ title: "Lỗi", description: error.message || "Lỗi khi nhập file Excel", variant: "destructive" }); }
+    finally { setIsSubmitting(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
+  };
 
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      toast.error("Vui lòng chọn file Excel (.xlsx hoặc .xls)");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const result = await genresApi.importExcel(file);
-      toast.success(result);
-      loadGenres(0);
-    } catch (error: any) {
-      toast.error(error.message || "Lỗi khi nhập file Excel");
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
+  const goToPage = (page: number) => setCurrentPage(page);
+  const goToFirstPage = () => setCurrentPage(0);
+  const goToLastPage = () => setCurrentPage(totalPages - 1);
+  const goToPreviousPage = () => setCurrentPage(prev => Math.max(0, prev - 1));
+  const goToNextPage = () => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1));
+  const handlePageSizeChange = (newSize: number) => { setPageSize(newSize); setCurrentPage(0); };
+  const getPageNumbers = () => {
+    const pages = []; const maxVisiblePages = 5;
+    let startPage = Math.max(0, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
+    if (endPage - startPage + 1 < maxVisiblePages) startPage = Math.max(0, endPage - maxVisiblePages + 1);
+    for (let i = startPage; i <= endPage; i++) pages.push(i);
+    return pages;
   };
 
   return (
-    <div className="space-y-6 pt-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Quản lý Thể loại</h1>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Tổng số:</span>
-            <span className="text-lg font-semibold text-primary">{totalElements}</span>
-            <span className="text-sm text-muted-foreground">thể loại</span>
+    <div className="min-h-screen bg-gradient-dark text-white p-6">
+      <div className="max-w-7xl mx-auto">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div><h1 className="text-3xl font-bold">Quản lý Thể loại</h1><p className="text-muted-foreground">Tổng số: {totalElements} thể loại • Trang {currentPage + 1} / {totalPages}</p></div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export Excel</Button>
+              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import Excel</Button>
+              <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
+              <Button onClick={handleCreate}><Plus className="w-4 h-4 mr-2" />Thêm thể loại</Button>
+            </div>
           </div>
+          <Card className="bg-card/50 border-border/50">
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
+                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? <div className="text-center py-8">Đang tải...</div> : genres.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div> : (
+                <>
+                  <Table><TableHeader><TableRow><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre) => (<TableRow key={genre.id}><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
+                  {totalPages > 1 && (<div className="flex items-center justify-between mt-6 pt-4 border-t border-border"><div className="text-sm text-muted-foreground">Hiển thị {genres.length} trên tổng số {totalElements} thể loại</div><div className="flex items-center gap-1"><Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>{getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}<Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button></div></div>)}
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" />
-            Export Excel
-          </Button>
-          <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}>
-            <Upload className="w-4 h-4 mr-2" />
-            Import Excel
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleImport}
-            style={{ display: 'none' }}
-          />
-          <Button onClick={handleCreate}>
-            <Plus className="w-4 h-4 mr-2" />
-            Thêm Thể loại
-          </Button>
-        </div>
+        <GenreFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedGenre} isLoading={isSubmitting} mode={formMode} />
+        <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa thể loại?" description={`Bạn có chắc muốn xóa thể loại "${selectedGenre?.name}"?`} isLoading={isSubmitting} />
       </div>
-
-      <Card className="p-4">
-        <div className="flex items-center gap-2">
-          <Search className="w-5 h-5 text-muted-foreground" />
-          <Input
-            placeholder="Tìm kiếm thể loại..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
-      </Card>
-
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Tên thể loại</TableHead>
-              <TableHead className="text-right">Hành động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center py-8">
-                  Đang tải...
-                </TableCell>
-              </TableRow>
-            ) : genres.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                  Không tìm thấy thể loại nào
-                </TableCell>
-              </TableRow>
-            ) : (
-              genres.map((genre) => (
-                <TableRow key={genre.id}>
-                  <TableCell className="font-mono text-muted-foreground">
-                    {genre.id}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{genre.name}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(genre)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteClick(genre)}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
-
-      {totalPages > 1 && (
-        <Pagination
-          currentPage={currentPage + 1}
-          totalPages={totalPages}
-          onPageChange={(page) => loadGenres(page - 1)}
-        />
-      )}
-
-      <GenreFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        onSubmit={handleFormSubmit}
-        defaultValues={
-          formMode === "edit" && selectedGenre
-            ? {
-                name: selectedGenre.name,
-              }
-            : undefined
-        }
-        isLoading={isSubmitting}
-        mode={formMode}
-      />
-
-      <DeleteConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={handleDelete}
-        title="Xóa thể loại?"
-        description={`Bạn có chắc chắn muốn xóa thể loại "${selectedGenre?.name}"? Hành động này không thể hoàn tác.`}
-        isLoading={isSubmitting}
-      />
     </div>
   );
 };
