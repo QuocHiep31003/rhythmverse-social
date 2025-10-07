@@ -25,7 +25,6 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Globe, Upload, Image } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 const playlistFormSchema = z.object({
   name: z.string().min(1, "Tên playlist không được để trống").max(200),
@@ -141,11 +140,9 @@ export const PlaylistFormDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col max-h-[calc(100vh-200px)]">
-            <ScrollArea className="flex-1 pr-4">
-              <div className="space-y-4">
-                {/* Cover Image Upload */}
-                <FormField
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            {/* Cover Image Upload */}
+            <FormField
               control={form.control}
               name="coverImage"
               render={({ field }) => (
@@ -319,10 +316,8 @@ export const PlaylistFormDialog = ({
                 </div>
               </div>
             )}
-              </div>
-            </ScrollArea>
 
-            <DialogFooter className="mt-4">
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
