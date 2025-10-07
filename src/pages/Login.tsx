@@ -7,11 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Music, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from "lucide-react";
+import { authApi } from "@/services/api";
 
 const Login = () => {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   
   const [loginData, setLoginData] = useState({
     email: "",
@@ -28,23 +31,80 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
+    setSuccess("");
     
-    // Mock login process
-    setTimeout(() => {
+    try {
+      const response = await authApi.login({
+        email: loginData.email,
+        password: loginData.password
+      });
+      
+      setSuccess("Login successful!");
+      // Store token or user data if needed
+      if (response.token) {
+        localStorage.setItem('token', response.token);
+      }
+      
+      // Navigate to home page after successful login
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
       setIsLoading(false);
-      navigate('/');
-    }, 1500);
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+    setSuccess("");
+    
+    // Validate passwords match
+    if (registerData.password !== registerData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    
+    // Validate password length
+    if (registerData.password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      return;
+    }
+    
     setIsLoading(true);
     
-    // Mock registration process
-    setTimeout(() => {
+    try {
+      const response = await authApi.register({
+        name: registerData.name,
+        email: registerData.email,
+        password: registerData.password
+      });
+      
+      setSuccess("Registration successful! Please log in.");
+      
+      // Clear form
+      setRegisterData({
+        name: "",
+        email: "",
+        password: "",
+        confirmPassword: ""
+      });
+      
+      // Switch to login tab after successful registration
+      setTimeout(() => {
+        const loginTab = document.querySelector('[value="login"]') as HTMLElement;
+        if (loginTab) {
+          loginTab.click();
+        }
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
+    } finally {
       setIsLoading(false);
-      navigate('/');
-    }, 1500);
+    }
   };
 
   const handleSocialLogin = (provider: string) => {
@@ -96,6 +156,18 @@ const Login = () => {
                     Sign in to continue your musical journey
                   </p>
                 </CardHeader>
+
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
+                
+                {success && (
+                  <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
+                    {success}
+                  </div>
+                )}
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
@@ -167,6 +239,18 @@ const Login = () => {
                     Create your account and discover amazing music
                   </p>
                 </CardHeader>
+
+                {error && (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
+                
+                {success && (
+                  <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
+                    {success}
+                  </div>
+                )}
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">

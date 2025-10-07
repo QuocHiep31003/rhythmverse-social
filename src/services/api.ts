@@ -42,28 +42,98 @@ interface PaginatedResponse<T> {
 
 // Users API
 export const usersApi = {
-  getAll: async () => {
-    await delay(300);
-    return mockUsers;
+  getAll: async (page: number = 0, size: number = 10, sort: string = "name,asc") => {
+    try {
+      const url = `${API_BASE_URL}/user?page=${page}&size=${size}&sort=${sort}`;
+      console.log('Fetching users from:', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add authorization header if needed
+          // 'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('Users data received:', data);
+      return data;
+    } catch (error) {
+      console.error('Error in usersApi.getAll:', error);
+      throw error;
+    }
   },
   
   getById: async (id: string) => {
-    await delay(200);
-    return mockUsers.find(u => u.id === id);
+    const response = await fetch(`${API_BASE_URL}/user/${id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch user');
+    }
+    
+    return await response.json();
   },
   
   create: async (data: any) => {
-    await delay(500);
-    return { id: Date.now().toString(), ...data };
+    const response = await fetch(`${API_BASE_URL}/user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to create user');
+    }
+    
+    return await response.json();
   },
   
   update: async (id: string, data: any) => {
-    await delay(500);
-    return { id, ...data };
+    const response = await fetch(`${API_BASE_URL}/user/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to update user');
+    }
+    
+    return await response.json();
   },
   
   delete: async (id: string) => {
-    await delay(500);
+    const response = await fetch(`${API_BASE_URL}/user/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete user');
+    }
+    
     return { success: true };
   },
 };
@@ -542,6 +612,43 @@ export const genresApi = {
       console.error("Error importing genres:", error);
       throw error;
     }
+  },
+};
+
+// Auth API
+export const authApi = {
+  register: async (data: { name: string; email: string; password: string }) => {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Registration failed');
+    }
+    
+    return await response.json();
+  },
+  
+  login: async (data: { email: string; password: string }) => {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Login failed');
+    }
+    
+    return await response.json();
   },
 };
 
