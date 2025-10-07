@@ -149,13 +149,15 @@ const AdminGenres = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pt-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Quản lý Thể loại</h1>
-          <p className="text-muted-foreground mt-2">
-            Tổng số: {totalElements} thể loại
-          </p>
+          <h1 className="text-3xl font-bold mb-2">Quản lý Thể loại</h1>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Tổng số:</span>
+            <span className="text-lg font-semibold text-primary">{totalElements}</span>
+            <span className="text-sm text-muted-foreground">thể loại</span>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleExport}>
