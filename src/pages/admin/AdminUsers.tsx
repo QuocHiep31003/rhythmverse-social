@@ -302,68 +302,69 @@ const AdminUsers = () => {
   );
 
   return (
-    <div className="h-screen overflow-hidden flex flex-col space-y-6 p-6">
-      {/* Header Section with Modern Design */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
-            <UsersIcon className="w-6 h-6 text-white" />
+    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
+        {/* Header Section with Modern Design */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10 flex-shrink-0 mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
+              <UsersIcon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                User Management
+              </h1>
+              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+                <Badge variant="secondary" className="font-normal">
+                  {totalElements} total users
+                </Badge>
+                {loading && <span className="text-xs">Loading...</span>}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              User Management
-            </h1>
-            <p className="text-muted-foreground flex items-center gap-2 mt-1">
-              <Badge variant="secondary" className="font-normal">
-                {totalElements} total users
-              </Badge>
-              {loading && <span className="text-xs">Loading...</span>}
-            </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              onChange={handleImport}
+              className="hidden"
+            />
+            
+            {/* Import Button */}
+            <Button 
+              variant="outline" 
+              onClick={handleImportClick}
+              className="gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </Button>
+            
+            {/* Export Button */}
+            <Button 
+              variant="outline" 
+              onClick={handleExport}
+              className="gap-2 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+            
+            {/* Add User Button */}
+            <Button 
+              onClick={handleCreate}
+              className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
+            >
+              <Plus className="w-4 h-4" />
+              Add User
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx"
-            onChange={handleImport}
-            className="hidden"
-          />
-          
-          {/* Import Button */}
-          <Button 
-            variant="outline" 
-            onClick={handleImportClick}
-            className="gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Import
-          </Button>
-          
-          {/* Export Button */}
-          <Button 
-            variant="outline" 
-            onClick={handleExport}
-            className="gap-2 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
-          
-          {/* Add User Button */}
-          <Button 
-            onClick={handleCreate}
-            className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
-          >
-            <Plus className="w-4 h-4" />
-            Add User
-          </Button>
-        </div>
-      </div>
 
-      <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20">
+      <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden min-h-0">
+        <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20 flex-shrink-0">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
               <CardTitle className="text-xl font-bold">Users Directory</CardTitle>
@@ -380,7 +381,7 @@ const AdminUsers = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0 flex-1 overflow-auto">
+        <CardContent className="p-0 flex-1 overflow-auto min-h-0 scrollbar-custom">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-b">
@@ -479,7 +480,7 @@ const AdminUsers = () => {
 
       {/* Modern Pagination Controls */}
       {totalPages > 0 && (
-        <Card className="border-none shadow-md">
+        <Card className="border-none shadow-md flex-shrink-0">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-sm text-muted-foreground">
@@ -560,6 +561,7 @@ const AdminUsers = () => {
         description={`Are you sure you want to delete "${selectedUser?.name}"? This action cannot be undone.`}
         isLoading={isSubmitting}
       />
+      </div>
     </div>
   );
 };

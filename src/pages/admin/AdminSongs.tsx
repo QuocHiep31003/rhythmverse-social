@@ -161,13 +161,13 @@ const AdminSongs = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col overflow-hidden">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
         <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại
         </Button>
 
-        <div className="space-y-6 flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Bài hát</h1>
@@ -189,8 +189,8 @@ const AdminSongs = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
-            <CardHeader>
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -208,7 +208,7 @@ const AdminSongs = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : songs.length === 0 ? (
@@ -262,7 +262,7 @@ const AdminSongs = () => {
           
           {/* Pagination outside of scrollable area */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4">
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
               <div className="text-sm text-muted-foreground">Hiển thị {songs.length} trên tổng số {totalElements} bài hát</div>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>

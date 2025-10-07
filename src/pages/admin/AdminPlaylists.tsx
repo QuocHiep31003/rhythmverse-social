@@ -362,7 +362,7 @@ const AdminPlaylists = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <div className="max-w-7xl mx-auto flex-1 flex flex-col overflow-hidden">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
         {/* Navigation */}
         <Button 
           variant="ghost" 
@@ -373,7 +373,7 @@ const AdminPlaylists = () => {
           Quay lại
         </Button>
 
-        <div className="space-y-6 flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Playlists</h1>
@@ -397,8 +397,8 @@ const AdminPlaylists = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
-            <CardHeader>
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -428,7 +428,7 @@ const AdminPlaylists = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto">
+            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : playlists.length === 0 ? (
@@ -446,10 +446,10 @@ const AdminPlaylists = () => {
               )}
             </CardContent>
           </Card>
-
+          
           {/* Pagination outside of scrollable area */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4">
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
               <div className="text-sm text-muted-foreground">
                 Hiển thị {playlists.length} trên tổng số {totalElements} playlists
               </div>
