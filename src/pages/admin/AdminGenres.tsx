@@ -27,19 +27,8 @@ const AdminGenres = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const debouncedLoadGenres = useCallback(
-    debounce(() => {
-      loadGenres();
-    }, 2000),
-    []
-  );
-
   useEffect(() => {
-    if (searchQuery) {
-      debouncedLoadGenres();
-    } else {
-      loadGenres();
-    }
+    loadGenres();
   }, [currentPage, pageSize, searchQuery]);
 
   const loadGenres = async () => {

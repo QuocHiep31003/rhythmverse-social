@@ -27,19 +27,8 @@ const AdminArtists = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const debouncedLoadArtists = useCallback(
-    debounce(() => {
-      loadArtists();
-    }, 2000),
-    []
-  );
-
   useEffect(() => {
-    if (searchQuery) {
-      debouncedLoadArtists();
-    } else {
-      loadArtists();
-    }
+    loadArtists();
   }, [currentPage, pageSize, searchQuery]);
 
   const loadArtists = async () => {

@@ -29,19 +29,8 @@ const AdminSongs = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const debouncedLoadSongs = useCallback(
-    debounce(() => {
-      loadSongs();
-    }, 2000),
-    []
-  );
-
   useEffect(() => {
-    if (searchQuery) {
-      debouncedLoadSongs();
-    } else {
-      loadSongs();
-    }
+    loadSongs();
   }, [currentPage, pageSize, searchQuery]);
 
   const loadSongs = async () => {

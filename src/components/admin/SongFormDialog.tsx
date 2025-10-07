@@ -49,7 +49,7 @@ import { genresApi, artistsApi } from "@/services/api";
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
-  genres: z.array(z.string()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
+  genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
   album: z.string().max(200).optional().or(z.literal("")),
   duration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
@@ -95,7 +95,7 @@ export const SongFormDialog = ({
     defaultValues: {
       name: "",
       releaseYear: new Date().getFullYear(),
-      genres: [],
+      genreIds: [],
       artistIds: [],
       album: "",
       duration: 180,
@@ -133,7 +133,7 @@ export const SongFormDialog = ({
   const debouncedSearchArtists = useCallback(
     debounce((query: string) => {
       searchArtists(query);
-    }, 2000),
+    }, 300),
     [searchArtists]
   );
 
@@ -164,7 +164,7 @@ export const SongFormDialog = ({
   const debouncedSearchGenres = useCallback(
     debounce((query: string) => {
       searchGenres(query);
-    }, 2000),
+    }, 300),
     [searchGenres]
   );
 
@@ -182,13 +182,20 @@ export const SongFormDialog = ({
 
   useEffect(() => {
     if (open && defaultValues) {
-      form.reset(defaultValues);
+      // Xử lý data từ API: artists và genres là array of objects
+      const apiData = defaultValues as any;
+      const formValues = {
+        ...defaultValues,
+        artistIds: apiData.artists?.map((a: any) => a.id) || defaultValues.artistIds || [],
+        genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
+      };
+      form.reset(formValues);
       setPreviewUrl(defaultValues.avatar || "");
     } else if (open) {
       form.reset({
         name: "",
         releaseYear: new Date().getFullYear(),
-        genres: [],
+        genreIds: [],
         artistIds: [],
         album: "",
         duration: 180,
@@ -302,7 +309,7 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="genres"
+              name="genreIds"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Thể loại * (chọn ít nhất 1)</FormLabel>
@@ -345,15 +352,15 @@ export const SongFormDialog = ({
                           {genreSearchResults.map((genre) => (
                             <CommandItem
                               key={genre.id}
-                              value={genre.name}
+                              value={genre.id.toString()}
                               onSelect={() => {
-                                const isSelected = field.value?.includes(genre.name);
+                                const isSelected = field.value?.includes(genre.id);
                                 if (isSelected) {
                                   field.onChange(
-                                    field.value?.filter((name: string) => name !== genre.name)
+                                    field.value?.filter((id: number) => id !== genre.id)
                                   );
                                 } else {
-                                  field.onChange([...(field.value || []), genre.name]);
+                                  field.onChange([...(field.value || []), genre.id]);
                                 }
                               }}
                             >
@@ -366,7 +373,7 @@ export const SongFormDialog = ({
                               <Check
                                 className={cn(
                                   "ml-2 h-4 w-4",
-                                  field.value?.includes(genre.name)
+                                  field.value?.includes(genre.id)
                                     ? "opacity-100"
                                     : "opacity-0"
                                 )}
@@ -379,25 +386,28 @@ export const SongFormDialog = ({
                   </Popover>
                   {field.value?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {field.value.map((genreName: string) => (
-                        <div
-                          key={genreName}
-                          className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
-                        >
-                          <span>{genreName}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              field.onChange(
-                                field.value?.filter((name: string) => name !== genreName)
-                              );
-                            }}
-                            className="ml-1 hover:text-destructive"
+                      {field.value.map((genreId: number) => {
+                        const genre = genreSearchResults.find(g => g.id === genreId);
+                        return (
+                          <div
+                            key={genreId}
+                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
                           >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                            <span>{genre?.name || `ID: ${genreId}`}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                field.onChange(
+                                  field.value?.filter((id: number) => id !== genreId)
+                                );
+                              }}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   <FormMessage />
