@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, Image, Search, User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const albumSchema = z.object({
   name: z.string().min(1, "Tên album là bắt buộc"),
@@ -170,9 +171,11 @@ export const AlbumFormDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Cover Image Upload */}
-            <FormField
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col max-h-[calc(100vh-200px)]">
+            <ScrollArea className="flex-1 pr-4">
+              <div className="space-y-4">
+                {/* Cover Image Upload */}
+                <FormField
               control={form.control}
               name="coverImage"
               render={({ field }) => (
@@ -357,8 +360,10 @@ export const AlbumFormDialog = ({
                 </div>
               </div>
             )}
+              </div>
+            </ScrollArea>
 
-            <DialogFooter>
+            <DialogFooter className="mt-4">
               <Button
                 type="button"
                 variant="outline"
