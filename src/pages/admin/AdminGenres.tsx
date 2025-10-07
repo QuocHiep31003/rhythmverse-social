@@ -90,10 +90,10 @@ const AdminGenres = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <Button variant="ghost" onClick={() => navigate(-1)} className="fixed top-4 left-4 z-50"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
-      
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0 pt-12">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
+        
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div><h1 className="text-3xl font-bold">Quản lý Thể loại</h1><p className="text-muted-foreground">Tổng số: {totalElements} thể loại • Trang {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">

@@ -305,18 +305,18 @@ const AdminUsers = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <Button 
-        variant="ghost" 
-        onClick={() => navigate(-1)} 
-        className="fixed top-4 left-4 z-50"
-      >
-        <ArrowLeft className="w-4 h-4 mr-2" />
-        Quay lại
-      </Button>
-      
       <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate(-1)} 
+          className="mb-4 self-start"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Quay lại
+        </Button>
+        
         {/* Header Section with Modern Design */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10 flex-shrink-0 mb-4 mt-12">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10 flex-shrink-0 mb-4">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
               <UsersIcon className="w-6 h-6 text-white" />
