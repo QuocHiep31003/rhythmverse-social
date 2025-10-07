@@ -362,18 +362,18 @@ const AdminPlaylists = () => {
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      {/* Navigation */}
+      <Button 
+        variant="ghost" 
+        onClick={() => navigate(-1)} 
+        className="fixed top-4 left-4 z-50"
+      >
+        <ArrowLeft className="w-4 h-4 mr-2" />
+        Quay lại
+      </Button>
+      
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-        {/* Navigation */}
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate(-1)} 
-          className="mb-6"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Quay lại
-        </Button>
-
-        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0 pt-12">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Playlists</h1>
