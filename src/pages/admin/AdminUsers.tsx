@@ -13,6 +13,8 @@ import { usersApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 
+const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
+
 const AdminUsers = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -432,7 +434,13 @@ const AdminUsers = () => {
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10 border-2 border-primary/10">
-                          <AvatarImage src={user.avatar || user.profileImage} alt={user.name} />
+                          <AvatarImage 
+                            src={user.avatar || user.profileImage || DEFAULT_AVATAR_URL} 
+                            alt={user.name}
+                            onError={(e: any) => {
+                              e.currentTarget.src = DEFAULT_AVATAR_URL;
+                            }}
+                          />
                           <AvatarFallback className="bg-gradient-primary text-white font-semibold">
                             {user.name?.[0]?.toUpperCase() || 'U'}
                           </AvatarFallback>

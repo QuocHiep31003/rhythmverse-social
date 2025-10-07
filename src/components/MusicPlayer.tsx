@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -135,6 +135,7 @@ const MusicPlayer = () => {
                     <img
                       src={currentSong.cover}
                       alt={currentSong.title}
+                      onError={handleImageError}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -320,6 +321,7 @@ const MusicPlayer = () => {
                 <img
                   src={currentSong.cover}
                   alt={currentSong.title}
+                  onError={handleImageError}
                   className="w-full h-full object-cover"
                 />
               ) : (

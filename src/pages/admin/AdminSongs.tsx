@@ -12,6 +12,8 @@ import { songsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { debounce } from "@/lib/utils";
 
+const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
+
 const AdminSongs = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -237,7 +239,7 @@ const AdminSongs = () => {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <img src={song.avatar || "https://via.placeholder.com/40"} alt={song.name} className="w-10 h-10 rounded object-cover" />
+                            <img src={song.avatar || DEFAULT_AVATAR_URL} alt={song.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded object-cover" />
                             <span className="font-medium">{song.name}</span>
                           </div>
                         </TableCell>

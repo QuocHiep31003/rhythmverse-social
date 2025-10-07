@@ -11,6 +11,8 @@ import { artistsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { debounce } from "@/lib/utils";
 
+const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
+
 const AdminArtists = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -117,7 +119,7 @@ const AdminArtists = () => {
             <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? <div className="text-center py-8">Đang tải...</div> : artists.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy nghệ sĩ" : "Chưa có nghệ sĩ nào"}</div> : (
                 <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Nghệ sĩ</TableHead><TableHead>Quốc gia</TableHead><TableHead>Năm ra mắt</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (
-                  <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || "https://via.placeholder.com/40"} alt={artist.name} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
+                  <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || DEFAULT_AVATAR_URL} alt={artist.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
                 ))}</TableBody></Table>
               )}
             </CardContent>

@@ -3,6 +3,7 @@ import MusicCard from "./MusicCard";
 import { TrendingUp, Clock, Heart } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { getTrendingSongs, mockSongs } from "@/data/mockData";
+import { handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 
 const TrendingSection = () => {
   const { playSong, setQueue } = useMusic();
@@ -37,7 +38,7 @@ const TrendingSection = () => {
                     </div>
                     <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                       {song.cover ? (
-                        <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                        <img src={song.cover} alt={song.title} onError={handleImageError} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-sm font-bold text-primary-foreground">
                           {song.artist.charAt(0)}
@@ -79,7 +80,7 @@ const TrendingSection = () => {
                   >
                     <div className="w-10 h-10 bg-gradient-secondary rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                       {song.cover ? (
-                        <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                        <img src={song.cover} alt={song.title} onError={handleImageError} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-xs font-bold text-accent-foreground">
                           {song.artist.charAt(0)}

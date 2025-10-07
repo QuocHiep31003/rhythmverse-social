@@ -17,6 +17,7 @@ import {
 import { useMusic } from "@/contexts/MusicContext";
 import { mockSongs } from "@/data/mockData";
 import { Song } from "@/contexts/MusicContext";
+import { handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 
 const FeaturedMusic = () => {
   const { playSong, setQueue } = useMusic();
@@ -164,7 +165,7 @@ const FeaturedMusic = () => {
                 <div className="relative mb-4">
                   <div className="w-full aspect-square bg-gradient-primary rounded-lg flex items-center justify-center relative overflow-hidden">
                     {song.cover ? (
-                      <img src={song.cover} alt={song.title} className="w-full h-full object-cover" />
+                      <img src={song.cover} alt={song.title} onError={handleImageError} className="w-full h-full object-cover" />
                     ) : (
                       <Music className="w-8 h-8 text-white/80" />
                     )}
