@@ -111,13 +111,24 @@ const AdminGenres = () => {
             </CardHeader>
             <CardContent className="flex-1 overflow-auto">
               {loading ? <div className="text-center py-8">Đang tải...</div> : genres.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div> : (
-                <>
-                  <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre, index) => (<TableRow key={genre.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
-                  {totalPages > 1 && (<div className="flex items-center justify-between mt-6 pt-4 border-t border-border"><div className="text-sm text-muted-foreground">Hiển thị {genres.length} trên tổng số {totalElements} thể loại</div><div className="flex items-center gap-1"><Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>{getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}<Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button></div></div>)}
-                </>
+                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre, index) => (<TableRow key={genre.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
               )}
             </CardContent>
           </Card>
+          
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4">
+              <div className="text-sm text-muted-foreground">Hiển thị {genres.length} trên tổng số {totalElements} thể loại</div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>
+                {getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}
+                <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
         </div>
         <GenreFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedGenre} isLoading={isSubmitting} mode={formMode} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa thể loại?" description={`Bạn có chắc muốn xóa thể loại "${selectedGenre?.name}"?`} isLoading={isSubmitting} />

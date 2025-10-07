@@ -115,13 +115,26 @@ const AdminArtists = () => {
             </CardHeader>
             <CardContent className="flex-1 overflow-auto">
               {loading ? <div className="text-center py-8">Đang tải...</div> : artists.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy nghệ sĩ" : "Chưa có nghệ sĩ nào"}</div> : (
-                <>
-                  <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Nghệ sĩ</TableHead><TableHead>Quốc gia</TableHead><TableHead>Năm ra mắt</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (<TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || "https://via.placeholder.com/40"} alt={artist.name} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
-                  {totalPages > 1 && (<div className="flex items-center justify-between mt-6 pt-4 border-t border-border"><div className="text-sm text-muted-foreground">Hiển thị {artists.length} trên tổng số {totalElements} nghệ sĩ</div><div className="flex items-center gap-1"><Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>{getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}<Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button></div></div>)}
-                </>
+                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Nghệ sĩ</TableHead><TableHead>Quốc gia</TableHead><TableHead>Năm ra mắt</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (
+                  <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || "https://via.placeholder.com/40"} alt={artist.name} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
+                ))}</TableBody></Table>
               )}
             </CardContent>
           </Card>
+          
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4">
+              <div className="text-sm text-muted-foreground">Hiển thị {artists.length} trên tổng số {totalElements} nghệ sĩ</div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>
+                {getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}
+                <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
         </div>
         <ArtistFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedArtist} isLoading={isSubmitting} mode={formMode} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa nghệ sĩ?" description={`Bạn có chắc muốn xóa nghệ sĩ "${selectedArtist?.name}"?`} isLoading={isSubmitting} />

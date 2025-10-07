@@ -436,152 +436,76 @@ const AdminPlaylists = () => {
                   {searchQuery ? "Không tìm thấy playlist phù hợp" : "Chưa có playlist nào"}
                 </div>
               ) : (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {playlists.map((playlist) => (
-                      <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
-                        <div className="relative aspect-square group">
-                          <img
-                            src={getPlaylistCover(playlist)}
-                            alt={playlist.name}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
-                          <div className="absolute bottom-4 left-4 right-4">
-                            <h3 className="font-bold text-lg mb-1 text-white">{playlist.name}</h3>
-                            <p className="text-sm text-gray-300 line-clamp-2">
-                              {playlist.description || "Không có mô tả"}
-                            </p>
-                          </div>
-                          <div className="absolute top-2 right-2">
-                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              playlist.isPublic 
-                                ? "bg-green-500/20 text-green-300" 
-                                : "bg-orange-500/20 text-orange-300"
-                            }`}>
-                              {playlist.isPublic ? "Công khai" : "Riêng tư"}
-                            </div>
-                          </div>
-                          {/* Hover actions */}
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              onClick={() => handleEdit(playlist)}
-                              className="bg-white/20 hover:bg-white/30 text-white border-0"
-                            >
-                              <Pencil className="w-3 h-3 mr-1" />
-                              Sửa
-                            </Button>
-                            <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={() => handleDeleteClick(playlist)}
-                              className="bg-red-500/20 hover:bg-red-500/30 text-white border-0"
-                            >
-                              <Trash2 className="w-3 h-3 mr-1" />
-                              Xóa
-                            </Button>
-                          </div>
-                        </div>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                              <Music className="w-4 h-4" />
-                              <span>{playlist.songs?.length || 0}/{playlist.songLimit} bài hát</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleEdit(playlist)}
-                                className="h-8 w-8 text-gray-400 hover:text-white"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleDeleteClick(playlist)}
-                                className="h-8 w-8 text-red-400 hover:text-red-300"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                          {playlist.dateUpdate && (
-                            <p className="text-xs text-gray-500 mt-2">
-                              Cập nhật: {playlist.dateUpdate}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-                      <div className="text-sm text-muted-foreground">
-                        Hiển thị {playlists.length} trên tổng số {totalElements} playlists
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToFirstPage}
-                          disabled={currentPage === 0}
-                          className="h-8 w-8"
-                        >
-                          <ChevronsLeft className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToPreviousPage}
-                          disabled={currentPage === 0}
-                          className="h-8 w-8"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        
-                        {getPageNumbers().map(page => (
-                          <Button
-                            key={page}
-                            variant={currentPage === page ? "default" : "outline"}
-                            size="icon"
-                            onClick={() => goToPage(page)}
-                            className="h-8 w-8"
-                          >
-                            {page + 1}
-                          </Button>
-                        ))}
-                        
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToNextPage}
-                          disabled={currentPage >= totalPages - 1}
-                          className="h-8 w-8"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToLastPage}
-                          disabled={currentPage >= totalPages - 1}
-                          className="h-8 w-8"
-                        >
-                          <ChevronsRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {playlists.map((playlist) => (
+                    <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
+...
+                    </Card>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4">
+              <div className="text-sm text-muted-foreground">
+                Hiển thị {playlists.length} trên tổng số {totalElements} playlists
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToFirstPage}
+                  disabled={currentPage === 0}
+                  className="h-8 w-8"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 0}
+                  className="h-8 w-8"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                
+                {getPageNumbers().map(page => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => goToPage(page)}
+                    className="h-8 w-8"
+                  >
+                    {page + 1}
+                  </Button>
+                ))}
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToNextPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToLastPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           <PlaylistFormDialog
             open={formOpen}
