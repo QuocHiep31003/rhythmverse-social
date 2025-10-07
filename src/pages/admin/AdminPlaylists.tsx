@@ -3,20 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Pencil, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Music, 
-  Upload, 
-  Download, 
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight
-} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Pencil, Trash2, Plus, Search, Upload, Download, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
@@ -57,6 +45,7 @@ interface PlaylistResponse {
 }
 
 const API_BASE_URL = "http://localhost:8080/api";
+const DEFAULT_IMAGE_URL = "https://tse4.mm.bing.net/th/id/OIP.5Xw-6Hc_loqdGyqQG6G2IgHaEr?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
 
 const AdminPlaylists = () => {
   const navigate = useNavigate();
@@ -308,12 +297,7 @@ const AdminPlaylists = () => {
     }
   };
 
-  const getPlaylistCover = (playlist: Playlist) => {
-    if (playlist.coverImage) {
-      return playlist.coverImage;
-    }
-    return `https://via.placeholder.com/300/1e40af/ffffff?text=${encodeURIComponent(playlist.name.charAt(0).toUpperCase())}`;
-  };
+  const getPlaylistCover = (playlist: Playlist) => playlist.coverImage || DEFAULT_IMAGE_URL;
 
   // Pagination handlers
   const goToPage = (page: number) => {
@@ -435,56 +419,55 @@ const AdminPlaylists = () => {
                   {searchQuery ? "Không tìm thấy playlist phù hợp" : "Chưa có playlist nào"}
                 </div>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {playlists.map((playlist) => (
-                    <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
-                      <div className="aspect-square relative">
-                        <img 
-                          src={getPlaylistCover(playlist)} 
-                          alt={playlist.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4 space-y-3">
-                        <div>
-                          <h3 className="font-semibold text-lg line-clamp-1">{playlist.name}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                            {playlist.description || 'Không có mô tả'}
-                          </p>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                            <Music className="w-3 h-3" />
-                            <span>{playlist.songs?.length || 0} bài hát</span>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">STT</TableHead>
+                      <TableHead>Playlist</TableHead>
+                      <TableHead>Mô tả</TableHead>
+                      <TableHead>Số bài hát</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {playlists.map((playlist, index) => (
+                      <TableRow key={playlist.id}>
+                        <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={getPlaylistCover(playlist)} 
+                              alt={playlist.name}
+                              onError={(e) => { e.currentTarget.src = DEFAULT_IMAGE_URL; }}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                            <span className="font-medium">{playlist.name}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                            <span className={playlist.isPublic ? "text-green-400" : "text-yellow-400"}>
-                              {playlist.isPublic ? "Công khai" : "Riêng tư"}
-                            </span>
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {playlist.description || '—'}
+                        </TableCell>
+                        <TableCell>{playlist.songs?.length || 0}</TableCell>
+                        <TableCell>
+                          <span className={playlist.isPublic ? "text-green-400" : "text-yellow-400"}>
+                            {playlist.isPublic ? "Công khai" : "Riêng tư"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(playlist)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(playlist)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleEdit(playlist)}
-                            className="flex-1"
-                          >
-                            <Pencil className="w-3 h-3 mr-1" />
-                            Sửa
-                          </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            onClick={() => handleDeleteClick(playlist)}
-                            className="flex-1"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Xóa
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>

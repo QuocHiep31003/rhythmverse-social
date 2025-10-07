@@ -127,7 +127,7 @@ export const PlaylistFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-card border-border">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-white">
             {mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}
@@ -209,7 +209,7 @@ export const PlaylistFormDialog = ({
                   <FormControl>
                     <Textarea
                       placeholder="Mô tả playlist..."
-                      className="resize-none bg-background/50 border-border text-white"
+                      className="min-h-[60px] resize-none bg-background/50 border-border text-white"
                       {...field}
                     />
                   </FormControl>
@@ -281,41 +281,6 @@ export const PlaylistFormDialog = ({
               )}
             />
 
-            {/* Preview */}
-            {name && (
-              <div className="space-y-2 pt-4 border-t border-border">
-                <FormLabel className="text-white">Xem trước</FormLabel>
-                <div className="p-4 rounded-lg bg-muted/50 border border-border">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="w-16 h-16">
-                      {coverPreview ? (
-                        <AvatarImage src={coverPreview} alt={name} />
-                      ) : (
-                        <AvatarFallback className="bg-primary/20 text-white">
-                          {name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-lg text-white">{name}</h3>
-                      {form.watch("description") && (
-                        <p className="text-sm text-gray-400 mt-1">
-                          {form.watch("description")}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant={isPublic ? "default" : "secondary"}>
-                          {isPublic ? "Công khai" : "Riêng tư"}
-                        </Badge>
-                        <Badge variant="outline" className="text-gray-400 border-gray-600">
-                          0/{songLimit} bài hát
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             <DialogFooter>
               <Button

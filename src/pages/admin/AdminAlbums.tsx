@@ -3,22 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Pencil, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Music2, 
-  Upload, 
-  Download, 
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Calendar,
-  User
-} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { AlbumFormDialog } from "@/components/admin/AlbumFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
@@ -56,6 +42,8 @@ interface Album {
   artist: Artist;
   songs: Song[];
   releaseDate: string;
+  coverImage?: string;
+  artistName?: string;
 }
 
 interface AlbumResponse {
@@ -74,6 +62,7 @@ interface AlbumResponse {
 }
 
 const API_BASE_URL = "http://localhost:8080/api";
+const DEFAULT_IMAGE_URL = "https://tse4.mm.bing.net/th/id/OIP.5Xw-6Hc_loqdGyqQG6G2IgHaEr?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
 
 const AdminAlbums = () => {
   const navigate = useNavigate();
@@ -336,9 +325,7 @@ const AdminAlbums = () => {
     }
   };
 
-  const getAlbumCover = (album: Album) => {
-    return `https://via.placeholder.com/300/9333ea/ffffff?text=${encodeURIComponent(album.name.charAt(0).toUpperCase())}`;
-  };
+  const getAlbumCover = (album: Album) => album.coverImage || DEFAULT_IMAGE_URL;
 
   // Pagination handlers
   const goToPage = (page: number) => {
@@ -459,56 +446,51 @@ const AdminAlbums = () => {
                   {searchQuery ? "Không tìm thấy album phù hợp" : "Chưa có album nào"}
                 </div>
               ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {albums.map((album) => (
-                    <Card key={album.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
-                      <div className="aspect-square relative">
-                        <img 
-                          src={getAlbumCover(album)} 
-                          alt={album.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <CardContent className="p-4 space-y-3">
-                        <div>
-                          <h3 className="font-semibold text-lg line-clamp-1">{album.name}</h3>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                            <User className="w-3 h-3" />
-                            <span className="line-clamp-1">{album.artist?.name || 'Unknown Artist'}</span>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">STT</TableHead>
+                      <TableHead>Album</TableHead>
+                      <TableHead>Nghệ sĩ</TableHead>
+                      <TableHead>Số bài hát</TableHead>
+                      <TableHead>Ngày phát hành</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {albums.map((album, index) => (
+                      <TableRow key={album.id}>
+                        <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={getAlbumCover(album)} 
+                              alt={album.name}
+                              onError={(e) => { e.currentTarget.src = DEFAULT_IMAGE_URL; }}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                            <span className="font-medium">{album.name}</span>
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                            <Calendar className="w-3 h-3" />
-                            <span>{album.releaseDate}</span>
+                        </TableCell>
+                        <TableCell>{album.artist?.name || '—'}</TableCell>
+                        <TableCell>{album.songs?.length || 0}</TableCell>
+                        <TableCell>
+                          {album.releaseDate ? new Date(album.releaseDate).toLocaleDateString('vi-VN') : '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(album)}>
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(album)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
                           </div>
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                            <Music2 className="w-3 h-3" />
-                            <span>{album.songs?.length || 0} bài hát</span>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => handleEdit(album)}
-                            className="flex-1"
-                          >
-                            <Pencil className="w-3 h-3 mr-1" />
-                            Sửa
-                          </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            onClick={() => handleDeleteClick(album)}
-                            className="flex-1"
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" />
-                            Xóa
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
