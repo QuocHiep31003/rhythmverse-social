@@ -7,7 +7,6 @@ import {
   Users, 
   Music,
   ChevronLeft,
-  PanelLeft,
   TrendingUp,
   Trophy,
   Library
@@ -22,7 +21,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +52,7 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
-  const { state, open, setOpen, openMobile, setOpenMobile, isMobile, toggleSidebar } = useSidebar();
+  const { openMobile, setOpenMobile, isMobile } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
   const isActive = (path: string) => currentPath === path;
@@ -65,23 +63,16 @@ useEffect(() => {
   setOpen(true);
 }, [setOpen]);
   return (
-    <div
-      className="group/sidebar-hover lg:min-w-[80px]"
+    <Sidebar 
+      variant="sidebar" 
+      collapsible="none"
+      className="w-64 fixed left-0 top-0 h-screen border-r"
     >
-      <Sidebar 
-        variant="sidebar" 
-        collapsible="icon"
-        style={{
-          "--sidebar-width": "16rem", // 64 -> w-64 = 256px = 16rem
-          "--sidebar-width-icon": "5rem", // 20 -> w-20 = 80px = 5rem
-        } as React.CSSProperties}
-        
-      >
       <SidebarHeader className="p-6 border-b border-border/40">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <Music className="h-8 w-8 text-primary flex-shrink-0" />
-            <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent group-data-[collapsible=icon]:hidden">
+            <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               EchoVerse
             </span>
           </div>
@@ -99,11 +90,6 @@ useEffect(() => {
           )}
         </div>
       </SidebarHeader>
-
-      {/* Desktop toggle button - hidden when expanded, shows on hover when collapsed */}
-      {/* <div className="hidden group-data-[collapsible=icon]:block px-3 py-2">
-        <SidebarTrigger className="h-8 w-8 opacity-0 group-hover/sidebar-hover:opacity-100 transition-opacity duration-200" />
-      </div> */}
 
       <SidebarContent className="bg-background/95 backdrop-blur-sm">
         <SidebarGroup>
@@ -135,22 +121,18 @@ useEffect(() => {
                         }}
                       >
                         <item.icon className="h-5 w-5 flex-shrink-0" />
-                        <span className="font-medium group-data-[collapsible=icon]:hidden">
+                        <span className="font-medium">
                           {item.title}
                         </span>
                         
-                        {/* Desktop notification badge */}
+                        {/* Notification badge */}
                         {notificationCount > 0 && (
-                          <>
-                            <Badge 
-                              variant="destructive" 
-                              className="ml-auto h-5 min-w-5 text-xs group-data-[collapsible=icon]:hidden"
-                            >
-                              {notificationCount}
-                            </Badge>
-                            {/* Icon mode notification dot */}
-                            <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full group-data-[collapsible=icon]:block hidden" />
-                          </>
+                          <Badge 
+                            variant="destructive" 
+                            className="ml-auto h-5 min-w-5 text-xs"
+                          >
+                            {notificationCount}
+                          </Badge>
                         )}
                       </NavLink>
                     </SidebarMenuButton>
@@ -162,6 +144,5 @@ useEffect(() => {
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>
-    </div>
   );
 }
