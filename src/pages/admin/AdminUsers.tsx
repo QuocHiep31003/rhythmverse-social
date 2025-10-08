@@ -301,21 +301,22 @@ const AdminUsers = () => {
   };
 
   const filteredUsers = users.filter((user) =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  const [roleFilter, setRoleFilter] = useState<string>("all");
 
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate(-1)} 
-          className="mb-4 self-start"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Quay lại
-        </Button>
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">User Management</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage system users and their permissions
+          </p>
+        </div>
         
         {/* Header Section with Modern Design */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10 flex-shrink-0 mb-4">
@@ -324,10 +325,7 @@ const AdminUsers = () => {
               <UsersIcon className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                User Management
-              </h1>
-              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+              <p className="text-muted-foreground flex items-center gap-2">
                 <Badge variant="secondary" className="font-normal">
                   {totalElements} total users
                 </Badge>
@@ -379,11 +377,7 @@ const AdminUsers = () => {
       <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden min-h-0">
         <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20 flex-shrink-0">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
-            <div className="flex-1">
-              <CardTitle className="text-xl font-bold">Users Directory</CardTitle>
-              <CardDescription>Manage and organize your user base</CardDescription>
-            </div>
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name or email..."
@@ -391,6 +385,18 @@ const AdminUsers = () => {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-background"
               />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Filter by role:</span>
+              <select 
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="bg-background border border-border rounded px-3 py-2 text-sm min-w-[120px]"
+              >
+                <option value="all">All Roles</option>
+                <option value="ADMIN">Admin</option>
+                <option value="USER">User</option>
+              </select>
             </div>
           </div>
         </CardHeader>
@@ -415,20 +421,24 @@ const AdminUsers = () => {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : filteredUsers.length === 0 ? (
+              ) : filteredUsers.filter(user => roleFilter === "all" || user.roles?.includes(roleFilter)).length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12">
-                    <div className="flex flex-col items-center gap-2">
-                      <UsersIcon className="w-12 h-12 text-muted-foreground/50" />
-                      <p className="text-sm font-medium">No users found</p>
-                      <p className="text-xs text-muted-foreground">
-                        {searchQuery ? 'Try adjusting your search' : 'Get started by adding a new user'}
-                      </p>
+                  <TableCell colSpan={5} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center">
+                        <UsersIcon className="w-10 h-10 text-muted-foreground/50" />
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold">Empty State</p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {searchQuery || roleFilter !== "all" ? 'No users match your filters' : 'No users found. Add your first user to get started.'}
+                        </p>
+                      </div>
                     </div>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredUsers.map((user, index) => (
+                filteredUsers.filter(user => roleFilter === "all" || user.roles?.includes(roleFilter)).map((user, index) => (
                   <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
                     <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
                     <TableCell>

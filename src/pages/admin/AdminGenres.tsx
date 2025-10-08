@@ -91,11 +91,17 @@ const AdminGenres = () => {
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Genre Management</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage music genres and categories
+          </p>
+        </div>
         
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
-            <div><h1 className="text-3xl font-bold">Quản lý Thể loại</h1><p className="text-muted-foreground">Tổng số: {totalElements} thể loại • Trang {currentPage + 1} / {totalPages}</p></div>
+            <div><p className="text-muted-foreground">Total: {totalElements} genres • Page {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
               <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
@@ -106,13 +112,27 @@ const AdminGenres = () => {
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
-                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search genres..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
+                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
-              {loading ? <div className="text-center py-8">Đang tải...</div> : genres.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div> : (
-                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre, index) => (<TableRow key={genre.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
+              {loading ? <div className="text-center py-8">Loading...</div> : genres.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center">
+                      <Search className="w-10 h-10 text-muted-foreground/50" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold">Empty Placeholder</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {searchQuery ? 'No genres match your search' : 'No genres found. Create your first genre.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Genre Name</TableHead><TableHead>Description</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre, index) => (<TableRow key={genre.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
               )}
             </CardContent>
           </Card>

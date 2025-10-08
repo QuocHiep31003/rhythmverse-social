@@ -30,6 +30,15 @@ const AdminSongs = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [genreFilter, setGenreFilter] = useState<string>("all");
+
+  const getAvailableGenres = () => {
+    const genres = songs
+      .map(song => song.genre)
+      .filter((genre, index, self) => genre && self.indexOf(genre) === index)
+      .sort();
+    return genres;
+  };
 
   useEffect(() => {
     loadSongs();
@@ -164,17 +173,19 @@ const AdminSongs = () => {
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Quay lại
-        </Button>
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Song Management</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage music tracks and recordings
+          </p>
+        </div>
         
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Quản lý Bài hát</h1>
               <p className="text-muted-foreground">
-                Tổng số: {totalElements} bài hát • Trang {currentPage + 1} / {totalPages}
+                Total: {totalElements} songs • Page {currentPage + 1} / {totalPages}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -196,40 +207,59 @@ const AdminSongs = () => {
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input placeholder="Tìm kiếm bài hát..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" />
+                  <Input placeholder="Search songs..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                  <span className="text-sm text-muted-foreground">Genre:</span>
+                  <select value={genreFilter} onChange={(e) => setGenreFilter(e.target.value)} className="bg-background border border-border rounded px-3 py-2 text-sm min-w-[120px]">
+                    <option value="all">All Genres</option>
+                    {getAvailableGenres().map(genre => (<option key={genre} value={genre}>{genre}</option>))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Show:</span>
                   <select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm">
                     <option value={5}>5</option>
                     <option value={10}>10</option>
                     <option value={20}>20</option>
                     <option value={50}>50</option>
                   </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  <span className="text-sm text-muted-foreground">per page</span>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
-                <div className="text-center py-8">Đang tải...</div>
-              ) : songs.length === 0 ? (
-                <div className="text-center py-8">{searchQuery ? "Không tìm thấy bài hát phù hợp" : "Chưa có bài hát nào"}</div>
+                <div className="text-center py-8">Loading...</div>
+              ) : songs.filter(song => genreFilter === "all" || song.genre === genreFilter).length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center">
+                      <Search className="w-10 h-10 text-muted-foreground/50" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold">Empty Placeholder</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {searchQuery || genreFilter !== "all" ? 'No songs match your filters' : 'No songs found. Add your first song.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-16">STT</TableHead>
                       <TableHead className="w-12"></TableHead>
-                      <TableHead>Bài hát</TableHead>
-                      <TableHead>Nghệ sĩ</TableHead>
-                      <TableHead>Năm phát hành</TableHead>
-                      <TableHead>Thể loại</TableHead>
-                      <TableHead className="text-right">Hành động</TableHead>
+                      <TableHead>Song</TableHead>
+                      <TableHead>Artist</TableHead>
+                      <TableHead>Release Year</TableHead>
+                      <TableHead>Genre</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {songs.map((song, index) => (
+                    {songs.filter(song => genreFilter === "all" || song.genre === genreFilter).map((song, index) => (
                       <TableRow key={song.id}>
                         <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
                         <TableCell>
