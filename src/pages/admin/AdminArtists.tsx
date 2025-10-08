@@ -21,6 +21,8 @@ const COUNTRIES = [
   "Switzerland", "Austria", "Belgium", "Poland", "Argentina", "Chile", "Colombia"
 ].sort();
 
+const DEBUT_YEARS = Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => (new Date().getFullYear() - i).toString());
+
 const AdminArtists = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -145,12 +147,16 @@ const AdminArtists = () => {
                       <option key={country} value={country}>{country}</option>
                     ))}
                   </select>
-                  <Input 
-                    placeholder="Filter by debut year..." 
+                  <select 
                     value={debutYearFilter} 
                     onChange={(e) => { setDebutYearFilter(e.target.value); setCurrentPage(0); }} 
-                    className="bg-background/50 min-w-[150px]"
-                  />
+                    className="bg-background border border-border rounded-md px-3 py-2 text-sm min-w-[150px] focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">All Debut Years</option>
+                    {DEBUT_YEARS.map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </CardHeader>
