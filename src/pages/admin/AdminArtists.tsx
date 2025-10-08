@@ -28,15 +28,6 @@ const AdminArtists = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [countryFilter, setCountryFilter] = useState<string>("all");
-
-  const getAvailableCountries = () => {
-    const countries = artists
-      .map(artist => artist.country)
-      .filter((country, index, self) => country && self.indexOf(country) === index)
-      .sort();
-    return countries;
-  };
 
   useEffect(() => {
     loadArtists();
@@ -106,17 +97,11 @@ const AdminArtists = () => {
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-        {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">Artist Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage music artists and performers
-          </p>
-        </div>
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
         
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
-            <div><p className="text-muted-foreground">Total: {totalElements} artists • Page {currentPage + 1} / {totalPages}</p></div>
+            <div><h1 className="text-3xl font-bold">Quản lý Nghệ sĩ</h1><p className="text-muted-foreground">Tổng số: {totalElements} nghệ sĩ • Trang {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
               <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
@@ -127,34 +112,13 @@ const AdminArtists = () => {
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search artists..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Country:</span>
-                  <select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)} className="bg-background border border-border rounded px-3 py-2 text-sm min-w-[120px]">
-                    <option value="all">All Countries</option>
-                    {getAvailableCountries().map(country => (<option key={country} value={country}>{country}</option>))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
+                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm nghệ sĩ..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
+                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
-              {loading ? <div className="text-center py-8">Loading...</div> : artists.filter(artist => countryFilter === "all" || artist.country === countryFilter).length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center">
-                      <Search className="w-10 h-10 text-muted-foreground/50" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold">Empty Placeholder</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {searchQuery || countryFilter !== "all" ? 'No artists match your filters' : 'No artists found. Add your first artist.'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Artist</TableHead><TableHead>Country</TableHead><TableHead>Debut Year</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{artists.filter(artist => countryFilter === "all" || artist.country === countryFilter).map((artist, index) => (
+              {loading ? <div className="text-center py-8">Đang tải...</div> : artists.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy nghệ sĩ" : "Chưa có nghệ sĩ nào"}</div> : (
+                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Nghệ sĩ</TableHead><TableHead>Quốc gia</TableHead><TableHead>Năm ra mắt</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (
                   <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || DEFAULT_AVATAR_URL} alt={artist.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
                 ))}</TableBody></Table>
               )}

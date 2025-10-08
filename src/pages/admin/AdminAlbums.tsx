@@ -371,33 +371,24 @@ const AdminAlbums = () => {
     return pages;
   };
 
-  const [yearFilter, setYearFilter] = useState<string>("all");
-
-  const getAvailableYears = () => {
-    const years = albums
-      .filter(album => album.releaseDate)
-      .map(album => new Date(album.releaseDate).getFullYear())
-      .filter((year, index, self) => self.indexOf(year) === index)
-      .sort((a, b) => b - a);
-    return years;
-  };
-
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-        {/* Page Title */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">Album Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage music albums and collections
-          </p>
-        </div>
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate(-1)} 
+          className="mb-4 self-start"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Quay lại
+        </Button>
         
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
+              <h1 className="text-3xl font-bold">Quản lý Albums</h1>
               <p className="text-muted-foreground">
-                Total: {totalElements} albums • Page {currentPage + 1} / {totalPages}
+                Tổng số: {totalElements} albums • Trang {currentPage + 1} / {totalPages}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -422,7 +413,7 @@ const AdminAlbums = () => {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search albums..."
+                    placeholder="Tìm kiếm album..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
@@ -432,20 +423,7 @@ const AdminAlbums = () => {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Year:</span>
-                  <select 
-                    value={yearFilter}
-                    onChange={(e) => setYearFilter(e.target.value)}
-                    className="bg-background border border-border rounded px-3 py-2 text-sm min-w-[120px]"
-                  >
-                    <option value="all">All Years</option>
-                    {getAvailableYears().map(year => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Show:</span>
+                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
                   <select 
                     value={pageSize}
                     onChange={(e) => handlePageSizeChange(Number(e.target.value))}
@@ -456,26 +434,16 @@ const AdminAlbums = () => {
                     <option value={20}>20</option>
                     <option value={50}>50</option>
                   </select>
-                  <span className="text-sm text-muted-foreground">per page</span>
+                  <span className="text-sm text-muted-foreground">mỗi trang</span>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
-                <div className="text-center py-8">Loading...</div>
-              ) : albums.filter(album => yearFilter === "all" || new Date(album.releaseDate).getFullYear().toString() === yearFilter).length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center">
-                      <Search className="w-10 h-10 text-muted-foreground/50" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold">Empty Placeholder</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {searchQuery || yearFilter !== "all" ? 'No albums match your filters' : 'No albums found. Create your first album.'}
-                      </p>
-                    </div>
-                  </div>
+                <div className="text-center py-8">Đang tải...</div>
+              ) : albums.length === 0 ? (
+                <div className="text-center py-8">
+                  {searchQuery ? "Không tìm thấy album phù hợp" : "Chưa có album nào"}
                 </div>
               ) : (
                 <Table>
@@ -490,7 +458,7 @@ const AdminAlbums = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {albums.filter(album => yearFilter === "all" || new Date(album.releaseDate).getFullYear().toString() === yearFilter).map((album, index) => (
+                    {albums.map((album, index) => (
                       <TableRow key={album.id}>
                         <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
                         <TableCell>
