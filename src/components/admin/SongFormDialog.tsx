@@ -50,11 +50,7 @@ const songFormSchema = z.object({
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
-  album: z.string().max(200).optional().or(z.literal("")),
-  duration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
-  cover: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
-  audio: z.string().url("URL audio không hợp lệ"),
-  avatar: z.string().optional(),
+  file: z.any().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -90,11 +86,7 @@ export const SongFormDialog = ({
       releaseYear: new Date().getFullYear(),
       genreIds: [],
       artistIds: [],
-      album: "",
-      duration: 180,
-      cover: "",
-      audio: "",
-      avatar: "",
+      file: undefined,
       ...defaultValues,
     },
   });
@@ -138,6 +130,7 @@ export const SongFormDialog = ({
         ...defaultValues,
         artistIds: apiData.artists?.map((a: any) => a.id) || defaultValues.artistIds || [],
         genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
+        file: undefined,
       };
       form.reset(formValues);
     } else if (open) {
@@ -146,11 +139,7 @@ export const SongFormDialog = ({
         releaseYear: new Date().getFullYear(),
         genreIds: [],
         artistIds: [],
-        album: "",
-        duration: 180,
-        cover: "",
-        audio: "",
-        avatar: "",
+        file: undefined,
       });
     }
   }, [open, defaultValues, form]);
@@ -418,104 +407,20 @@ export const SongFormDialog = ({
               )}
             />
 
-            {/* Tạm thời disable trường ảnh bài hát */}
-            {/* <FormField
-              control={form.control}
-              name="avatar"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Ảnh bài hát</FormLabel>
-                  <FormControl>
-                    <div className="space-y-4">
-                      {previewUrl ? (
-                        <div className="relative w-32 h-32">
-                          <img
-                            src={previewUrl}
-                            alt="Preview"
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            className="absolute -top-2 -right-2"
-                            onClick={handleRemoveImage}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4">
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileUpload}
-                            disabled={uploading}
-                          />
-                          {uploading && <span className="text-sm text-muted-foreground">Đang tải...</span>}
-                        </div>
-                      )}
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            /> */}
-
             <FormField
               control={form.control}
-              name="album"
-              render={({ field }) => (
+              name="file"
+              render={({ field: { value, onChange, ...field } }) => (
                 <FormItem>
-                  <FormLabel>Album (không bắt buộc)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Tên album" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="duration"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Thời lượng (giây) *</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="180" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="cover"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cover URL (không bắt buộc)</FormLabel>
+                  <FormLabel>File nhạc * {mode === "edit" && "(Để trống nếu không thay đổi)"}</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder="https://example.com/cover.jpg"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="audio"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Audio URL *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://example.com/audio.mp3"
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        onChange(file);
+                      }}
                       {...field}
                     />
                   </FormControl>

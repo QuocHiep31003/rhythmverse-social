@@ -140,8 +140,14 @@ const AdminSongs = () => {
   };
 
   const handlePlayClick = (song: any) => {
+    const playableSong = {
+      ...song,
+      audio: song.audioUrl,
+      artist: song.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+      genre: song.genres?.[0]?.name || 'Unknown'
+    };
     if (currentSong?.id === song.id) togglePlay();
-    else playSong(song);
+    else playSong(playableSong);
   };
 
   const goToPage = (page: number) => setCurrentPage(page);
@@ -239,14 +245,19 @@ const AdminSongs = () => {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <img src={song.avatar || DEFAULT_AVATAR_URL} alt={song.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded object-cover" />
                             <span className="font-medium">{song.name}</span>
                           </div>
                         </TableCell>
                         <TableCell>{song.artists?.map((a: any) => a.name).join(', ') || '—'}</TableCell>
                         <TableCell>{song.releaseYear || '—'}</TableCell>
                         <TableCell>
-                          <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs">{song.genre || '—'}</span>
+                          <div className="flex flex-wrap gap-1">
+                            {song.genres?.map((g: any) => (
+                              <span key={g.id} className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs">
+                                {g.name}
+                              </span>
+                            )) || '—'}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">

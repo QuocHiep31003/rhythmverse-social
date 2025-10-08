@@ -186,10 +186,25 @@ export const songsApi = {
 
   create: async (data: any) => {
     try {
+      const formData = new FormData();
+      formData.append("name", data.name);
+      formData.append("releaseYear", data.releaseYear.toString());
+      
+      // Append arrays properly
+      data.genreIds.forEach((id: number) => {
+        formData.append("genreIds", id.toString());
+      });
+      data.artistIds.forEach((id: number) => {
+        formData.append("artistIds", id.toString());
+      });
+      
+      if (data.file) {
+        formData.append("file", data.file);
+      }
+
       const response = await fetch(`${API_BASE_URL}/songs`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: formData,
       });
       return await response.json();
     } catch (error) {
@@ -200,10 +215,25 @@ export const songsApi = {
 
   update: async (id: string, data: any) => {
     try {
+      const formData = new FormData();
+      formData.append("name", data.name);
+      formData.append("releaseYear", data.releaseYear.toString());
+      
+      // Append arrays properly
+      data.genreIds.forEach((id: number) => {
+        formData.append("genreIds", id.toString());
+      });
+      data.artistIds.forEach((id: number) => {
+        formData.append("artistIds", id.toString());
+      });
+      
+      if (data.file) {
+        formData.append("file", data.file);
+      }
+
       const response = await fetch(`${API_BASE_URL}/songs/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: formData,
       });
       return await response.json();
     } catch (error) {
