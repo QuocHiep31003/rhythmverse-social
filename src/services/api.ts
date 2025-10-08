@@ -9,6 +9,9 @@ interface PaginationParams {
   size?: number;
   sort?: string;
   search?: string;
+  country?: string;
+  debutYear?: number;
+  releaseYear?: number;
 }
 
 interface PaginatedResponse<T> {
@@ -46,7 +49,7 @@ export const usersApi = {
     try {
       const url = `${API_BASE_URL}/user?page=${page}&size=${size}&sort=${sort}`;
       console.log('Fetching users from:', url);
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -55,15 +58,15 @@ export const usersApi = {
           // 'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
       });
-      
+
       console.log('Response status:', response.status);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Error response:', errorText);
         throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       console.log('Users data received:', data);
       return data;
@@ -72,7 +75,7 @@ export const usersApi = {
       throw error;
     }
   },
-  
+
   getById: async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'GET',
@@ -80,14 +83,14 @@ export const usersApi = {
         'Content-Type': 'application/json',
       },
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to fetch user');
     }
-    
+
     return await response.json();
   },
-  
+
   create: async (data: any) => {
     const response = await fetch(`${API_BASE_URL}/user`, {
       method: 'POST',
@@ -96,15 +99,15 @@ export const usersApi = {
       },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Failed to create user');
     }
-    
+
     return await response.json();
   },
-  
+
   update: async (id: string, data: any) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'PUT',
@@ -113,15 +116,15 @@ export const usersApi = {
       },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Failed to update user');
     }
-    
+
     return await response.json();
   },
-  
+
   delete: async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'DELETE',
@@ -129,11 +132,11 @@ export const usersApi = {
         'Content-Type': 'application/json',
       },
     });
-    
+
     if (!response.ok) {
       throw new Error('Failed to delete user');
     }
-    
+
     return { success: true };
   },
 };
@@ -147,7 +150,7 @@ export const songsApi = {
       if (params?.size !== undefined) queryParams.append('size', params.size.toString());
       if (params?.sort) queryParams.append('sort', params.sort);
       if (params?.search) queryParams.append('search', params.search);
-      
+
       const response = await fetch(`${API_BASE_URL}/songs?${queryParams.toString()}`);
       if (!response.ok) {
         throw new Error("Failed to fetch songs");
@@ -169,7 +172,7 @@ export const songsApi = {
       } as PaginatedResponse<any>;
     }
   },
-  
+
   getById: async (id: string) => {
     try {
       const response = await fetch(`${API_BASE_URL}/songs/${id}`);
@@ -179,7 +182,7 @@ export const songsApi = {
       return mockSongs.find(s => s.id === id);
     }
   },
-  
+
   create: async (data: any) => {
     try {
       const response = await fetch(`${API_BASE_URL}/songs`, {
@@ -193,7 +196,7 @@ export const songsApi = {
       throw error;
     }
   },
-  
+
   update: async (id: string, data: any) => {
     try {
       const response = await fetch(`${API_BASE_URL}/songs/${id}`, {
@@ -207,7 +210,7 @@ export const songsApi = {
       throw error;
     }
   },
-  
+
   delete: async (id: string) => {
     try {
       await fetch(`${API_BASE_URL}/songs/${id}`, {
@@ -219,7 +222,7 @@ export const songsApi = {
       throw error;
     }
   },
-  
+
   getCount: async (search?: string) => {
     try {
       const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
@@ -233,7 +236,7 @@ export const songsApi = {
       return mockSongs.length;
     }
   },
-  
+
   exportExcel: async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/songs/export`);
@@ -254,22 +257,22 @@ export const songsApi = {
       throw error;
     }
   },
-  
+
   importExcel: async (file: File) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await fetch(`${API_BASE_URL}/songs/import`, {
         method: 'POST',
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(errorText || "Failed to import songs");
       }
-      
+
       return await response.text();
     } catch (error) {
       console.error("Error importing songs:", error);
@@ -284,22 +287,22 @@ export const playlistsApi = {
     await delay(300);
     return mockPlaylists;
   },
-  
+
   getById: async (id: string) => {
     await delay(200);
     return mockPlaylists.find(p => p.id === id);
   },
-  
+
   create: async (data: any) => {
     await delay(500);
     return { id: Date.now().toString(), ...data, songs: [] };
   },
-  
+
   update: async (id: string, data: any) => {
     await delay(500);
     return { id, ...data };
   },
-  
+
   delete: async (id: string) => {
     await delay(500);
     return { success: true };
@@ -312,22 +315,22 @@ export const albumsApi = {
     await delay(300);
     return mockAlbums;
   },
-  
+
   getById: async (id: string) => {
     await delay(200);
     return mockAlbums.find(a => a.id === id);
   },
-  
+
   create: async (data: any) => {
     await delay(500);
     return { id: Date.now().toString(), ...data };
   },
-  
+
   update: async (id: string, data: any) => {
     await delay(500);
     return { id, ...data };
   },
-  
+
   delete: async (id: string) => {
     await delay(500);
     return { success: true };
@@ -342,8 +345,9 @@ export const artistsApi = {
       if (params?.page !== undefined) queryParams.append('page', params.page.toString());
       if (params?.size !== undefined) queryParams.append('size', params.size.toString());
       if (params?.sort) queryParams.append('sort', params.sort);
-      if (params?.search) queryParams.append('search', params.search);
-      
+      if (params?.search) queryParams.append('name', params.search);
+      if (params?.country) queryParams.append('country', params.country);
+
       const response = await fetch(`${API_BASE_URL}/artists?${queryParams.toString()}`);
       if (!response.ok) {
         throw new Error("Failed to fetch artists");
@@ -365,7 +369,7 @@ export const artistsApi = {
       } as PaginatedResponse<any>;
     }
   },
-  
+
   getById: async (id: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/artists/${id}`);
@@ -375,7 +379,7 @@ export const artistsApi = {
       return mockArtists.find(a => a.id === id);
     }
   },
-  
+
   create: async (data: any) => {
     try {
       const response = await fetch(`${API_BASE_URL}/artists`, {
@@ -389,7 +393,7 @@ export const artistsApi = {
       throw error;
     }
   },
-  
+
   update: async (id: number, data: any) => {
     try {
       const response = await fetch(`${API_BASE_URL}/artists/${id}`, {
@@ -403,7 +407,7 @@ export const artistsApi = {
       throw error;
     }
   },
-  
+
   delete: async (id: number) => {
     try {
       await fetch(`${API_BASE_URL}/artists/${id}`, {
@@ -415,7 +419,7 @@ export const artistsApi = {
       throw error;
     }
   },
-  
+
   getCount: async (search?: string) => {
     try {
       const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
@@ -429,7 +433,7 @@ export const artistsApi = {
       return mockArtists.length;
     }
   },
-  
+
   exportExcel: async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/artists/export`);
@@ -450,22 +454,22 @@ export const artistsApi = {
       throw error;
     }
   },
-  
+
   importExcel: async (file: File) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await fetch(`${API_BASE_URL}/artists/import`, {
         method: 'POST',
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(errorText || "Failed to import artists");
       }
-      
+
       return await response.text();
     } catch (error) {
       console.error("Error importing artists:", error);
@@ -483,7 +487,7 @@ export const genresApi = {
       if (params?.size !== undefined) queryParams.append('size', params.size.toString());
       if (params?.sort) queryParams.append('sort', params.sort);
       if (params?.search) queryParams.append('search', params.search);
-      
+
       const response = await fetch(`${API_BASE_URL}/genres?${queryParams.toString()}`);
       if (!response.ok) {
         throw new Error("Failed to fetch genres");
@@ -505,7 +509,7 @@ export const genresApi = {
       } as PaginatedResponse<any>;
     }
   },
-  
+
   getById: async (id: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/${id}`);
@@ -515,7 +519,7 @@ export const genresApi = {
       return mockGenres.find(g => g.id === id);
     }
   },
-  
+
   create: async (data: any) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres`, {
@@ -529,7 +533,7 @@ export const genresApi = {
       throw error;
     }
   },
-  
+
   update: async (id: number, data: any) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/${id}`, {
@@ -543,7 +547,7 @@ export const genresApi = {
       throw error;
     }
   },
-  
+
   delete: async (id: number) => {
     try {
       await fetch(`${API_BASE_URL}/genres/${id}`, {
@@ -555,7 +559,7 @@ export const genresApi = {
       throw error;
     }
   },
-  
+
   getCount: async (search?: string) => {
     try {
       const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
@@ -570,7 +574,7 @@ export const genresApi = {
       return mockGenres.length;
     }
   },
-  
+
   exportExcel: async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/export`);
@@ -591,22 +595,22 @@ export const genresApi = {
       throw error;
     }
   },
-  
+
   importExcel: async (file: File) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await fetch(`${API_BASE_URL}/genres/import`, {
         method: 'POST',
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(errorText || "Failed to import genres");
       }
-      
+
       return await response.text();
     } catch (error) {
       console.error("Error importing genres:", error);
@@ -625,15 +629,15 @@ export const authApi = {
       },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Registration failed');
     }
-    
+
     return await response.json();
   },
-  
+
   login: async (data: { email: string; password: string }) => {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
@@ -642,12 +646,12 @@ export const authApi = {
       },
       body: JSON.stringify(data),
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Login failed');
     }
-    
+
     return await response.json();
   },
 };
