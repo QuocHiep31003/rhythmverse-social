@@ -13,6 +13,14 @@ import { debounce } from "@/lib/utils";
 
 const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
 
+const COUNTRIES = [
+  "Vietnam", "Korea", "Japan", "China", "Thailand", "United States", "United Kingdom", 
+  "Canada", "Australia", "France", "Germany", "Italy", "Spain", "Brazil", "Mexico",
+  "India", "Indonesia", "Philippines", "Malaysia", "Singapore", "Taiwan", "Hong Kong",
+  "Russia", "Turkey", "Netherlands", "Sweden", "Norway", "Denmark", "Finland",
+  "Switzerland", "Austria", "Belgium", "Poland", "Argentina", "Chile", "Colombia"
+].sort();
+
 const AdminArtists = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -127,12 +135,16 @@ const AdminArtists = () => {
                   <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Input 
-                    placeholder="Filter by country..." 
+                  <select 
                     value={countryFilter} 
                     onChange={(e) => { setCountryFilter(e.target.value); setCurrentPage(0); }} 
-                    className="bg-background/50 min-w-[150px]"
-                  />
+                    className="bg-background border border-border rounded-md px-3 py-2 text-sm min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">All Countries</option>
+                    {COUNTRIES.map((country) => (
+                      <option key={country} value={country}>{country}</option>
+                    ))}
+                  </select>
                   <Input 
                     placeholder="Filter by debut year..." 
                     value={debutYearFilter} 
