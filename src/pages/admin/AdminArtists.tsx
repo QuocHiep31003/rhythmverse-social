@@ -27,21 +27,39 @@ const AdminArtists = () => {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [countryFilter, setCountryFilter] = useState<string>("");
+  const [debutYearFilter, setDebutYearFilter] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadArtists();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, countryFilter, debutYearFilter]);
 
   const loadArtists = async () => {
     try {
       setLoading(true);
       const data = await artistsApi.getAll({ page: currentPage, size: pageSize, sort: "name,asc", search: searchQuery || undefined });
-      setArtists(data.content || []); setTotalPages(data.totalPages || 0); setTotalElements(data.totalElements || 0);
+      let filteredData = data.content || [];
+      
+      // Apply filters
+      if (countryFilter) {
+        filteredData = filteredData.filter((artist: any) => artist.country === countryFilter);
+      }
+      if (debutYearFilter) {
+        filteredData = filteredData.filter((artist: any) => artist.debutYear?.toString() === debutYearFilter);
+      }
+      
+      setArtists(filteredData); 
+      setTotalPages(data.totalPages || 0); 
+      setTotalElements(filteredData.length);
     } catch (error) {
       toast({ title: "Lỗi", description: "Không thể tải danh sách nghệ sĩ", variant: "destructive" });
     } finally { setLoading(false); }
   };
+  
+  // Get unique countries and years for filters
+  const uniqueCountries = Array.from(new Set(artists.map((a: any) => a.country).filter(Boolean)));
+  const uniqueYears = Array.from(new Set(artists.map((a: any) => a.debutYear).filter(Boolean))).sort((a, b) => b - a);
 
   const handleCreate = () => { setFormMode("create"); setSelectedArtist(null); setFormOpen(true); };
   const handleEdit = (artist: any) => { setFormMode("edit"); setSelectedArtist(artist); setFormOpen(true); };
@@ -97,11 +115,9 @@ const AdminArtists = () => {
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
-       
-        
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
-          <div className="flex items-center justify-between">
-            <div><h1 className="text-3xl font-bold">Quản lý Nghệ sĩ</h1><p className="text-muted-foreground">Tổng số: {totalElements} nghệ sĩ • Trang {currentPage + 1} / {totalPages}</p></div>
+           <div className="flex items-center justify-between">
+             <div><h1 className="text-3xl font-bold">Artist Management</h1><p className="text-muted-foreground">Total: {totalElements} artists • Page {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
               <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
@@ -111,15 +127,39 @@ const AdminArtists = () => {
           </div>
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm nghệ sĩ..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
-                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search artists..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
+                  <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select 
+                    value={countryFilter} 
+                    onChange={(e) => { setCountryFilter(e.target.value); setCurrentPage(0); }} 
+                    className="bg-background/50 border border-border rounded px-3 py-2 text-sm min-w-[150px]"
+                  >
+                    <option value="">All Countries</option>
+                    {uniqueCountries.map((country) => (
+                      <option key={country} value={country}>{country}</option>
+                    ))}
+                  </select>
+                  <select 
+                    value={debutYearFilter} 
+                    onChange={(e) => { setDebutYearFilter(e.target.value); setCurrentPage(0); }} 
+                    className="bg-background/50 border border-border rounded px-3 py-2 text-sm min-w-[150px]"
+                  >
+                    <option value="">All Debut Years</option>
+                    {uniqueYears.map((year) => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
-              {loading ? <div className="text-center py-8">Đang tải...</div> : artists.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy nghệ sĩ" : "Chưa có nghệ sĩ nào"}</div> : (
-                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Nghệ sĩ</TableHead><TableHead>Quốc gia</TableHead><TableHead>Năm ra mắt</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (
-                  <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || DEFAULT_AVATAR_URL} alt={artist.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
+              {loading ? <div className="text-center py-8">Loading...</div> : artists.length === 0 ? <div className="text-center py-8 text-muted-foreground">{searchQuery || countryFilter || debutYearFilter ? "No artists found" : "Empty Placeholder"}</div> : (
+                <Table><TableHeader><TableRow><TableHead className="w-16">No.</TableHead><TableHead>Country</TableHead><TableHead>Artist</TableHead><TableHead>Debut Year</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (
+                  <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || DEFAULT_AVATAR_URL} alt={artist.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
                 ))}</TableBody></Table>
               )}
             </CardContent>
@@ -128,7 +168,7 @@ const AdminArtists = () => {
           {/* Pagination outside of scrollable area */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">Hiển thị {artists.length} trên tổng số {totalElements} nghệ sĩ</div>
+              <div className="text-sm text-muted-foreground">Showing {artists.length} of {totalElements} artists</div>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
                 <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>

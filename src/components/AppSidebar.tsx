@@ -58,10 +58,6 @@ export function AppSidebar() {
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
- 
-useEffect(() => {
-  setOpen(true);
-}, [setOpen]);
   return (
     <Sidebar 
       variant="sidebar" 
