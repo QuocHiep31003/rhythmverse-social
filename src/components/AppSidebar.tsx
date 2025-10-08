@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 
 // Mock notification data - in real app, this would come from context/state
 const getNotificationCount = (url: string) => {
@@ -54,11 +55,13 @@ export function AppSidebar() {
   const { openMobile, setOpenMobile, isMobile } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
-
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
-
+ 
+useEffect(() => {
+  setOpen(true);
+}, [setOpen]);
   return (
     <Sidebar 
       variant="sidebar" 
