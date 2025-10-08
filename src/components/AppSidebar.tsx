@@ -63,7 +63,7 @@ export function AppSidebar() {
     <Sidebar 
       variant="sidebar" 
       collapsible="none"
-      className="w-64"
+      className="w-64 fixed left-0 top-0 h-screen border-r"
     >
       <SidebarHeader className="p-6 border-b border-border/40">
         <div className="flex items-center justify-between">
