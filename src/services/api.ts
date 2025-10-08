@@ -9,8 +9,9 @@ interface PaginationParams {
   size?: number;
   sort?: string;
   search?: string;
+  name?: string;
   country?: string;
-  debutYear?: number;
+  debutYear?: string;
   releaseYear?: number;
 }
 
@@ -345,8 +346,9 @@ export const artistsApi = {
       if (params?.page !== undefined) queryParams.append('page', params.page.toString());
       if (params?.size !== undefined) queryParams.append('size', params.size.toString());
       if (params?.sort) queryParams.append('sort', params.sort);
-      if (params?.search) queryParams.append('name', params.search);
+      if (params?.name) queryParams.append('name', params.name);
       if (params?.country) queryParams.append('country', params.country);
+      if (params?.debutYear) queryParams.append('debutYear', params.debutYear);
 
       const response = await fetch(`${API_BASE_URL}/artists?${queryParams.toString()}`);
       if (!response.ok) {

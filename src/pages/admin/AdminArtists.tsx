@@ -38,28 +38,22 @@ const AdminArtists = () => {
   const loadArtists = async () => {
     try {
       setLoading(true);
-      const data = await artistsApi.getAll({ page: currentPage, size: pageSize, sort: "name,asc", search: searchQuery || undefined });
-      let filteredData = data.content || [];
+      const data = await artistsApi.getAll({ 
+        page: currentPage, 
+        size: pageSize, 
+        sort: "name,asc", 
+        name: searchQuery || undefined,
+        country: countryFilter || undefined,
+        debutYear: debutYearFilter || undefined
+      });
       
-      // Apply filters
-      if (countryFilter) {
-        filteredData = filteredData.filter((artist: any) => artist.country === countryFilter);
-      }
-      if (debutYearFilter) {
-        filteredData = filteredData.filter((artist: any) => artist.debutYear?.toString() === debutYearFilter);
-      }
-      
-      setArtists(filteredData); 
+      setArtists(data.content || []); 
       setTotalPages(data.totalPages || 0); 
-      setTotalElements(filteredData.length);
+      setTotalElements(data.totalElements || 0);
     } catch (error) {
       toast({ title: "Lỗi", description: "Không thể tải danh sách nghệ sĩ", variant: "destructive" });
     } finally { setLoading(false); }
   };
-  
-  // Get unique countries and years for filters
-  const uniqueCountries = Array.from(new Set(artists.map((a: any) => a.country).filter(Boolean)));
-  const uniqueYears = Array.from(new Set(artists.map((a: any) => a.debutYear).filter(Boolean))).sort((a, b) => b - a);
 
   const handleCreate = () => { setFormMode("create"); setSelectedArtist(null); setFormOpen(true); };
   const handleEdit = (artist: any) => { setFormMode("edit"); setSelectedArtist(artist); setFormOpen(true); };
@@ -133,26 +127,18 @@ const AdminArtists = () => {
                   <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <select 
+                  <Input 
+                    placeholder="Filter by country..." 
                     value={countryFilter} 
                     onChange={(e) => { setCountryFilter(e.target.value); setCurrentPage(0); }} 
-                    className="bg-background/50 border border-border rounded px-3 py-2 text-sm min-w-[150px]"
-                  >
-                    <option value="">All Countries</option>
-                    {uniqueCountries.map((country) => (
-                      <option key={country} value={country}>{country}</option>
-                    ))}
-                  </select>
-                  <select 
+                    className="bg-background/50 min-w-[150px]"
+                  />
+                  <Input 
+                    placeholder="Filter by debut year..." 
                     value={debutYearFilter} 
                     onChange={(e) => { setDebutYearFilter(e.target.value); setCurrentPage(0); }} 
-                    className="bg-background/50 border border-border rounded px-3 py-2 text-sm min-w-[150px]"
-                  >
-                    <option value="">All Debut Years</option>
-                    {uniqueYears.map((year) => (
-                      <option key={year} value={year}>{year}</option>
-                    ))}
-                  </select>
+                    className="bg-background/50 min-w-[150px]"
+                  />
                 </div>
               </div>
             </CardHeader>
