@@ -99,8 +99,8 @@ export const ArtistFormDialog = ({
     }
 
     setUploading(true);
-     const cloudName = "dhylbhwvb";
-const uploadPreset = "EchoVerse";
+  const cloudName = "dhylbhwvb";
+  const uploadPreset = "EchoVerse";
 try {
   setUploading(true);
   const formData = new FormData();

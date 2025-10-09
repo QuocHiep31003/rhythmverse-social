@@ -75,24 +75,35 @@ const AdminSongs = () => {
     setDeleteOpen(true);
   };
 
-  const handleFormSubmit = async (data: any) => {
-    try {
-      setIsSubmitting(true);
-      if (formMode === "create") {
-        await songsApi.create(data);
-        toast({ title: "Thành công", description: "Đã tạo bài hát mới" });
-      } else {
-        await songsApi.update(selectedSong.id, data);
-        toast({ title: "Thành công", description: "Đã cập nhật bài hát" });
-      }
+ const handleFormSubmit = async (data: any) => {
+  setIsSubmitting(true);
+  try {
+    const response = formMode === "create"
+      ? await songsApi.create(data)
+      : await songsApi.update(selectedSong.id, data);
+
+    // Kiểm tra status nếu API không throw
+    if (response?.status >= 200 && response?.status < 300) {
+      toast({
+        title: "Thành công",
+        description: formMode === "create" ? "Đã tạo bài hát mới" : "Đã cập nhật bài hát",
+      });
       setFormOpen(false);
       loadSongs();
-    } catch (error) {
-      toast({ title: "Lỗi", description: "Không thể lưu bài hát", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      throw new Error("Lưu bài hát thất bại");
     }
-  };
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Lỗi",
+      description: "Không thể lưu bài hát",
+      variant: "destructive",
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleDelete = async () => {
     try {

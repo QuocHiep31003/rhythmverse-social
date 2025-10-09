@@ -50,7 +50,7 @@ const songFormSchema = z.object({
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
-  urlAudio: z.string().optional(),
+  audioUrl: z.string().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -88,7 +88,7 @@ export const SongFormDialog = ({
       releaseYear: new Date().getFullYear(),
       genreIds: [],
       artistIds: [],
-      urlAudio: "",
+      audioUrl: "",
       ...defaultValues,
     },
   });
@@ -132,7 +132,7 @@ export const SongFormDialog = ({
         ...defaultValues,
         artistIds: apiData.artists?.map((a: any) => a.id) || defaultValues.artistIds || [],
         genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
-        urlAudio: apiData.audioUrl || defaultValues.urlAudio || "",
+        audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
       };
       form.reset(formValues);
     } else if (open) {
@@ -141,14 +141,14 @@ export const SongFormDialog = ({
         releaseYear: new Date().getFullYear(),
         genreIds: [],
         artistIds: [],
-        urlAudio: "",
+        audioUrl: "",
       });
     }
   }, [open, defaultValues, form]);
 
   const uploadToCloudinary = async (file: File): Promise<string> => {
     const cloudName = "dhylbhwvb"; // Cloudinary cloud name
-    const uploadPreset = "ml_default"; // Unsigned upload preset
+    const uploadPreset = "EchoVerse"; // Unsigned upload preset
     
     const formData = new FormData();
     formData.append("file", file);
@@ -193,7 +193,7 @@ export const SongFormDialog = ({
       clearInterval(progressInterval);
       setUploadProgress(100);
       
-      form.setValue("urlAudio", url);
+      form.setValue("audioUrl", url);
       
       setTimeout(() => {
         setUploadProgress(0);
@@ -471,7 +471,7 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="urlAudio"
+              name="audioUrl"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới nếu muốn thay đổi)"}</FormLabel>
