@@ -215,7 +215,7 @@ export const songsApi = {
         releaseYear: data.releaseYear,
         genreIds: data.genreIds,
         artistIds: data.artistIds,
-        urlAudio: data.urlAudio,
+        audioUrl: data.audioUrl,
       };
 
       const response = await fetch(`${API_BASE_URL}/songs/${id}`, {
