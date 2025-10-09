@@ -78,21 +78,18 @@ const AdminSongs = () => {
  const handleFormSubmit = async (data: any) => {
   setIsSubmitting(true);
   try {
-    const response = formMode === "create"
-      ? await songsApi.create(data)
-      : await songsApi.update(selectedSong.id, data);
-
-    // Kiểm tra status nếu API không throw
-    if (response?.status >= 200 && response?.status < 300) {
-      toast({
-        title: "Thành công",
-        description: formMode === "create" ? "Đã tạo bài hát mới" : "Đã cập nhật bài hát",
-      });
-      setFormOpen(false);
-      loadSongs();
+    if (formMode === "create") {
+      await songsApi.create(data);
     } else {
-      throw new Error("Lưu bài hát thất bại");
+      await songsApi.update(selectedSong.id, data);
     }
+    
+    toast({
+      title: "Thành công",
+      description: formMode === "create" ? "Đã tạo bài hát mới" : "Đã cập nhật bài hát",
+    });
+    setFormOpen(false);
+    loadSongs();
   } catch (error) {
     console.error(error);
     toast({
