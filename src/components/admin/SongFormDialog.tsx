@@ -50,7 +50,7 @@ const songFormSchema = z.object({
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
-  file: z.any().optional(),
+  urlAudio: z.string().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -78,6 +78,8 @@ export const SongFormDialog = ({
   const [genreSearchQuery, setGenreSearchQuery] = useState("");
   const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -86,7 +88,7 @@ export const SongFormDialog = ({
       releaseYear: new Date().getFullYear(),
       genreIds: [],
       artistIds: [],
-      file: undefined,
+      urlAudio: "",
       ...defaultValues,
     },
   });
@@ -130,7 +132,7 @@ export const SongFormDialog = ({
         ...defaultValues,
         artistIds: apiData.artists?.map((a: any) => a.id) || defaultValues.artistIds || [],
         genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
-        file: undefined,
+        urlAudio: apiData.audioUrl || defaultValues.urlAudio || "",
       };
       form.reset(formValues);
     } else if (open) {
@@ -139,10 +141,70 @@ export const SongFormDialog = ({
         releaseYear: new Date().getFullYear(),
         genreIds: [],
         artistIds: [],
-        file: undefined,
+        urlAudio: "",
       });
     }
   }, [open, defaultValues, form]);
+
+  const uploadToCloudinary = async (file: File): Promise<string> => {
+    const cloudName = "dhylbhwvb"; // Cloudinary cloud name
+    const uploadPreset = "ml_default"; // Unsigned upload preset
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", uploadPreset);
+    formData.append("resource_type", "video"); // audio files use 'video' resource type
+    
+    try {
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+      
+      const data = await response.json();
+      return data.secure_url;
+    } catch (error) {
+      console.error("Error uploading to Cloudinary:", error);
+      throw error;
+    }
+  };
+
+  const handleFileChange = async (file: File | undefined) => {
+    if (!file) return;
+    
+    setUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      // Simulate progress (Cloudinary doesn't provide real-time progress)
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => Math.min(prev + 10, 90));
+      }, 200);
+      
+      const url = await uploadToCloudinary(file);
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      form.setValue("urlAudio", url);
+      
+      setTimeout(() => {
+        setUploadProgress(0);
+      }, 1000);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Lỗi khi upload file. Vui lòng thử lại.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = (data: SongFormValues) => {
     onSubmit(data);
@@ -409,20 +471,40 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="file"
-              render={({ field: { value, onChange, ...field } }) => (
+              name="urlAudio"
+              render={({ field }) => (
                 <FormItem>
-                  <FormLabel>File nhạc * {mode === "edit" && "(Để trống nếu không thay đổi)"}</FormLabel>
+                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới nếu muốn thay đổi)"}</FormLabel>
                   <FormControl>
-                    <Input
-                      type="file"
-                      accept="audio/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        onChange(file);
-                      }}
-                      {...field}
-                    />
+                    <div className="space-y-2">
+                      <Input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          handleFileChange(file);
+                        }}
+                        disabled={uploading}
+                      />
+                      {uploading && (
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">
+                            Đang upload... {uploadProgress}%
+                          </div>
+                          <div className="w-full bg-secondary rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {field.value && !uploading && (
+                        <div className="text-sm text-muted-foreground">
+                          ✓ Audio URL: {field.value.substring(0, 50)}...
+                        </div>
+                      )}
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
