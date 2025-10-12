@@ -149,12 +149,11 @@ const AdminAlbums = () => {
     try {
       setIsSubmitting(true);
 
-      // Chỉ gửi các trường cơ bản theo API spec
       const albumData = {
         name: data.name,
         artistId: data.artistId,
+        songIds: data.songIds || [],
         releaseDate: data.releaseDate
-        // Không gửi songIds vì API chưa hỗ trợ
       };
 
       if (formMode === "create") {

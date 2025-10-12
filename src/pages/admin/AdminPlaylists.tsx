@@ -120,11 +120,12 @@ const AdminPlaylists = () => {
       
       const today = new Date().toISOString().split("T")[0];
       const playlistData = {
-        ...data,
+        name: data.name,
+        description: data.description || "",
         isPublic: data.isPublic ?? true,
         songLimit: data.songLimit ?? 500,
         dateUpdate: today,
-        songIds: selectedPlaylist?.songIds || [],
+        songIds: data.songIds || [],
         coverImage: data.coverImage || null
       };
 

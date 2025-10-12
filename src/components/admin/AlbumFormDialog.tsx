@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 const albumSchema = z.object({
   name: z.string().min(1, "Tên album là bắt buộc"),
   artistId: z.number().min(1, "Nghệ sĩ là bắt buộc"),
+  songIds: z.array(z.number()).min(1, "Phải chọn ít nhất 1 bài hát"),
   releaseDate: z.string().min(1, "Ngày phát hành là bắt buộc"),
   coverImage: z.string().optional().or(z.literal("")),
   description: z.string().optional(),
@@ -40,6 +41,12 @@ interface Artist {
   country: string;
   debutYear: number;
   description: string;
+}
+
+interface Song {
+  id: number;
+  name: string;
+  releaseYear: number;
 }
 
 interface AlbumFormDialogProps {
@@ -65,12 +72,15 @@ export const AlbumFormDialog = ({
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [artistSearch, setArtistSearch] = useState("");
   const [showArtistDropdown, setShowArtistDropdown] = useState(false);
+  const [availableSongs, setAvailableSongs] = useState<Song[]>([]);
+  const [loadingSongs, setLoadingSongs] = useState(false);
 
   const form = useForm<AlbumFormValues>({
     resolver: zodResolver(albumSchema),
     defaultValues: {
       name: "",
       artistId: 0,
+      songIds: [],
       releaseDate: new Date().toISOString().split('T')[0],
       coverImage: "",
       description: "",
@@ -96,6 +106,7 @@ export const AlbumFormDialog = ({
       form.reset({
         name: "",
         artistId: 0,
+        songIds: [],
         releaseDate: new Date().toISOString().split('T')[0],
         coverImage: "",
         description: "",
@@ -103,8 +114,34 @@ export const AlbumFormDialog = ({
       setCoverPreview("");
       setCoverFile(null);
       setArtistSearch("");
+      setAvailableSongs([]);
     }
   }, [open, defaultValues, form, artists]);
+
+  // Load songs when artist is selected
+  useEffect(() => {
+    const artistId = form.watch("artistId");
+    if (artistId && artistId > 0) {
+      loadSongsByArtist(artistId);
+    } else {
+      setAvailableSongs([]);
+    }
+  }, [form.watch("artistId")]);
+
+  const loadSongsByArtist = async (artistId: number) => {
+    try {
+      setLoadingSongs(true);
+      const response = await fetch(`http://localhost:8080/api/songs/by-artist/${artistId}`);
+      if (response.ok) {
+        const songs = await response.json();
+        setAvailableSongs(songs);
+      }
+    } catch (error) {
+      console.error("Failed to load songs:", error);
+    } finally {
+      setLoadingSongs(false);
+    }
+  };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -142,8 +179,18 @@ export const AlbumFormDialog = ({
 
   const handleArtistSelect = (artist: Artist) => {
     form.setValue("artistId", artist.id);
+    form.setValue("songIds", []); // Reset selected songs
     setArtistSearch(artist.name);
     setShowArtistDropdown(false);
+  };
+
+  const handleSongToggle = (songId: number) => {
+    const currentSongs = form.getValues("songIds") || [];
+    if (currentSongs.includes(songId)) {
+      form.setValue("songIds", currentSongs.filter(id => id !== songId));
+    } else {
+      form.setValue("songIds", [...currentSongs, songId]);
+    }
   };
 
   const filteredArtists = artists.filter(artist =>
@@ -309,6 +356,55 @@ export const AlbumFormDialog = ({
               )}
             />
 
+            {/* Songs Multi-select */}
+            <FormField
+              control={form.control}
+              name="songIds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-white">Danh sách bài hát *</FormLabel>
+                  {!selectedArtist ? (
+                    <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
+                      <p className="text-sm text-gray-400">Vui lòng chọn nghệ sĩ trước</p>
+                    </div>
+                  ) : loadingSongs ? (
+                    <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
+                      <p className="text-sm text-gray-400">Đang tải bài hát...</p>
+                    </div>
+                  ) : availableSongs.length === 0 ? (
+                    <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
+                      <p className="text-sm text-gray-400">Không có bài hát nào</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto border border-border rounded-lg p-3 bg-background/30">
+                      {availableSongs.map((song) => (
+                        <div
+                          key={song.id}
+                          className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                          onClick={() => handleSongToggle(song.id)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={field.value?.includes(song.id)}
+                            onChange={() => handleSongToggle(song.id)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-white text-sm">{song.name}</span>
+                          <span className="text-xs text-gray-400 ml-auto">({song.releaseYear})</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <FormMessage />
+                  {field.value && field.value.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Đã chọn {field.value.length} bài hát
+                    </p>
+                  )}
+                </FormItem>
+              )}
+            />
+
             <FormField
               control={form.control}
               name="description"
@@ -326,7 +422,6 @@ export const AlbumFormDialog = ({
                 </FormItem>
               )}
             />
-
 
             <DialogFooter>
               <Button

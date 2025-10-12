@@ -144,6 +144,19 @@ export const usersApi = {
 
 // Songs API
 export const songsApi = {
+  getByArtist: async (artistId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/songs/by-artist/${artistId}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch songs by artist");
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching songs by artist:", error);
+      return [];
+    }
+  },
+
   getAll: async (params?: PaginationParams) => {
     try {
       const queryParams = new URLSearchParams();
