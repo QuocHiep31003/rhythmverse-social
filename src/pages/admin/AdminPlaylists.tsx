@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Upload, Download, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil, Trash2, Plus, Search, Upload, Download, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter } from "lucide-react";
 import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
@@ -60,6 +61,10 @@ const AdminPlaylists = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
+  // Filter state
+  const [filterPublic, setFilterPublic] = useState<string>("all");
+  const [filterDate, setFilterDate] = useState<string>("all");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -68,14 +73,16 @@ const AdminPlaylists = () => {
 
   useEffect(() => {
     loadPlaylists();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, filterPublic, filterDate]);
 
   const loadPlaylists = async () => {
     try {
       setLoading(true);
       const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+      const publicParam = filterPublic !== "all" ? `&isPublic=${filterPublic}` : '';
+      const dateParam = filterDate !== "all" ? `&date=${filterDate}` : '';
       const response = await fetch(
-        `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}`
+        `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}${publicParam}${dateParam}`
       );
       
       if (!response.ok) {
@@ -345,6 +352,22 @@ const AdminPlaylists = () => {
     return pages;
   };
 
+  // Get unique dates (years) from playlists for filter
+  const availableDates = Array.from(
+    new Set(
+      playlists
+        .map(playlist => playlist.dateUpdate ? new Date(playlist.dateUpdate).getFullYear() : null)
+        .filter(year => year !== null)
+    )
+  ).sort((a, b) => (b as number) - (a as number));
+
+  const handleClearFilters = () => {
+    setFilterPublic("all");
+    setFilterDate("all");
+    setSearchQuery("");
+    setCurrentPage(0);
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
@@ -383,32 +406,73 @@ const AdminPlaylists = () => {
 
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm playlist..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(0); // Reset về trang đầu khi tìm kiếm
-                    }}
-                    className="pl-10 bg-background/50"
-                  />
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm playlist..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(0);
+                      }}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                    <select 
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
-                  <select 
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Lọc:</span>
+                  </div>
+                  
+                  <Select value={filterPublic} onValueChange={(value) => { setFilterPublic(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Trạng thái" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả</SelectItem>
+                      <SelectItem value="true">Công khai</SelectItem>
+                      <SelectItem value="false">Riêng tư</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filterDate} onValueChange={(value) => { setFilterDate(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Năm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả năm</SelectItem>
+                      {availableDates.map(year => (
+                        <SelectItem key={year} value={year?.toString() || ""}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(filterPublic !== "all" || filterDate !== "all" || searchQuery) && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                      Xóa bộ lọc
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>

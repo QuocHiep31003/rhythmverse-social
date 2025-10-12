@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter } from "lucide-react";
 import { AlbumFormDialog } from "@/components/admin/AlbumFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
@@ -78,6 +79,10 @@ const AdminAlbums = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
+  // Filter state
+  const [filterArtist, setFilterArtist] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>("all");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -87,14 +92,16 @@ const AdminAlbums = () => {
   useEffect(() => {
     loadAlbums();
     loadArtists();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, filterArtist, filterYear]);
 
   const loadAlbums = async () => {
     try {
       setLoading(true);
       const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+      const artistParam = filterArtist !== "all" ? `&artistId=${filterArtist}` : '';
+      const yearParam = filterYear !== "all" ? `&year=${filterYear}` : '';
       const response = await fetch(
-        `${API_BASE_URL}/albums?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}`
+        `${API_BASE_URL}/albums?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}${artistParam}${yearParam}`
       );
       
       if (!response.ok) {
@@ -370,6 +377,22 @@ const AdminAlbums = () => {
     return pages;
   };
 
+  // Get unique years from albums for filter
+  const availableYears = Array.from(
+    new Set(
+      albums
+        .map(album => album.releaseDate ? new Date(album.releaseDate).getFullYear() : null)
+        .filter(year => year !== null)
+    )
+  ).sort((a, b) => (b as number) - (a as number));
+
+  const handleClearFilters = () => {
+    setFilterArtist("all");
+    setFilterYear("all");
+    setSearchQuery("");
+    setCurrentPage(0);
+  };
+
   return (
     <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
@@ -408,32 +431,76 @@ const AdminAlbums = () => {
 
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm album..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(0);
-                    }}
-                    className="pl-10 bg-background/50"
-                  />
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm album..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(0);
+                      }}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                    <select 
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
-                  <select 
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Lọc:</span>
+                  </div>
+                  
+                  <Select value={filterArtist} onValueChange={(value) => { setFilterArtist(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Nghệ sĩ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả nghệ sĩ</SelectItem>
+                      {artists.map(artist => (
+                        <SelectItem key={artist.id} value={artist.id.toString()}>
+                          {artist.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filterYear} onValueChange={(value) => { setFilterYear(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Năm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả năm</SelectItem>
+                      {availableYears.map(year => (
+                        <SelectItem key={year} value={year?.toString() || ""}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(filterArtist !== "all" || filterYear !== "all" || searchQuery) && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                      Xóa bộ lọc
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>
