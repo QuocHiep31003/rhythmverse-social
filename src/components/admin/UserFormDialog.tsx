@@ -32,6 +32,8 @@ const userFormSchema = z.object({
   name: z.string().min(2, "Tên phải có ít nhất 2 ký tự").max(100),
   email: z.string().email("Email không hợp lệ").max(255),
   role: z.enum(["user", "admin"]),
+  phone: z.string().max(50).optional().or(z.literal("")),
+  address: z.string().max(255).optional().or(z.literal("")),
   avatar: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
 });
 
@@ -60,6 +62,8 @@ export const UserFormDialog = ({
       name: "",
       email: "",
       role: "user",
+      phone: "",
+      address: "",
       avatar: "",
       ...defaultValues,
     },
@@ -73,6 +77,8 @@ export const UserFormDialog = ({
         name: "",
         email: "",
         role: "user",
+        phone: "",
+        address: "",
         avatar: "",
       });
     }
@@ -87,12 +93,12 @@ export const UserFormDialog = ({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {mode === "create" ? "Thêm người dùng mới" : "Chỉnh sửa người dùng"}
+            {mode === "create" ? "Add New User" : "Edit User"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Nhập thông tin để tạo người dùng mới"
-              : "Cập nhật thông tin người dùng"}
+              ? "Enter information to create a new user"
+              : "Update user information"}
           </DialogDescription>
         </DialogHeader>
 
@@ -103,7 +109,7 @@ export const UserFormDialog = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tên</FormLabel>
+                  <FormLabel>Full Name</FormLabel>
                   <FormControl>
                     <Input placeholder="Nguyễn Văn A" {...field} />
                   </FormControl>
@@ -132,17 +138,45 @@ export const UserFormDialog = ({
 
             <FormField
               control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="0123456789" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Address (optional)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="123 Đường ABC, Quận XYZ" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="role"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Vai trò</FormLabel>
+                  <FormLabel>Role</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Chọn vai trò" />
+                        <SelectValue placeholder="Select role" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -160,7 +194,7 @@ export const UserFormDialog = ({
               name="avatar"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Avatar URL (không bắt buộc)</FormLabel>
+                  <FormLabel>Avatar URL (optional)</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="https://example.com/avatar.jpg"
@@ -179,10 +213,10 @@ export const UserFormDialog = ({
                 onClick={() => onOpenChange(false)}
                 disabled={isLoading}
               >
-                Hủy
+                Cancel
               </Button>
               <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Đang lưu..." : mode === "create" ? "Tạo" : "Cập nhật"}
+                {isLoading ? "Saving..." : mode === "create" ? "Create" : "Update"}
               </Button>
             </DialogFooter>
           </form>

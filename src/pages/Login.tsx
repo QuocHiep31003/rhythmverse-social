@@ -15,6 +15,7 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [activeTab, setActiveTab] = useState("login");
   
   const [loginData, setLoginData] = useState({
     email: "",
@@ -95,10 +96,7 @@ const Login = () => {
       
       // Switch to login tab after successful registration
       setTimeout(() => {
-        const loginTab = document.querySelector('[value="login"]') as HTMLElement;
-        if (loginTab) {
-          loginTab.click();
-        }
+        setActiveTab("login");
       }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -143,7 +141,7 @@ const Login = () => {
 
         <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 shadow-2xl">
           <CardContent className="p-6">
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">Sign In</TabsTrigger>
                 <TabsTrigger value="register">Sign Up</TabsTrigger>

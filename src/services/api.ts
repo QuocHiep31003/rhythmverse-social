@@ -4,6 +4,36 @@ const API_BASE_URL = "http://localhost:8080/api";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Auth helpers for API requests
+const getAuthToken = (): string | null => {
+  try {
+    return typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  } catch {
+    return null;
+  }
+};
+
+const buildJsonHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
+const parseErrorResponse = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.json();
+    return (data && (data.message || data.error || data.details)) || JSON.stringify(data);
+  } catch {
+    try {
+      const text = await response.text();
+      return text || `${response.status} ${response.statusText}`;
+    } catch {
+      return `${response.status} ${response.statusText}`;
+    }
+  }
+};
+
 interface PaginationParams {
   page?: number;
   size?: number;
@@ -49,19 +79,15 @@ export const usersApi = {
       
       const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add authorization header if needed
-          // 'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
+        headers: buildJsonHeaders(),
       });
       
       console.log('Response status:', response.status);
       
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await parseErrorResponse(response);
         console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch users: ${response.status} ${response.statusText}`);
+        throw new Error(errorText || `Failed to fetch users: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
@@ -76,13 +102,11 @@ export const usersApi = {
   getById: async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildJsonHeaders(),
     });
     
     if (!response.ok) {
-      throw new Error('Failed to fetch user');
+      throw new Error(await parseErrorResponse(response));
     }
     
     return await response.json();
@@ -91,15 +115,13 @@ export const usersApi = {
   create: async (data: any) => {
     const response = await fetch(`${API_BASE_URL}/user`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildJsonHeaders(),
       body: JSON.stringify(data),
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create user');
+      const message = await parseErrorResponse(response);
+      throw new Error(message || 'Failed to create user');
     }
     
     return await response.json();
@@ -108,15 +130,13 @@ export const usersApi = {
   update: async (id: string, data: any) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildJsonHeaders(),
       body: JSON.stringify(data),
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to update user');
+      const message = await parseErrorResponse(response);
+      throw new Error(message || 'Failed to update user');
     }
     
     return await response.json();
@@ -125,16 +145,38 @@ export const usersApi = {
   delete: async (id: string) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildJsonHeaders(),
     });
     
     if (!response.ok) {
-      throw new Error('Failed to delete user');
+      throw new Error(await parseErrorResponse(response));
     }
     
     return { success: true };
+  },
+
+  importExcel: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Don't set Content-Type for FormData, browser will set it with boundary
+    
+    const response = await fetch(`${API_BASE_URL}/user/import`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const message = await parseErrorResponse(response);
+      throw new Error(message || 'Failed to import users');
+    }
+    
+    // Return text response as backend returns "Users imported successfully."
+    return await response.text();
   },
 };
 

@@ -83,14 +83,23 @@ const AdminUsers = () => {
   const handleFormSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
+      const payloadBase = {
+        name: data.name,
+        email: data.email,
+        phone: data.phone || "",
+        address: data.address || "",
+        roleId: data.role === "admin" ? 1 : 2,
+      };
+
       if (formMode === "create") {
-        await usersApi.create(data);
+        // Create expects no id in body
+        await usersApi.create(payloadBase);
         toast({
           title: "Success",
           description: "User created successfully",
         });
       } else {
-        await usersApi.update(selectedUser.id, data);
+        await usersApi.update(selectedUser.id, payloadBase);
         toast({
           title: "Success",
           description: "User updated successfully",
@@ -101,7 +110,7 @@ const AdminUsers = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save user",
+        description: error instanceof Error ? error.message : "Failed to save user",
         variant: "destructive",
       });
     } finally {
@@ -141,7 +150,7 @@ const AdminUsers = () => {
         Email: user.email,
         Phone: user.phone || '',
         Address: user.address || '',
-        Roles: user.roles?.join(', ') || 'User',
+        Roles: (user.roles?.includes('ADMIN') || user.roleId === 1) ? 'ADMIN' : 'USER',
       }));
 
       // Create worksheet
@@ -183,8 +192,8 @@ const AdminUsers = () => {
   };
 
   // Import from Excel
-  // Excel format required: Name, Email, Phone (optional), Address (optional), Password (optional), Roles (optional)
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Excel format required: Name, Email, Phone (optional), Address (optional), Roles (optional)
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     
     if (!file) return;
@@ -211,85 +220,33 @@ const AdminUsers = () => {
       return;
     }
 
-    const reader = new FileReader();
+    try {
+      setLoading(true);
+      
+      // Call backend API directly with the file
+      const result = await usersApi.importExcel(file);
+      
+      toast({
+        title: "Success",
+        description: result || "Users imported successfully",
+      });
 
-    reader.onload = async (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        
-        // Get first sheet
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // Convert to JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-        
-        console.log('Imported data:', jsonData);
-
-        if (jsonData.length === 0) {
-          toast({
-            title: "Warning",
-            description: "Excel file contains no data",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        // Validate and transform data
-        const importedUsers = jsonData.map((row: any) => ({
-          name: row.Name || row.name,
-          email: row.Email || row.email,
-          phone: row.Phone || row.phone || '',
-          address: row.Address || row.address || '',
-          password: row.Password || row.password || 'defaultPassword123', // You should handle passwords properly
-          roles: row.Roles ? row.Roles.split(',').map((r: string) => r.trim()) : ['USER'],
-        }));
-
-        // Import users one by one
-        let successCount = 0;
-        let errorCount = 0;
-
-        for (const user of importedUsers) {
-          try {
-            await usersApi.create(user);
-            successCount++;
-          } catch (error) {
-            errorCount++;
-            console.error('Error importing user:', user, error);
-          }
-        }
-
-        toast({
-          title: "Import Complete",
-          description: `Successfully imported ${successCount} user${successCount !== 1 ? 's' : ''}${errorCount > 0 ? `, ${errorCount} failed` : ''}`,
-        });
-
-        loadUsers();
-      } catch (error) {
-        console.error('Import error:', error);
-        toast({
-          title: "Error",
-          description: "Failed to read Excel file",
-          variant: "destructive",
-        });
-      } finally {
-        // Reset file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }
-    };
-
-    reader.onerror = () => {
+      // Reload users list
+      loadUsers();
+    } catch (error) {
+      console.error('Import error:', error);
       toast({
         title: "Error",
-        description: "Failed to read file",
+        description: error instanceof Error ? error.message : "Failed to import Excel file",
         variant: "destructive",
       });
-    };
-
-    reader.readAsBinaryString(file);
+    } finally {
+      setLoading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleImportClick = () => {
@@ -381,19 +338,21 @@ const AdminUsers = () => {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent border-b">
-                <TableHead className="font-semibold">User</TableHead>
-                <TableHead className="font-semibold">Email</TableHead>
-                <TableHead className="font-semibold">Role</TableHead>
-                <TableHead className="text-right font-semibold">Actions</TableHead>
-              </TableRow>
+          <div className="overflow-auto" style={{ maxHeight: '60vh' }}>
+            <Table>
+            <TableHeader className="sticky top-0 bg-background z-10">
+                <TableRow className="hover:bg-transparent border-b">
+                <TableHead className="font-semibold w-16 text-center bg-background">No.</TableHead>
+                <TableHead className="font-semibold bg-background">User</TableHead>
+                <TableHead className="font-semibold bg-background">Email</TableHead>
+                <TableHead className="font-semibold bg-background">Role</TableHead>
+                <TableHead className="text-right font-semibold bg-background">Actions</TableHead>
+                </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
                       <p className="text-sm text-muted-foreground">Loading users...</p>
@@ -402,7 +361,7 @@ const AdminUsers = () => {
                 </TableRow>
               ) : filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <div className="flex flex-col items-center gap-2">
                       <UsersIcon className="w-12 h-12 text-muted-foreground/50" />
                       <p className="text-sm font-medium">No users found</p>
@@ -413,8 +372,11 @@ const AdminUsers = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredUsers.map((user) => (
+                filteredUsers.map((user, index) => (
                   <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
+                    <TableCell className="text-center text-sm text-muted-foreground">
+                      {currentPage * pageSize + index + 1}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10 border-2 border-primary/10">
@@ -439,11 +401,11 @@ const AdminUsers = () => {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Badge 
-                          variant={user.roles?.includes("ADMIN") ? "default" : "secondary"}
+                          variant={(user.roles?.includes("ADMIN") || user.roleId === 1) ? "default" : "secondary"}
                           className="gap-1"
                         >
-                          {user.roles?.includes("ADMIN") && <Shield className="w-3 h-3" />}
-                          {user.roles?.join(', ') || 'User'}
+                          {(user.roles?.includes("ADMIN") || user.roleId === 1) && <Shield className="w-3 h-3" />}
+                          {(user.roles?.includes("ADMIN") || user.roleId === 1) ? 'ADMIN' : 'USER'}
                         </Badge>
                       </div>
                     </TableCell>
@@ -471,7 +433,8 @@ const AdminUsers = () => {
                 ))
               )}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -545,7 +508,14 @@ const AdminUsers = () => {
         open={formOpen}
         onOpenChange={setFormOpen}
         onSubmit={handleFormSubmit}
-        defaultValues={selectedUser}
+        defaultValues={selectedUser ? {
+          name: selectedUser.name,
+          email: selectedUser.email,
+          role: (selectedUser.roleId === 1 || selectedUser.roles?.includes('ADMIN')) ? 'admin' : 'user',
+          avatar: selectedUser.avatar || '',
+          phone: selectedUser.phone || '',
+          address: selectedUser.address || '',
+        } : undefined}
         isLoading={isSubmitting}
         mode={formMode}
       />
