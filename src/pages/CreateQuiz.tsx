@@ -465,7 +465,7 @@ const CreateQuiz = () => {
                     variant="hero"
                     onClick={saveQuiz}
                     className="w-full"
-                    disabled={quiz.questions.length < 10}
+                    disabled={quiz.questions.length < 1}
                   >
                     <Save className="w-4 h-4 mr-2" />
                     Save Quiz

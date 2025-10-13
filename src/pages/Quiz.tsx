@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Play, Trophy, Clock, Music, Target, Plus } from "lucide-react";
+import { Play, Trophy, Clock, Music, Target, Plus, Download, Upload } from "lucide-react";
 
 const Quiz = () => {
   const navigate = useNavigate();
@@ -62,6 +62,60 @@ const Quiz = () => {
     fetchQuizzes();
   }, []);
 
+  // ✅ Import Excel
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch("http://localhost:8080/api/quizDetails/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`Import thành công! ${result.successCount} bản ghi đã được thêm.`);
+        // Reload lại trang để cập nhật danh sách
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`Import thất bại: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("❌ Import error:", error);
+      alert("Import thất bại!");
+    }
+
+    event.target.value = "";
+  };
+
+  // ✅ Export Excel
+  const handleExport = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/quizDetails/export");
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `quizzes_${new Date().toISOString().split('T')[0]}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        alert("Export thất bại!");
+      }
+    } catch (error) {
+      console.error("❌ Export error:", error);
+      alert("Export thất bại!");
+    }
+  };
   // ✅ Bắt đầu quiz - lấy câu hỏi theo ID
   const startQuiz = async (quizId: number) => {
     try {
@@ -258,47 +312,64 @@ const Quiz = () => {
           </p>
         </div>
 
-        <div>
-          <Button variant="hero" className="mb-6" onClick={() => navigate("/quiz/create")}>
+        <div className="flex gap-2 mb-6">
+          <Button variant="hero" onClick={() => navigate("/quiz/create")}>
             <Plus className="w-4 h-4 mr-2" />
             Create New Quiz
           </Button>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {currentQuizzes.map((quiz) => (
-              <Card
-                key={quiz.id}
-                className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
-              >
-                <CardContent className="p-6">
-                  <div className="flex justify-between items-center mb-3">
-                    <h3 className="text-xl font-bold">{quiz.title}</h3>
-                    <Badge variant="secondary">{quiz.difficulty}</Badge>
-                  </div>
-                  <p className="text-muted-foreground mb-3">{quiz.description}</p>
-
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                    <span className="flex items-center gap-1">
-                      <Music className="w-4 h-4" />
-                      {quiz.questionsCount} questions
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      {quiz.time}s
-                    </span>
-                  </div>
-
-                  <Button variant="hero" onClick={() => startQuiz(quiz.id)}>
-                    <Play className="w-4 h-4 mr-2" />
-                    Start Quiz
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+          
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" />
+            Export Excel
+          </Button>
+          
+          <Button variant="outline" onClick={() => document.getElementById("import-file")?.click()}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Excel
+            <input
+              id="import-file"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              className="hidden"
+            />
+          </Button>
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {currentQuizzes.map((quiz) => (
+            <Card
+              key={quiz.id}
+              className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+            >
+              <CardContent className="p-6">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xl font-bold">{quiz.title}</h3>
+                  <Badge variant="secondary">{quiz.difficulty}</Badge>
+                </div>
+                <p className="text-muted-foreground mb-3">{quiz.description}</p>
+
+                <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+                  <span className="flex items-center gap-1">
+                    <Music className="w-4 h-4" />
+                    {quiz.questionsCount} questions
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
+                    {quiz.time}s
+                  </span>
+                </div>
+
+                <Button variant="hero" onClick={() => startQuiz(quiz.id)}>
+                  <Play className="w-4 h-4 mr-2" />
+                  Start Quiz
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
       </div>
       <Footer />
     </div>

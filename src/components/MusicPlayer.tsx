@@ -28,6 +28,7 @@ import {
 import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
+import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 
 const lyricsMock = [
   { time: 0, text: "♪ Instrumental intro..." },
@@ -50,7 +51,10 @@ const MusicPlayer = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
   const [duration, setDuration] = useState(0);
-
+  const [hasReportedListen, setHasReportedListen] = useState(false);
+  const [listenTime, setListenTime] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -62,64 +66,164 @@ const MusicPlayer = () => {
     return Math.floor(audioRef.current.currentTime);
   };
 
-  // Handle play/pause
-  useEffect(() => {
-    if (!audioRef.current) return;
-    
-    if (isPlaying) {
-      audioRef.current.play().catch(err => console.error("Play error:", err));
-    } else {
-      audioRef.current.pause();
-    }
-  }, [isPlaying]);
-
-  // Load new song
+  // Load new song - professional handling with proper state management
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
     
     const audio = audioRef.current;
-    audio.src = currentSong.audioUrl || currentSong.audio || "";
+    
+    // Immediately pause and reset current playback
+    audio.pause();
+    audio.currentTime = 0;
+    setIsLoading(true);
+    
+    // Reset all tracking states for new song
+    setHasReportedListen(false);
+    setListenTime(0);
+    setProgress([0]);
+    setCurrentLyric(0);
+    setDuration(0);
+    
+    // Set new audio source
+    const audioUrl = currentSong.audioUrl || currentSong.audio || "";
+    
+    // Only update src if it's different to avoid unnecessary reloads
+    if (audio.src !== audioUrl) {
+      audio.src = audioUrl;
+    }
+    
+    // Handler for when audio is ready to play
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      
+      // Only auto-play if player was in playing state
+      if (isPlaying) {
+        audio.play().catch(err => {
+          console.error("Auto-play failed:", err);
+          toast({
+            title: "Playback paused",
+            description: "Click play to continue",
+          });
+        });
+      }
+    };
+    
+    // Handler for load errors
+    const handleLoadError = (e: Event) => {
+      console.error("Audio load error:", e);
+      setIsLoading(false);
+      toast({
+        title: "Load error",
+        description: "Failed to load audio. Skipping to next song...",
+        variant: "destructive",
+      });
+      
+      // Auto-skip to next song after 2 seconds
+      setTimeout(() => {
+        playNext();
+      }, 2000);
+    };
+    
+    // Attach event listeners
+    audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("error", handleLoadError);
+    
+    // Start loading the audio
     audio.load();
     
-    if (isPlaying) {
-      audio.play().catch(err => console.error("Play error:", err));
-    }
-  }, [currentSong]);
+    // Cleanup
+    return () => {
+      audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("error", handleLoadError);
+    };
+  }, [currentSong]); // Only depend on currentSong change
 
-  // Update progress
+  // Handle play/pause toggle separately
+  useEffect(() => {
+    if (!audioRef.current || isLoading) return;
+    
+    const audio = audioRef.current;
+    
+    if (isPlaying && audio.paused && audio.readyState >= 2) {
+      // readyState >= 2 means enough data to play
+      audio.play().catch(err => {
+        console.error("Play error:", err);
+        toast({
+          title: "Playback error",
+          description: "Unable to play audio",
+          variant: "destructive",
+        });
+      });
+    } else if (!isPlaying && !audio.paused) {
+      audio.pause();
+    }
+  }, [isPlaying, isLoading]);
+  // Track listen time
+  useEffect(() => {
+    if (!audioRef.current || !isPlaying || hasReportedListen) return;
+
+    const interval = setInterval(() => {
+      setListenTime(prev => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, hasReportedListen]);
+
+  // Update progress and handle song end
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const updateProgress = () => {
-      if (audio.duration) {
-        setProgress([(audio.currentTime / audio.duration) * 100]);
+      if (audio.duration && !isNaN(audio.duration)) {
+        const progressPercent = (audio.currentTime / audio.duration) * 100;
+        setProgress([progressPercent]);
       }
     };
 
     const updateDuration = () => {
-      setDuration(audio.duration);
+      if (!isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
     };
 
     const handleEnded = () => {
+      console.log("Song ended, repeat mode:", repeatMode);
+      
       if (repeatMode === "one") {
+        // Repeat current song
         audio.currentTime = 0;
-        audio.play();
-      } else if (repeatMode === "all" || repeatMode === "off") {
+        audio.play().catch(err => console.error("Repeat play error:", err));
+      } else {
+        // Play next song (works for both "all" and "off" modes)
+        console.log("Playing next song");
         playNext();
       }
+    };
+
+    const handleError = (e: Event) => {
+      console.error("Audio error:", e);
+      toast({
+        title: "Playback error",
+        description: "Failed to play audio. Trying next song...",
+        variant: "destructive",
+      });
+      // Try next song on error
+      setTimeout(() => playNext(), 1000);
     };
 
     audio.addEventListener("timeupdate", updateProgress);
     audio.addEventListener("loadedmetadata", updateDuration);
     audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
 
     return () => {
       audio.removeEventListener("timeupdate", updateProgress);
       audio.removeEventListener("loadedmetadata", updateDuration);
       audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
     };
-  }, [repeatMode, playNext]);
+  }, [repeatMode, playNext, toast]);
 
   // Handle volume
   useEffect(() => {
@@ -129,9 +233,13 @@ const MusicPlayer = () => {
 
   // Handle progress seek
   const handleProgressChange = (value: number[]) => {
+    if (!audioRef.current || isNaN(audioRef.current.duration)) return;
+    
     setProgress(value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = (value[0] / 100) * audioRef.current.duration;
+    const newTime = (value[0] / 100) * audioRef.current.duration;
+    
+    if (!isNaN(newTime)) {
+      audioRef.current.currentTime = newTime;
     }
   };
 
@@ -145,6 +253,22 @@ const MusicPlayer = () => {
     );
     if (index !== -1) setCurrentLyric(index);
   }, [progress]);
+
+  // Record listening history when 50% of song is played
+  useEffect(() => {
+    if (!currentSong || hasReportedListen || !audioRef.current) return;
+
+    const duration = audioRef.current.duration;
+    if (duration && listenTime >= duration / 2) {
+      listeningHistoryApi
+        .recordListen({
+          userId: 1, // TODO: Get from auth context
+          songId: currentSong.id,
+        })
+        .then(() => setHasReportedListen(true))
+        .catch(err => console.error("Failed to record listen:", err));
+    }
+  }, [listenTime, currentSong, hasReportedListen]);
 
   const toggleMute = () => setIsMuted(!isMuted);
   const toggleShuffle = () => setIsShuffled(!isShuffled);
@@ -208,16 +332,22 @@ const MusicPlayer = () => {
                 className="relative group cursor-pointer"
                 onClick={() => setIsExpanded(true)}
               >
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden shadow">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
                   {currentSong.cover ? (
                     <img
                       src={currentSong.cover}
                       alt={currentSong.title}
                       onError={handleImageError}
-                      className="w-full h-full object-cover"
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-300",
+                        isPlaying && "animate-spin-slow"
+                      )}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                    <div className={cn(
+                      "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                      isPlaying && "animate-spin-slow"
+                    )}>
                       <Music className="w-5 h-5 text-white" />
                     </div>
                   )}
@@ -274,8 +404,11 @@ const MusicPlayer = () => {
                   size="icon"
                   className="h-10 w-10 sm:h-12 sm:w-12"
                   onClick={togglePlay}
+                  disabled={isLoading}
                 >
-                  {isPlaying ? (
+                  {isLoading ? (
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : isPlaying ? (
                     <Pause className="w-5 h-5 sm:w-6 sm:h-6" />
                   ) : (
                     <Play className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -394,16 +527,22 @@ const MusicPlayer = () => {
           {/* Content */}
           <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-4 overflow-y-auto">
             {/* Cover */}
-            <div className="w-64 h-64 rounded-xl overflow-hidden shadow-lg">
+            <div className="w-64 h-64 rounded-full overflow-hidden shadow-lg">
               {currentSong.cover ? (
                 <img
                   src={currentSong.cover}
                   alt={currentSong.title}
                   onError={handleImageError}
-                  className="w-full h-full object-cover"
+                  className={cn(
+                    "w-full h-full object-cover transition-transform duration-300",
+                    isPlaying && "animate-spin-slow"
+                  )}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                <div className={cn(
+                  "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                  isPlaying && "animate-spin-slow"
+                )}>
                   <Music className="w-20 h-20 text-white" />
                 </div>
               )}
@@ -447,8 +586,11 @@ const MusicPlayer = () => {
                   size="icon"
                   className="h-14 w-14"
                   onClick={togglePlay}
+                  disabled={isLoading}
                 >
-                  {isPlaying ? (
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : isPlaying ? (
                     <Pause className="w-6 h-6" />
                   ) : (
                     <Play className="w-6 h-6" />

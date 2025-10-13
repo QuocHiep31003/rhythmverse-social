@@ -11,6 +11,7 @@ import { MobileNotifications } from "@/components/MobileNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Play, Headphones, Star, TrendingUp, Sparkles, Music } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
+import NewAlbums from "@/components/ui/NewAlbums"; // ✅ thêm component mới
 import { mockSongs } from "@/data/mockData";
 
 const Index = () => {
@@ -183,32 +184,7 @@ const Index = () => {
               </Card>
 
               {/* Editor's Choice */}
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2">
-                    <Music className="w-5 h-5 text-neon-blue" />
-                    Editor's Albums
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {editorsChoice.map((album) => (
-                    <div key={album.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer">
-                      <div className="w-12 h-12 bg-gradient-subtle rounded-lg flex items-center justify-center">
-                        <Music className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate text-sm">{album.title}</p>
-                        <p className="text-xs text-muted-foreground">by {album.editor}</p>
-                        <p className="text-xs text-muted-foreground">{album.tracks} tracks</p>
-                      </div>
-                      <Button variant="outline" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Play className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="outline" className="w-full mt-4" size="sm" onClick={() => navigate('/discover')}>Browse All Albums</Button>
-                </CardContent>
-              </Card>
+ <NewAlbums />
             </div>
           </div>
         </section>

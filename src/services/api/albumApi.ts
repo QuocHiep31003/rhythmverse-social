@@ -58,28 +58,31 @@ export const albumsApi = {
   },
 
   // ✅ Lấy 1 album theo ID
-  getById: async (id: number) => {
+  getById: async (id: string | number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/albums/${id}`);
       if (!response.ok) throw new Error("Failed to fetch album");
       return await response.json();
     } catch (error) {
       console.error("Error fetching album:", error);
-      return mockAlbums.find((a) => a.id === id);
+      return mockAlbums.find((a) => (a as any).id?.toString?.() === id.toString());
     }
   },
 
   // ✅ Tạo mới album
   create: async (data: any) => {
     try {
-      const payload = {
+      const payload: any = {
         name: data.name,
         artistId: data.artistId,
         songIds: data.songIds,
         releaseDate: data.releaseDate,
-        coverImage: data.coverImage || "",
+        coverUrl: data.coverUrl || "",
         description: data.description || "",
       };
+      if (data.coverUrl && String(data.coverUrl).trim() !== "") {
+        payload.cover = data.coverUrl; // compatibility alias
+      }
 
       const response = await fetch(`${API_BASE_URL}/albums`, {
         method: "POST",
@@ -102,14 +105,17 @@ export const albumsApi = {
   // ✅ Cập nhật album
   update: async (id: number, data: any) => {
     try {
-      const payload = {
+      const payload: any = {
         name: data.name,
         artistId: data.artistId,
         songIds: data.songIds,
         releaseDate: data.releaseDate,
-        coverImage: data.coverImage,
+        coverUrl: data.coverUrl,
         description: data.description,
       };
+      if (data.coverUrl && String(data.coverUrl).trim() !== "") {
+        payload.cover = data.coverUrl; // compatibility alias
+      }
 
       const response = await fetch(`${API_BASE_URL}/albums/${id}`, {
         method: "PUT",
