@@ -58,14 +58,14 @@ export const albumsApi = {
   },
 
   // ✅ Lấy 1 album theo ID
-  getById: async (id: number) => {
+  getById: async (id: string | number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/albums/${id}`);
       if (!response.ok) throw new Error("Failed to fetch album");
       return await response.json();
     } catch (error) {
       console.error("Error fetching album:", error);
-      return mockAlbums.find((a) => a.id.toString() === id.toString());
+      return mockAlbums.find((a) => (a as any).id?.toString?.() === id.toString());
     }
   },
 
