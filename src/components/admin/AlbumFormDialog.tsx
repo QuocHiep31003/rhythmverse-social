@@ -20,15 +20,17 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Upload, Image, Search, User } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
+import { Search, Image, Music2, User, X } from "lucide-react";
+import { songsApi } from "@/services/api";
+import { debounce } from "lodash";
 
+// === Validation Schema ===
 const albumSchema = z.object({
-  name: z.string().min(1, "Tên album là bắt buộc"),
-  artistId: z.number().min(1, "Nghệ sĩ là bắt buộc"),
-  songIds: z.array(z.number()).min(1, "Phải chọn ít nhất 1 bài hát"),
-  releaseDate: z.string().min(1, "Ngày phát hành là bắt buộc"),
+  name: z.string().min(1, "Album name is required"),
+  artistId: z.number().min(1, "Artist is required"),
+  songIds: z.array(z.number()).optional().default([]),
+  releaseDate: z.string().min(1, "Release date is required"),
   coverImage: z.string().optional().or(z.literal("")),
   description: z.string().optional(),
 });
@@ -40,13 +42,14 @@ interface Artist {
   name: string;
   country: string;
   debutYear: number;
-  description: string;
+  avatar?: string;
 }
 
 interface Song {
   id: number;
   name: string;
   releaseYear: number;
+  albumId?: number | null;
 }
 
 interface AlbumFormDialogProps {
@@ -69,10 +72,11 @@ export const AlbumFormDialog = ({
   artists,
 }: AlbumFormDialogProps) => {
   const [coverPreview, setCoverPreview] = useState<string>("");
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [artistSearch, setArtistSearch] = useState("");
+  const [artistQuery, setArtistQuery] = useState("");
   const [showArtistDropdown, setShowArtistDropdown] = useState(false);
-  const [availableSongs, setAvailableSongs] = useState<Song[]>([]);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
+  const [songQuery, setSongQuery] = useState("");
   const [loadingSongs, setLoadingSongs] = useState(false);
 
   const form = useForm<AlbumFormValues>({
@@ -81,366 +85,368 @@ export const AlbumFormDialog = ({
       name: "",
       artistId: 0,
       songIds: [],
-      releaseDate: new Date().toISOString().split('T')[0],
+      releaseDate: new Date().toISOString().split("T")[0],
       coverImage: "",
       description: "",
       ...defaultValues,
     },
   });
 
+  const artistId = form.watch("artistId");
+  const selectedSongs = form.watch("songIds") || [];
+
+  // ✅ Reset form each time "create new" dialog opens
   useEffect(() => {
-    if (open && defaultValues) {
-      form.reset(defaultValues);
-      if (defaultValues.coverImage) {
-        setCoverPreview(defaultValues.coverImage);
-      }
-      
-      // Set artist name for display
-      if (defaultValues.artistId && artists.length > 0) {
-        const artist = artists.find(a => a.id === defaultValues.artistId);
-        if (artist) {
-          setArtistSearch(artist.name);
-        }
-      }
-    } else if (open) {
+    if (open && mode === "create") {
       form.reset({
         name: "",
         artistId: 0,
         songIds: [],
-        releaseDate: new Date().toISOString().split('T')[0],
+        releaseDate: new Date().toISOString().split("T")[0],
         coverImage: "",
         description: "",
       });
       setCoverPreview("");
-      setCoverFile(null);
-      setArtistSearch("");
-      setAvailableSongs([]);
+      setArtistQuery("");
+      setSongs([]);
+      setFilteredSongs([]);
     }
-  }, [open, defaultValues, form, artists]);
+    if (open && defaultValues) {
+      setCoverPreview(defaultValues.coverImage || "");
+    }
+  }, [open]);
 
-  // Load songs when artist is selected
+  // ✅ Load songs by artist, filter out those already in another album
   useEffect(() => {
-    const artistId = form.watch("artistId");
     if (artistId && artistId > 0) {
-      loadSongsByArtist(artistId);
-    } else {
-      setAvailableSongs([]);
-    }
-  }, [form.watch("artistId")]);
-
-  const loadSongsByArtist = async (artistId: number) => {
-    try {
       setLoadingSongs(true);
-      const response = await fetch(`http://localhost:8080/api/songs/by-artist/${artistId}`);
-      if (response.ok) {
-        const songs = await response.json();
-        setAvailableSongs(songs);
-      }
-    } catch (error) {
-      console.error("Failed to load songs:", error);
-    } finally {
-      setLoadingSongs(false);
+      songsApi
+        .getByArtist(artistId)
+        .then((res) => {
+          // FE filter logic: mark which songs already have album
+          const processed = res.map((song: Song) => ({
+            ...song,
+            isInOtherAlbum:
+              !!song.albumId &&
+              song.albumId !== (defaultValues as any)?.id, // ignore current album
+          }));
+
+          setSongs(processed);
+          setFilteredSongs(processed);
+        })
+        .finally(() => setLoadingSongs(false));
+    } else {
+      setSongs([]);
+      setFilteredSongs([]);
     }
-  };
+  }, [artistId]);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        form.setError("coverImage", {
-          type: "manual",
-          message: "File ảnh không được vượt quá 5MB",
-        });
-        return;
-      }
+  // ✅ Debounced song search
+  const handleSongSearch = debounce((query: string) => {
+    const lower = query.toLowerCase();
+    setFilteredSongs(
+      songs.filter(
+        (s) =>
+          s.name.toLowerCase().includes(lower) ||
+          s.releaseYear.toString().includes(lower)
+      )
+    );
+  }, 200);
 
-      if (!file.type.startsWith('image/')) {
-        form.setError("coverImage", {
-          type: "manual",
-          message: "File phải là định dạng ảnh",
-        });
-        return;
-      }
-
-      setCoverFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setCoverPreview(result);
-        form.setValue("coverImage", result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSubmit = (data: AlbumFormValues) => {
-    onSubmit(data);
-  };
-
+  // ✅ Select artist
   const handleArtistSelect = (artist: Artist) => {
     form.setValue("artistId", artist.id);
-    form.setValue("songIds", []); // Reset selected songs
-    setArtistSearch(artist.name);
+    setArtistQuery(artist.name);
     setShowArtistDropdown(false);
   };
 
-  const handleSongToggle = (songId: number) => {
-    const currentSongs = form.getValues("songIds") || [];
-    if (currentSongs.includes(songId)) {
-      form.setValue("songIds", currentSongs.filter(id => id !== songId));
-    } else {
-      form.setValue("songIds", [...currentSongs, songId]);
-    }
+  // ✅ Select/Deselect song
+  const handleSongToggle = (id: number) => {
+    const current = form.getValues("songIds");
+    form.setValue(
+      "songIds",
+      current.includes(id)
+        ? current.filter((x) => x !== id)
+        : [...current, id]
+    );
   };
 
-  const filteredArtists = artists.filter(artist =>
-    artist.name.toLowerCase().includes(artistSearch.toLowerCase())
+  // ✅ Upload image
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setCoverPreview(result);
+      form.setValue("coverImage", result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFormSubmit = (values: AlbumFormValues) => {
+    onSubmit({
+      ...values,
+      artistId: Number(values.artistId),
+      songIds: values.songIds?.map(Number) || [],
+    });
+  };
+
+  const filteredArtists = artists.filter((a) =>
+    a.name.toLowerCase().includes(artistQuery.toLowerCase())
   );
-
-  const selectedArtist = artists.find(artist => artist.id === form.watch("artistId"));
-
-  const name = form.watch("name");
-  const releaseDate = form.watch("releaseDate");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            {mode === "create" ? "Tạo album mới" : "Chỉnh sửa album"}
+      <DialogContent className="sm:max-w-[880px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b border-zinc-800">
+          <DialogTitle className="text-lg font-semibold">
+            {mode === "create" ? "Create New Album" : "Edit Album"}
           </DialogTitle>
           <DialogDescription className="text-gray-400">
-            {mode === "create"
-              ? "Nhập thông tin để tạo album mới"
-              : "Cập nhật thông tin album"}
+            Fill in the album details. You can add songs later.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Cover Image Upload */}
-            <FormField
-              control={form.control}
-              name="coverImage"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Ảnh bìa album</FormLabel>
-                  <div className="flex items-center gap-4">
-                    <div className="w-24 h-24 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
-                      {coverPreview ? (
-                        <img 
-                          src={coverPreview} 
-                          alt="Preview" 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-center p-2">
-                          <Image className="w-6 h-6 mx-auto mb-1 text-gray-400" />
-                          <p className="text-xs text-gray-400">Upload ảnh</p>
+          <form
+            onSubmit={form.handleSubmit(handleFormSubmit)}
+            className="flex flex-col sm:flex-row gap-8 px-6 py-6"
+          >
+            {/* === LEFT: COVER PREVIEW === */}
+            <div className="flex flex-col items-center justify-start gap-4 w-full sm:w-1/3">
+              <div className="relative w-48 h-48 border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden flex items-center justify-center bg-zinc-900">
+                {coverPreview ? (
+                  <img
+                    src={coverPreview}
+                    alt="Album cover"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center text-gray-500 text-sm">
+                    <Image className="w-6 h-6 mx-auto mb-2 opacity-70" />
+                    Upload cover
+                  </div>
+                )}
+              </div>
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="bg-zinc-900 border-zinc-700 text-sm cursor-pointer w-48"
+              />
+            </div>
+
+            {/* === RIGHT: FORM FIELDS === */}
+            <div className="flex-1 space-y-5">
+              {/* Album Name */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Album Name *</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Enter album name..."
+                        className="bg-zinc-900 border-zinc-700"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Artist Select */}
+              <FormField
+                control={form.control}
+                name="artistId"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>Artist *</FormLabel>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                      <Input
+                        value={artistQuery}
+                        onChange={(e) => {
+                          setArtistQuery(e.target.value);
+                          setShowArtistDropdown(true);
+                        }}
+                        placeholder="Search artist..."
+                        className="pl-9 bg-zinc-900 border-zinc-700"
+                      />
+                      {showArtistDropdown && filteredArtists.length > 0 && (
+                        <div className="absolute z-30 w-full bg-zinc-900 border border-zinc-700 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-lg">
+                          {filteredArtists.map((artist) => (
+                            <div
+                              key={artist.id}
+                              onClick={() => handleArtistSelect(artist)}
+                              className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 cursor-pointer"
+                            >
+                              {artist.avatar ? (
+                                <img
+                                  src={artist.avatar}
+                                  alt={artist.name}
+                                  className="w-7 h-7 rounded-full object-cover"
+                                />
+                              ) : (
+                                <User className="w-4 h-4 text-gray-400" />
+                              )}
+                              <div>
+                                <p className="font-medium text-sm">
+                                  {artist.name}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {artist.country} • {artist.debutYear}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                    <div className="flex-1">
-                      <FormControl>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="bg-background/50 border-border text-white"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Đề xuất: 1000x1000px, tối đa 5MB (JPG, PNG, WebP)
-                      </p>
-                    </div>
-                  </div>
-                </FormItem>
-              )}
-            />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Tên album *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="Nhập tên album..." 
-                      {...field} 
-                      className="bg-background/50 border-border text-white"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              {/* Release Date */}
+              <FormField
+                control={form.control}
+                name="releaseDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Release Date *</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        className="bg-zinc-900 border-zinc-700"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Artist Selection */}
-            <FormField
-              control={form.control}
-              name="artistId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Nghệ sĩ *</FormLabel>
-                  <div className="relative">
-                    <div className="flex gap-2">
-                      <FormControl>
-                        <div className="relative flex-1">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              {/* Song Selection */}
+              <FormField
+                control={form.control}
+                name="songIds"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>
+                      Songs{" "}
+                      <span className="text-gray-500 text-xs">(optional)</span>
+                    </FormLabel>
+                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 space-y-3">
+                      {loadingSongs ? (
+                        <p className="text-center text-gray-400 text-sm">
+                          Loading songs...
+                        </p>
+                      ) : songs.length === 0 ? (
+                        <p className="text-center text-gray-500 text-sm">
+                          {artistId
+                            ? "No songs available for this artist."
+                            : "Select an artist first."}
+                        </p>
+                      ) : (
+                        <>
                           <Input
-                            placeholder="Tìm kiếm nghệ sĩ..."
-                            value={artistSearch}
+                            placeholder="Search songs..."
+                            value={songQuery}
                             onChange={(e) => {
-                              setArtistSearch(e.target.value);
-                              setShowArtistDropdown(true);
+                              setSongQuery(e.target.value);
+                              handleSongSearch(e.target.value);
                             }}
-                            onFocus={() => setShowArtistDropdown(true)}
-                            className="pl-10 bg-background/50 border-border text-white"
+                            className="bg-zinc-950 border-zinc-700 text-sm"
                           />
-                        </div>
-                      </FormControl>
-                    </div>
-                    
-                    {showArtistDropdown && filteredArtists.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-background border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                        {filteredArtists.map((artist) => (
-                          <div
-                            key={artist.id}
-                            className="flex items-center gap-3 p-3 hover:bg-muted/50 cursor-pointer border-b border-border last:border-b-0"
-                            onClick={() => handleArtistSelect(artist)}
-                          >
-                            <User className="w-4 h-4 text-gray-400" />
-                            <div>
-                              <p className="text-white font-medium">{artist.name}</p>
-                              <p className="text-xs text-gray-400">
-                                {artist.country} • Debut: {artist.debutYear}
-                              </p>
-                            </div>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {filteredSongs.map((song) => {
+                              const checked = selectedSongs.includes(song.id);
+                              const disabled = song.isInOtherAlbum;
+                              return (
+                                <div
+                                  key={song.id}
+                                  onClick={() =>
+                                    !disabled && handleSongToggle(song.id)
+                                  }
+                                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all ${
+                                    disabled
+                                      ? "bg-zinc-800 border-zinc-700 opacity-50 cursor-not-allowed"
+                                      : checked
+                                      ? "bg-indigo-600 border-indigo-600 cursor-pointer"
+                                      : "bg-zinc-800 border-zinc-700 hover:border-zinc-500 cursor-pointer"
+                                  }`}
+                                >
+                                  <Music2 className="w-4 h-4" />
+                                  <span>{song.name}</span>
+                                  <span className="text-xs text-gray-500 ml-auto">
+                                    {song.releaseYear}
+                                  </span>
+                                  {disabled && (
+                                    <span className="text-xs text-red-400 ml-2">
+                                      (Already in album)
+                                    </span>
+                                  )}
+                                  {checked && (
+                                    <X className="w-3 h-3 ml-1 text-white" />
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {selectedArtist && (
-                      <div className="mt-2 p-3 bg-primary/20 border border-primary/30 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-primary" />
-                          <span className="text-white font-medium">{selectedArtist.name}</span>
-                          <span className="text-xs text-gray-400">({selectedArtist.country})</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="releaseDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Ngày phát hành *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="date"
-                      {...field}
-                      className="bg-background/50 border-border text-white"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Songs Multi-select */}
-            <FormField
-              control={form.control}
-              name="songIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Danh sách bài hát *</FormLabel>
-                  {!selectedArtist ? (
-                    <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
-                      <p className="text-sm text-gray-400">Vui lòng chọn nghệ sĩ trước</p>
+                        </>
+                      )}
                     </div>
-                  ) : loadingSongs ? (
-                    <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
-                      <p className="text-sm text-gray-400">Đang tải bài hát...</p>
-                    </div>
-                  ) : availableSongs.length === 0 ? (
-                    <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
-                      <p className="text-sm text-gray-400">Không có bài hát nào</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto border border-border rounded-lg p-3 bg-background/30">
-                      {availableSongs.map((song) => (
-                        <div
-                          key={song.id}
-                          className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
-                          onClick={() => handleSongToggle(song.id)}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={field.value?.includes(song.id)}
-                            onChange={() => handleSongToggle(song.id)}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-white text-sm">{song.name}</span>
-                          <span className="text-xs text-gray-400 ml-auto">({song.releaseYear})</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <FormMessage />
-                  {field.value && field.value.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      Đã chọn {field.value.length} bài hát
-                    </p>
-                  )}
-                </FormItem>
-              )}
-            />
+                  </FormItem>
+                )}
+              />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Mô tả album</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Nhập mô tả về album..."
-                      className="min-h-[60px] resize-none bg-background/50 border-border text-white"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              {/* Description */}
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="Write something about this album..."
+                        className="min-h-[70px] resize-none bg-zinc-900 border-zinc-700"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isLoading}
-                className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
-              >
-                Hủy
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={isLoading}
-                className="bg-primary hover:bg-primary/90"
-              >
-                {isLoading ? "Đang lưu..." : mode === "create" ? "Tạo album" : "Cập nhật"}
-              </Button>
-            </DialogFooter>
+              {/* Footer */}
+              <DialogFooter className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isLoading}
+                  className="bg-transparent border-zinc-700 text-white hover:bg-zinc-800"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  {isLoading
+                    ? "Saving..."
+                    : mode === "create"
+                    ? "Create Album"
+                    : "Update Album"}
+                </Button>
+              </DialogFooter>
+            </div>
           </form>
         </Form>
       </DialogContent>
