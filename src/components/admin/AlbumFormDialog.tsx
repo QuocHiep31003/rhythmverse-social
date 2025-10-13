@@ -116,9 +116,40 @@ export const AlbumFormDialog = ({
       setFilteredSongs([]);
     }
     if (open && defaultValues) {
-      setCoverPreview(defaultValues.coverUrl || "");
+      // Normalize date format for the date input
+      const normalized = {
+        name: defaultValues.name || "",
+        artistId: Number(defaultValues.artistId) || 0,
+        songIds: (defaultValues.songIds as number[]) || [],
+        releaseDate: defaultValues.releaseDate
+          ? new Date(defaultValues.releaseDate).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0],
+        coverUrl: defaultValues.coverUrl || "",
+        description: defaultValues.description || "",
+      } as AlbumFormValues;
+
+      form.reset(normalized);
+      setCoverPreview(normalized.coverUrl || "");
+      // Pre-fill artist search box when editing
+      const currentArtist = artists.find((a) => a.id === Number(normalized.artistId));
+      if (currentArtist) {
+        setArtistQuery(currentArtist.name);
+      }
     }
   }, [open]);
+
+  // Keep artist query in sync if artistId changes while editing and query is empty
+  useEffect(() => {
+    if (!open) return;
+    if (mode !== "edit") return;
+    if (artistQuery) return;
+    if (artistId && artistId > 0) {
+      const currentArtist = artists.find((a) => a.id === Number(artistId));
+      if (currentArtist) {
+        setArtistQuery(currentArtist.name);
+      }
+    }
+  }, [artistId, mode, open]);
 
   // ✅ Load songs by artist, filter out those already in another album
   useEffect(() => {
@@ -184,7 +215,7 @@ export const AlbumFormDialog = ({
     try {
       const result = await uploadImage(file);
       setCoverPreview(result.secure_url);
-      form.setValue("coverUrl", result.secure_url);
+      form.setValue("coverUrl", result.secure_url, { shouldDirty: true, shouldValidate: true });
     } catch (error) {
       console.error("Upload error:", error);
     } finally {
@@ -226,6 +257,8 @@ export const AlbumFormDialog = ({
             onSubmit={form.handleSubmit(handleFormSubmit)}
             className="flex flex-col sm:flex-row gap-8 px-6 py-6"
           >
+            {/* Hidden field to register coverUrl with RHF */}
+            <input type="hidden" {...form.register("coverUrl")} />
             {/* === LEFT: COVER PREVIEW === */}
             <div className="flex flex-col items-center justify-start gap-4 w-full sm:w-1/3">
               <div className="relative w-48 h-48 border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden flex items-center justify-center bg-zinc-900">
