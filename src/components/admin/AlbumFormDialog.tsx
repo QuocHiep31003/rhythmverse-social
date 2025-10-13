@@ -21,9 +21,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Image, Music2, User, X } from "lucide-react";
+import { Search, Image, Music2, User, X, Upload } from "lucide-react";
 import { songsApi } from "@/services/api";
 import { debounce } from "lodash";
+import { uploadImage } from "@/config/cloudinary";
+import { toast } from "sonner";
 
 // === Validation Schema ===
 const albumSchema = z.object({
@@ -31,7 +33,7 @@ const albumSchema = z.object({
   artistId: z.number().min(1, "Artist is required"),
   songIds: z.array(z.number()).optional().default([]),
   releaseDate: z.string().min(1, "Release date is required"),
-  coverImage: z.string().optional().or(z.literal("")),
+  coverUrl: z.string().optional().or(z.literal("")),
   description: z.string().optional(),
 });
 
@@ -50,6 +52,7 @@ interface Song {
   name: string;
   releaseYear: number;
   albumId?: number | null;
+  isInOtherAlbum?: boolean;
 }
 
 interface AlbumFormDialogProps {
@@ -78,6 +81,7 @@ export const AlbumFormDialog = ({
   const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
   const [songQuery, setSongQuery] = useState("");
   const [loadingSongs, setLoadingSongs] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const form = useForm<AlbumFormValues>({
     resolver: zodResolver(albumSchema),
@@ -86,7 +90,7 @@ export const AlbumFormDialog = ({
       artistId: 0,
       songIds: [],
       releaseDate: new Date().toISOString().split("T")[0],
-      coverImage: "",
+      coverUrl: "",
       description: "",
       ...defaultValues,
     },
@@ -103,7 +107,7 @@ export const AlbumFormDialog = ({
         artistId: 0,
         songIds: [],
         releaseDate: new Date().toISOString().split("T")[0],
-        coverImage: "",
+        coverUrl: "",
         description: "",
       });
       setCoverPreview("");
@@ -112,7 +116,7 @@ export const AlbumFormDialog = ({
       setFilteredSongs([]);
     }
     if (open && defaultValues) {
-      setCoverPreview(defaultValues.coverImage || "");
+      setCoverPreview(defaultValues.coverUrl || "");
     }
   }, [open]);
 
@@ -171,17 +175,26 @@ export const AlbumFormDialog = ({
     );
   };
 
-  // ✅ Upload image
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ✅ Upload image to Cloudinary
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      setCoverPreview(result);
-      form.setValue("coverImage", result);
-    };
-    reader.readAsDataURL(file);
+
+    setUploading(true);
+    try {
+      const result = await uploadImage(file);
+      setCoverPreview(result.secure_url);
+      form.setValue("coverUrl", result.secure_url);
+    } catch (error) {
+      console.error("Upload error:", error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setCoverPreview("");
+    form.setValue("coverUrl", "");
   };
 
   const handleFormSubmit = (values: AlbumFormValues) => {
@@ -217,24 +230,39 @@ export const AlbumFormDialog = ({
             <div className="flex flex-col items-center justify-start gap-4 w-full sm:w-1/3">
               <div className="relative w-48 h-48 border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden flex items-center justify-center bg-zinc-900">
                 {coverPreview ? (
-                  <img
-                    src={coverPreview}
-                    alt="Album cover"
-                    className="w-full h-full object-cover"
-                  />
+                  <>
+                    <img
+                      src={coverPreview}
+                      alt="Album cover"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full hover:bg-red-700"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
                 ) : (
-                  <div className="text-center text-gray-500 text-sm">
-                    <Image className="w-6 h-6 mx-auto mb-2 opacity-70" />
-                    Upload cover
-                  </div>
+                  <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer hover:bg-zinc-800">
+                    <Upload className="w-8 h-8 mb-2 text-gray-400" />
+                    <span className="text-sm text-gray-500">
+                      {uploading ? "Đang upload..." : "Upload cover"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
                 )}
               </div>
-              <Input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="bg-zinc-900 border-zinc-700 text-sm cursor-pointer w-48"
-              />
+              <p className="text-xs text-gray-500 text-center">
+                Tối đa 5MB. Cloudinary sẽ tự động xử lý.
+              </p>
             </div>
 
             {/* === RIGHT: FORM FIELDS === */}
@@ -429,17 +457,19 @@ export const AlbumFormDialog = ({
                   type="button"
                   variant="outline"
                   onClick={() => onOpenChange(false)}
-                  disabled={isLoading}
+                  disabled={isLoading || uploading}
                   className="bg-transparent border-zinc-700 text-white hover:bg-zinc-800"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || uploading}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
-                  {isLoading
+                  {uploading
+                    ? "Đang upload..."
+                    : isLoading
                     ? "Saving..."
                     : mode === "create"
                     ? "Create Album"

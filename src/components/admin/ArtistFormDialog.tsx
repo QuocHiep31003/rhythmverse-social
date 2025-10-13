@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Upload, X } from "lucide-react";
-import { toast } from "sonner";
+import { uploadImage } from "@/config/cloudinary";
 
 const artistFormSchema = z.object({
   name: z.string().min(1, "Tên nghệ sĩ không được để trống").max(200),
@@ -86,47 +86,17 @@ export const ArtistFormDialog = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
-      toast.error("Vui lòng chọn file ảnh");
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Kích thước file không được vượt quá 5MB");
-      return;
-    }
-
     setUploading(true);
-  const cloudName = "dhylbhwvb";
-  const uploadPreset = "EchoVerse";
-try {
-  setUploading(true);
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", uploadPreset);
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: "POST",
-    body: formData
-  });
-
-  const data = await response.json();
-
-  if (data.secure_url) {
-    setPreviewUrl(data.secure_url);
-    form.setValue("avatar", data.secure_url);
-    toast.success("Upload ảnh thành công!");
-  } else {
-    toast.error("Không lấy được URL từ Cloudinary");
-  }
-
-} catch (error) {
-  toast.error("Lỗi khi upload ảnh");
-  console.error(error);
-} finally {
-  setUploading(false);
-}}
+    try {
+      const result = await uploadImage(file);
+      setPreviewUrl(result.secure_url);
+      form.setValue("avatar", result.secure_url);
+    } catch (error) {
+      console.error("Upload error:", error);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleRemoveImage = () => {
     setPreviewUrl("");

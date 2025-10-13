@@ -43,7 +43,7 @@ interface Album {
   artist: Artist;
   songs: Song[];
   releaseDate: string;
-  coverImage?: string;
+  coverUrl?: string;
   artistName?: string;
 }
 
@@ -160,7 +160,9 @@ const AdminAlbums = () => {
         name: data.name,
         artistId: data.artistId,
         songIds: data.songIds || [],
-        releaseDate: data.releaseDate
+        releaseDate: data.releaseDate,
+        coverUrl: data.coverUrl || "",
+        description: data.description || ""
       };
 
       if (formMode === "create") {
@@ -331,7 +333,7 @@ const AdminAlbums = () => {
     }
   };
 
-  const getAlbumCover = (album: Album) => album.coverImage || DEFAULT_IMAGE_URL;
+  const getAlbumCover = (album: Album) => album.coverUrl || DEFAULT_IMAGE_URL;
 
   // Pagination handlers
   const goToPage = (page: number) => {

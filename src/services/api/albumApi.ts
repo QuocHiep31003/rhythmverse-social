@@ -65,7 +65,7 @@ export const albumsApi = {
       return await response.json();
     } catch (error) {
       console.error("Error fetching album:", error);
-      return mockAlbums.find((a) => a.id === id);
+      return mockAlbums.find((a) => a.id.toString() === id.toString());
     }
   },
 
@@ -77,7 +77,7 @@ export const albumsApi = {
         artistId: data.artistId,
         songIds: data.songIds,
         releaseDate: data.releaseDate,
-        coverImage: data.coverImage || "",
+        coverUrl: data.coverUrl || "",
         description: data.description || "",
       };
 
@@ -107,7 +107,7 @@ export const albumsApi = {
         artistId: data.artistId,
         songIds: data.songIds,
         releaseDate: data.releaseDate,
-        coverImage: data.coverImage,
+        coverUrl: data.coverUrl,
         description: data.description,
       };
 
