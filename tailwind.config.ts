@@ -2,7 +2,12 @@ import type { Config } from "tailwindcss";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  content: [
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -61,47 +66,65 @@ export default {
           bg: "hsl(var(--glass-bg))",
         },
       },
+
       backgroundImage: {
-        'gradient-primary': 'var(--gradient-primary)',
-        'gradient-secondary': 'var(--gradient-secondary)',
-        'gradient-dark': 'var(--gradient-dark)',
-        'gradient-glass': 'var(--gradient-glass)',
+        "gradient-primary": "var(--gradient-primary)",
+        "gradient-secondary": "var(--gradient-secondary)",
+        "gradient-dark": "var(--gradient-dark)",
+        "gradient-glass": "var(--gradient-glass)",
       },
+
       boxShadow: {
-        'glow': 'var(--shadow-glow)',
-        'neon': 'var(--shadow-neon)',
-        'card': 'var(--shadow-card)',
+        glow: "var(--shadow-glow)",
+        neon: "var(--shadow-neon)",
+        card: "var(--shadow-card)",
       },
+
       transitionTimingFunction: {
-        'bounce': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+        bounce: "cubic-bezier(0.68, -0.55, 0.265, 1.55)",
       },
+
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+
+      // 👇 Các hiệu ứng chuyển động
       keyframes: {
         "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
         },
         "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+        // 👇 Quay thuận
+        slowspin: {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
+        },
+        // 👇 Quay ngược chiều kim đồng hồ
+        reversespin: {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(-360deg)" },
         },
       },
+
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "spin-slow": "spin 20s linear infinite",
+
+        // 👇 Quay chậm, rất chậm
+        "spin-slow": "slowspin 20s linear infinite",
+        "spin-slower": "slowspin 40s linear infinite",
+        "spin-super-slow": "slowspin 80s linear infinite",
+
+        // 👇 Quay ngược chiều
+        "spin-reverse-slow": "reversespin 20s linear infinite",
+        "spin-reverse-slower": "reversespin 40s linear infinite",
+        "spin-reverse-super-slow": "reversespin 80s linear infinite",
       },
     },
   },
