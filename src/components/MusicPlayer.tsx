@@ -50,7 +50,8 @@ const MusicPlayer = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
   const [duration, setDuration] = useState(0);
-
+  const [hasReportedListen, setHasReportedListen] = useState(false);
+  const [listenTime, setListenTime] = useState(0);
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -84,7 +85,18 @@ const MusicPlayer = () => {
     if (isPlaying) {
       audio.play().catch(err => console.error("Play error:", err));
     }
+    setHasReportedListen(false);
   }, [currentSong]);
+  useEffect(() => {
+  if (!audioRef.current) return;
+  if (!isPlaying || hasReportedListen) return;
+
+  const interval = setInterval(() => {
+    setListenTime(prev => prev + 1);
+  }, 1000); // mỗi 1s
+
+  return () => clearInterval(interval);
+}, [isPlaying, hasReportedListen]);
 
   // Update progress
   useEffect(() => {
@@ -144,7 +156,45 @@ const MusicPlayer = () => {
         (i === lyricsMock.length - 1 || currentTime < lyricsMock[i + 1].time)
     );
     if (index !== -1) setCurrentLyric(index);
+    //   if (audioRef.current && currentSong && !hasReportedListen) {
+    // const percent = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+    // if (percent >= 50) {
+    //   // gửi API lưu lượt nghe
+    //   fetch("http://localhost:8080/api/listening-history", {
+    //     method: "POST",
+    //     headers: { "Content-Type": "application/json" },
+    //     body: JSON.stringify({
+    //       userId: 1, // hoặc lấy từ context đăng nhập
+    //       songId: currentSong.id,
+    //     }),
+    //   })
+    //     .then(() => console.log("✅ Đã lưu lượt nghe"))
+    //     .catch(err => console.error("❌ Lỗi lưu lượt nghe:", err));
+
+    //   setHasReportedListen(true); // tránh gửi trùng
+    // }
+  // }
   }, [progress]);
+  useEffect(() => {
+  if (!currentSong || hasReportedListen || !audioRef.current) return;
+
+  const duration = audioRef.current.duration;
+  if (duration && listenTime >= duration / 2) {
+    // gửi API lưu lượt nghe
+    fetch(`http://localhost:8080/api/listening-history`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: 1, // lấy từ context Auth
+        songId: currentSong.id,
+      }),
+    })
+      .then(() => console.log("✅ Đã lưu lượt nghe"))
+      .catch(err => console.error("❌ Lỗi lưu lượt nghe:", err));
+
+    setHasReportedListen(true); // tránh gửi trùng
+  }
+}, [listenTime, currentSong, hasReportedListen]);
 
   const toggleMute = () => setIsMuted(!isMuted);
   const toggleShuffle = () => setIsShuffled(!isShuffled);
