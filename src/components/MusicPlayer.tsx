@@ -53,6 +53,8 @@ const MusicPlayer = () => {
   const [duration, setDuration] = useState(0);
   const [hasReportedListen, setHasReportedListen] = useState(false);
   const [listenTime, setListenTime] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -64,51 +66,98 @@ const MusicPlayer = () => {
     return Math.floor(audioRef.current.currentTime);
   };
 
-  // Load new song - handle all state resets here
+  // Load new song - professional handling with proper state management
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
     
     const audio = audioRef.current;
     
-    // Reset all tracking states
+    // Immediately pause and reset current playback
+    audio.pause();
+    audio.currentTime = 0;
+    setIsLoading(true);
+    
+    // Reset all tracking states for new song
     setHasReportedListen(false);
     setListenTime(0);
     setProgress([0]);
     setCurrentLyric(0);
+    setDuration(0);
     
-    // Pause current playback first
-    audio.pause();
-    audio.currentTime = 0;
-    
-    // Load new song
+    // Set new audio source
     const audioUrl = currentSong.audioUrl || currentSong.audio || "";
+    
+    // Only update src if it's different to avoid unnecessary reloads
     if (audio.src !== audioUrl) {
       audio.src = audioUrl;
     }
     
-    // Load and auto-play if needed
+    // Handler for when audio is ready to play
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      
+      // Only auto-play if player was in playing state
+      if (isPlaying) {
+        audio.play().catch(err => {
+          console.error("Auto-play failed:", err);
+          toast({
+            title: "Playback paused",
+            description: "Click play to continue",
+          });
+        });
+      }
+    };
+    
+    // Handler for load errors
+    const handleLoadError = (e: Event) => {
+      console.error("Audio load error:", e);
+      setIsLoading(false);
+      toast({
+        title: "Load error",
+        description: "Failed to load audio. Skipping to next song...",
+        variant: "destructive",
+      });
+      
+      // Auto-skip to next song after 2 seconds
+      setTimeout(() => {
+        playNext();
+      }, 2000);
+    };
+    
+    // Attach event listeners
+    audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("error", handleLoadError);
+    
+    // Start loading the audio
     audio.load();
     
-    const playPromise = isPlaying ? audio.play() : Promise.resolve();
-    playPromise.catch(err => {
-      console.error("Play error:", err);
-      // If auto-play fails, just log it but don't crash
-    });
-    
-  }, [currentSong, isPlaying]);
+    // Cleanup
+    return () => {
+      audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("error", handleLoadError);
+    };
+  }, [currentSong]); // Only depend on currentSong change
 
-  // Handle play/pause toggle (only when user interacts)
+  // Handle play/pause toggle separately
   useEffect(() => {
-    if (!audioRef.current) return;
+    if (!audioRef.current || isLoading) return;
     
     const audio = audioRef.current;
     
-    if (isPlaying && audio.paused) {
-      audio.play().catch(err => console.error("Play error:", err));
+    if (isPlaying && audio.paused && audio.readyState >= 2) {
+      // readyState >= 2 means enough data to play
+      audio.play().catch(err => {
+        console.error("Play error:", err);
+        toast({
+          title: "Playback error",
+          description: "Unable to play audio",
+          variant: "destructive",
+        });
+      });
     } else if (!isPlaying && !audio.paused) {
       audio.pause();
     }
-  }, [isPlaying]);
+  }, [isPlaying, isLoading]);
   // Track listen time
   useEffect(() => {
     if (!audioRef.current || !isPlaying || hasReportedListen) return;
@@ -355,8 +404,11 @@ const MusicPlayer = () => {
                   size="icon"
                   className="h-10 w-10 sm:h-12 sm:w-12"
                   onClick={togglePlay}
+                  disabled={isLoading}
                 >
-                  {isPlaying ? (
+                  {isLoading ? (
+                    <div className="w-5 h-5 sm:w-6 sm:h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : isPlaying ? (
                     <Pause className="w-5 h-5 sm:w-6 sm:h-6" />
                   ) : (
                     <Play className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -534,8 +586,11 @@ const MusicPlayer = () => {
                   size="icon"
                   className="h-14 w-14"
                   onClick={togglePlay}
+                  disabled={isLoading}
                 >
-                  {isPlaying ? (
+                  {isLoading ? (
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : isPlaying ? (
                     <Pause className="w-6 h-6" />
                   ) : (
                     <Play className="w-6 h-6" />
