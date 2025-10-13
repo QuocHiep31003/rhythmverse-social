@@ -340,13 +340,13 @@ const MusicPlayer = () => {
                       onError={handleImageError}
                       className={cn(
                         "w-full h-full object-cover transition-transform duration-300",
-                        isPlaying && "animate-spin-slow"
+                        isPlaying && "spin-reverse-slower"
                       )}
                     />
                   ) : (
                     <div className={cn(
                       "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-                      isPlaying && "animate-spin-slow"
+                      isPlaying && "spin-reverse-slower"
                     )}>
                       <Music className="w-5 h-5 text-white" />
                     </div>
@@ -535,13 +535,13 @@ const MusicPlayer = () => {
                   onError={handleImageError}
                   className={cn(
                     "w-full h-full object-cover transition-transform duration-300",
-                    isPlaying && "animate-spin-slow"
+                    isPlaying && "spin-reverse-slower"
                   )}
                 />
               ) : (
                 <div className={cn(
                   "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-                  isPlaying && "animate-spin-slow"
+                  isPlaying && "spin-reverse-slower"
                 )}>
                   <Music className="w-20 h-20 text-white" />
                 </div>
