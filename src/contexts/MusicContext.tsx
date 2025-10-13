@@ -10,6 +10,8 @@ export interface Song {
   genre?: string;
   plays?: string;
   url?: string;
+  audio?: string;
+  audioUrl?: string;
 }
 
 interface MusicContextType {

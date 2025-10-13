@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Shield, ChevronLeft, ChevronRight, Download, Upload, Users as UsersIcon, Filter } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Shield, ChevronLeft, ChevronRight, Download, Upload, Users as UsersIcon, Filter, ArrowLeft } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { UserFormDialog } from "@/components/admin/UserFormDialog";
@@ -12,7 +13,10 @@ import { usersApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 
+const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
+
 const AdminUsers = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -259,68 +263,78 @@ const AdminUsers = () => {
   );
 
   return (
-    <div className="space-y-6">
-      {/* Header Section with Modern Design */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
-            <UsersIcon className="w-6 h-6 text-white" />
+    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
+        <Button 
+          variant="ghost" 
+          onClick={() => navigate(-1)} 
+          className="mb-4 self-start"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Quay lại
+        </Button>
+        
+        {/* Header Section with Modern Design */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10 flex-shrink-0 mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
+              <UsersIcon className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                User Management
+              </h1>
+              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+                <Badge variant="secondary" className="font-normal">
+                  {totalElements} total users
+                </Badge>
+                {loading && <span className="text-xs">Loading...</span>}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              User Management
-            </h1>
-            <p className="text-muted-foreground flex items-center gap-2 mt-1">
-              <Badge variant="secondary" className="font-normal">
-                {totalElements} total users
-              </Badge>
-              {loading && <span className="text-xs">Loading...</span>}
-            </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              onChange={handleImport}
+              className="hidden"
+            />
+            
+            {/* Import Button */}
+            <Button 
+              variant="outline" 
+              onClick={handleImportClick}
+              className="gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </Button>
+            
+            {/* Export Button */}
+            <Button 
+              variant="outline" 
+              onClick={handleExport}
+              className="gap-2 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+            
+            {/* Add User Button */}
+            <Button 
+              onClick={handleCreate}
+              className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
+            >
+              <Plus className="w-4 h-4" />
+              Add User
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx"
-            onChange={handleImport}
-            className="hidden"
-          />
-          
-          {/* Import Button */}
-          <Button 
-            variant="outline" 
-            onClick={handleImportClick}
-            className="gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
-          >
-            <Upload className="w-4 h-4" />
-            Import
-          </Button>
-          
-          {/* Export Button */}
-          <Button 
-            variant="outline" 
-            onClick={handleExport}
-            className="gap-2 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
-          
-          {/* Add User Button */}
-          <Button 
-            onClick={handleCreate}
-            className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
-          >
-            <Plus className="w-4 h-4" />
-            Add User
-          </Button>
-        </div>
-      </div>
 
-      <Card className="border-none shadow-lg">
-        <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20">
+      <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden min-h-0">
+        <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20 flex-shrink-0">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
               <CardTitle className="text-xl font-bold">Users Directory</CardTitle>
@@ -337,17 +351,16 @@ const AdminUsers = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-auto" style={{ maxHeight: '60vh' }}>
-            <Table>
-            <TableHeader className="sticky top-0 bg-background z-10">
-                <TableRow className="hover:bg-transparent border-b">
-                <TableHead className="font-semibold w-16 text-center bg-background">No.</TableHead>
-                <TableHead className="font-semibold bg-background">User</TableHead>
-                <TableHead className="font-semibold bg-background">Email</TableHead>
-                <TableHead className="font-semibold bg-background">Role</TableHead>
-                <TableHead className="text-right font-semibold bg-background">Actions</TableHead>
-                </TableRow>
+        <CardContent className="p-0 flex-1 overflow-auto min-h-0 scrollbar-custom">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent border-b">
+                <TableHead className="w-16 font-semibold">STT</TableHead>
+                <TableHead className="font-semibold">User</TableHead>
+                <TableHead className="font-semibold">Email</TableHead>
+                <TableHead className="font-semibold">Role</TableHead>
+                <TableHead className="text-right font-semibold">Actions</TableHead>
+              </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
@@ -374,13 +387,17 @@ const AdminUsers = () => {
               ) : (
                 filteredUsers.map((user, index) => (
                   <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
-                    <TableCell className="text-center text-sm text-muted-foreground">
-                      {currentPage * pageSize + index + 1}
-                    </TableCell>
+                    <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="w-10 h-10 border-2 border-primary/10">
-                          <AvatarImage src={user.avatar || user.profileImage} alt={user.name} />
+                          <AvatarImage 
+                            src={user.avatar || user.profileImage || DEFAULT_AVATAR_URL} 
+                            alt={user.name}
+                            onError={(e: any) => {
+                              e.currentTarget.src = DEFAULT_AVATAR_URL;
+                            }}
+                          />
                           <AvatarFallback className="bg-gradient-primary text-white font-semibold">
                             {user.name?.[0]?.toUpperCase() || 'U'}
                           </AvatarFallback>
@@ -433,14 +450,13 @@ const AdminUsers = () => {
                 ))
               )}
             </TableBody>
-            </Table>
-          </div>
+          </Table>
         </CardContent>
       </Card>
 
       {/* Modern Pagination Controls */}
       {totalPages > 0 && (
-        <Card className="border-none shadow-md">
+        <Card className="border-none shadow-md flex-shrink-0">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-sm text-muted-foreground">
@@ -528,6 +544,7 @@ const AdminUsers = () => {
         description={`Are you sure you want to delete "${selectedUser?.name}"? This action cannot be undone.`}
         isLoading={isSubmitting}
       />
+      </div>
     </div>
   );
 };

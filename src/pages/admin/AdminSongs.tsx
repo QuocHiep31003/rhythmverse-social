@@ -12,6 +12,8 @@ import { songsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { debounce } from "@/lib/utils";
 
+const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
+
 const AdminSongs = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -29,19 +31,8 @@ const AdminSongs = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const debouncedLoadSongs = useCallback(
-    debounce(() => {
-      loadSongs();
-    }, 2000),
-    []
-  );
-
   useEffect(() => {
-    if (searchQuery) {
-      debouncedLoadSongs();
-    } else {
-      loadSongs();
-    }
+    loadSongs();
   }, [currentPage, pageSize, searchQuery]);
 
   const loadSongs = async () => {
@@ -84,24 +75,32 @@ const AdminSongs = () => {
     setDeleteOpen(true);
   };
 
-  const handleFormSubmit = async (data: any) => {
-    try {
-      setIsSubmitting(true);
-      if (formMode === "create") {
-        await songsApi.create(data);
-        toast({ title: "Thành công", description: "Đã tạo bài hát mới" });
-      } else {
-        await songsApi.update(selectedSong.id, data);
-        toast({ title: "Thành công", description: "Đã cập nhật bài hát" });
-      }
-      setFormOpen(false);
-      loadSongs();
-    } catch (error) {
-      toast({ title: "Lỗi", description: "Không thể lưu bài hát", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
+ const handleFormSubmit = async (data: any) => {
+  setIsSubmitting(true);
+  try {
+    if (formMode === "create") {
+      await songsApi.create(data);
+    } else {
+      await songsApi.update(selectedSong.id, data);
     }
-  };
+    
+    toast({
+      title: "Thành công",
+      description: formMode === "create" ? "Đã tạo bài hát mới" : "Đã cập nhật bài hát",
+    });
+    setFormOpen(false);
+    loadSongs();
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Lỗi",
+      description: "Không thể lưu bài hát",
+      variant: "destructive",
+    });
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleDelete = async () => {
     try {
@@ -149,8 +148,14 @@ const AdminSongs = () => {
   };
 
   const handlePlayClick = (song: any) => {
+    const playableSong = {
+      ...song,
+      audio: song.audioUrl,
+      artist: song.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+      genre: song.genres?.[0]?.name || 'Unknown'
+    };
     if (currentSong?.id === song.id) togglePlay();
-    else playSong(song);
+    else playSong(playableSong);
   };
 
   const goToPage = (page: number) => setCurrentPage(page);
@@ -171,14 +176,14 @@ const AdminSongs = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-dark text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
+    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại
         </Button>
-
-        <div className="space-y-6">
+        
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Bài hát</h1>
@@ -188,10 +193,10 @@ const AdminSongs = () => {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}>
-                <Download className="w-4 h-4 mr-2" />Export Excel
+                <Download className="w-4 h-4 mr-2" />Export
               </Button>
               <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}>
-                <Upload className="w-4 h-4 mr-2" />Import Excel
+                <Upload className="w-4 h-4 mr-2" />Import
               </Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
               <Button onClick={handleCreate}>
@@ -200,8 +205,8 @@ const AdminSongs = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader>
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -219,71 +224,78 @@ const AdminSongs = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : songs.length === 0 ? (
                 <div className="text-center py-8">{searchQuery ? "Không tìm thấy bài hát phù hợp" : "Chưa có bài hát nào"}</div>
               ) : (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12"></TableHead>
-                        <TableHead>Bài hát</TableHead>
-                        <TableHead>Nghệ sĩ</TableHead>
-                        <TableHead>Năm phát hành</TableHead>
-                        <TableHead>Thể loại</TableHead>
-                        <TableHead className="text-right">Hành động</TableHead>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">STT</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Bài hát</TableHead>
+                      <TableHead>Nghệ sĩ</TableHead>
+                      <TableHead>Năm phát hành</TableHead>
+                      <TableHead>Thể loại</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {songs.map((song, index) => (
+                      <TableRow key={song.id}>
+                        <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" onClick={() => handlePlayClick(song)}>
+                            {currentSong?.id === song.id && isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                          </Button>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <span className="font-medium">{song.name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{song.artists?.map((a: any) => a.name).join(', ') || '—'}</TableCell>
+                        <TableCell>{song.releaseYear || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {song.genres?.map((g: any) => (
+                              <span key={g.id} className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs">
+                                {g.name}
+                              </span>
+                            )) || '—'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(song)}><Pencil className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(song)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {songs.map((song) => (
-                        <TableRow key={song.id}>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handlePlayClick(song)}>
-                              {currentSong?.id === song.id && isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                            </Button>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <img src={song.avatar || "https://via.placeholder.com/40"} alt={song.name} className="w-10 h-10 rounded object-cover" />
-                              <span className="font-medium">{song.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>{song.artists?.map((a: any) => a.name).join(', ') || '—'}</TableCell>
-                          <TableCell>{song.releaseYear || '—'}</TableCell>
-                          <TableCell>
-                            <span className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs">{song.genre || '—'}</span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button variant="ghost" size="icon" onClick={() => handleEdit(song)}><Pencil className="w-4 h-4" /></Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(song)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-                      <div className="text-sm text-muted-foreground">Hiển thị {songs.length} trên tổng số {totalElements} bài hát</div>
-                      <div className="flex items-center gap-1">
-                        <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
-                        <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>
-                        {getPageNumbers().map(page => (
-                          <Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>
-                        ))}
-                        <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button>
-                        <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button>
-                      </div>
-                    </div>
-                  )}
-                </>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
+          
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
+              <div className="text-sm text-muted-foreground">Hiển thị {songs.length} trên tổng số {totalElements} bài hát</div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>
+                {getPageNumbers().map(page => (
+                  <Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>
+                ))}
+                <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
         </div>
 
         <SongFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedSong} isLoading={isSubmitting} mode={formMode} />

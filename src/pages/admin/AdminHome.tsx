@@ -2,6 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Users, Music, ListMusic, TrendingUp } from "lucide-react";
 import { mockSongs, mockUsers, mockPlaylists } from "@/data/mockData";
 
+const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
+
 const AdminHome = () => {
   const stats = [
     {
@@ -76,6 +78,7 @@ const AdminHome = () => {
                   <img
                     src={song.cover}
                     alt={song.title}
+                    onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }}
                     className="w-12 h-12 rounded object-cover"
                   />
                   <div className="flex-1 min-w-0">
@@ -105,6 +108,7 @@ const AdminHome = () => {
                   <img
                     src={user.avatar}
                     alt={user.name}
+                    onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }}
                     className="w-10 h-10 rounded-full"
                   />
                   <div className="flex-1 min-w-0">

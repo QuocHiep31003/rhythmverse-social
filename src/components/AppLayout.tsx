@@ -6,7 +6,7 @@ import { Menu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-interface AppLayoutProps {
+interface AppLayoutProps { 
   children: React.ReactNode;
 }
 
@@ -37,9 +37,9 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-dark">
         <AppSidebar />
-        <SidebarInset className="flex flex-col min-w-0">
+        <SidebarInset className="flex flex-col min-w-0 lg:ml-64">
           {!isMobile && <TopBar />}
-          <main className="flex-1 overflow-auto p-0">
+          <main className="flex-1 p-0">
             {children}
           </main>
         </SidebarInset>

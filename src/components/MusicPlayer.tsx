@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 
@@ -40,6 +40,7 @@ const lyricsMock = [
 const MusicPlayer = () => {
   const location = useLocation();
   const { currentSong, isPlaying, togglePlay, playNext, playPrevious } = useMusic();
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
   const [isMuted, setIsMuted] = useState(false);
@@ -48,6 +49,7 @@ const MusicPlayer = () => {
   const [isLiked, setIsLiked] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -56,8 +58,81 @@ const MusicPlayer = () => {
   };
 
   const getCurrentTime = () => {
-    if (!currentSong) return 0;
-    return Math.floor((progress[0] / 100) * currentSong.duration);
+    if (!audioRef.current) return 0;
+    return Math.floor(audioRef.current.currentTime);
+  };
+
+  // Handle play/pause
+  useEffect(() => {
+    if (!audioRef.current) return;
+    
+    if (isPlaying) {
+      audioRef.current.play().catch(err => console.error("Play error:", err));
+    } else {
+      audioRef.current.pause();
+    }
+  }, [isPlaying]);
+
+  // Load new song
+  useEffect(() => {
+    if (!audioRef.current || !currentSong) return;
+    
+    const audio = audioRef.current;
+    audio.src = currentSong.audioUrl || currentSong.audio || "";
+    audio.load();
+    
+    if (isPlaying) {
+      audio.play().catch(err => console.error("Play error:", err));
+    }
+  }, [currentSong]);
+
+  // Update progress
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const updateProgress = () => {
+      if (audio.duration) {
+        setProgress([(audio.currentTime / audio.duration) * 100]);
+      }
+    };
+
+    const updateDuration = () => {
+      setDuration(audio.duration);
+    };
+
+    const handleEnded = () => {
+      if (repeatMode === "one") {
+        audio.currentTime = 0;
+        audio.play();
+      } else if (repeatMode === "all" || repeatMode === "off") {
+        playNext();
+      }
+    };
+
+    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("loadedmetadata", updateDuration);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", updateProgress);
+      audio.removeEventListener("loadedmetadata", updateDuration);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, [repeatMode, playNext]);
+
+  // Handle volume
+  useEffect(() => {
+    if (!audioRef.current) return;
+    audioRef.current.volume = isMuted ? 0 : volume[0] / 100;
+  }, [volume, isMuted]);
+
+  // Handle progress seek
+  const handleProgressChange = (value: number[]) => {
+    setProgress(value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = (value[0] / 100) * audioRef.current.duration;
+    }
   };
 
   // Auto update lyrics highlight
@@ -120,6 +195,9 @@ const MusicPlayer = () => {
 
   return (
     <>
+      {/* Audio Element */}
+      <audio ref={audioRef} />
+      
       {/* Mini Player */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t border-border/40">
         <div className="container mx-auto px-2 sm:px-4 py-3">
@@ -135,6 +213,7 @@ const MusicPlayer = () => {
                     <img
                       src={currentSong.cover}
                       alt={currentSong.title}
+                      onError={handleImageError}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -239,13 +318,13 @@ const MusicPlayer = () => {
                 </span>
                 <Slider
                   value={progress}
-                  onValueChange={setProgress}
+                  onValueChange={handleProgressChange}
                   max={100}
                   step={1}
                   className="flex-1"
                 />
                 <span className="text-xs text-muted-foreground w-8 hidden sm:block">
-                  {formatTime(currentSong?.duration || 0)}
+                  {formatTime(duration)}
                 </span>
               </div>
             </div>
@@ -320,6 +399,7 @@ const MusicPlayer = () => {
                 <img
                   src={currentSong.cover}
                   alt={currentSong.title}
+                  onError={handleImageError}
                   className="w-full h-full object-cover"
                 />
               ) : (
@@ -343,13 +423,13 @@ const MusicPlayer = () => {
                 </span>
                 <Slider
                   value={progress}
-                  onValueChange={setProgress}
+                  onValueChange={handleProgressChange}
                   max={100}
                   step={1}
                   className="flex-1"
                 />
                 <span className="text-xs text-muted-foreground">
-                  {formatTime(currentSong?.duration || 0)}
+                  {formatTime(duration)}
                 </span>
               </div>
 

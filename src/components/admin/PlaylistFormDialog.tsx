@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,8 +32,15 @@ const playlistFormSchema = z.object({
   description: z.string().max(500).optional().or(z.literal("")),
   isPublic: z.boolean().default(true),
   songLimit: z.number().min(1).max(1000).default(500),
+  songIds: z.array(z.number()).default([]),
   coverImage: z.string().optional().or(z.literal("")),
 });
+
+interface Song {
+  id: number;
+  name: string;
+  releaseYear: number;
+}
 
 export type PlaylistFormValues = z.infer<typeof playlistFormSchema>;
 
@@ -55,6 +63,9 @@ export const PlaylistFormDialog = ({
 }: PlaylistFormDialogProps) => {
   const [coverPreview, setCoverPreview] = useState<string>("");
   const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [allSongs, setAllSongs] = useState<Song[]>([]);
+  const [songSearch, setSongSearch] = useState("");
+  const [loadingSongs, setLoadingSongs] = useState(false);
 
   const form = useForm<PlaylistFormValues>({
     resolver: zodResolver(playlistFormSchema),
@@ -63,29 +74,49 @@ export const PlaylistFormDialog = ({
       description: "",
       isPublic: true,
       songLimit: 500,
+      songIds: [],
       coverImage: "",
       ...defaultValues,
     },
   });
 
   useEffect(() => {
-    if (open && defaultValues) {
-      form.reset(defaultValues);
-      if (defaultValues.coverImage) {
-        setCoverPreview(defaultValues.coverImage);
+    if (open) {
+      loadAllSongs();
+      if (defaultValues) {
+        form.reset(defaultValues);
+        if (defaultValues.coverImage) {
+          setCoverPreview(defaultValues.coverImage);
+        }
+      } else {
+        form.reset({
+          name: "",
+          description: "",
+          isPublic: true,
+          songLimit: 500,
+          songIds: [],
+          coverImage: "",
+        });
+        setCoverPreview("");
+        setCoverFile(null);
       }
-    } else if (open) {
-      form.reset({
-        name: "",
-        description: "",
-        isPublic: true,
-        songLimit: 500,
-        coverImage: "",
-      });
-      setCoverPreview("");
-      setCoverFile(null);
     }
   }, [open, defaultValues, form]);
+
+  const loadAllSongs = async () => {
+    try {
+      setLoadingSongs(true);
+      const response = await fetch(`http://localhost:8080/api/songs?page=0&size=1000`);
+      if (response.ok) {
+        const data = await response.json();
+        setAllSongs(data.content || []);
+      }
+    } catch (error) {
+      console.error("Failed to load songs:", error);
+    } finally {
+      setLoadingSongs(false);
+    }
+  };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -121,13 +152,26 @@ export const PlaylistFormDialog = ({
     onSubmit(data);
   };
 
+  const handleSongToggle = (songId: number) => {
+    const currentSongs = form.getValues("songIds") || [];
+    if (currentSongs.includes(songId)) {
+      form.setValue("songIds", currentSongs.filter(id => id !== songId));
+    } else {
+      form.setValue("songIds", [...currentSongs, songId]);
+    }
+  };
+
+  const filteredSongs = allSongs.filter(song =>
+    song.name.toLowerCase().includes(songSearch.toLowerCase())
+  );
+
   const isPublic = form.watch("isPublic");
   const songLimit = form.watch("songLimit");
   const name = form.watch("name");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-card border-border">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-white">
             {mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}
@@ -209,7 +253,7 @@ export const PlaylistFormDialog = ({
                   <FormControl>
                     <Textarea
                       placeholder="Mô tả playlist..."
-                      className="resize-none bg-background/50 border-border text-white"
+                      className="min-h-[60px] resize-none bg-background/50 border-border text-white"
                       {...field}
                     />
                   </FormControl>
@@ -281,41 +325,61 @@ export const PlaylistFormDialog = ({
               )}
             />
 
-            {/* Preview */}
-            {name && (
-              <div className="space-y-2 pt-4 border-t border-border">
-                <FormLabel className="text-white">Xem trước</FormLabel>
-                <div className="p-4 rounded-lg bg-muted/50 border border-border">
-                  <div className="flex items-center gap-4">
-                    <Avatar className="w-16 h-16">
-                      {coverPreview ? (
-                        <AvatarImage src={coverPreview} alt={name} />
-                      ) : (
-                        <AvatarFallback className="bg-primary/20 text-white">
-                          {name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-lg text-white">{name}</h3>
-                      {form.watch("description") && (
-                        <p className="text-sm text-gray-400 mt-1">
-                          {form.watch("description")}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant={isPublic ? "default" : "secondary"}>
-                          {isPublic ? "Công khai" : "Riêng tư"}
-                        </Badge>
-                        <Badge variant="outline" className="text-gray-400 border-gray-600">
-                          0/{songLimit} bài hát
-                        </Badge>
-                      </div>
+            {/* Songs Multi-select */}
+            <FormField
+              control={form.control}
+              name="songIds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-white">Chọn bài hát</FormLabel>
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Input
+                        placeholder="Tìm kiếm bài hát..."
+                        value={songSearch}
+                        onChange={(e) => setSongSearch(e.target.value)}
+                        className="pl-10 bg-background/50 border-border text-white"
+                      />
                     </div>
+                    {loadingSongs ? (
+                      <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
+                        <p className="text-sm text-gray-400">Đang tải bài hát...</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[200px] overflow-y-auto border border-border rounded-lg p-3 bg-background/30">
+                        {filteredSongs.length === 0 ? (
+                          <p className="text-sm text-gray-400 text-center py-2">Không tìm thấy bài hát</p>
+                        ) : (
+                          filteredSongs.map((song) => (
+                            <div
+                              key={song.id}
+                              className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
+                              onClick={() => handleSongToggle(song.id)}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={field.value?.includes(song.id)}
+                                onChange={() => handleSongToggle(song.id)}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-white text-sm">{song.name}</span>
+                              <span className="text-xs text-gray-400 ml-auto">({song.releaseYear})</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
-            )}
+                  <FormMessage />
+                  {field.value && field.value.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Đã chọn {field.value.length} bài hát
+                    </p>
+                  )}
+                </FormItem>
+              )}
+            />
 
             <DialogFooter>
               <Button

@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Trash2, Check, ChevronsUpDown } from "lucide-react";
-import { toast } from "sonner";
+import { Check, ChevronsUpDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -43,19 +42,15 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn, debounce } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { genresApi, artistsApi } from "@/services/api";
 
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
-  genres: z.array(z.string()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
+  genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
-  album: z.string().max(200).optional().or(z.literal("")),
-  duration: z.coerce.number().min(1, "Thời lượng phải lớn hơn 0"),
-  cover: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
-  audio: z.string().url("URL audio không hợp lệ"),
-  avatar: z.string().optional(),
+  audioUrl: z.string().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -77,104 +72,53 @@ export const SongFormDialog = ({
   isLoading = false,
   mode,
 }: SongFormDialogProps) => {
-  const [genres, setGenres] = useState<any[]>([]);
-  const [artists, setArtists] = useState<any[]>([]);
+  const [allGenres, setAllGenres] = useState<any[]>([]);
+  const [allArtists, setAllArtists] = useState<any[]>([]);
   const [artistSearchQuery, setArtistSearchQuery] = useState("");
-  const [artistSearchResults, setArtistSearchResults] = useState<any[]>([]);
-  const [isSearchingArtists, setIsSearchingArtists] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
-  const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genreSearchQuery, setGenreSearchQuery] = useState("");
-  const [genreSearchResults, setGenreSearchResults] = useState<any[]>([]);
-  const [isSearchingGenres, setIsSearchingGenres] = useState(false);
+  const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
     defaultValues: {
       name: "",
       releaseYear: new Date().getFullYear(),
-      genres: [],
+      genreIds: [],
       artistIds: [],
-      album: "",
-      duration: 180,
-      cover: "",
-      audio: "",
-      avatar: "",
+      audioUrl: "",
       ...defaultValues,
     },
   });
 
-  const searchArtists = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setArtistSearchResults([]);
-      return;
-    }
-    
-    try {
-      setIsSearchingArtists(true);
-      const data = await artistsApi.getAll({
-        page: 0,
-        size: 20,
-        sort: "name,asc",
-        search: query
-      });
-      const results = Array.isArray(data) ? data : data.content || [];
-      setArtistSearchResults(results);
-    } catch (error) {
-      console.error("Error searching artists:", error);
-      setArtistSearchResults([]);
-    } finally {
-      setIsSearchingArtists(false);
-    }
-  }, []);
+  // Filter local data thay vì call API
+  const filteredArtists = artistSearchQuery.trim()
+    ? allArtists.filter((artist) =>
+        artist.name.toLowerCase().includes(artistSearchQuery.toLowerCase())
+      )
+    : allArtists;
 
-  const debouncedSearchArtists = useCallback(
-    debounce((query: string) => {
-      searchArtists(query);
-    }, 2000),
-    [searchArtists]
-  );
+  const filteredGenres = genreSearchQuery.trim()
+    ? allGenres.filter((genre) =>
+        genre.name.toLowerCase().includes(genreSearchQuery.toLowerCase())
+      )
+    : allGenres;
 
-  const searchGenres = useCallback(async (query: string) => {
-    if (!query.trim()) {
-      setGenreSearchResults([]);
-      return;
-    }
-    
-    try {
-      setIsSearchingGenres(true);
-      const data = await genresApi.getAll({
-        page: 0,
-        size: 20,
-        sort: "name,asc",
-        search: query
-      });
-      const results = Array.isArray(data) ? data : data.content || [];
-      setGenreSearchResults(results);
-    } catch (error) {
-      console.error("Error searching genres:", error);
-      setGenreSearchResults([]);
-    } finally {
-      setIsSearchingGenres(false);
-    }
-  }, []);
-
-  const debouncedSearchGenres = useCallback(
-    debounce((query: string) => {
-      searchGenres(query);
-    }, 2000),
-    [searchGenres]
-  );
-
+  // Load toàn bộ artists và genres khi component mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const genresData = await genresApi.getAll();
-        setGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
+        const [artistsData, genresData] = await Promise.all([
+          artistsApi.getAll({ page: 0, size: 1000, sort: "name,asc" }),
+          genresApi.getAll({ page: 0, size: 1000, sort: "name,asc" })
+        ]);
+        
+        setAllArtists(Array.isArray(artistsData) ? artistsData : artistsData.content || []);
+        setAllGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
       } catch (error) {
-        console.error("Error loading genres:", error);
+        console.error("Error loading data:", error);
       }
     };
     loadData();
@@ -182,72 +126,84 @@ export const SongFormDialog = ({
 
   useEffect(() => {
     if (open && defaultValues) {
-      form.reset(defaultValues);
-      setPreviewUrl(defaultValues.avatar || "");
+      // Xử lý data từ API: artists và genres là array of objects
+      const apiData = defaultValues as any;
+      const formValues = {
+        ...defaultValues,
+        artistIds: apiData.artists?.map((a: any) => a.id) || defaultValues.artistIds || [],
+        genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
+        audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
+      };
+      form.reset(formValues);
     } else if (open) {
       form.reset({
         name: "",
         releaseYear: new Date().getFullYear(),
-        genres: [],
+        genreIds: [],
         artistIds: [],
-        album: "",
-        duration: 180,
-        cover: "",
-        audio: "",
-        avatar: "",
+        audioUrl: "",
       });
-      setPreviewUrl("");
     }
   }, [open, defaultValues, form]);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast.error("Vui lòng chọn file ảnh");
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Kích thước file không được vượt quá 5MB");
-      return;
-    }
-
+  const uploadToCloudinary = async (file: File): Promise<string> => {
+    const cloudName = "dhylbhwvb"; // Cloudinary cloud name
+    const uploadPreset = "EchoVerse"; // Unsigned upload preset
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", uploadPreset);
+    formData.append("resource_type", "video"); // audio files use 'video' resource type
+    
     try {
-      setUploading(true);
-      
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', 'ml_default');
-      
       const response = await fetch(
-        'https://api.cloudinary.com/v1_1/doa8bsmwv/image/upload',
+        `https://api.cloudinary.com/v1_1/${cloudName}/upload`,
         {
-          method: 'POST',
+          method: "POST",
           body: formData,
         }
       );
-
+      
       if (!response.ok) {
-        throw new Error('Upload failed');
+        throw new Error("Upload failed");
       }
-
+      
       const data = await response.json();
-      form.setValue('avatar', data.secure_url);
-      setPreviewUrl(data.secure_url);
-      toast.success("Tải ảnh lên thành công");
+      return data.secure_url;
     } catch (error) {
-      console.error('Upload error:', error);
-      toast.error("Lỗi khi tải ảnh lên");
-    } finally {
-      setUploading(false);
+      console.error("Error uploading to Cloudinary:", error);
+      throw error;
     }
   };
 
-  const handleRemoveImage = () => {
-    form.setValue('avatar', '');
-    setPreviewUrl('');
+  const handleFileChange = async (file: File | undefined) => {
+    if (!file) return;
+    
+    setUploading(true);
+    setUploadProgress(0);
+    
+    try {
+      // Simulate progress (Cloudinary doesn't provide real-time progress)
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => Math.min(prev + 10, 90));
+      }, 200);
+      
+      const url = await uploadToCloudinary(file);
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      form.setValue("audioUrl", url);
+      
+      setTimeout(() => {
+        setUploadProgress(0);
+      }, 1000);
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Lỗi khi upload file. Vui lòng thử lại.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = (data: SongFormValues) => {
@@ -302,7 +258,7 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="genres"
+              name="genreIds"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Thể loại * (chọn ít nhất 1)</FormLabel>
@@ -329,31 +285,24 @@ export const SongFormDialog = ({
                         <CommandInput
                           placeholder="Tìm kiếm thể loại..."
                           value={genreSearchQuery}
-                          onValueChange={(value) => {
-                            setGenreSearchQuery(value);
-                            if (value) {
-                              debouncedSearchGenres(value);
-                            } else {
-                              setGenreSearchResults([]);
-                            }
-                          }}
+                          onValueChange={setGenreSearchQuery}
                         />
                         <CommandEmpty>
-                          {isSearchingGenres ? "Đang tìm kiếm..." : "Không tìm thấy thể loại"}
+                          Không tìm thấy thể loại
                         </CommandEmpty>
                         <CommandGroup className="max-h-[300px] overflow-y-auto">
-                          {genreSearchResults.map((genre) => (
+                          {filteredGenres.map((genre) => (
                             <CommandItem
                               key={genre.id}
-                              value={genre.name}
+                              value={genre.id.toString()}
                               onSelect={() => {
-                                const isSelected = field.value?.includes(genre.name);
+                                const isSelected = field.value?.includes(genre.id);
                                 if (isSelected) {
                                   field.onChange(
-                                    field.value?.filter((name: string) => name !== genre.name)
+                                    field.value?.filter((id: number) => id !== genre.id)
                                   );
                                 } else {
-                                  field.onChange([...(field.value || []), genre.name]);
+                                  field.onChange([...(field.value || []), genre.id]);
                                 }
                               }}
                             >
@@ -366,7 +315,7 @@ export const SongFormDialog = ({
                               <Check
                                 className={cn(
                                   "ml-2 h-4 w-4",
-                                  field.value?.includes(genre.name)
+                                  field.value?.includes(genre.id)
                                     ? "opacity-100"
                                     : "opacity-0"
                                 )}
@@ -379,25 +328,28 @@ export const SongFormDialog = ({
                   </Popover>
                   {field.value?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {field.value.map((genreName: string) => (
-                        <div
-                          key={genreName}
-                          className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
-                        >
-                          <span>{genreName}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              field.onChange(
-                                field.value?.filter((name: string) => name !== genreName)
-                              );
-                            }}
-                            className="ml-1 hover:text-destructive"
+                      {field.value.map((genreId: number) => {
+                        const genre = allGenres.find(g => g.id === genreId);
+                        return (
+                          <div
+                            key={genreId}
+                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
                           >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                            <span>{genre?.name || `ID: ${genreId}`}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                field.onChange(
+                                  field.value?.filter((id: number) => id !== genreId)
+                                );
+                              }}
+                              className="ml-1 hover:text-destructive"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   <FormMessage />
@@ -434,20 +386,13 @@ export const SongFormDialog = ({
                         <CommandInput
                           placeholder="Tìm kiếm nghệ sĩ..."
                           value={artistSearchQuery}
-                          onValueChange={(value) => {
-                            setArtistSearchQuery(value);
-                            if (value) {
-                              debouncedSearchArtists(value);
-                            } else {
-                              setArtistSearchResults([]);
-                            }
-                          }}
+                          onValueChange={setArtistSearchQuery}
                         />
                         <CommandEmpty>
-                          {isSearchingArtists ? "Đang tìm kiếm..." : "Không tìm thấy nghệ sĩ"}
+                          Không tìm thấy nghệ sĩ
                         </CommandEmpty>
                         <CommandGroup className="max-h-[300px] overflow-y-auto">
-                          {artistSearchResults.map((artist) => (
+                          {filteredArtists.map((artist) => (
                             <CommandItem
                               key={artist.id}
                               value={artist.id.toString()}
@@ -491,7 +436,7 @@ export const SongFormDialog = ({
                   {field.value?.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {field.value.map((artistId: number) => {
-                        const artist = artistSearchResults.find((a) => a.id === artistId);
+                        const artist = allArtists.find((a) => a.id === artistId);
                         if (!artist) return null;
                         return (
                           <div
@@ -526,103 +471,40 @@ export const SongFormDialog = ({
 
             <FormField
               control={form.control}
-              name="avatar"
+              name="audioUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Ảnh bài hát</FormLabel>
+                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới nếu muốn thay đổi)"}</FormLabel>
                   <FormControl>
-                    <div className="space-y-4">
-                      {previewUrl ? (
-                        <div className="relative w-32 h-32">
-                          <img
-                            src={previewUrl}
-                            alt="Preview"
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="icon"
-                            className="absolute -top-2 -right-2"
-                            onClick={handleRemoveImage}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                    <div className="space-y-2">
+                      <Input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          handleFileChange(file);
+                        }}
+                        disabled={uploading}
+                      />
+                      {uploading && (
+                        <div className="space-y-1">
+                          <div className="text-sm text-muted-foreground">
+                            Đang upload... {uploadProgress}%
+                          </div>
+                          <div className="w-full bg-secondary rounded-full h-2">
+                            <div
+                              className="bg-primary h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                          </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-4">
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleFileUpload}
-                            disabled={uploading}
-                          />
-                          {uploading && <span className="text-sm text-muted-foreground">Đang tải...</span>}
+                      )}
+                      {field.value && !uploading && (
+                        <div className="text-sm text-muted-foreground">
+                          ✓ Audio URL: {field.value.substring(0, 50)}...
                         </div>
                       )}
                     </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="album"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Album (không bắt buộc)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Tên album" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="duration"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Thời lượng (giây) *</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="180" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="cover"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cover URL (không bắt buộc)</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://example.com/cover.jpg"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="audio"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Audio URL *</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://example.com/audio.mp3"
-                      {...field}
-                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

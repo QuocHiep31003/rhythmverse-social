@@ -3,20 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Pencil, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Music, 
-  Upload, 
-  Download, 
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight
-} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil, Trash2, Plus, Search, Upload, Download, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter } from "lucide-react";
 import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
@@ -57,6 +46,7 @@ interface PlaylistResponse {
 }
 
 const API_BASE_URL = "http://localhost:8080/api";
+const DEFAULT_IMAGE_URL = "https://tse4.mm.bing.net/th/id/OIP.5Xw-6Hc_loqdGyqQG6G2IgHaEr?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
 
 const AdminPlaylists = () => {
   const navigate = useNavigate();
@@ -71,6 +61,10 @@ const AdminPlaylists = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
+  // Filter state
+  const [filterPublic, setFilterPublic] = useState<string>("all");
+  const [filterDate, setFilterDate] = useState<string>("all");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -79,14 +73,16 @@ const AdminPlaylists = () => {
 
   useEffect(() => {
     loadPlaylists();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, filterPublic, filterDate]);
 
   const loadPlaylists = async () => {
     try {
       setLoading(true);
       const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+      const publicParam = filterPublic !== "all" ? `&isPublic=${filterPublic}` : '';
+      const dateParam = filterDate !== "all" ? `&date=${filterDate}` : '';
       const response = await fetch(
-        `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}`
+        `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}${publicParam}${dateParam}`
       );
       
       if (!response.ok) {
@@ -131,11 +127,12 @@ const AdminPlaylists = () => {
       
       const today = new Date().toISOString().split("T")[0];
       const playlistData = {
-        ...data,
+        name: data.name,
+        description: data.description || "",
         isPublic: data.isPublic ?? true,
         songLimit: data.songLimit ?? 500,
         dateUpdate: today,
-        songIds: selectedPlaylist?.songIds || [],
+        songIds: data.songIds || [],
         coverImage: data.coverImage || null
       };
 
@@ -308,12 +305,7 @@ const AdminPlaylists = () => {
     }
   };
 
-  const getPlaylistCover = (playlist: Playlist) => {
-    if (playlist.coverImage) {
-      return playlist.coverImage;
-    }
-    return `https://via.placeholder.com/300/1e40af/ffffff?text=${encodeURIComponent(playlist.name.charAt(0).toUpperCase())}`;
-  };
+  const getPlaylistCover = (playlist: Playlist) => playlist.coverImage || DEFAULT_IMAGE_URL;
 
   // Pagination handlers
   const goToPage = (page: number) => {
@@ -360,20 +352,35 @@ const AdminPlaylists = () => {
     return pages;
   };
 
+  // Get unique dates (years) from playlists for filter
+  const availableDates = Array.from(
+    new Set(
+      playlists
+        .map(playlist => playlist.dateUpdate ? new Date(playlist.dateUpdate).getFullYear() : null)
+        .filter(year => year !== null)
+    )
+  ).sort((a, b) => (b as number) - (a as number));
+
+  const handleClearFilters = () => {
+    setFilterPublic("all");
+    setFilterDate("all");
+    setSearchQuery("");
+    setCurrentPage(0);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-dark text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Navigation */}
+    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
         <Button 
           variant="ghost" 
           onClick={() => navigate(-1)} 
-          className="mb-6"
+          className="mb-4 self-start"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại
         </Button>
-
-        <div className="space-y-6">
+        
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Playlists</h1>
@@ -384,11 +391,11 @@ const AdminPlaylists = () => {
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}>
                 <Download className="w-4 h-4 mr-2" />
-                Export Excel
+                Export
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="w-4 h-4 mr-2" />
-                Import Excel
+                Import
               </Button>
               <Button onClick={handleCreate}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -397,38 +404,79 @@ const AdminPlaylists = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm playlist..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(0); // Reset về trang đầu khi tìm kiếm
-                    }}
-                    className="pl-10 bg-background/50"
-                  />
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm playlist..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(0);
+                      }}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                    <select 
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
-                  <select 
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Lọc:</span>
+                  </div>
+                  
+                  <Select value={filterPublic} onValueChange={(value) => { setFilterPublic(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Trạng thái" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả</SelectItem>
+                      <SelectItem value="true">Công khai</SelectItem>
+                      <SelectItem value="false">Riêng tư</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filterDate} onValueChange={(value) => { setFilterDate(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Năm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả năm</SelectItem>
+                      {availableDates.map(year => (
+                        <SelectItem key={year} value={year?.toString() || ""}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(filterPublic !== "all" || filterDate !== "all" || searchQuery) && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                      Xóa bộ lọc
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : playlists.length === 0 ? (
@@ -436,152 +484,118 @@ const AdminPlaylists = () => {
                   {searchQuery ? "Không tìm thấy playlist phù hợp" : "Chưa có playlist nào"}
                 </div>
               ) : (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {playlists.map((playlist) => (
-                      <Card key={playlist.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
-                        <div className="relative aspect-square group">
-                          <img
-                            src={getPlaylistCover(playlist)}
-                            alt={playlist.name}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
-                          <div className="absolute bottom-4 left-4 right-4">
-                            <h3 className="font-bold text-lg mb-1 text-white">{playlist.name}</h3>
-                            <p className="text-sm text-gray-300 line-clamp-2">
-                              {playlist.description || "Không có mô tả"}
-                            </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">STT</TableHead>
+                      <TableHead>Playlist</TableHead>
+                      <TableHead>Mô tả</TableHead>
+                      <TableHead>Số bài hát</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {playlists.map((playlist, index) => (
+                      <TableRow key={playlist.id}>
+                        <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={getPlaylistCover(playlist)} 
+                              alt={playlist.name}
+                              onError={(e) => { e.currentTarget.src = DEFAULT_IMAGE_URL; }}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                            <span className="font-medium">{playlist.name}</span>
                           </div>
-                          <div className="absolute top-2 right-2">
-                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              playlist.isPublic 
-                                ? "bg-green-500/20 text-green-300" 
-                                : "bg-orange-500/20 text-orange-300"
-                            }`}>
-                              {playlist.isPublic ? "Công khai" : "Riêng tư"}
-                            </div>
-                          </div>
-                          {/* Hover actions */}
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              onClick={() => handleEdit(playlist)}
-                              className="bg-white/20 hover:bg-white/30 text-white border-0"
-                            >
-                              <Pencil className="w-3 h-3 mr-1" />
-                              Sửa
+                        </TableCell>
+                        <TableCell className="max-w-xs truncate">
+                          {playlist.description || '—'}
+                        </TableCell>
+                        <TableCell>{playlist.songs?.length || 0}</TableCell>
+                        <TableCell>
+                          <span className={playlist.isPublic ? "text-green-400" : "text-yellow-400"}>
+                            {playlist.isPublic ? "Công khai" : "Riêng tư"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(playlist)}>
+                              <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={() => handleDeleteClick(playlist)}
-                              className="bg-red-500/20 hover:bg-red-500/30 text-white border-0"
-                            >
-                              <Trash2 className="w-3 h-3 mr-1" />
-                              Xóa
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(playlist)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </div>
-                        </div>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                              <Music className="w-4 h-4" />
-                              <span>{playlist.songs?.length || 0}/{playlist.songLimit} bài hát</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleEdit(playlist)}
-                                className="h-8 w-8 text-gray-400 hover:text-white"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleDeleteClick(playlist)}
-                                className="h-8 w-8 text-red-400 hover:text-red-300"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                          {playlist.dateUpdate && (
-                            <p className="text-xs text-gray-500 mt-2">
-                              Cập nhật: {playlist.dateUpdate}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </div>
-
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-                      <div className="text-sm text-muted-foreground">
-                        Hiển thị {playlists.length} trên tổng số {totalElements} playlists
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToFirstPage}
-                          disabled={currentPage === 0}
-                          className="h-8 w-8"
-                        >
-                          <ChevronsLeft className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToPreviousPage}
-                          disabled={currentPage === 0}
-                          className="h-8 w-8"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        
-                        {getPageNumbers().map(page => (
-                          <Button
-                            key={page}
-                            variant={currentPage === page ? "default" : "outline"}
-                            size="icon"
-                            onClick={() => goToPage(page)}
-                            className="h-8 w-8"
-                          >
-                            {page + 1}
-                          </Button>
-                        ))}
-                        
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToNextPage}
-                          disabled={currentPage >= totalPages - 1}
-                          className="h-8 w-8"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToLastPage}
-                          disabled={currentPage >= totalPages - 1}
-                          className="h-8 w-8"
-                        >
-                          <ChevronsRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
+          
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
+              <div className="text-sm text-muted-foreground">
+                Hiển thị {playlists.length} trên tổng số {totalElements} playlists
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToFirstPage}
+                  disabled={currentPage === 0}
+                  className="h-8 w-8"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 0}
+                  className="h-8 w-8"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                
+                {getPageNumbers().map(page => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => goToPage(page)}
+                    className="h-8 w-8"
+                  >
+                    {page + 1}
+                  </Button>
+                ))}
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToNextPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToLastPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           <PlaylistFormDialog
             open={formOpen}

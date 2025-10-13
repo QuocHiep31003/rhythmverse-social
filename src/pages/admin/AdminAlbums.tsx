@@ -3,22 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Pencil, 
-  Trash2, 
-  Plus, 
-  Search, 
-  Music2, 
-  Upload, 
-  Download, 
-  ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  Calendar,
-  User
-} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Filter } from "lucide-react";
 import { AlbumFormDialog } from "@/components/admin/AlbumFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { toast } from "@/hooks/use-toast";
@@ -56,6 +43,8 @@ interface Album {
   artist: Artist;
   songs: Song[];
   releaseDate: string;
+  coverImage?: string;
+  artistName?: string;
 }
 
 interface AlbumResponse {
@@ -74,6 +63,7 @@ interface AlbumResponse {
 }
 
 const API_BASE_URL = "http://localhost:8080/api";
+const DEFAULT_IMAGE_URL = "https://tse4.mm.bing.net/th/id/OIP.5Xw-6Hc_loqdGyqQG6G2IgHaEr?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
 
 const AdminAlbums = () => {
   const navigate = useNavigate();
@@ -89,6 +79,10 @@ const AdminAlbums = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
 
+  // Filter state
+  const [filterArtist, setFilterArtist] = useState<string>("all");
+  const [filterYear, setFilterYear] = useState<string>("all");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
@@ -98,14 +92,16 @@ const AdminAlbums = () => {
   useEffect(() => {
     loadAlbums();
     loadArtists();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, filterArtist, filterYear]);
 
   const loadAlbums = async () => {
     try {
       setLoading(true);
       const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
+      const artistParam = filterArtist !== "all" ? `&artistId=${filterArtist}` : '';
+      const yearParam = filterYear !== "all" ? `&year=${filterYear}` : '';
       const response = await fetch(
-        `${API_BASE_URL}/albums?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}`
+        `${API_BASE_URL}/albums?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}${artistParam}${yearParam}`
       );
       
       if (!response.ok) {
@@ -160,12 +156,11 @@ const AdminAlbums = () => {
     try {
       setIsSubmitting(true);
 
-      // Chỉ gửi các trường cơ bản theo API spec
       const albumData = {
         name: data.name,
         artistId: data.artistId,
+        songIds: data.songIds || [],
         releaseDate: data.releaseDate
-        // Không gửi songIds vì API chưa hỗ trợ
       };
 
       if (formMode === "create") {
@@ -336,9 +331,7 @@ const AdminAlbums = () => {
     }
   };
 
-  const getAlbumCover = (album: Album) => {
-    return `https://via.placeholder.com/300/9333ea/ffffff?text=${encodeURIComponent(album.name.charAt(0).toUpperCase())}`;
-  };
+  const getAlbumCover = (album: Album) => album.coverImage || DEFAULT_IMAGE_URL;
 
   // Pagination handlers
   const goToPage = (page: number) => {
@@ -384,20 +377,35 @@ const AdminAlbums = () => {
     return pages;
   };
 
+  // Get unique years from albums for filter
+  const availableYears = Array.from(
+    new Set(
+      albums
+        .map(album => album.releaseDate ? new Date(album.releaseDate).getFullYear() : null)
+        .filter(year => year !== null)
+    )
+  ).sort((a, b) => (b as number) - (a as number));
+
+  const handleClearFilters = () => {
+    setFilterArtist("all");
+    setFilterYear("all");
+    setSearchQuery("");
+    setCurrentPage(0);
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-dark text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Navigation */}
+    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
         <Button 
           variant="ghost" 
           onClick={() => navigate(-1)} 
-          className="mb-6"
+          className="mb-4 self-start"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại
         </Button>
-
-        <div className="space-y-6">
+        
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Quản lý Albums</h1>
@@ -408,11 +416,11 @@ const AdminAlbums = () => {
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleExport}>
                 <Download className="w-4 h-4 mr-2" />
-                Export Excel
+                Export
               </Button>
               <Button variant="outline" onClick={() => setImportOpen(true)}>
                 <Upload className="w-4 h-4 mr-2" />
-                Import Excel
+                Import
               </Button>
               <Button onClick={handleCreate}>
                 <Plus className="w-4 h-4 mr-2" />
@@ -421,38 +429,82 @@ const AdminAlbums = () => {
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm album..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(0);
-                    }}
-                    className="pl-10 bg-background/50"
-                  />
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm album..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(0);
+                      }}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                    <select 
+                      value={pageSize}
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
-                  <select 
-                    value={pageSize}
-                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Lọc:</span>
+                  </div>
+                  
+                  <Select value={filterArtist} onValueChange={(value) => { setFilterArtist(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Nghệ sĩ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả nghệ sĩ</SelectItem>
+                      {artists.map(artist => (
+                        <SelectItem key={artist.id} value={artist.id.toString()}>
+                          {artist.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filterYear} onValueChange={(value) => { setFilterYear(value); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Năm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả năm</SelectItem>
+                      {availableYears.map(year => (
+                        <SelectItem key={year} value={year?.toString() || ""}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(filterArtist !== "all" || filterYear !== "all" || searchQuery) && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                      Xóa bộ lọc
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? (
                 <div className="text-center py-8">Đang tải...</div>
               ) : albums.length === 0 ? (
@@ -460,161 +512,114 @@ const AdminAlbums = () => {
                   {searchQuery ? "Không tìm thấy album phù hợp" : "Chưa có album nào"}
                 </div>
               ) : (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {albums.map((album) => (
-                      <Card key={album.id} className="overflow-hidden bg-card/30 border-border/30 hover:border-primary/50 transition-all duration-300">
-                        <div className="relative aspect-square group">
-                          <img
-                            src={getAlbumCover(album)}
-                            alt={album.name}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent" />
-                          <div className="absolute bottom-4 left-4 right-4">
-                            <h3 className="font-bold text-lg mb-1 text-white">{album.name}</h3>
-                            <p className="text-sm text-gray-300 flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              {album.artist?.name || "Unknown Artist"}
-                            </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-16">STT</TableHead>
+                      <TableHead>Album</TableHead>
+                      <TableHead>Nghệ sĩ</TableHead>
+                      <TableHead>Số bài hát</TableHead>
+                      <TableHead>Ngày phát hành</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {albums.map((album, index) => (
+                      <TableRow key={album.id}>
+                        <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={getAlbumCover(album)} 
+                              alt={album.name}
+                              onError={(e) => { e.currentTarget.src = DEFAULT_IMAGE_URL; }}
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                            <span className="font-medium">{album.name}</span>
                           </div>
-                          {/* Hover actions */}
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2">
-                            <Button 
-                              variant="secondary" 
-                              size="sm" 
-                              onClick={() => handleEdit(album)}
-                              className="bg-white/20 hover:bg-white/30 text-white border-0"
-                            >
-                              <Pencil className="w-3 h-3 mr-1" />
-                              Sửa
+                        </TableCell>
+                        <TableCell>{album.artist?.name || '—'}</TableCell>
+                        <TableCell>{album.songs?.length || 0}</TableCell>
+                        <TableCell>
+                          {album.releaseDate ? new Date(album.releaseDate).toLocaleDateString('vi-VN') : '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(album)}>
+                              <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button 
-                              variant="destructive" 
-                              size="sm"
-                              onClick={() => handleDeleteClick(album)}
-                              className="bg-red-500/20 hover:bg-red-500/30 text-white border-0"
-                            >
-                              <Trash2 className="w-3 h-3 mr-1" />
-                              Xóa
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(album)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
                           </div>
-                        </div>
-                        <CardContent className="p-4">
-                          <div className="space-y-2 mb-3">
-                            <div className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-1 text-gray-400">
-                                <Calendar className="w-3 h-3" />
-                                <span>Ngày phát hành:</span>
-                              </div>
-                              <span className="font-medium text-white">
-                                {new Date(album.releaseDate).toLocaleDateString('vi-VN')}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-400">Bài hát:</span>
-                              <span className="font-medium text-white">{album.songs?.length || 0}</span>
-                            </div>
-                            {album.artist?.country && (
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-400">Quốc gia:</span>
-                                <span className="font-medium text-white">{album.artist.country}</span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                              <Music2 className="w-4 h-4" />
-                              <span>{album.songs?.length || 0} bài hát</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleEdit(album)}
-                                className="h-8 w-8 text-gray-400 hover:text-white"
-                              >
-                                <Pencil className="w-3 h-3" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => handleDeleteClick(album)}
-                                className="h-8 w-8 text-red-400 hover:text-red-300"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </div>
-
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-                      <div className="text-sm text-muted-foreground">
-                        Hiển thị {albums.length} trên tổng số {totalElements} albums
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToFirstPage}
-                          disabled={currentPage === 0}
-                          className="h-8 w-8"
-                        >
-                          <ChevronsLeft className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToPreviousPage}
-                          disabled={currentPage === 0}
-                          className="h-8 w-8"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        
-                        {getPageNumbers().map(page => (
-                          <Button
-                            key={page}
-                            variant={currentPage === page ? "default" : "outline"}
-                            size="icon"
-                            onClick={() => goToPage(page)}
-                            className="h-8 w-8"
-                          >
-                            {page + 1}
-                          </Button>
-                        ))}
-                        
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToNextPage}
-                          disabled={currentPage >= totalPages - 1}
-                          className="h-8 w-8"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={goToLastPage}
-                          disabled={currentPage >= totalPages - 1}
-                          className="h-8 w-8"
-                        >
-                          <ChevronsRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>
+          
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
+              <div className="text-sm text-muted-foreground">
+                Hiển thị {albums.length} trên tổng số {totalElements} albums
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToFirstPage}
+                  disabled={currentPage === 0}
+                  className="h-8 w-8"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToPreviousPage}
+                  disabled={currentPage === 0}
+                  className="h-8 w-8"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                
+                {getPageNumbers().map(page => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => goToPage(page)}
+                    className="h-8 w-8"
+                  >
+                    {page + 1}
+                  </Button>
+                ))}
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToNextPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToLastPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           <AlbumFormDialog
             open={formOpen}

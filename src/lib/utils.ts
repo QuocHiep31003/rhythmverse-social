@@ -1,8 +1,14 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export const DEFAULT_AVATAR_URL = "https://tse4.mm.bing.net/th/id/OIP.5Xw-6Hc_loqdGyqQG6G2IgHaEr?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+export function handleImageError(e: React.SyntheticEvent<HTMLImageElement>) {
+  e.currentTarget.src = DEFAULT_AVATAR_URL;
 }
 
 export function debounce<T extends (...args: any[]) => any>(

@@ -27,19 +27,8 @@ const AdminGenres = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const debouncedLoadGenres = useCallback(
-    debounce(() => {
-      loadGenres();
-    }, 2000),
-    []
-  );
-
   useEffect(() => {
-    if (searchQuery) {
-      debouncedLoadGenres();
-    } else {
-      loadGenres();
-    }
+    loadGenres();
   }, [currentPage, pageSize, searchQuery]);
 
   const loadGenres = async () => {
@@ -100,35 +89,47 @@ const AdminGenres = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-dark text-white p-6">
-      <div className="max-w-7xl mx-auto">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
-        <div className="space-y-6">
+    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start"><ArrowLeft className="w-4 h-4 mr-2" />Quay lại</Button>
+        
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div><h1 className="text-3xl font-bold">Quản lý Thể loại</h1><p className="text-muted-foreground">Tổng số: {totalElements} thể loại • Trang {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export Excel</Button>
-              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import Excel</Button>
+              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
+              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
               <Button onClick={handleCreate}><Plus className="w-4 h-4 mr-2" />Thêm thể loại</Button>
             </div>
           </div>
-          <Card className="bg-card/50 border-border/50">
-            <CardHeader>
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background/50" /></div>
                 <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background/50 border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
               {loading ? <div className="text-center py-8">Đang tải...</div> : genres.length === 0 ? <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div> : (
-                <>
-                  <Table><TableHeader><TableRow><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre) => (<TableRow key={genre.id}><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
-                  {totalPages > 1 && (<div className="flex items-center justify-between mt-6 pt-4 border-t border-border"><div className="text-sm text-muted-foreground">Hiển thị {genres.length} trên tổng số {totalElements} thể loại</div><div className="flex items-center gap-1"><Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>{getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}<Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button><Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button></div></div>)}
-                </>
+                <Table><TableHeader><TableRow><TableHead className="w-16">STT</TableHead><TableHead>Tên thể loại</TableHead><TableHead>Mô tả</TableHead><TableHead className="text-right">Hành động</TableHead></TableRow></TableHeader><TableBody>{genres.map((genre, index) => (<TableRow key={genre.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell><span className="font-medium">{genre.name}</span></TableCell><TableCell><span className="text-muted-foreground">{genre.description || '—'}</span></TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(genre)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(genre)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>))}</TableBody></Table>
               )}
             </CardContent>
           </Card>
+          
+          {/* Pagination outside of scrollable area */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
+              <div className="text-sm text-muted-foreground">Hiển thị {genres.length} trên tổng số {totalElements} thể loại</div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>
+                {getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}
+                <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          )}
         </div>
         <GenreFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedGenre} isLoading={isSubmitting} mode={formMode} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa thể loại?" description={`Bạn có chắc muốn xóa thể loại "${selectedGenre?.name}"?`} isLoading={isSubmitting} />
