@@ -18,6 +18,7 @@ import {
   Music,
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
+import NewAlbums from "@/components/ui/NewAlbums"; // ✅ thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 
@@ -303,6 +304,7 @@ const Index = () => {
               </Card>
 
               {/* Editor's Choice */}
+<<<<<<< HEAD
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2">
@@ -349,6 +351,9 @@ const Index = () => {
                   </Button>
                 </CardContent>
               </Card>
+=======
+ <NewAlbums />
+>>>>>>> feaa6184998d9d00f7c4d718017df9db241274db
             </div>
           </div>
         </section>

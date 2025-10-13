@@ -126,11 +126,25 @@ const AdminAlbums = () => {
         sort: "name,asc"
       });
 
-      if (searchQuery) query.append("search", searchQuery);
-      if (filterArtist !== "all") query.append("artistId", filterArtist);
-      if (filterYear !== "all") query.append("year", filterYear);
+      if (searchQuery) {
+        query.append("search", searchQuery);
+        // compatibility: some backends use "name" as search key
+        query.append("name", searchQuery);
+      }
+      if (filterArtist !== "all") {
+        query.append("artistId", filterArtist);
+        // compatibility: some backends expect "artist" string filter
+        const artistName = artists.find(a => a.id.toString() === filterArtist)?.name;
+        if (artistName) query.append("artist", artistName);
+      }
+      if (filterYear !== "all") {
+        // backend may expect releaseYear instead of year
+        query.append("releaseYear", filterYear);
+      }
 
-      const res = await fetch(`${API_BASE_URL}/albums?${query.toString()}`);
+      const url = `${API_BASE_URL}/albums?${query.toString()}`;
+      try { console.debug("Fetching albums:", url); } catch {}
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch albums");
 
       const data: AlbumResponse = await res.json();
@@ -270,6 +284,39 @@ const AdminAlbums = () => {
     }
   };
 
+  // Import albums from Excel
+  const handleImport = async () => {
+    if (!importFile) {
+      toast({ title: "Lỗi", description: "Vui lòng chọn file Excel để import", variant: "destructive" });
+      return;
+    }
+    const validExt = [".xlsx", ".xls"];
+    const ext = importFile.name.toLowerCase().slice(importFile.name.lastIndexOf("."));
+    if (!validExt.includes(ext)) {
+      toast({ title: "Lỗi", description: "Chỉ hỗ trợ file .xlsx hoặc .xls", variant: "destructive" });
+      return;
+    }
+    try {
+      setIsSubmitting(true);
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await fetch(`${API_BASE_URL}/albums/import`, { method: "POST", body: fd });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || "Import failed");
+      }
+      const msg = await res.text();
+      toast({ title: "Đã import", description: msg || "Import albums thành công" });
+      setImportOpen(false);
+      setImportFile(null);
+      loadAlbums();
+    } catch (e: any) {
+      toast({ title: "Lỗi import", description: e?.message || "Không thể import albums", variant: "destructive" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getAlbumCover = (album: Album) => {
     const a: any = album as any;
     const url =
@@ -322,11 +369,56 @@ const AdminAlbums = () => {
             <Button variant="outline" onClick={handleExport}>
               <Download className="w-4 h-4 mr-2" /> Export
             </Button>
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-2" /> Import
+            </Button>
             <Button onClick={handleCreate}>
               <Plus className="w-4 h-4 mr-2" /> Tạo album
             </Button>
           </div>
         </div>
+
+        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          <DialogContent className="sm:max-w-[425px] bg-card border-border">
+            <DialogHeader>
+              <DialogTitle className="text-white">Import Albums từ Excel</DialogTitle>
+              <DialogDescription className="text-gray-400">
+                Chọn file Excel (.xlsx, .xls) đúng định dạng export để import albums.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm text-gray-400 mb-2">
+                  {importFile ? importFile.name : "Kéo thả hoặc chọn file Excel"}
+                </p>
+                <Input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                  className="bg-background/50"
+                />
+                <p className="text-xs text-gray-500 mt-2">Hỗ trợ: .xlsx, .xls</p>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setImportOpen(false);
+                    setImportFile(null);
+                  }}
+                  disabled={isSubmitting}
+                  className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
+                >
+                  Hủy
+                </Button>
+                <Button onClick={handleImport} disabled={isSubmitting || !importFile} className="bg-primary hover:bg-primary/90">
+                  {isSubmitting ? "Đang import..." : "Import Excel"}
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Content */}
         <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
