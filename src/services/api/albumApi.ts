@@ -72,7 +72,7 @@ export const albumsApi = {
   // ✅ Tạo mới album
   create: async (data: any) => {
     try {
-      const payload = {
+      const payload: any = {
         name: data.name,
         artistId: data.artistId,
         songIds: data.songIds,
@@ -80,6 +80,9 @@ export const albumsApi = {
         coverUrl: data.coverUrl || "",
         description: data.description || "",
       };
+      if (data.coverUrl && String(data.coverUrl).trim() !== "") {
+        payload.cover = data.coverUrl; // compatibility alias
+      }
 
       const response = await fetch(`${API_BASE_URL}/albums`, {
         method: "POST",
@@ -102,7 +105,7 @@ export const albumsApi = {
   // ✅ Cập nhật album
   update: async (id: number, data: any) => {
     try {
-      const payload = {
+      const payload: any = {
         name: data.name,
         artistId: data.artistId,
         songIds: data.songIds,
@@ -110,6 +113,9 @@ export const albumsApi = {
         coverUrl: data.coverUrl,
         description: data.description,
       };
+      if (data.coverUrl && String(data.coverUrl).trim() !== "") {
+        payload.cover = data.coverUrl; // compatibility alias
+      }
 
       const response = await fetch(`${API_BASE_URL}/albums/${id}`, {
         method: "PUT",
