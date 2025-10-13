@@ -28,6 +28,7 @@ import {
 import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
+import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 
 const lyricsMock = [
   { time: 0, text: "♪ Instrumental intro..." },
@@ -85,18 +86,21 @@ const MusicPlayer = () => {
     if (isPlaying) {
       audio.play().catch(err => console.error("Play error:", err));
     }
+    
+    // Reset tracking states for new song
     setHasReportedListen(false);
+    setListenTime(0);
   }, [currentSong]);
+  // Track listen time
   useEffect(() => {
-  if (!audioRef.current) return;
-  if (!isPlaying || hasReportedListen) return;
+    if (!audioRef.current || !isPlaying || hasReportedListen) return;
 
-  const interval = setInterval(() => {
-    setListenTime(prev => prev + 1);
-  }, 1000); // mỗi 1s
+    const interval = setInterval(() => {
+      setListenTime(prev => prev + 1);
+    }, 1000);
 
-  return () => clearInterval(interval);
-}, [isPlaying, hasReportedListen]);
+    return () => clearInterval(interval);
+  }, [isPlaying, hasReportedListen]);
 
   // Update progress
   useEffect(() => {
@@ -156,45 +160,23 @@ const MusicPlayer = () => {
         (i === lyricsMock.length - 1 || currentTime < lyricsMock[i + 1].time)
     );
     if (index !== -1) setCurrentLyric(index);
-    //   if (audioRef.current && currentSong && !hasReportedListen) {
-    // const percent = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-    // if (percent >= 50) {
-    //   // gửi API lưu lượt nghe
-    //   fetch("http://localhost:8080/api/listening-history", {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({
-    //       userId: 1, // hoặc lấy từ context đăng nhập
-    //       songId: currentSong.id,
-    //     }),
-    //   })
-    //     .then(() => console.log("✅ Đã lưu lượt nghe"))
-    //     .catch(err => console.error("❌ Lỗi lưu lượt nghe:", err));
-
-    //   setHasReportedListen(true); // tránh gửi trùng
-    // }
-  // }
   }, [progress]);
+
+  // Record listening history when 50% of song is played
   useEffect(() => {
-  if (!currentSong || hasReportedListen || !audioRef.current) return;
+    if (!currentSong || hasReportedListen || !audioRef.current) return;
 
-  const duration = audioRef.current.duration;
-  if (duration && listenTime >= duration / 2) {
-    // gửi API lưu lượt nghe
-    fetch(`http://localhost:8080/api/listening-history`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: 1, // lấy từ context Auth
-        songId: currentSong.id,
-      }),
-    })
-      .then(() => console.log("✅ Đã lưu lượt nghe"))
-      .catch(err => console.error("❌ Lỗi lưu lượt nghe:", err));
-
-    setHasReportedListen(true); // tránh gửi trùng
-  }
-}, [listenTime, currentSong, hasReportedListen]);
+    const duration = audioRef.current.duration;
+    if (duration && listenTime >= duration / 2) {
+      listeningHistoryApi
+        .recordListen({
+          userId: 1, // TODO: Get from auth context
+          songId: currentSong.id,
+        })
+        .then(() => setHasReportedListen(true))
+        .catch(err => console.error("Failed to record listen:", err));
+    }
+  }, [listenTime, currentSong, hasReportedListen]);
 
   const toggleMute = () => setIsMuted(!isMuted);
   const toggleShuffle = () => setIsShuffled(!isShuffled);
@@ -258,16 +240,22 @@ const MusicPlayer = () => {
                 className="relative group cursor-pointer"
                 onClick={() => setIsExpanded(true)}
               >
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden shadow">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
                   {currentSong.cover ? (
                     <img
                       src={currentSong.cover}
                       alt={currentSong.title}
                       onError={handleImageError}
-                      className="w-full h-full object-cover"
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-300",
+                        isPlaying && "animate-spin-slow"
+                      )}
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                    <div className={cn(
+                      "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                      isPlaying && "animate-spin-slow"
+                    )}>
                       <Music className="w-5 h-5 text-white" />
                     </div>
                   )}
@@ -444,16 +432,22 @@ const MusicPlayer = () => {
           {/* Content */}
           <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-4 overflow-y-auto">
             {/* Cover */}
-            <div className="w-64 h-64 rounded-xl overflow-hidden shadow-lg">
+            <div className="w-64 h-64 rounded-full overflow-hidden shadow-lg">
               {currentSong.cover ? (
                 <img
                   src={currentSong.cover}
                   alt={currentSong.title}
                   onError={handleImageError}
-                  className="w-full h-full object-cover"
+                  className={cn(
+                    "w-full h-full object-cover transition-transform duration-300",
+                    isPlaying && "animate-spin-slow"
+                  )}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                <div className={cn(
+                  "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                  isPlaying && "animate-spin-slow"
+                )}>
                   <Music className="w-20 h-20 text-white" />
                 </div>
               )}
