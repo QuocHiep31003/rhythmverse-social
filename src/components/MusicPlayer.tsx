@@ -64,33 +64,51 @@ const MusicPlayer = () => {
     return Math.floor(audioRef.current.currentTime);
   };
 
-  // Handle play/pause
-  useEffect(() => {
-    if (!audioRef.current) return;
-    
-    if (isPlaying) {
-      audioRef.current.play().catch(err => console.error("Play error:", err));
-    } else {
-      audioRef.current.pause();
-    }
-  }, [isPlaying]);
-
-  // Load new song
+  // Load new song - handle all state resets here
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
     
     const audio = audioRef.current;
-    audio.src = currentSong.audioUrl || currentSong.audio || "";
-    audio.load();
     
-    if (isPlaying) {
-      audio.play().catch(err => console.error("Play error:", err));
-    }
-    
-    // Reset tracking states for new song
+    // Reset all tracking states
     setHasReportedListen(false);
     setListenTime(0);
-  }, [currentSong]);
+    setProgress([0]);
+    setCurrentLyric(0);
+    
+    // Pause current playback first
+    audio.pause();
+    audio.currentTime = 0;
+    
+    // Load new song
+    const audioUrl = currentSong.audioUrl || currentSong.audio || "";
+    if (audio.src !== audioUrl) {
+      audio.src = audioUrl;
+    }
+    
+    // Load and auto-play if needed
+    audio.load();
+    
+    const playPromise = isPlaying ? audio.play() : Promise.resolve();
+    playPromise.catch(err => {
+      console.error("Play error:", err);
+      // If auto-play fails, just log it but don't crash
+    });
+    
+  }, [currentSong, isPlaying]);
+
+  // Handle play/pause toggle (only when user interacts)
+  useEffect(() => {
+    if (!audioRef.current) return;
+    
+    const audio = audioRef.current;
+    
+    if (isPlaying && audio.paused) {
+      audio.play().catch(err => console.error("Play error:", err));
+    } else if (!isPlaying && !audio.paused) {
+      audio.pause();
+    }
+  }, [isPlaying]);
   // Track listen time
   useEffect(() => {
     if (!audioRef.current || !isPlaying || hasReportedListen) return;
@@ -102,40 +120,61 @@ const MusicPlayer = () => {
     return () => clearInterval(interval);
   }, [isPlaying, hasReportedListen]);
 
-  // Update progress
+  // Update progress and handle song end
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const updateProgress = () => {
-      if (audio.duration) {
-        setProgress([(audio.currentTime / audio.duration) * 100]);
+      if (audio.duration && !isNaN(audio.duration)) {
+        const progressPercent = (audio.currentTime / audio.duration) * 100;
+        setProgress([progressPercent]);
       }
     };
 
     const updateDuration = () => {
-      setDuration(audio.duration);
+      if (!isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
     };
 
     const handleEnded = () => {
+      console.log("Song ended, repeat mode:", repeatMode);
+      
       if (repeatMode === "one") {
+        // Repeat current song
         audio.currentTime = 0;
-        audio.play();
-      } else if (repeatMode === "all" || repeatMode === "off") {
+        audio.play().catch(err => console.error("Repeat play error:", err));
+      } else {
+        // Play next song (works for both "all" and "off" modes)
+        console.log("Playing next song");
         playNext();
       }
+    };
+
+    const handleError = (e: Event) => {
+      console.error("Audio error:", e);
+      toast({
+        title: "Playback error",
+        description: "Failed to play audio. Trying next song...",
+        variant: "destructive",
+      });
+      // Try next song on error
+      setTimeout(() => playNext(), 1000);
     };
 
     audio.addEventListener("timeupdate", updateProgress);
     audio.addEventListener("loadedmetadata", updateDuration);
     audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
 
     return () => {
       audio.removeEventListener("timeupdate", updateProgress);
       audio.removeEventListener("loadedmetadata", updateDuration);
       audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
     };
-  }, [repeatMode, playNext]);
+  }, [repeatMode, playNext, toast]);
 
   // Handle volume
   useEffect(() => {
@@ -145,9 +184,13 @@ const MusicPlayer = () => {
 
   // Handle progress seek
   const handleProgressChange = (value: number[]) => {
+    if (!audioRef.current || isNaN(audioRef.current.duration)) return;
+    
     setProgress(value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = (value[0] / 100) * audioRef.current.duration;
+    const newTime = (value[0] / 100) * audioRef.current.duration;
+    
+    if (!isNaN(newTime)) {
+      audioRef.current.currentTime = newTime;
     }
   };
 
