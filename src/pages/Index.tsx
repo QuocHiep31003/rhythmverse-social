@@ -18,7 +18,7 @@ import {
   Music,
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
-import NewAlbums from "@/components/ui/NewAlbums"; // ✅ thêm component mới
+import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 
@@ -198,12 +198,10 @@ const Index = () => {
                         playSong(song);
                       }}
                     >
-                      {/* Số thứ tự */}
                       <span className="w-6 text-sm text-muted-foreground text-center">
                         {index + 1}
                       </span>
 
-                      {/* Ảnh bìa hoặc ảnh mặc định */}
                       <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex items-center justify-center">
                         {song.cover ? (
                           <img
@@ -212,11 +210,10 @@ const Index = () => {
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                         ) : (
-                          <Headphones className="w-6 h-6 text-gray-400" /> // icon tai nghe
+                          <Headphones className="w-6 h-6 text-gray-400" />
                         )}
                       </div>
 
-                      {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm">
                           {song.name}
@@ -226,7 +223,6 @@ const Index = () => {
                         </p>
                       </div>
 
-                      {/* Lượt nghe */}
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
@@ -235,15 +231,6 @@ const Index = () => {
                       </div>
                     </div>
                   ))}
-
-                  {/* <Button
-                    variant="outline"
-                    className="w-full mt-4"
-                    size="sm"
-                    onClick={() => navigate("/trending")}
-                  >
-                    See More Trending
-                  </Button> */}
                 </CardContent>
               </Card>
 
@@ -303,57 +290,8 @@ const Index = () => {
                 </CardContent>
               </Card>
 
-              {/* Editor's Choice */}
-<<<<<<< HEAD
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2">
-                    <Music className="w-5 h-5 text-neon-blue" />
-                    Editor's Albums
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {editorsChoice.map((album) => (
-                    <div
-                      key={album.id}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer"
-                    >
-                      <div className="w-12 h-12 bg-gradient-subtle rounded-lg flex items-center justify-center">
-                        <Music className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate text-sm">
-                          {album.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          by {album.editor}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {album.tracks} tracks
-                        </p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Play className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    className="w-full mt-4"
-                    size="sm"
-                    onClick={() => navigate("/discover")}
-                  >
-                    Browse All Albums
-                  </Button>
-                </CardContent>
-              </Card>
-=======
- <NewAlbums />
->>>>>>> feaa6184998d9d00f7c4d718017df9db241274db
+              {/* Editor's Choice / New Albums */}
+              <NewAlbums />
             </div>
           </div>
         </section>
@@ -364,8 +302,6 @@ const Index = () => {
       </main>
 
       <Footer />
-
-      {/* Mobile Notifications */}
       {isMobile && <MobileNotifications />}
     </div>
   );
