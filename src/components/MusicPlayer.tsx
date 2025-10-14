@@ -337,7 +337,7 @@ const MusicPlayer = () => {
       {currentSong.cover ? (
         <img
           src={currentSong.cover}
-          alt={currentSong.name}
+          alt={currentSong.title}
           onError={handleImageError}
           className={cn(
             "w-full h-full object-cover transition-transform duration-300",
@@ -359,12 +359,10 @@ const MusicPlayer = () => {
 
   <div className="min-w-0 flex-1">
     <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
-      {currentSong.name}
+      {currentSong.title}
     </h4>
     <p className="text-xs sm:text-sm text-muted-foreground truncate">
-      {currentSong.artists && currentSong.artists.length > 0
-        ? currentSong.artists.map((artist) => artist.name).join(", ")
-        : "Unknown Artist"}
+      {currentSong.artist || "Unknown Artist"}
     </p>
   </div>
 

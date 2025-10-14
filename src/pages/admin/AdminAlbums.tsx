@@ -619,8 +619,7 @@ const AdminAlbums = () => {
                   releaseDate: selectedAlbum.releaseDate
                     ? new Date(selectedAlbum.releaseDate).toISOString().split("T")[0]
                     : new Date().toISOString().split("T")[0],
-                  coverUrl: selectedAlbum.coverUrl || "",
-                  description: selectedAlbum.description || ""
+                  coverUrl: selectedAlbum.coverUrl || ""
                 }
               : undefined
           }
