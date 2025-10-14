@@ -110,7 +110,7 @@ const TrendingMusic = () => {
 
         
 
-        {/* Trending Stats */}
+        {/* Trending Stats
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-card/50 border-border/50">
             <CardContent className="p-6">
@@ -149,7 +149,7 @@ const TrendingMusic = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
+        </div> */}
 
         {/* Hot Today với scroll */}
         <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">

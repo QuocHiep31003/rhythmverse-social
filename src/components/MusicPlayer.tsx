@@ -40,7 +40,8 @@ const lyricsMock = [
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, isPlaying, togglePlay, playNext, playPrevious } = useMusic();
+  const { currentSong, isPlaying, togglePlay, playNext, playPrevious } =
+    useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
@@ -54,7 +55,7 @@ const MusicPlayer = () => {
   const [hasReportedListen, setHasReportedListen] = useState(false);
   const [listenTime, setListenTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -69,36 +70,36 @@ const MusicPlayer = () => {
   // Load new song - professional handling with proper state management
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
-    
+
     const audio = audioRef.current;
-    
+
     // Immediately pause and reset current playback
     audio.pause();
     audio.currentTime = 0;
     setIsLoading(true);
-    
+
     // Reset all tracking states for new song
     setHasReportedListen(false);
     setListenTime(0);
     setProgress([0]);
     setCurrentLyric(0);
     setDuration(0);
-    
+
     // Set new audio source
     const audioUrl = currentSong.audioUrl || currentSong.audio || "";
-    
+
     // Only update src if it's different to avoid unnecessary reloads
     if (audio.src !== audioUrl) {
       audio.src = audioUrl;
     }
-    
+
     // Handler for when audio is ready to play
     const handleCanPlay = () => {
       setIsLoading(false);
-      
+
       // Only auto-play if player was in playing state
       if (isPlaying) {
-        audio.play().catch(err => {
+        audio.play().catch((err) => {
           console.error("Auto-play failed:", err);
           toast({
             title: "Playback paused",
@@ -107,7 +108,7 @@ const MusicPlayer = () => {
         });
       }
     };
-    
+
     // Handler for load errors
     const handleLoadError = (e: Event) => {
       console.error("Audio load error:", e);
@@ -117,20 +118,20 @@ const MusicPlayer = () => {
         description: "Failed to load audio. Skipping to next song...",
         variant: "destructive",
       });
-      
+
       // Auto-skip to next song after 2 seconds
       setTimeout(() => {
         playNext();
       }, 2000);
     };
-    
+
     // Attach event listeners
     audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("error", handleLoadError);
-    
+
     // Start loading the audio
     audio.load();
-    
+
     // Cleanup
     return () => {
       audio.removeEventListener("canplay", handleCanPlay);
@@ -141,12 +142,12 @@ const MusicPlayer = () => {
   // Handle play/pause toggle separately
   useEffect(() => {
     if (!audioRef.current || isLoading) return;
-    
+
     const audio = audioRef.current;
-    
+
     if (isPlaying && audio.paused && audio.readyState >= 2) {
       // readyState >= 2 means enough data to play
-      audio.play().catch(err => {
+      audio.play().catch((err) => {
         console.error("Play error:", err);
         toast({
           title: "Playback error",
@@ -163,7 +164,7 @@ const MusicPlayer = () => {
     if (!audioRef.current || !isPlaying || hasReportedListen) return;
 
     const interval = setInterval(() => {
-      setListenTime(prev => prev + 1);
+      setListenTime((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(interval);
@@ -189,11 +190,11 @@ const MusicPlayer = () => {
 
     const handleEnded = () => {
       console.log("Song ended, repeat mode:", repeatMode);
-      
+
       if (repeatMode === "one") {
         // Repeat current song
         audio.currentTime = 0;
-        audio.play().catch(err => console.error("Repeat play error:", err));
+        audio.play().catch((err) => console.error("Repeat play error:", err));
       } else {
         // Play next song (works for both "all" and "off" modes)
         console.log("Playing next song");
@@ -234,10 +235,10 @@ const MusicPlayer = () => {
   // Handle progress seek
   const handleProgressChange = (value: number[]) => {
     if (!audioRef.current || isNaN(audioRef.current.duration)) return;
-    
+
     setProgress(value);
     const newTime = (value[0] / 100) * audioRef.current.duration;
-    
+
     if (!isNaN(newTime)) {
       audioRef.current.currentTime = newTime;
     }
@@ -266,7 +267,7 @@ const MusicPlayer = () => {
           songId: currentSong.id,
         })
         .then(() => setHasReportedListen(true))
-        .catch(err => console.error("Failed to record listen:", err));
+        .catch((err) => console.error("Failed to record listen:", err));
     }
   }, [listenTime, currentSong, hasReportedListen]);
 
@@ -282,7 +283,7 @@ const MusicPlayer = () => {
 
   const handleShare = (type: string) => {
     if (!currentSong) return;
-    
+
     switch (type) {
       case "friends":
         toast({
@@ -297,7 +298,9 @@ const MusicPlayer = () => {
         });
         break;
       case "copy":
-        navigator.clipboard.writeText(`${window.location.origin}/song/${currentSong.id}`);
+        navigator.clipboard.writeText(
+          `${window.location.origin}/song/${currentSong.id}`
+        );
         toast({
           title: "Link copied!",
           description: "Song link copied to clipboard",
@@ -321,66 +324,69 @@ const MusicPlayer = () => {
     <>
       {/* Audio Element */}
       <audio ref={audioRef} />
-      
+
       {/* Mini Player */}
       <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t border-border/40">
         <div className="container mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Song Info */}
-           {/* Song Info */}
-<div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
-  <div
-    className="relative group cursor-pointer"
-    onClick={() => setIsExpanded(true)}
-  >
-    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
-      {currentSong.cover ? (
-        <img
-          src={currentSong.cover}
-          alt={currentSong.title}
-          onError={handleImageError}
-          className={cn(
-            "w-full h-full object-cover transition-transform duration-300",
-            isPlaying && "spin-reverse-slower"
-          )}
-        />
-      ) : (
-        <div
-          className={cn(
-            "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-            isPlaying && "spin-reverse-slower"
-          )}
-        >
-          <Music className="w-5 h-5 text-white" />
-        </div>
-      )}
-    </div>
-  </div>
+            {/* Song Info */}
+            <div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
+              <div
+                className="relative group cursor-pointer"
+                onClick={() => setIsExpanded(true)}
+              >
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
+                  {currentSong.cover ? (
+                    <img
+                      src={currentSong.cover}
+                      alt={currentSong.title}
+                      onError={handleImageError}
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-300",
+                        isPlaying && "spin-reverse-slower"
+                      )}
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                        isPlaying && "spin-reverse-slower"
+                      )}
+                    >
+                      <Music className="w-5 h-5 text-white" />
+                    </div>
+                  )}
+                </div>
+              </div>
 
-  <div className="min-w-0 flex-1">
-    <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
-      {currentSong.title}
-    </h4>
-    <p className="text-xs sm:text-sm text-muted-foreground truncate">
-      {currentSong.artist || "Unknown Artist"}
-    </p>
-  </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
+                  {currentSong.title || currentSong.name}
+                </h4>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                  {currentSong.artist
+                    ? currentSong.artist
+                    : currentSong.artists && currentSong.artists.length > 0
+                    ? currentSong.artists.map((a) => a.name).join(", ")
+                    : "Unknown Artist"}
+                </p>
+              </div>
 
-  <Button
-    variant="ghost"
-    size="icon"
-    className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-    onClick={toggleLike}
-  >
-    <Heart
-      className={cn(
-        "w-4 h-4",
-        isLiked && "fill-red-500 text-red-500"
-      )}
-    />
-  </Button>
-</div>
-
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+                onClick={toggleLike}
+              >
+                <Heart
+                  className={cn(
+                    "w-4 h-4",
+                    isLiked && "fill-red-500 text-red-500"
+                  )}
+                />
+              </Button>
+            </div>
 
             {/* Player Controls */}
             <div className="flex flex-col items-center space-y-2 flex-1 max-w-md order-3 sm:order-none w-full sm:w-auto">
@@ -396,9 +402,9 @@ const MusicPlayer = () => {
                   />
                 </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-8 w-8"
                   onClick={playPrevious}
                 >
@@ -421,9 +427,9 @@ const MusicPlayer = () => {
                   )}
                 </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-8 w-8"
                   onClick={playNext}
                 >
@@ -525,7 +531,11 @@ const MusicPlayer = () => {
           {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-border/40">
             <h3 className="text-lg font-semibold">Now Playing</h3>
-            <Button variant="ghost" size="icon" onClick={() => setIsExpanded(false)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsExpanded(false)}
+            >
               ✕
             </Button>
           </div>
@@ -545,10 +555,12 @@ const MusicPlayer = () => {
                   )}
                 />
               ) : (
-                <div className={cn(
-                  "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-                  isPlaying && "spin-reverse-slower"
-                )}>
+                <div
+                  className={cn(
+                    "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                    isPlaying && "spin-reverse-slower"
+                  )}
+                >
                   <Music className="w-20 h-20 text-white" />
                 </div>
               )}
