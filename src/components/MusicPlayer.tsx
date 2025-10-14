@@ -40,14 +40,11 @@ const lyricsMock = [
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, isPlaying, togglePlay, playNext, playPrevious } =
-    useMusic();
+  const { currentSong, isPlaying, togglePlay, playNext, playPrevious } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
   const [isMuted, setIsMuted] = useState(false);
-  const [isShuffled, setIsShuffled] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<"off" | "one" | "all">("off");
   const [isLiked, setIsLiked] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
@@ -272,7 +269,18 @@ const MusicPlayer = () => {
   }, [listenTime, currentSong, hasReportedListen]);
 
   const toggleMute = () => setIsMuted(!isMuted);
-  const toggleShuffle = () => setIsShuffled(!isShuffled);
+  
+  const handleShuffleToggle = () => {
+    toggleShuffle();
+    toast({
+      title: isShuffled ? "Shuffle off" : "Shuffle on",
+      description: isShuffled 
+        ? "Playing songs in order" 
+        : "Playing songs in random order",
+      duration: 2000,
+    });
+  };
+  
   const toggleLike = () => {
     setIsLiked(!isLiked);
     toast({
@@ -311,8 +319,20 @@ const MusicPlayer = () => {
 
   const cycleRepeat = () => {
     const modes: Array<"off" | "one" | "all"> = ["off", "one", "all"];
+    const modeNames = ["Repeat off", "Repeat one", "Repeat all"];
     const currentIndex = modes.indexOf(repeatMode);
-    setRepeatMode(modes[(currentIndex + 1) % modes.length]);
+    const nextMode = modes[(currentIndex + 1) % modes.length];
+    const nextModeName = modeNames[(currentIndex + 1) % modes.length];
+    
+    setRepeatMode(nextMode);
+    toast({
+      title: nextModeName,
+      description: 
+        nextMode === "one" ? "Current song will repeat" :
+        nextMode === "all" ? "All songs will repeat" :
+        "Songs will play once",
+      duration: 2000,
+    });
   };
 
   // Hide player on login page or if no song is playing
@@ -395,7 +415,7 @@ const MusicPlayer = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={toggleShuffle}
+                  onClick={handleShuffleToggle}
                 >
                   <Shuffle
                     className={cn("w-4 h-4", isShuffled && "text-primary")}
