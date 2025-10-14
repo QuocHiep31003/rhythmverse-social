@@ -64,6 +64,7 @@ const AdminPlaylists = () => {
   // Filter state
   const [filterPublic, setFilterPublic] = useState<string>("all");
   const [filterDate, setFilterDate] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("name-asc");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -73,16 +74,23 @@ const AdminPlaylists = () => {
 
   useEffect(() => {
     loadPlaylists();
-  }, [currentPage, pageSize, searchQuery, filterPublic, filterDate]);
+  }, [currentPage, pageSize, searchQuery, filterPublic, filterDate, sortBy]);
 
   const loadPlaylists = async () => {
     try {
       setLoading(true);
+      
+      // Determine sort parameter
+      let sortParam = "name,asc";
+      if (sortBy === "name-desc") sortParam = "name,desc";
+      else if (sortBy === "date-newest") sortParam = "dateUpdate,desc";
+      else if (sortBy === "date-oldest") sortParam = "dateUpdate,asc";
+      
       const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
       const publicParam = filterPublic !== "all" ? `&isPublic=${filterPublic}` : '';
       const dateParam = filterDate !== "all" ? `&date=${filterDate}` : '';
       const response = await fetch(
-        `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=name,asc${searchParam}${publicParam}${dateParam}`
+        `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=${sortParam}${searchParam}${publicParam}${dateParam}`
       );
       
       if (!response.ok) {
@@ -365,6 +373,7 @@ const AdminPlaylists = () => {
     setFilterPublic("all");
     setFilterDate("all");
     setSearchQuery("");
+    setSortBy("name-asc");
     setCurrentPage(0);
   };
 
@@ -436,7 +445,7 @@ const AdminPlaylists = () => {
                   </div>
                 </div>
                 
-                {/* Filters */}
+                {/* Filters & Sort */}
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
                     <Filter className="w-4 h-4 text-muted-foreground" />
@@ -468,7 +477,25 @@ const AdminPlaylists = () => {
                     </SelectContent>
                   </Select>
 
-                  {(filterPublic !== "all" || filterDate !== "all" || searchQuery) && (
+                  <Select
+                    value={sortBy}
+                    onValueChange={(v) => {
+                      setSortBy(v);
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Sắp xếp" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name-asc">Tên A-Z</SelectItem>
+                      <SelectItem value="name-desc">Tên Z-A</SelectItem>
+                      <SelectItem value="date-newest">Mới nhất</SelectItem>
+                      <SelectItem value="date-oldest">Cũ nhất</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {(filterPublic !== "all" || filterDate !== "all" || searchQuery || sortBy !== "name-asc") && (
                     <Button variant="ghost" size="sm" onClick={handleClearFilters}>
                       Xóa bộ lọc
                     </Button>
