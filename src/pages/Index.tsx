@@ -195,7 +195,7 @@ const Index = () => {
                   </CardTitle>
                 </CardHeader>
 
-                <CardContent className="space-y-3">
+                <CardContent >
                   {topHitsToday.map((song, index) => (
                     <div
                       key={song.id}
