@@ -180,7 +180,14 @@ const Index = () => {
               </Card>
 
               {/* Top Hits Today */}
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+              <Card
+                className="
+    bg-gradient-glass backdrop-blur-sm border-white/10 
+    transition-all duration-500 
+    hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(255,255,255,0.15)]
+    hover:border-white/20 hover:bg-gradient-to-br hover:from-white/10 hover:to-white/5
+  "
+              >
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-neon-pink" />
@@ -192,30 +199,40 @@ const Index = () => {
                   {topHitsToday.map((song, index) => (
                     <div
                       key={song.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer transition-all"
+                      className="
+          flex items-center gap-3 p-2 rounded-lg 
+          group cursor-pointer transition-all 
+          hover:bg-white/5 hover:scale-[1.02] hover:shadow-inner
+        "
                       onClick={() => {
                         setQueue(topHitsToday);
                         playSong(song);
                       }}
                     >
+                      {/* Số thứ tự */}
                       <span className="w-6 text-sm text-muted-foreground text-center">
                         {index + 1}
                       </span>
 
+                      {/* Ảnh bìa hoặc ảnh mặc định */}
                       <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex items-center justify-center">
                         {song.cover ? (
                           <img
                             src={song.cover}
                             alt={song.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            className="
+                w-full h-full object-cover 
+                transition-transform duration-500 group-hover:scale-110
+              "
                           />
                         ) : (
                           <Headphones className="w-6 h-6 text-gray-400" />
                         )}
                       </div>
 
+                      {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate text-sm">
+                        <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
                           {song.name}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
@@ -223,6 +240,7 @@ const Index = () => {
                         </p>
                       </div>
 
+                      {/* Lượt nghe */}
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
@@ -231,6 +249,15 @@ const Index = () => {
                       </div>
                     </div>
                   ))}
+
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4"
+                    size="sm"
+                    onClick={() => navigate("/trending")}
+                  >
+                    See More Trending
+                  </Button>
                 </CardContent>
               </Card>
 

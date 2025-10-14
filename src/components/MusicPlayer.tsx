@@ -327,54 +327,62 @@ const MusicPlayer = () => {
         <div className="container mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Song Info */}
-            <div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
-              <div
-                className="relative group cursor-pointer"
-                onClick={() => setIsExpanded(true)}
-              >
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
-                  {currentSong.cover ? (
-                    <img
-                      src={currentSong.cover}
-                      alt={currentSong.title}
-                      onError={handleImageError}
-                      className={cn(
-                        "w-full h-full object-cover transition-transform duration-300",
-                        isPlaying && "spin-reverse-slower"
-                      )}
-                    />
-                  ) : (
-                    <div className={cn(
-                      "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-                      isPlaying && "spin-reverse-slower"
-                    )}>
-                      <Music className="w-5 h-5 text-white" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="min-w-0 flex-1">
-                <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
-                  {currentSong.title}
-                </h4>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                  {currentSong.artist}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-                onClick={toggleLike}
-              >
-                <Heart
-                  className={cn(
-                    "w-4 h-4",
-                    isLiked && "fill-red-500 text-red-500"
-                  )}
-                />
-              </Button>
-            </div>
+           {/* Song Info */}
+<div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
+  <div
+    className="relative group cursor-pointer"
+    onClick={() => setIsExpanded(true)}
+  >
+    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
+      {currentSong.cover ? (
+        <img
+          src={currentSong.cover}
+          alt={currentSong.name}
+          onError={handleImageError}
+          className={cn(
+            "w-full h-full object-cover transition-transform duration-300",
+            isPlaying && "spin-reverse-slower"
+          )}
+        />
+      ) : (
+        <div
+          className={cn(
+            "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+            isPlaying && "spin-reverse-slower"
+          )}
+        >
+          <Music className="w-5 h-5 text-white" />
+        </div>
+      )}
+    </div>
+  </div>
+
+  <div className="min-w-0 flex-1">
+    <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
+      {currentSong.name}
+    </h4>
+    <p className="text-xs sm:text-sm text-muted-foreground truncate">
+      {currentSong.artists && currentSong.artists.length > 0
+        ? currentSong.artists.map((artist) => artist.name).join(", ")
+        : "Unknown Artist"}
+    </p>
+  </div>
+
+  <Button
+    variant="ghost"
+    size="icon"
+    className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+    onClick={toggleLike}
+  >
+    <Heart
+      className={cn(
+        "w-4 h-4",
+        isLiked && "fill-red-500 text-red-500"
+      )}
+    />
+  </Button>
+</div>
+
 
             {/* Player Controls */}
             <div className="flex flex-col items-center space-y-2 flex-1 max-w-md order-3 sm:order-none w-full sm:w-auto">
