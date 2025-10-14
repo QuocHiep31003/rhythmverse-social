@@ -18,8 +18,10 @@ const TrendingMusic = () => {
   const navigate = useNavigate();
   const { playSong, setQueue } = useMusic();
   const [topHitsToday, setTopHitsToday] = useState<any[]>([]);
+  const [filteredSongs, setFilteredSongs] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
   // Lấy bài hát từ API với phân trang
@@ -30,11 +32,28 @@ const TrendingMusic = () => {
         if (data && data.content) {
           const sorted = data.content.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
           setTopHitsToday(sorted);
+          setFilteredSongs(sorted);
           setTotalPages(data.totalPages || 1);
         }
       })
       .catch((err) => console.error("Lỗi tải bài hát:", err));
   }, [currentPage]);
+
+  // Filter songs based on search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredSongs(topHitsToday);
+    } else {
+      const filtered = topHitsToday.filter((song) => {
+        const searchLower = searchQuery.toLowerCase();
+        const title = (song.name || song.title || "").toLowerCase();
+        const artist = song.artists?.map((a: any) => a.name).join(" ").toLowerCase() || 
+                      (song.artist || "").toLowerCase();
+        return title.includes(searchLower) || artist.includes(searchLower);
+      });
+      setFilteredSongs(filtered);
+    }
+  }, [searchQuery, topHitsToday]);
 
   // Phát nhạc và cập nhật queue
   const handlePlaySong = (song: any, index: number) => {
@@ -45,7 +64,7 @@ const TrendingMusic = () => {
       album: song.album?.name || song.album || "",
       duration: song.duration || 0,
       cover: song.cover || "",
-      audio_url: song.audioUrl || "",
+      audioUrl: song.audioUrl || song.audio || "",
     };
 
     const formattedQueue = topHitsToday.map((s) => ({
@@ -55,7 +74,7 @@ const TrendingMusic = () => {
       album: s.album?.name || s.album || "",
       duration: s.duration || 0,
       cover: s.cover || "",
-      audio_url: s.audioUrl || "",
+      audioUrl: s.audioUrl || s.audio || "",
     }));
 
     setQueue(formattedQueue);
@@ -76,6 +95,17 @@ const TrendingMusic = () => {
           <p className="text-muted-foreground text-lg">
             Discover what's hot right now
           </p>
+          
+          {/* Search Bar */}
+          <div className="mt-4">
+            <input
+              type="text"
+              placeholder="Search songs or artists..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full max-w-md px-4 py-2 rounded-lg bg-card/50 border border-border/50 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
         </div>
 
         
@@ -133,7 +163,12 @@ const TrendingMusic = () => {
           <CardContent>
             <ScrollArea className="h-[600px] pr-4">
               <div className="space-y-3">
-                {topHitsToday.map((song, index) => (
+                {filteredSongs.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">
+                    No songs found
+                  </p>
+                ) : (
+                  filteredSongs.map((song, index) => (
                   <div
                     key={song.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer transition-all"
@@ -171,7 +206,8 @@ const TrendingMusic = () => {
                       </p>
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             </ScrollArea>
 
