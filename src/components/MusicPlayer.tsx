@@ -390,10 +390,15 @@ const MusicPlayer = () => {
 
   <div className="min-w-0 flex-1">
     <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
-      {currentSong.title}
+      {currentSong.title || currentSong.name }
     </h4>
     <p className="text-xs sm:text-sm text-muted-foreground truncate">
-      {currentSong.artist || "Unknown Artist"}
+     {currentSong.artist
+  ? currentSong.artist
+  : currentSong.artists && currentSong.artists.length > 0
+    ? currentSong.artists.map((a) => a.name).join(", ")
+    : "Unknown Artist"}
+
     </p>
   </div>
 
