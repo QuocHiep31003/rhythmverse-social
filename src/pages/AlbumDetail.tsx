@@ -14,9 +14,8 @@ const AlbumDetail = () => {
   const { id } = useParams();
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);
-  const [relatedAlbums, setRelatedAlbums] = useState<any[]>([]);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
-  const { playSong, setQueue } = useMusic();
+  const { playSong, setQueue } = useMusic(); // ✅ lấy context từ MusicProvider
 
   useEffect(() => {
     const fetchAlbum = async () => {
@@ -49,23 +48,7 @@ const AlbumDetail = () => {
 
         setAlbum(normalized);
         setSongs(songList);
-        setQueue(songList);
-
-        // Fetch related albums by same artist
-        if (normalized.artistId) {
-          try {
-            const allAlbums = await albumsApi.getAll({ size: 100 });
-            const otherAlbums = allAlbums.content
-              .filter((a: any) => 
-                a.artist?.id === normalized.artistId && 
-                a.id !== normalized.id
-              )
-              .slice(0, 6);
-            setRelatedAlbums(otherAlbums);
-          } catch (err) {
-            console.error("Error fetching related albums:", err);
-          }
-        }
+        setQueue(songList); // ✅ set danh sách queue cho player
       } catch (error) {
         console.error("Error fetching album:", error);
       }
@@ -199,6 +182,7 @@ const AlbumDetail = () => {
                     {song.duration || "-"}
                   </div>
 
+                  {/* ❤️ + share luôn hiện (không hover) */}
                   <div className="flex items-center gap-2 transition-opacity">
                     <Button
                       variant="ghost"
@@ -228,48 +212,6 @@ const AlbumDetail = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* ===== RELATED ALBUMS ===== */}
-        {relatedAlbums.length > 0 && (
-          <div className="mt-12">
-            <h2 className="text-2xl font-bold mb-6">
-              More from {album?.artist}
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {relatedAlbums.map((relAlbum: any) => (
-                <a
-                  key={relAlbum.id}
-                  href={`/album/${relAlbum.id}`}
-                  className="group cursor-pointer"
-                >
-                  <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:border-primary/50 transition-all overflow-hidden">
-                    <div className="aspect-square relative overflow-hidden">
-                      {relAlbum.coverUrl || relAlbum.cover ? (
-                        <img
-                          src={relAlbum.coverUrl || relAlbum.cover}
-                          alt={relAlbum.name}
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-primary flex items-center justify-center">
-                          <Music className="w-12 h-12 text-white/50" />
-                        </div>
-                      )}
-                    </div>
-                    <CardContent className="p-3">
-                      <p className="font-medium truncate">{relAlbum.name}</p>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {relAlbum.releaseDate
-                          ? new Date(relAlbum.releaseDate).getFullYear()
-                          : ""}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </a>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
       <Footer />
     </div>

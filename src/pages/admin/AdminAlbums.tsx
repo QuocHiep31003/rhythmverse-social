@@ -97,7 +97,6 @@ const AdminAlbums = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterArtist, setFilterArtist] = useState<string>("all");
   const [filterYear, setFilterYear] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("name-asc");
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -116,54 +115,40 @@ const AdminAlbums = () => {
   useEffect(() => {
     loadAlbums();
     loadArtists();
-  }, [currentPage, pageSize, searchQuery, filterArtist, filterYear, sortBy]);
+  }, [currentPage, pageSize, searchQuery, filterArtist, filterYear]);
 
   const loadAlbums = async () => {
     try {
       setLoading(true);
-      
-      // Determine sort parameter
-      let sortParam = "name,asc";
-      if (sortBy === "name-desc") sortParam = "name,desc";
-      else if (sortBy === "date-newest") sortParam = "releaseDate,desc";
-      else if (sortBy === "date-oldest") sortParam = "releaseDate,asc";
-      
       const query = new URLSearchParams({
         page: String(currentPage),
         size: String(pageSize),
-        sort: sortParam
+        sort: "name,asc"
       });
 
       if (searchQuery) {
         query.append("search", searchQuery);
+        // compatibility: some backends use "name" as search key
         query.append("name", searchQuery);
       }
       if (filterArtist !== "all") {
         query.append("artistId", filterArtist);
+        // compatibility: some backends expect "artist" string filter
         const artistName = artists.find(a => a.id.toString() === filterArtist)?.name;
         if (artistName) query.append("artist", artistName);
       }
       if (filterYear !== "all") {
+        // backend may expect releaseYear instead of year
         query.append("releaseYear", filterYear);
       }
 
       const url = `${API_BASE_URL}/albums?${query.toString()}`;
+      try { console.debug("Fetching albums:", url); } catch {}
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch albums");
 
       const data: AlbumResponse = await res.json();
-      
-      // Client-side filtering for artist name in search
-      let filteredContent = data.content;
-      if (searchQuery) {
-        const lowerQuery = searchQuery.toLowerCase();
-        filteredContent = data.content.filter((album) => 
-          album.name.toLowerCase().includes(lowerQuery) ||
-          album.artist?.name?.toLowerCase().includes(lowerQuery)
-        );
-      }
-      
-      setAlbums(filteredContent);
+      setAlbums(data.content);
       setTotalElements(data.totalElements);
       setTotalPages(data.totalPages);
     } catch (e) {
@@ -362,7 +347,6 @@ const AdminAlbums = () => {
     setFilterArtist("all");
     setFilterYear("all");
     setSearchQuery("");
-    setSortBy("name-asc");
     setCurrentPage(0);
   };
 
@@ -445,7 +429,7 @@ const AdminAlbums = () => {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Tìm kiếm album hoặc nghệ sĩ..."
+                    placeholder="Tìm kiếm album..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
@@ -454,26 +438,9 @@ const AdminAlbums = () => {
                     className="pl-10 bg-background/50"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
-                  <select 
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setCurrentPage(0);
-                    }}
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
-                </div>
               </div>
 
-              {/* Filters & Sort */}
+              {/* Filters */}
               <div className="flex flex-wrap items-center gap-3">
                 <Filter className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Lọc:</span>
@@ -518,25 +485,7 @@ const AdminAlbums = () => {
                   </SelectContent>
                 </Select>
 
-                <Select
-                  value={sortBy}
-                  onValueChange={(v) => {
-                    setSortBy(v);
-                    setCurrentPage(0);
-                  }}
-                >
-                  <SelectTrigger className="w-[180px] bg-background/50">
-                    <SelectValue placeholder="Sắp xếp" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name-asc">Tên A-Z</SelectItem>
-                    <SelectItem value="name-desc">Tên Z-A</SelectItem>
-                    <SelectItem value="date-newest">Mới nhất</SelectItem>
-                    <SelectItem value="date-oldest">Cũ nhất</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {(filterArtist !== "all" || filterYear !== "all" || searchQuery || sortBy !== "name-asc") && (
+                {(filterArtist !== "all" || filterYear !== "all" || searchQuery) && (
                   <Button variant="ghost" size="sm" onClick={handleClearFilters}>
                     Xóa bộ lọc
                   </Button>
