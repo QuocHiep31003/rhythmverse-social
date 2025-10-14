@@ -38,6 +38,7 @@ import AdminAlbums from "./pages/admin/AdminAlbums";
 import AdminArtists from "./pages/admin/AdminArtists";
 import AdminGenres from "./pages/admin/AdminGenres";
 import AdminSettings from "./pages/admin/AdminSettings";
+import TestAuth from "./pages/TestAuth";
 
 const queryClient = new QueryClient();
 
@@ -73,7 +74,9 @@ const App = () => (
             <Route path="*" element={
               <AppLayout>
                 <Routes>
+                
                   <Route path="/" element={<Index />} />
+                  <Route path="/testauth" element={<TestAuth />} />
                   <Route path="/discover" element={<Discover />} />
                   <Route path="/playlist" element={<Playlist />} />
                   <Route path="/playlists" element={<PlaylistLibrary />} />

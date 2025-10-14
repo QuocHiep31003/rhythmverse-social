@@ -697,41 +697,103 @@ export const genresApi = {
 };
 
 // Auth API
+// Auth API
 export const authApi = {
   register: async (data: { name: string; email: string; password: string }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Registration failed');
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage || 'Registration failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error in authApi.register:', error);
+      throw error;
     }
-
-    return await response.json();
   },
 
   login: async (data: { email: string; password: string }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Login failed');
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage || 'Login failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error in authApi.login:', error);
+      throw error;
     }
+  },
 
-    return await response.json();
+  // Get current authenticated user
+  getCurrentUser: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage || 'Failed to fetch current user');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Error in authApi.getCurrentUser:', error);
+      throw error;
+    }
+  },
+
+  // Logout user
+  logout: () => {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+      }
+    } catch (error) {
+      console.error('Error in authApi.logout:', error);
+    }
+  },
+
+  // Optional: Verify token
+  verifyToken: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in authApi.verifyToken:', error);
+      return false;
+    }
   },
 };
+
 
 // Stats API
 export const statsApi = {
