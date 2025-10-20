@@ -748,3 +748,17 @@ export const statsApi = {
     };
   },
 };
+export const searchApi = {
+  getAll: async (keyword: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/search?search=${encodeURIComponent(keyword)}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch search results");
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching search results:", error);
+      return { artists: [], songs: [], albums: [] };
+    }
+  },
+};
