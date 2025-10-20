@@ -162,23 +162,23 @@ export const usersApi = {
   importExcel: async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const token = getAuthToken();
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
     // Don't set Content-Type for FormData, browser will set it with boundary
-    
+
     const response = await fetch(`${API_BASE_URL}/user/import`, {
       method: 'POST',
       headers,
       body: formData,
     });
-    
+
     if (!response.ok) {
       const message = await parseErrorResponse(response);
       throw new Error(message || 'Failed to import users');
     }
-    
+
     // Return text response as backend returns "Users imported successfully."
     return await response.text();
   },
@@ -215,7 +215,7 @@ export const songsApi = {
       return data;
     } catch (error) {
       console.error("Error fetching songs:", error);
-      await delay(500);
+
       return {
         content: mockSongs,
         totalElements: mockSongs.length,
