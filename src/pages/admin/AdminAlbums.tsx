@@ -118,64 +118,68 @@ const AdminAlbums = () => {
     loadArtists();
   }, [currentPage, pageSize, searchQuery, filterArtist, filterYear, sortBy]);
 
-  const loadAlbums = async () => {
-    try {
-      setLoading(true);
-      
-      // Determine sort parameter
-      let sortParam = "name,asc";
-      if (sortBy === "name-desc") sortParam = "name,desc";
-      else if (sortBy === "date-newest") sortParam = "releaseDate,desc";
-      else if (sortBy === "date-oldest") sortParam = "releaseDate,asc";
-      
-      const query = new URLSearchParams({
-        page: String(currentPage),
-        size: String(pageSize),
-        sort: sortParam
-      });
+const loadAlbums = async () => {
+  try {
+    setLoading(true);
 
-      if (searchQuery) {
-        query.append("search", searchQuery);
-        query.append("name", searchQuery);
-      }
-      if (filterArtist !== "all") {
-        query.append("artistId", filterArtist);
-        const artistName = artists.find(a => a.id.toString() === filterArtist)?.name;
-        if (artistName) query.append("artist", artistName);
-      }
-      if (filterYear !== "all") {
-        query.append("releaseYear", filterYear);
-      }
+    // === Xử lý sắp xếp ===
+    let sortParam = "name,asc";
+    if (sortBy === "name-desc") sortParam = "name,desc";
+    else if (sortBy === "date-newest") sortParam = "releaseDate,desc";
+    else if (sortBy === "date-oldest") sortParam = "releaseDate,asc";
 
-      const url = `${API_BASE_URL}/albums?${query.toString()}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch albums");
+    // === Nếu có searchQuery → thử tìm theo tên nghệ sĩ trước ===
+    if (searchQuery && searchQuery.trim().length > 0) {
+      try {
+        const artistSearchUrl = `${API_BASE_URL}/albums/search/artist?artistName=${encodeURIComponent(searchQuery)}`;
+        const artistRes = await fetch(artistSearchUrl);
 
-      const data: AlbumResponse = await res.json();
-      
-      // Client-side filtering for artist name in search
-      let filteredContent = data.content;
-      if (searchQuery) {
-        const lowerQuery = searchQuery.toLowerCase();
-        filteredContent = data.content.filter((album) => 
-          album.name.toLowerCase().includes(lowerQuery) ||
-          album.artist?.name?.toLowerCase().includes(lowerQuery)
-        );
+        if (artistRes.ok) {
+          const artistAlbums: Album[] = await artistRes.json();
+          if (artistAlbums && artistAlbums.length > 0) {
+            setAlbums(artistAlbums);
+            setTotalElements(artistAlbums.length);
+            setTotalPages(1);
+            return; // ✅ Dừng tại đây (đã load theo nghệ sĩ)
+          }
+        }
+      } catch {
+        console.warn("Không tìm thấy album theo nghệ sĩ, fallback sang tìm theo tên album...");
       }
-      
-      setAlbums(filteredContent);
-      setTotalElements(data.totalElements);
-      setTotalPages(data.totalPages);
-    } catch (e) {
-      toast({
-        title: "Lỗi",
-        description: "Không thể tải danh sách albums",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
     }
-  };
+
+    // === Nếu không có nghệ sĩ trùng → fallback tìm theo tên album (mặc định) ===
+    const query = new URLSearchParams({
+      page: String(currentPage),
+      size: String(pageSize),
+      sort: sortParam,
+    });
+
+    if (searchQuery) query.append("search", searchQuery);
+    if (filterArtist !== "all") query.append("artistId", filterArtist);
+    if (filterYear !== "all") query.append("releaseYear", filterYear);
+
+    const albumsUrl = `${API_BASE_URL}/albums?${query.toString()}`;
+    const res = await fetch(albumsUrl);
+    if (!res.ok) throw new Error("Không thể tải danh sách albums");
+
+    const data: AlbumResponse = await res.json();
+
+    setAlbums(data.content);
+    setTotalElements(data.totalElements);
+    setTotalPages(data.totalPages);
+  } catch (error) {
+    console.error("Lỗi loadAlbums:", error);
+    toast({
+      title: "Lỗi",
+      description: "Không thể tải danh sách albums",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const loadArtists = async () => {
     try {

@@ -1,22 +1,31 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
 import ShareButton from "@/components/ShareButton";
 import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Heart, MoreHorizontal, Clock, Calendar, Music } from "lucide-react";
+import {
+  Play,
+  Heart,
+  MoreHorizontal,
+  Clock,
+  Calendar,
+  Music,
+} from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
-import { useMusic } from "@/contexts/MusicContext"; // ✅ import Music context
+import { useMusic } from "@/contexts/MusicContext";
 
 const AlbumDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);
   const [relatedAlbums, setRelatedAlbums] = useState<any[]>([]);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
-  const { playSong, setQueue } = useMusic();
+
+  const { playSong, setQueue, currentSong, isPlaying } = useMusic();
 
   useEffect(() => {
     const fetchAlbum = async () => {
@@ -41,7 +50,7 @@ const AlbumDetail = () => {
               title: s.name,
               artist: s.artists?.[0]?.name ?? normalized.artist,
               album: normalized.title,
-              duration: 0,
+              duration: s.duration ?? 0,
               cover: normalized.cover,
               audioUrl: s.audioUrl ?? "",
             }))
@@ -51,14 +60,15 @@ const AlbumDetail = () => {
         setSongs(songList);
         setQueue(songList);
 
-        // Fetch related albums by same artist
+        // Load related albums cùng nghệ sĩ
         if (normalized.artistId) {
           try {
             const allAlbums = await albumsApi.getAll({ size: 100 });
             const otherAlbums = allAlbums.content
-              .filter((a: any) => 
-                a.artist?.id === normalized.artistId && 
-                a.id !== normalized.id
+              .filter(
+                (a: any) =>
+                  a.artist?.id === normalized.artistId &&
+                  a.id !== normalized.id
               )
               .slice(0, 6);
             setRelatedAlbums(otherAlbums);
@@ -74,11 +84,11 @@ const AlbumDetail = () => {
   }, [id]);
 
   const handlePlayAlbum = () => {
-    if (songs.length > 0) playSong(songs[0]); // ✅ bắt đầu bài đầu tiên
+    if (songs.length > 0) playSong(songs[0]);
   };
 
   const handlePlaySong = (song: any) => {
-    playSong(song); // ✅ phát bài được chọn
+    playSong(song);
   };
 
   const toggleLike = (songId: string) => {
@@ -97,7 +107,11 @@ const AlbumDetail = () => {
         <div className="flex flex-col md:flex-row gap-8 mb-8">
           <div className="w-full md:w-80 h-80 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow overflow-hidden">
             {album?.cover ? (
-              <img src={album.cover} alt={album.title} className="w-full h-full object-cover" />
+              <img
+                src={album.cover}
+                alt={album.title}
+                className="w-full h-full object-cover"
+              />
             ) : (
               <Music className="w-32 h-32 text-white" />
             )}
@@ -152,7 +166,7 @@ const AlbumDetail = () => {
           </div>
         </div>
 
-        {/* ===== SONGS LIST ===== */}
+        {/* ===== SONG LIST ===== */}
         <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
           <CardContent className="p-0">
             <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-4 border-b border-border/20 text-sm text-muted-foreground">
@@ -168,59 +182,84 @@ const AlbumDetail = () => {
             </div>
 
             {songs.length > 0 ? (
-              songs.map((song, index) => (
-                <div
-                  key={song.id}
-                  className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-4 hover:bg-white/5 transition-colors cursor-pointer"
-                  onClick={() => handlePlaySong(song)}
-                >
-                  <div className="flex items-center justify-center text-muted-foreground">
-                    {index + 1}
-                  </div>
+              songs.map((song, index) => {
+                const isActive = currentSong?.id === song.id;
+                return (
+                  <div
+                    key={song.id}
+                    className={`grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-4 transition-colors cursor-pointer ${
+                      isActive ? "bg-white/10" : "hover:bg-white/5"
+                    }`}
+                    onClick={() => handlePlaySong(song)}
+                  >
+                    {/* --- Cột số thứ tự hoặc equalizer --- */}
+                    <div className="flex items-center justify-center w-6">
+                      {isActive ? (
+                        <div className="flex items-end gap-[2px] h-4">
+                          <div className="w-[2px] bg-primary animate-[equalizer_1s_ease-in-out_infinite]" />
+                          <div className="w-[2px] bg-primary animate-[equalizer_1.3s_ease-in-out_infinite]" />
+                          <div className="w-[2px] bg-primary animate-[equalizer_0.9s_ease-in-out_infinite]" />
+                          <div className="w-[2px] bg-primary animate-[equalizer_1.2s_ease-in-out_infinite]" />
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {index + 1}
+                        </span>
+                      )}
+                    </div>
 
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium truncate">{song.title}</p>
+                    {/* --- Tên bài hát --- */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div>
+                        <p
+                          className={`font-medium truncate ${
+                            isActive ? "text-primary" : ""
+                          }`}
+                        >
+                          {song.title}
+                        </p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {song.artist}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {song.artist}
-                      </p>
+                    </div>
+
+                    {/* --- Ngày phát hành --- */}
+                    <div className="hidden sm:flex items-center justify-center text-sm text-muted-foreground">
+                      {album?.releaseDate
+                        ? new Date(album.releaseDate).toLocaleDateString()
+                        : ""}
+                    </div>
+
+                    {/* --- Thời lượng --- */}
+                    <div className="flex items-center justify-center text-sm text-muted-foreground">
+                      {song.duration || "-"}
+                    </div>
+
+                    {/* --- Like / Share --- */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleLike(song.id);
+                        }}
+                      >
+                        <Heart
+                          className={`w-4 h-4 ${
+                            likedSongs.includes(song.id)
+                              ? "fill-red-500 text-red-500"
+                              : ""
+                          }`}
+                        />
+                      </Button>
+                      <ShareButton title={song.title} type="song" />
                     </div>
                   </div>
-
-                  <div className="hidden sm:flex items-center justify-center text-sm text-muted-foreground">
-                    {album?.releaseDate
-                      ? new Date(album.releaseDate).toLocaleDateString()
-                      : ""}
-                  </div>
-
-                  <div className="flex items-center justify-center text-sm text-muted-foreground">
-                    {song.duration || "-"}
-                  </div>
-
-                  <div className="flex items-center gap-2 transition-opacity">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleLike(song.id);
-                      }}
-                    >
-                      <Heart
-                        className={`w-4 h-4 ${
-                          likedSongs.includes(song.id)
-                            ? "fill-red-500 text-red-500"
-                            : ""
-                        }`}
-                      />
-                    </Button>
-                    <ShareButton title={song.title} type="song" />
-                  </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="p-6 text-center text-muted-foreground">
                 No songs available.
@@ -237,10 +276,18 @@ const AlbumDetail = () => {
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {relatedAlbums.map((relAlbum: any) => (
-                <a
+                <div
                   key={relAlbum.id}
-                  href={`/album/${relAlbum.id}`}
+                  onClick={() => navigate(`/album/${relAlbum.id}`)}
                   className="group cursor-pointer"
+                  role="link"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(`/album/${relAlbum.id}`);
+                    }
+                  }}
                 >
                   <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:border-primary/50 transition-all overflow-hidden">
                     <div className="aspect-square relative overflow-hidden">
@@ -265,7 +312,7 @@ const AlbumDetail = () => {
                       </p>
                     </CardContent>
                   </Card>
-                </a>
+                </div>
               ))}
             </div>
           </div>
