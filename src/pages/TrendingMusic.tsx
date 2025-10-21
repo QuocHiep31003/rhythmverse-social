@@ -6,6 +6,7 @@ import { TrendingUp, Headphones } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
+import { formatPlayCount } from "@/lib/utils";
 
 const TrendingMusic = () => {
   const navigate = useNavigate();
@@ -169,7 +170,7 @@ const TrendingMusic = () => {
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
-                          {song.playCount || 0}
+                          {formatPlayCount(song.playCount || 0)}
                         </p>
                       </div>
                     </div>
