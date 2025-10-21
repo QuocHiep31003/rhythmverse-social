@@ -58,7 +58,18 @@ const Index = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data && Array.isArray(data)) {
-          setTopHitsToday(data.slice(0, 5));
+          // Format theo MusicContext
+          const formatted = data.slice(0, 5).map((song) => ({
+            id: song.id,
+            title: song.name || song.title,
+            artist: song.artists?.map((a) => a.name).join(", ") || "Unknown",
+            album: song.album?.name || song.album || "",
+            duration: song.duration || 0,
+            cover: song.cover || "",
+            audioUrl: song.audioUrl || song.audio || "",
+            playCount: song.playCount || 0,
+          }));
+          setTopHitsToday(formatted);
         }
       })
       .catch((err) => console.error("Lỗi tải trending:", err));
@@ -193,7 +204,7 @@ const Index = () => {
                   </CardTitle>
                 </CardHeader>
 
-                <CardContent >
+                <CardContent className="space-y-2">
                   {topHitsToday.map((song, index) => (
                     <div
                       key={song.id}
@@ -217,7 +228,7 @@ const Index = () => {
                         {song.cover ? (
                           <img
                             src={song.cover}
-                            alt={song.name}
+                            alt={song.title}
                             className="
                 w-full h-full object-cover 
                 transition-transform duration-500 group-hover:scale-110
@@ -231,14 +242,14 @@ const Index = () => {
                       {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {song.name}
+                          {song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artists?.map((a) => a.name).join(", ")}
+                          {song.artist}
                         </p>
                       </div>
 
-                      {/* Lượt nghe */}
+                      {/* Lượt nghe tổng */}
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
