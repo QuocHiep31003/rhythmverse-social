@@ -53,7 +53,8 @@ const Index = () => {
   const [topHitsToday, setTopHitsToday] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:8080/api/songs")
+    // Fetch tất cả bài hát để sort toàn bộ
+    fetch("http://localhost:8080/api/songs?size=1000")
       .then((res) => res.json())
       .then((data) => {
         if (data && data.content) {

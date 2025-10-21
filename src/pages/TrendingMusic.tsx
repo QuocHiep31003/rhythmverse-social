@@ -11,35 +11,36 @@ import { formatPlayCount } from "@/lib/utils";
 const TrendingMusic = () => {
   const navigate = useNavigate();
   const { playSong, setQueue } = useMusic();
-  const [topHitsToday, setTopHitsToday] = useState<any[]>([]);
+  const [allSongs, setAllSongs] = useState<any[]>([]); // Toàn bộ bài hát đã sort
   const [filteredSongs, setFilteredSongs] = useState<any[]>([]);
+  const [displayedSongs, setDisplayedSongs] = useState<any[]>([]); // Bài hát hiển thị theo page
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
-  // Fetch API với phân trang
+  // Fetch toàn bộ bài hát và sort một lần
   useEffect(() => {
-    fetch(`http://localhost:8080/api/songs?page=${currentPage - 1}&size=${itemsPerPage}`)
+    fetch(`http://localhost:8080/api/songs?size=1000`)
       .then((res) => res.json())
       .then((data) => {
         if (data && data.content) {
           const sorted = data.content.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-          setTopHitsToday(sorted);
+          setAllSongs(sorted);
           setFilteredSongs(sorted);
-          setTotalPages(data.totalPages || 1);
+          setTotalPages(Math.ceil(sorted.length / itemsPerPage));
         }
       })
       .catch((err) => console.error("Lỗi tải bài hát:", err));
-  }, [currentPage]);
+  }, []);
 
   // Lọc theo tìm kiếm
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setFilteredSongs(topHitsToday);
+      setFilteredSongs(allSongs);
     } else {
       const searchLower = searchQuery.toLowerCase();
-      const filtered = topHitsToday.filter((song) => {
+      const filtered = allSongs.filter((song) => {
         const title = (song.name || song.title || "").toLowerCase();
         const artist =
           song.artists?.map((a: any) => a.name).join(" ").toLowerCase() ||
@@ -48,7 +49,15 @@ const TrendingMusic = () => {
       });
       setFilteredSongs(filtered);
     }
-  }, [searchQuery, topHitsToday]);
+  }, [searchQuery, allSongs]);
+
+  // Phân trang client-side
+  useEffect(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    setDisplayedSongs(filteredSongs.slice(startIndex, endIndex));
+    setTotalPages(Math.ceil(filteredSongs.length / itemsPerPage));
+  }, [currentPage, filteredSongs]);
 
   // Play nhạc
   const handlePlaySong = (song: any, index: number) => {
@@ -62,7 +71,7 @@ const TrendingMusic = () => {
       audioUrl: song.audioUrl || song.audio || "",
     };
 
-    const formattedQueue = topHitsToday.map((s) => ({
+    const formattedQueue = allSongs.map((s) => ({
       id: s.id,
       title: s.name || s.title,
       artist: s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
@@ -122,12 +131,12 @@ const TrendingMusic = () => {
           <CardContent>
             <ScrollArea className="h-[600px] pr-4">
               <div className="space-y-2">
-                {filteredSongs.length === 0 ? (
+                {displayedSongs.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
                     No songs found
                   </p>
                 ) : (
-                  filteredSongs.map((song, index) => (
+                  displayedSongs.map((song, index) => (
                     <div
                       key={song.id}
                       className="
