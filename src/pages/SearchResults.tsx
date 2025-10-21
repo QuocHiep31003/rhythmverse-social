@@ -15,18 +15,13 @@ import {
   User,
   Album,
   ListMusic,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Repeat,
-  Shuffle,
-  Volume2,
-  Share2
 } from "lucide-react";
 import { searchApi } from "@/services/api";
 import { useSearchParams } from "react-router-dom";
+import { useMusic } from "@/contexts/MusicContext";
 
 const SearchResults = () => {
+  const { playSong: playGlobalSong, setQueue } = useMusic();
   const [searchParams] = useSearchParams();
   const queryParam = searchParams.get("query") || ""; // lấy giá trị query trên URL
   const [searchQuery, setSearchQuery] = useState(queryParam);
@@ -37,8 +32,6 @@ const SearchResults = () => {
   });
   const [loading, setLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
-  const [currentSong, setCurrentSong] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   useEffect(() => {
     if (queryParam) {
       setSearchQuery(queryParam);
@@ -113,13 +106,29 @@ const SearchResults = () => {
     // { id: "playlists", label: "Playlists", count: searchResults.playlists.length }
   ];
 
-  const playSong = (song) => {
-    setCurrentSong(song);
-    setIsPlaying(true);
-  };
+  const playSong = (song: any) => {
+    const formattedSong = {
+      id: song.id,
+      title: song.name || song.title,
+      artist: song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
+      album: song.album?.name || "",
+      duration: song.duration || 0,
+      cover: song.urlImageAlbum || song.cover || "",
+      audioUrl: song.audioUrl || song.audio || "",
+    };
 
-  const togglePlayPause = () => {
-    setIsPlaying(!isPlaying);
+    const formattedQueue = searchResults.songs.map((s: any) => ({
+      id: s.id,
+      title: s.name || s.title,
+      artist: s.artists?.map((a: any) => a.name).join(", ") || "Unknown",
+      album: s.album?.name || "",
+      duration: s.duration || 0,
+      cover: s.urlImageAlbum || s.cover || "",
+      audioUrl: s.audioUrl || s.audio || "",
+    }));
+
+    setQueue(formattedQueue);
+    playGlobalSong(formattedSong);
   };
 
   return (
@@ -303,63 +312,6 @@ const SearchResults = () => {
         </div>
       </div>
 
-      {/* Player Bar */}
-      {currentSong && (
-        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border p-4">
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
-            {/* Now Playing Info */}
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="w-14 h-14 bg-muted rounded-lg flex items-center justify-center">
-                <Music className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-semibold text-foreground truncate">{currentSong.title}</p>
-                <p className="text-sm text-muted-foreground truncate">{currentSong.artist}</p>
-              </div>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <Heart className="w-5 h-5" />
-              </Button>
-            </div>
-
-            {/* Controls */}
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <Shuffle className="w-5 h-5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <SkipBack className="w-6 h-6" />
-              </Button>
-              <Button
-                variant="default"
-                size="icon"
-                className="w-12 h-12"
-                onClick={togglePlayPause}
-              >
-                {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
-              </Button>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <SkipForward className="w-6 h-6" />
-              </Button>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <Repeat className="w-5 h-5" />
-              </Button>
-            </div>
-
-            {/* Secondary Controls */}
-            <div className="flex items-center gap-2 flex-1 justify-end">
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <Share2 className="w-4 h-4" />
-              </Button>
-              <div className="flex items-center gap-2">
-                <Volume2 className="w-5 h-5 text-muted-foreground" />
-                <div className="w-20 h-1 bg-muted rounded-full">
-                  <div className="w-1/2 h-full bg-primary rounded-full"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       <Footer />
     </div>

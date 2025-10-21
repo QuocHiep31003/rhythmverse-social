@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from "react";
+import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 
 export interface Song {
   id: string;
@@ -42,6 +43,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const playSong = (song: Song) => {
     setCurrentSong(song);
     setIsPlaying(true);
+    
+    // Record play immediately (userId hardcoded as 1 for now)
+    listeningHistoryApi.recordPlay(song.id, 1).catch(err => {
+      console.error("Failed to record play:", err);
+    });
   };
 
   const togglePlay = () => {

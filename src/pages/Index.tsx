@@ -49,23 +49,19 @@ const Index = () => {
     },
   ];
 
-  // Dữ liệu từ API thực tế
+  // Dữ liệu từ API thực tế - Trending 7 ngày
   const [topHitsToday, setTopHitsToday] = useState([]);
 
   useEffect(() => {
-    // Fetch tất cả bài hát để sort toàn bộ
-    fetch("http://localhost:8080/api/songs?size=10000")
+    // Gọi API trending
+    fetch("http://localhost:8080/api/songs/trending")
       .then((res) => res.json())
       .then((data) => {
-        if (data && data.content) {
-          const songs = data.content;
-          const sorted = songs
-            .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
-            .slice(0, 5);
-          setTopHitsToday(sorted);
+        if (data && Array.isArray(data)) {
+          setTopHitsToday(data.slice(0, 5));
         }
       })
-      .catch((err) => console.error("Lỗi tải bài hát:", err));
+      .catch((err) => console.error("Lỗi tải trending:", err));
   }, []);
 
   return (
