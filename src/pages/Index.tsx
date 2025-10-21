@@ -21,6 +21,7 @@ import { useMusic } from "@/contexts/MusicContext";
 import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
+import { formatPlayCount } from "@/lib/utils";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -244,7 +245,7 @@ const Index = () => {
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
-                          {song.playCount || 0}
+                          {formatPlayCount(song.playCount || 0)}
                         </p>
                       </div>
                     </div>
