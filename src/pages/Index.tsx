@@ -207,8 +207,21 @@ const Index = () => {
           hover:bg-white/5 hover:scale-[1.02] hover:shadow-inner
         "
                       onClick={() => {
-                        setQueue(topHitsToday);
-                        playSong(song);
+                        const formattedSongs = topHitsToday.map(s => ({
+                          id: s.id,
+                          title: s.name,
+                          artist: s.artists?.map((a) => a.name).join(", ") || "Unknown",
+                          album: s.album?.name || "Unknown",
+                          duration: s.duration || 0,
+                          cover: s.cover || "",
+                          genre: s.genres?.[0]?.name || "Unknown",
+                          plays: formatPlayCount(s.playCount || 0),
+                          audio: s.audioUrl,
+                          audioUrl: s.audioUrl,
+                        }));
+                        setQueue(formattedSongs);
+                        const currentFormatted = formattedSongs.find(s => s.id === song.id);
+                        playSong(currentFormatted);
                       }}
                     >
                       {/* Số thứ tự */}

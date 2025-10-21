@@ -46,7 +46,7 @@ const AdminSongs = () => {
   const [selectedSong, setSelectedSong] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { currentSong, isPlaying, playSong, togglePlay } = useMusic();
+  const { currentSong, isPlaying, playSong, togglePlay, setQueue } = useMusic();
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
@@ -187,14 +187,21 @@ const AdminSongs = () => {
   };
 
   const handlePlayClick = (song: any) => {
-    const playableSong = {
-      ...song,
-      audio: song.audioUrl,
-      artist: song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
-      genre: song.genres?.[0]?.name || "Unknown",
-    };
-    if (currentSong?.id === song.id) togglePlay();
-    else playSong(playableSong);
+    const playableSongs = songs.map(s => ({
+      ...s,
+      audio: s.audioUrl,
+      artist: s.artists?.map((a: any) => a.name).join(", ") || "Unknown",
+      genre: s.genres?.[0]?.name || "Unknown",
+    }));
+    
+    const playableSong = playableSongs.find(s => s.id === song.id);
+    
+    if (currentSong?.id === song.id) {
+      togglePlay();
+    } else {
+      setQueue(playableSongs);
+      playSong(playableSong);
+    }
   };
 
   const goToPage = (page: number) => setCurrentPage(page);
