@@ -114,11 +114,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="pt-16 md:pt-0 p-6 md:p-8">
-          {children}
-        </div>
-      </main>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 overflow-y-auto">
+          <div className="pt-16 md:pt-0 p-6 md:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 };
