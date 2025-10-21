@@ -49,30 +49,23 @@ const Index = () => {
     },
   ];
 
-  // Dữ liệu từ API thực tế - Trending 7 ngày
+  // Dữ liệu từ API thực tế
   const [topHitsToday, setTopHitsToday] = useState([]);
 
   useEffect(() => {
-    // Gọi API trending - đã được sort theo lượt nghe giảm dần từ backend
-    fetch("http://localhost:8080/api/songs/trending")
+    // Fetch tất cả bài hát để sort toàn bộ
+    fetch("http://localhost:8080/api/songs?size=10000")
       .then((res) => res.json())
       .then((data) => {
-        if (data && Array.isArray(data)) {
-          // Lấy top 5 và giữ nguyên thứ tự từ API (không sort lại)
-          const formatted = data.slice(0, 5).map((song) => ({
-            id: song.id,
-            title: song.name || song.title,
-            artist: song.artists?.map((a) => a.name).join(", ") || "Unknown",
-            album: song.album?.name || song.album || "",
-            duration: song.duration || 0,
-            cover: song.cover || "",
-            audioUrl: song.audioUrl || song.audio || "",
-            playCount: song.playCount || 0, // Hiển thị lượt nghe tổng
-          }));
-          setTopHitsToday(formatted);
+        if (data && data.content) {
+          const songs = data.content;
+          const sorted = songs
+            .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+            .slice(0, 5);
+          setTopHitsToday(sorted);
         }
       })
-      .catch((err) => console.error("Lỗi tải trending:", err));
+      .catch((err) => console.error("Lỗi tải bài hát:", err));
   }, []);
 
   return (
@@ -204,7 +197,7 @@ const Index = () => {
                   </CardTitle>
                 </CardHeader>
 
-                <CardContent className="space-y-2">
+                <CardContent >
                   {topHitsToday.map((song, index) => (
                     <div
                       key={song.id}
@@ -228,7 +221,7 @@ const Index = () => {
                         {song.cover ? (
                           <img
                             src={song.cover}
-                            alt={song.title}
+                            alt={song.name}
                             className="
                 w-full h-full object-cover 
                 transition-transform duration-500 group-hover:scale-110
@@ -242,14 +235,14 @@ const Index = () => {
                       {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {song.title}
+                          {song.name}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artist}
+                          {song.artists?.map((a) => a.name).join(", ")}
                         </p>
                       </div>
 
-                      {/* Lượt nghe tổng */}
+                      {/* Lượt nghe */}
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
