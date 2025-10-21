@@ -54,7 +54,7 @@ const Index = () => {
 
   useEffect(() => {
     // Fetch tất cả bài hát để sort toàn bộ
-    fetch("http://localhost:8080/api/songs?size=1000")
+    fetch("http://localhost:8080/api/songs?size=10000")
       .then((res) => res.json())
       .then((data) => {
         if (data && data.content) {

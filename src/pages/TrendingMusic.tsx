@@ -21,7 +21,7 @@ const TrendingMusic = () => {
 
   // Fetch toàn bộ bài hát và sort một lần
   useEffect(() => {
-    fetch(`http://localhost:8080/api/songs?size=1000`)
+    fetch(`http://localhost:8080/api/songs?size=10000`)
       .then((res) => res.json())
       .then((data) => {
         if (data && data.content) {

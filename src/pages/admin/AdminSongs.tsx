@@ -31,7 +31,7 @@ import { SongFormDialog } from "@/components/admin/SongFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { songsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
-import { debounce } from "@/lib/utils";
+import { debounce, formatPlayCount } from "@/lib/utils";
 
 const DEFAULT_AVATAR_URL =
   "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
@@ -371,7 +371,7 @@ const AdminSongs = () => {
                         </TableCell>
                         <TableCell className="text-center">
                           <div className="flex flex-wrap gap-1 ">
-                            {song.playCount || 0}
+                            {formatPlayCount(song.playCount || 0)}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
