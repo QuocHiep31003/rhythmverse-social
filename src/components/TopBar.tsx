@@ -126,7 +126,7 @@ const TopBar = () => {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex items-center gap-2 text-destructive">
+              <DropdownMenuItem className="flex items-center gap-2">
                 <LogOut className="h-4 w-4" />
                 Log out
               </DropdownMenuItem>
