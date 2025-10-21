@@ -25,7 +25,7 @@ const NewAlbums = () => {
   useEffect(() => {
     const fetchAlbums = async () => {
       try {
-        const res = await albumsApi.getAll({ page: 0, size: 4, sort: "id,desc" }); // ✅ lấy album mới nhất
+        const res = await albumsApi.getAll({ page: 0, size: 3, sort: "id,desc" }); // ✅ lấy album mới nhất
         setAlbums(res?.content || []);
       } catch (error) {
         console.error("Error fetching albums:", error);
