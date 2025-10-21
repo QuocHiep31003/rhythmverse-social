@@ -557,14 +557,14 @@ const loadAlbums = async () => {
               <div className="text-center py-8">Không có album nào</div>
             ) : (
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-card z-10">
                   <TableRow>
-                    <TableHead>STT</TableHead>
-                    <TableHead>Album</TableHead>
-                    <TableHead>Nghệ sĩ</TableHead>
-                    <TableHead>Số bài hát</TableHead>
-                    <TableHead>Ngày phát hành</TableHead>
-                    <TableHead className="text-right">Hành động</TableHead>
+                    <TableHead className="bg-card">STT</TableHead>
+                    <TableHead className="bg-card">Album</TableHead>
+                    <TableHead className="bg-card">Nghệ sĩ</TableHead>
+                    <TableHead className="bg-card">Số bài hát</TableHead>
+                    <TableHead className="bg-card">Ngày phát hành</TableHead>
+                    <TableHead className="text-right bg-card">Hành động</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

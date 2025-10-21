@@ -512,14 +512,14 @@ const AdminPlaylists = () => {
                 </div>
               ) : (
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-card z-10">
                     <TableRow>
-                      <TableHead className="w-16">STT</TableHead>
-                      <TableHead>Playlist</TableHead>
-                      <TableHead>Mô tả</TableHead>
-                      <TableHead>Số bài hát</TableHead>
-                      <TableHead>Trạng thái</TableHead>
-                      <TableHead className="text-right">Hành động</TableHead>
+                      <TableHead className="w-16 bg-card">STT</TableHead>
+                      <TableHead className="bg-card">Playlist</TableHead>
+                      <TableHead className="bg-card">Mô tả</TableHead>
+                      <TableHead className="bg-card">Số bài hát</TableHead>
+                      <TableHead className="bg-card">Trạng thái</TableHead>
+                      <TableHead className="text-right bg-card">Hành động</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

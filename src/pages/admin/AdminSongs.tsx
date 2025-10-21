@@ -316,16 +316,16 @@ const AdminSongs = () => {
                 </div>
               ) : (
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-card z-10">
                     <TableRow>
-                      <TableHead className="w-16">STT</TableHead>
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>Bài hát</TableHead>
-                      <TableHead>Nghệ sĩ</TableHead>
-                      <TableHead>Năm phát hành</TableHead>
-                      <TableHead>Thể loại</TableHead>
-                      <TableHead>Lượt nghe</TableHead>
-                      <TableHead className="text-right">Hành động</TableHead>
+                      <TableHead className="w-16 bg-card">STT</TableHead>
+                      <TableHead className="w-12 bg-card"></TableHead>
+                      <TableHead className="bg-card">Bài hát</TableHead>
+                      <TableHead className="bg-card">Nghệ sĩ</TableHead>
+                      <TableHead className="bg-card">Năm phát hành</TableHead>
+                      <TableHead className="bg-card">Thể loại</TableHead>
+                      <TableHead className="bg-card">Lượt nghe</TableHead>
+                      <TableHead className="text-right bg-card">Hành động</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

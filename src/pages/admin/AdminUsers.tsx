@@ -353,13 +353,13 @@ const AdminUsers = () => {
         </CardHeader>
         <CardContent className="p-0 flex-1 overflow-auto min-h-0 scrollbar-custom">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 bg-card z-10">
               <TableRow className="hover:bg-transparent border-b">
-                <TableHead className="w-16 font-semibold">STT</TableHead>
-                <TableHead className="font-semibold">User</TableHead>
-                <TableHead className="font-semibold">Email</TableHead>
-                <TableHead className="font-semibold">Role</TableHead>
-                <TableHead className="text-right font-semibold">Actions</TableHead>
+                <TableHead className="w-16 font-semibold bg-card">STT</TableHead>
+                <TableHead className="font-semibold bg-card">User</TableHead>
+                <TableHead className="font-semibold bg-card">Email</TableHead>
+                <TableHead className="font-semibold bg-card">Role</TableHead>
+                <TableHead className="text-right font-semibold bg-card">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
