@@ -53,12 +53,12 @@ const Index = () => {
   const [topHitsToday, setTopHitsToday] = useState([]);
 
   useEffect(() => {
-    // Gọi API trending
+    // Gọi API trending - đã được sort theo lượt nghe giảm dần từ backend
     fetch("http://localhost:8080/api/songs/trending")
       .then((res) => res.json())
       .then((data) => {
         if (data && Array.isArray(data)) {
-          // Format theo MusicContext
+          // Lấy top 5 và giữ nguyên thứ tự từ API (không sort lại)
           const formatted = data.slice(0, 5).map((song) => ({
             id: song.id,
             title: song.name || song.title,
@@ -67,7 +67,7 @@ const Index = () => {
             duration: song.duration || 0,
             cover: song.cover || "",
             audioUrl: song.audioUrl || song.audio || "",
-            playCount: song.playCount || 0,
+            playCount: song.playCount || 0, // Hiển thị lượt nghe tổng
           }));
           setTopHitsToday(formatted);
         }
