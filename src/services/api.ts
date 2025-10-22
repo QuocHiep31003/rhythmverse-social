@@ -355,6 +355,160 @@ export const songsApi = {
       throw error;
     }
   },
+
+  // ========================================
+  // TRENDING APIs - Backend đã sort sẵn
+  // ========================================
+
+  /**
+   * Lấy trending 7 ngày (simple) - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/simple?limit=X
+   */
+  getTrendingSimple: async (limit: number = 20) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/simple?limit=${limit}`);
+      if (!response.ok) throw new Error("Failed to fetch trending");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching trending:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy trending với limit tùy chỉnh - ĐÃ SORT SẴN Ở BACKEND
+   * Tự động chọn endpoint tối ưu dựa trên limit
+   */
+  getTrending: async (limit: number = 100) => {
+    try {
+      let endpoint = `${API_BASE_URL}/trending/simple?limit=${limit}`;
+      
+      // Chọn endpoint tối ưu
+      if (limit === 100) {
+        endpoint = `${API_BASE_URL}/trending/top100`;
+      } else if (limit === 50) {
+        endpoint = `${API_BASE_URL}/trending/top50`;
+      } else if (limit === 10) {
+        endpoint = `${API_BASE_URL}/trending/top10`;
+      }
+      
+      console.log('🌐 Calling endpoint:', endpoint);
+      const response = await fetch(endpoint);
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch trending: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ Data received:', data?.length, 'songs');
+      
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error("❌ Error fetching trending:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/top100
+   */
+  getTop100: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/top100`);
+      if (!response.ok) throw new Error("Failed to fetch top 100");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching top 100:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 50 - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/top50
+   */
+  getTop50: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/top50`);
+      if (!response.ok) throw new Error("Failed to fetch top 50");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching top 50:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 10 - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/top10
+   */
+  getTop10: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/top10`);
+      if (!response.ok) throw new Error("Failed to fetch top 10");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching top 10:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy trending với sorting options - ĐÃ SORT Ở BACKEND
+   * GET /api/trending/sorted?limit=X&sortBy=score&order=desc
+   */
+  getTrendingSorted: async (
+    limit: number = 20,
+    sortBy: 'score' | 'name' | 'plays' = 'score',
+    order: 'asc' | 'desc' = 'desc'
+  ) => {
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/trending/sorted?limit=${limit}&sortBy=${sortBy}&order=${order}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch sorted trending");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching sorted trending:", error);
+      return [];
+    }
+  },
+
+  // Trending theo period (từ TrendingScore entity)
+  getDailyTrending: async (limit: number = 20) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/daily?limit=${limit}`);
+      if (!response.ok) throw new Error("Failed to fetch daily trending");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching daily trending:", error);
+      return [];
+    }
+  },
+
+  getWeeklyTrending: async (limit: number = 20) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/weekly?limit=${limit}`);
+      if (!response.ok) throw new Error("Failed to fetch weekly trending");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching weekly trending:", error);
+      return [];
+    }
+  },
+
+  getMonthlyTrending: async (limit: number = 20) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/monthly?limit=${limit}`);
+      if (!response.ok) throw new Error("Failed to fetch monthly trending");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching monthly trending:", error);
+      return [];
+    }
+  },
 };
 
 // Playlists API
