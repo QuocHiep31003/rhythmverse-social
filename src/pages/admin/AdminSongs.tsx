@@ -228,12 +228,12 @@ const AdminSongs = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+    <div className="h-screen overflow-hidden p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden">
         <Button
           variant="ghost"
           onClick={() => navigate(-1)}
-          className="mb-4 self-start"
+          className="mb-4 self-start hover:bg-[hsl(var(--admin-card))]"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Quay lại
@@ -242,14 +242,18 @@ const AdminSongs = () => {
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Quản lý Bài hát</h1>
+              <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Quản lý Bài hát</h1>
               <p className="text-muted-foreground">
                 Tổng số: {totalElements} bài hát • Trang {currentPage + 1} /{" "}
                 {totalPages}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleExport}>
+              <Button 
+                variant="outline" 
+                onClick={handleExport}
+                className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
+              >
                 <Download className="w-4 h-4 mr-2" />
                 Export
               </Button>
@@ -257,6 +261,7 @@ const AdminSongs = () => {
                 variant="outline"
                 onClick={handleImportClick}
                 disabled={isSubmitting}
+                className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Import
@@ -268,14 +273,17 @@ const AdminSongs = () => {
                 onChange={handleImport}
                 style={{ display: "none" }}
               />
-              <Button onClick={handleCreate}>
+              <Button 
+                onClick={handleCreate}
+                className="bg-gradient-admin hover:opacity-90"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Thêm bài hát
               </Button>
             </div>
           </div>
 
-          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+          <Card className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="relative flex-1">
@@ -299,7 +307,7 @@ const AdminSongs = () => {
                     onChange={(e) =>
                       handlePageSizeChange(Number(e.target.value))
                     }
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+                    className="bg-background border-[hsl(var(--admin-border))] rounded px-2 py-1 text-sm"
                   >
                     <option value={5}>5</option>
                     <option value={10}>10</option>
@@ -323,16 +331,16 @@ const AdminSongs = () => {
                 </div>
               ) : (
                 <Table>
-                  <TableHeader className="sticky top-0 bg-card z-10">
+                  <TableHeader className="sticky top-0 bg-[hsl(var(--admin-card))] z-10">
                     <TableRow>
-                      <TableHead className="w-16 bg-card">STT</TableHead>
-                      <TableHead className="w-12 bg-card"></TableHead>
-                      <TableHead className="bg-card">Bài hát</TableHead>
-                      <TableHead className="bg-card">Nghệ sĩ</TableHead>
-                      <TableHead className="bg-card">Năm phát hành</TableHead>
-                      <TableHead className="bg-card">Thể loại</TableHead>
-                      <TableHead className="bg-card">Lượt nghe</TableHead>
-                      <TableHead className="text-right bg-card">Hành động</TableHead>
+                      <TableHead className="w-16 bg-[hsl(var(--admin-card))]">STT</TableHead>
+                      <TableHead className="w-12 bg-[hsl(var(--admin-card))]"></TableHead>
+                      <TableHead className="bg-[hsl(var(--admin-card))]">Bài hát</TableHead>
+                      <TableHead className="bg-[hsl(var(--admin-card))]">Nghệ sĩ</TableHead>
+                      <TableHead className="bg-[hsl(var(--admin-card))]">Năm phát hành</TableHead>
+                      <TableHead className="bg-[hsl(var(--admin-card))]">Thể loại</TableHead>
+                      <TableHead className="bg-[hsl(var(--admin-card))]">Lượt nghe</TableHead>
+                      <TableHead className="text-right bg-[hsl(var(--admin-card))]">Hành động</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -346,6 +354,7 @@ const AdminSongs = () => {
                             variant="ghost"
                             size="icon"
                             onClick={() => handlePlayClick(song)}
+                            className="hover:bg-gradient-admin hover:text-white"
                           >
                             {currentSong?.id === song.id && isPlaying ? (
                               <Pause className="w-4 h-4" />
@@ -387,6 +396,7 @@ const AdminSongs = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleEdit(song)}
+                              className="hover:bg-[hsl(var(--admin-primary))] hover:text-white"
                             >
                               <Pencil className="w-4 h-4" />
                             </Button>
@@ -394,6 +404,7 @@ const AdminSongs = () => {
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDeleteClick(song)}
+                              className="hover:bg-destructive hover:text-destructive-foreground"
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
@@ -419,7 +430,7 @@ const AdminSongs = () => {
                   size="icon"
                   onClick={goToFirstPage}
                   disabled={currentPage === 0}
-                  className="h-8 w-8"
+                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
                 >
                   <ChevronsLeft className="w-4 h-4" />
                 </Button>
@@ -428,17 +439,21 @@ const AdminSongs = () => {
                   size="icon"
                   onClick={goToPreviousPage}
                   disabled={currentPage === 0}
-                  className="h-8 w-8"
+                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
                 {getPageNumbers().map((page) => (
                   <Button
                     key={page}
-                    variant={currentPage === page ? "default" : "outline"}
+                    variant="outline"
                     size="icon"
                     onClick={() => goToPage(page)}
-                    className="h-8 w-8"
+                    className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
+                      currentPage === page 
+                        ? "bg-gradient-admin text-white hover:opacity-90" 
+                        : "hover:bg-[hsl(var(--admin-card))]"
+                    }`}
                   >
                     {page + 1}
                   </Button>
@@ -448,7 +463,7 @@ const AdminSongs = () => {
                   size="icon"
                   onClick={goToNextPage}
                   disabled={currentPage >= totalPages - 1}
-                  className="h-8 w-8"
+                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </Button>
@@ -457,7 +472,7 @@ const AdminSongs = () => {
                   size="icon"
                   onClick={goToLastPage}
                   disabled={currentPage >= totalPages - 1}
-                  className="h-8 w-8"
+                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
                 >
                   <ChevronsRight className="w-4 h-4" />
                 </Button>

@@ -62,6 +62,21 @@ All colors MUST be HSL.
     /* Animations */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-bounce: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    /* Admin Panel Specific Colors */
+    --admin-primary: 40 100% 50%;
+    --admin-primary-foreground: 0 0% 100%;
+    --admin-secondary: 200 18% 46%;
+    --admin-secondary-foreground: 0 0% 100%;
+    --admin-accent: 25 95% 53%;
+    --admin-accent-foreground: 0 0% 100%;
+    --admin-border: 214.3 31.8% 91.4%;
+    --admin-card: 0 0% 98%;
+    --admin-sidebar: 210 20% 98%;
+    
+    /* Admin Gradients */
+    --gradient-admin: linear-gradient(135deg, hsl(var(--admin-primary)), hsl(var(--admin-accent)));
+    --gradient-admin-card: linear-gradient(180deg, hsl(var(--admin-card)), hsl(0, 0%, 96%));
   }
 
   .dark {
@@ -113,6 +128,21 @@ All colors MUST be HSL.
     --shadow-glow: 0 0 40px hsla(280, 100%, 65%, 0.3);
     --shadow-neon: 0 0 20px hsla(195, 100%, 65%, 0.4);
     --shadow-card: 0 10px 30px hsla(220, 26%, 0%, 0.5);
+
+    /* Admin Panel Specific Colors - Dark Mode */
+    --admin-primary: 45 93% 58%;
+    --admin-primary-foreground: 0 0% 0%;
+    --admin-secondary: 200 20% 25%;
+    --admin-secondary-foreground: 0 0% 100%;
+    --admin-accent: 30 100% 60%;
+    --admin-accent-foreground: 0 0% 0%;
+    --admin-border: 220 26% 18%;
+    --admin-card: 220 26% 10%;
+    --admin-sidebar: 220 26% 8%;
+    
+    /* Admin Gradients - Dark Mode */
+    --gradient-admin: linear-gradient(135deg, hsl(var(--admin-primary)), hsl(var(--admin-accent)));
+    --gradient-admin-card: linear-gradient(180deg, hsl(var(--admin-card)), hsl(220, 26%, 8%));
   }
 }
 

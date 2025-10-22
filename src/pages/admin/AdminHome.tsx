@@ -39,13 +39,13 @@ const AdminHome = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
+        <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Dashboard</h1>
         <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <Card key={stat.title}>
+          <Card key={stat.title} className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 {stat.title}
@@ -63,7 +63,7 @@ const AdminHome = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
             <CardTitle>Bài hát phổ biến</CardTitle>
             <CardDescription>Top 5 bài hát được nghe nhiều nhất</CardDescription>
@@ -96,7 +96,7 @@ const AdminHome = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
             <CardTitle>Người dùng mới</CardTitle>
             <CardDescription>Người dùng đăng ký gần đây</CardDescription>
