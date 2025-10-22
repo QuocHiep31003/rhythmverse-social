@@ -80,6 +80,7 @@ export const SongFormDialog = ({
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [audioInputMode, setAudioInputMode] = useState<"upload" | "url">("upload");
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -216,7 +217,7 @@ export const SongFormDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="text-2xl font-bold">
             {mode === "create" ? "Thêm bài hát mới" : "Chỉnh sửa bài hát"}
           </DialogTitle>
           <DialogDescription>
@@ -333,7 +334,7 @@ export const SongFormDialog = ({
                         return (
                           <div
                             key={genreId}
-                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
+                            className="flex items-center gap-1 bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))] px-2 py-1 rounded-md text-sm"
                           >
                             <span>{genre?.name || `ID: ${genreId}`}</span>
                             <button
@@ -441,7 +442,7 @@ export const SongFormDialog = ({
                         return (
                           <div
                             key={artistId}
-                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
+                            className="flex items-center gap-1 bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))] px-2 py-1 rounded-md text-sm"
                           >
                             <Avatar className="h-4 w-4">
                               <AvatarImage src={artist.avatar} alt={artist.name} />
@@ -474,34 +475,66 @@ export const SongFormDialog = ({
               name="audioUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới nếu muốn thay đổi)"}</FormLabel>
+                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới hoặc cập nhật URL)"}</FormLabel>
+                  <div className="flex gap-2 mb-2">
+                    <Button
+                      type="button"
+                      variant={audioInputMode === "upload" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setAudioInputMode("upload")}
+                      className="flex-1"
+                    >
+                      Upload File
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={audioInputMode === "url" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setAudioInputMode("url")}
+                      className="flex-1"
+                    >
+                      Nhập URL
+                    </Button>
+                  </div>
                   <FormControl>
                     <div className="space-y-2">
-                      <Input
-                        type="file"
-                        accept="audio/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          handleFileChange(file);
-                        }}
-                        disabled={uploading}
-                      />
-                      {uploading && (
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            Đang upload... {uploadProgress}%
-                          </div>
-                          <div className="w-full bg-secondary rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${uploadProgress}%` }}
-                            />
-                          </div>
-                        </div>
+                      {audioInputMode === "upload" ? (
+                        <>
+                          <Input
+                            type="file"
+                            accept="audio/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              handleFileChange(file);
+                            }}
+                            disabled={uploading}
+                          />
+                          {uploading && (
+                            <div className="space-y-1">
+                              <div className="text-sm text-muted-foreground">
+                                Đang upload... {uploadProgress}%
+                              </div>
+                              <div className="w-full bg-secondary rounded-full h-2">
+                                <div
+                                  className="bg-[hsl(var(--admin-active))] h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${uploadProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <Input
+                          placeholder="https://example.com/audio.mp3"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                          }}
+                        />
                       )}
                       {field.value && !uploading && (
                         <div className="text-sm text-muted-foreground">
-                          ✓ Audio URL: {field.value.substring(0, 50)}...
+                          ✓ Audio URL: {field.value.substring(0, 60)}...
                         </div>
                       )}
                     </div>

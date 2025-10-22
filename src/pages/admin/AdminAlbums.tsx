@@ -118,67 +118,67 @@ const AdminAlbums = () => {
     loadArtists();
   }, [currentPage, pageSize, searchQuery, filterArtist, filterYear, sortBy]);
 
-const loadAlbums = async () => {
-  try {
-    setLoading(true);
+  const loadAlbums = async () => {
+    try {
+      setLoading(true);
 
-    // === Xử lý sắp xếp ===
-    let sortParam = "name,asc";
-    if (sortBy === "name-desc") sortParam = "name,desc";
-    else if (sortBy === "date-newest") sortParam = "releaseDate,desc";
-    else if (sortBy === "date-oldest") sortParam = "releaseDate,asc";
+      // === Xử lý sắp xếp ===
+      let sortParam = "name,asc";
+      if (sortBy === "name-desc") sortParam = "name,desc";
+      else if (sortBy === "date-newest") sortParam = "releaseDate,desc";
+      else if (sortBy === "date-oldest") sortParam = "releaseDate,asc";
 
-    // === Nếu có searchQuery → thử tìm theo tên nghệ sĩ trước ===
-    if (searchQuery && searchQuery.trim().length > 0) {
-      try {
-        const artistSearchUrl = `${API_BASE_URL}/albums/search/artist?artistName=${encodeURIComponent(searchQuery)}`;
-        const artistRes = await fetch(artistSearchUrl);
+      // === Nếu có searchQuery → thử tìm theo tên nghệ sĩ trước ===
+      if (searchQuery && searchQuery.trim().length > 0) {
+        try {
+          const artistSearchUrl = `${API_BASE_URL}/albums/search/artist?artistName=${encodeURIComponent(searchQuery)}`;
+          const artistRes = await fetch(artistSearchUrl);
 
-        if (artistRes.ok) {
-          const artistAlbums: Album[] = await artistRes.json();
-          if (artistAlbums && artistAlbums.length > 0) {
-            setAlbums(artistAlbums);
-            setTotalElements(artistAlbums.length);
-            setTotalPages(1);
-            return; // ✅ Dừng tại đây (đã load theo nghệ sĩ)
+          if (artistRes.ok) {
+            const artistAlbums: Album[] = await artistRes.json();
+            if (artistAlbums && artistAlbums.length > 0) {
+              setAlbums(artistAlbums);
+              setTotalElements(artistAlbums.length);
+              setTotalPages(1);
+              return; // ✅ Dừng tại đây (đã load theo nghệ sĩ)
+            }
           }
+        } catch {
+          console.warn("Không tìm thấy album theo nghệ sĩ, fallback sang tìm theo tên album...");
         }
-      } catch {
-        console.warn("Không tìm thấy album theo nghệ sĩ, fallback sang tìm theo tên album...");
       }
+
+      // === Nếu không có nghệ sĩ trùng → fallback tìm theo tên album (mặc định) ===
+      const query = new URLSearchParams({
+        page: String(currentPage),
+        size: String(pageSize),
+        sort: sortParam,
+      });
+
+      if (searchQuery) query.append("search", searchQuery);
+      if (filterArtist !== "all") query.append("artistId", filterArtist);
+      if (filterYear !== "all") query.append("releaseYear", filterYear);
+
+      const albumsUrl = `${API_BASE_URL}/albums?${query.toString()}`;
+      const res = await fetch(albumsUrl);
+      if (!res.ok) throw new Error("Không thể tải danh sách albums");
+
+      const data: AlbumResponse = await res.json();
+
+      setAlbums(data.content);
+      setTotalElements(data.totalElements);
+      setTotalPages(data.totalPages);
+    } catch (error) {
+      console.error("Lỗi loadAlbums:", error);
+      toast({
+        title: "Lỗi",
+        description: "Không thể tải danh sách albums",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    // === Nếu không có nghệ sĩ trùng → fallback tìm theo tên album (mặc định) ===
-    const query = new URLSearchParams({
-      page: String(currentPage),
-      size: String(pageSize),
-      sort: sortParam,
-    });
-
-    if (searchQuery) query.append("search", searchQuery);
-    if (filterArtist !== "all") query.append("artistId", filterArtist);
-    if (filterYear !== "all") query.append("releaseYear", filterYear);
-
-    const albumsUrl = `${API_BASE_URL}/albums?${query.toString()}`;
-    const res = await fetch(albumsUrl);
-    if (!res.ok) throw new Error("Không thể tải danh sách albums");
-
-    const data: AlbumResponse = await res.json();
-
-    setAlbums(data.content);
-    setTotalElements(data.totalElements);
-    setTotalPages(data.totalPages);
-  } catch (error) {
-    console.error("Lỗi loadAlbums:", error);
-    toast({
-      title: "Lỗi",
-      description: "Không thể tải danh sách albums",
-      variant: "destructive",
-    });
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
 
   const loadArtists = async () => {
@@ -371,300 +371,271 @@ const loadAlbums = async () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
-      <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start">
-        <ArrowLeft className="w-4 h-4 mr-2" /> Quay lại
-      </Button>
-
-      <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Quản lý Albums</h1>
-            <p className="text-muted-foreground">
-              Tổng số: {totalElements} albums • Trang {currentPage + 1} / {totalPages}
-            </p>
+    <div className="h-screen overflow-hidden p-6 flex flex-col">
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Albums</h1>
+              <p className="text-muted-foreground">
+                Tổng số: {totalElements} albums • Trang {currentPage + 1} / {totalPages}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleExport} className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]">
+                <Download className="w-4 h-4 mr-2" /> Export
+              </Button>
+              <Button variant="outline" onClick={() => setImportOpen(true)} className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]">
+                <Upload className="w-4 h-4 mr-2" /> Import
+              </Button>
+              <Button onClick={handleCreate} className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity">
+                <Plus className="w-4 h-4 mr-2" /> Tạo album
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="w-4 h-4 mr-2" /> Export
-            </Button>
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" /> Import
-            </Button>
-            <Button onClick={handleCreate}>
-              <Plus className="w-4 h-4 mr-2" /> Tạo album
-            </Button>
-          </div>
-        </div>
 
-        <Dialog open={importOpen} onOpenChange={setImportOpen}>
-          <DialogContent className="sm:max-w-[425px] bg-card border-border">
-            <DialogHeader>
-              <DialogTitle className="text-white">Import Albums từ Excel</DialogTitle>
-              <DialogDescription className="text-gray-400">
-                Chọn file Excel (.xlsx, .xls) đúng định dạng export để import albums.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm text-gray-400 mb-2">
-                  {importFile ? importFile.name : "Kéo thả hoặc chọn file Excel"}
-                </p>
-                <Input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                  className="bg-background/50"
-                />
-                <p className="text-xs text-gray-500 mt-2">Hỗ trợ: .xlsx, .xls</p>
+          {/* Content */}
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
+              {/* Filters + Search */}
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm album hoặc nghệ sĩ..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(0);
+                      }}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(0);
+                      }}
+                      className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                    </select>
+                    <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  </div>
+                </div>
+
+                {/* Filters & Sort */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Lọc:</span>
+
+                  <Select
+                    value={filterArtist}
+                    onValueChange={(v) => {
+                      setFilterArtist(v);
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Nghệ sĩ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả nghệ sĩ</SelectItem>
+                      {artists.map((a) => (
+                        <SelectItem key={a.id} value={a.id.toString()}>
+                          {a.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={filterYear}
+                    onValueChange={(v) => {
+                      setFilterYear(v);
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-[150px] bg-background/50">
+                      <SelectValue placeholder="Năm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả năm</SelectItem>
+                      {availableYears.map((y) => (
+                        <SelectItem key={y} value={y?.toString() || ""}>
+                          {y}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={sortBy}
+                    onValueChange={(v) => {
+                      setSortBy(v);
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Sắp xếp" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name-asc">Tên A-Z</SelectItem>
+                      <SelectItem value="name-desc">Tên Z-A</SelectItem>
+                      <SelectItem value="date-newest">Mới nhất</SelectItem>
+                      <SelectItem value="date-oldest">Cũ nhất</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {(filterArtist !== "all" || filterYear !== "all" || searchQuery || sortBy !== "name-asc") && (
+                    <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+                      Xóa bộ lọc
+                    </Button>
+                  )}
+                </div>
               </div>
-              <DialogFooter>
+            </CardHeader>
+
+            <CardContent className="flex-1 flex flex-col min-h-0">
+              {loading ? (
+                <div className="text-center py-8">Đang tải...</div>
+              ) : albums.length === 0 ? (
+                <div className="text-center py-8">Không có album nào</div>
+              ) : (
+                <>
+                  {/* Fixed Header */}
+                  <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                    <table className="w-full table-fixed">
+                      <thead>
+                        <tr>
+                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
+                          <th className="w-80 text-left text-sm font-medium text-muted-foreground p-3">Album</th>
+                          <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Nghệ sĩ</th>
+                          <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày phát hành</th>
+                          <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
+                        </tr>
+                      </thead>
+                    </table>
+                  </div>
+
+                  {/* Scrollable Body */}
+                  <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
+                    <table className="w-full table-fixed">
+                      <tbody>
+                        {albums.map((album, i) => (
+                          <tr key={album.id} className="border-b border-border hover:bg-muted/50">
+                            <td className="w-16 p-3">{currentPage * pageSize + i + 1}</td>
+                            <td className="w-80 p-3">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  key={album.coverUrl}
+                                  src={getAlbumCover(album)}
+                                  alt={album.name}
+                                  onError={(e) => (e.currentTarget.src = DEFAULT_IMAGE_URL)}
+                                  className="w-10 h-10 rounded object-cover"
+                                />
+                                <span className="font-medium truncate">{album.name}</span>
+                              </div>
+                            </td>
+                            <td className="w-48 p-3 truncate">{album.artist?.name || "—"}</td>
+                            <td className="w-32 p-3">{album.songs?.length || 0}</td>
+                            <td className="w-40 p-3">
+                              {album.releaseDate
+                                ? new Date(album.releaseDate).toLocaleDateString("vi-VN")
+                                : "—"}
+                            </td>
+                            <td className="w-32 text-right p-3">
+                              <div className="flex justify-end gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(album)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteClick(album)}
+                                  className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 flex-shrink-0">
+              <div className="text-sm text-muted-foreground">
+                Hiển thị {albums.length} trên tổng {totalElements}
+              </div>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]">
+                  <ChevronsLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="icon" onClick={goToPrev} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]">
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                {[...Array(totalPages).keys()].slice(
+                  Math.max(0, currentPage - 2),
+                  Math.min(totalPages, currentPage + 3)
+                ).map((p) => (
+                  <Button
+                    key={p}
+                    variant="outline"
+                    size="icon"
+                    onClick={() => goToPage(p)}
+                    className={`h-8 w-8 border-[hsl(var(--admin-border))] ${currentPage === p
+                      ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
+                      : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                      }`}
+                  >
+                    {p + 1}
+                  </Button>
+                ))}
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setImportOpen(false);
-                    setImportFile(null);
-                  }}
-                  disabled={isSubmitting}
-                  className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
-                >
-                  Hủy
-                </Button>
-                <Button onClick={handleImport} disabled={isSubmitting || !importFile} className="bg-primary hover:bg-primary/90">
-                  {isSubmitting ? "Đang import..." : "Import Excel"}
-                </Button>
-              </DialogFooter>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Content */}
-        <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
-          <CardHeader>
-            {/* Filters + Search */}
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm album hoặc nghệ sĩ..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(0);
-                    }}
-                    className="pl-10 bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
-                  <select 
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setCurrentPage(0);
-                    }}
-                    className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
-                </div>
-              </div>
-
-              {/* Filters & Sort */}
-              <div className="flex flex-wrap items-center gap-3">
-                <Filter className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Lọc:</span>
-
-                <Select
-                  value={filterArtist}
-                  onValueChange={(v) => {
-                    setFilterArtist(v);
-                    setCurrentPage(0);
-                  }}
-                >
-                  <SelectTrigger className="w-[180px] bg-background/50">
-                    <SelectValue placeholder="Nghệ sĩ" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả nghệ sĩ</SelectItem>
-                    {artists.map((a) => (
-                      <SelectItem key={a.id} value={a.id.toString()}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={filterYear}
-                  onValueChange={(v) => {
-                    setFilterYear(v);
-                    setCurrentPage(0);
-                  }}
-                >
-                  <SelectTrigger className="w-[150px] bg-background/50">
-                    <SelectValue placeholder="Năm" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tất cả năm</SelectItem>
-                    {availableYears.map((y) => (
-                      <SelectItem key={y} value={y?.toString() || ""}>
-                        {y}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select
-                  value={sortBy}
-                  onValueChange={(v) => {
-                    setSortBy(v);
-                    setCurrentPage(0);
-                  }}
-                >
-                  <SelectTrigger className="w-[180px] bg-background/50">
-                    <SelectValue placeholder="Sắp xếp" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name-asc">Tên A-Z</SelectItem>
-                    <SelectItem value="name-desc">Tên Z-A</SelectItem>
-                    <SelectItem value="date-newest">Mới nhất</SelectItem>
-                    <SelectItem value="date-oldest">Cũ nhất</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                {(filterArtist !== "all" || filterYear !== "all" || searchQuery || sortBy !== "name-asc") && (
-                  <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-                    Xóa bộ lọc
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-
-          {/* Table */}
-          <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
-            {loading ? (
-              <div className="text-center py-8">Đang tải...</div>
-            ) : albums.length === 0 ? (
-              <div className="text-center py-8">Không có album nào</div>
-            ) : (
-              <Table>
-                <TableHeader className="sticky top-0 bg-card z-10">
-                  <TableRow>
-                    <TableHead className="bg-card">STT</TableHead>
-                    <TableHead className="bg-card">Album</TableHead>
-                    <TableHead className="bg-card">Nghệ sĩ</TableHead>
-                    <TableHead className="bg-card">Số bài hát</TableHead>
-                    <TableHead className="bg-card">Ngày phát hành</TableHead>
-                    <TableHead className="text-right bg-card">Hành động</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {albums.map((album, i) => (
-                    <TableRow key={album.id}>
-                      <TableCell>{currentPage * pageSize + i + 1}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <img
-                            key={album.coverUrl}
-                            src={getAlbumCover(album)}
-                            alt={album.name}
-                            onError={(e) => (e.currentTarget.src = DEFAULT_IMAGE_URL)}
-                            className="w-10 h-10 rounded object-cover"
-                          />
-                          <span className="font-medium">{album.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{album.artist?.name || "—"}</TableCell>
-                      <TableCell>{album.songs?.length || 0}</TableCell>
-                      <TableCell>
-                        {album.releaseDate
-                          ? new Date(album.releaseDate).toLocaleDateString("vi-VN")
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEdit(album)}>
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteClick(album)}
-                          >
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between pt-4">
-            <div className="text-sm text-muted-foreground">
-              Hiển thị {albums.length} trên tổng {totalElements}
-            </div>
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0}>
-                <ChevronsLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="icon" onClick={goToPrev} disabled={currentPage === 0}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              {[...Array(totalPages).keys()].slice(
-                Math.max(0, currentPage - 2),
-                Math.min(totalPages, currentPage + 3)
-              ).map((p) => (
-                <Button
-                  key={p}
-                  variant={currentPage === p ? "default" : "outline"}
                   size="icon"
-                  onClick={() => goToPage(p)}
+                  onClick={goToNext}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
                 >
-                  {p + 1}
+                  <ChevronRight className="w-4 h-4" />
                 </Button>
-              ))}
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={goToNext}
-                disabled={currentPage >= totalPages - 1}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={goToLastPage}
-                disabled={currentPage >= totalPages - 1}
-              >
-                <ChevronsRight className="w-4 h-4" />
-              </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={goToLastPage}
+                  disabled={currentPage >= totalPages - 1}
+                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <AlbumFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          onSubmit={handleFormSubmit}
-          defaultValues={
-            formMode === "edit" && selectedAlbum
-              ? {
+          <AlbumFormDialog
+            open={formOpen}
+            onOpenChange={setFormOpen}
+            onSubmit={handleFormSubmit}
+            defaultValues={
+              formMode === "edit" && selectedAlbum
+                ? {
                   name: selectedAlbum.name,
                   artistId: selectedAlbum.artistId || selectedAlbum.artist?.id || 0,
                   songIds:
@@ -676,21 +647,64 @@ const loadAlbums = async () => {
                     : new Date().toISOString().split("T")[0],
                   coverUrl: selectedAlbum.coverUrl || ""
                 }
-              : undefined
-          }
-          isLoading={isSubmitting}
-          mode={formMode}
-          artists={artists}
-        />
+                : undefined
+            }
+            isLoading={isSubmitting}
+            mode={formMode}
+            artists={artists}
+          />
 
-        <DeleteConfirmDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          onConfirm={handleDelete}
-          title="Xóa album?"
-          description={`Bạn có chắc muốn xóa album "${selectedAlbum?.name}"? Hành động này không thể hoàn tác.`}
-          isLoading={isSubmitting}
-        />
+          <DeleteConfirmDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            onConfirm={handleDelete}
+            title="Xóa album?"
+            description={`Bạn có chắc muốn xóa album "${selectedAlbum?.name}"? Hành động này không thể hoàn tác.`}
+            isLoading={isSubmitting}
+          />
+
+          <Dialog open={importOpen} onOpenChange={setImportOpen}>
+            <DialogContent className="sm:max-w-[425px] bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="text-white">Import Albums từ Excel</DialogTitle>
+                <DialogDescription className="text-gray-400">
+                  Chọn file Excel (.xlsx, .xls) đúng định dạng export để import albums.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                  <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm text-gray-400 mb-2">
+                    {importFile ? importFile.name : "Kéo thả hoặc chọn file Excel"}
+                  </p>
+                  <Input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                    className="bg-background/50"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">Hỗ trợ: .xlsx, .xls</p>
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setImportOpen(false);
+                      setImportFile(null);
+                    }}
+                    disabled={isSubmitting}
+                    className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
+                  >
+                    Hủy
+                  </Button>
+                  <Button onClick={handleImport} disabled={isSubmitting || !importFile} className="bg-primary hover:bg-primary/90">
+                    {isSubmitting ? "Đang import..." : "Import Excel"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
     </div>
   );

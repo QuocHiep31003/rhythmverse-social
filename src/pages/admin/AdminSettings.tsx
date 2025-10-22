@@ -4,14 +4,53 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { useTheme } from "@/components/ThemeProvider";
+import { Moon, Sun } from "lucide-react";
 
 const AdminSettings = () => {
+  const { theme, setTheme } = useTheme();
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-3xl font-bold">Cài đặt hệ thống</h1>
         <p className="text-muted-foreground">Quản lý cấu hình và tùy chọn hệ thống</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Giao diện</CardTitle>
+          <CardDescription>Tùy chỉnh giao diện hiển thị</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Chế độ hiển thị</Label>
+              <p className="text-sm text-muted-foreground">
+                Chọn giữa chế độ sáng và tối
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="gap-2"
+            >
+              {theme === "dark" ? (
+                <>
+                  <Sun className="w-4 h-4" />
+                  Chế độ sáng
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4" />
+                  Chế độ tối
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

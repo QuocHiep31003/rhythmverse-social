@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { ArtistFormDialog } from "@/components/admin/ArtistFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { artistsApi } from "@/services/api";
@@ -121,12 +121,12 @@ const AdminArtists = () => {
       <div className="w-full flex-1 flex flex-col overflow-hidden">
         <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
            <div className="flex items-center justify-between">
-             <div><h1 className="text-3xl font-bold">Artist Management</h1><p className="text-muted-foreground">Total: {totalElements} artists • Page {currentPage + 1} / {totalPages}</p></div>
+             <div><h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Nghệ sĩ</h1><p className="text-muted-foreground">Tổng số: {totalElements} nghệ sĩ • Trang {currentPage + 1} / {totalPages}</p></div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleExport}><Download className="w-4 h-4 mr-2" />Export</Button>
-              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting}><Upload className="w-4 h-4 mr-2" />Import</Button>
+              <Button variant="outline" onClick={handleExport} className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Download className="w-4 h-4 mr-2" />Export</Button>
+              <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting} className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Upload className="w-4 h-4 mr-2" />Import</Button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} style={{ display: 'none' }} />
-              <Button onClick={handleCreate}><Plus className="w-4 h-4 mr-2" />Thêm nghệ sĩ</Button>
+              <Button onClick={handleCreate} className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity"><Plus className="w-4 h-4 mr-2" />Thêm nghệ sĩ</Button>
             </div>
           </div>
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
@@ -160,11 +160,55 @@ const AdminArtists = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
+            <CardContent className="flex-1 flex flex-col min-h-0">
               {loading ? <div className="text-center py-8">Loading...</div> : artists.length === 0 ? <div className="text-center py-8 text-muted-foreground">{searchQuery || countryFilter || debutYearFilter ? "No artists found" : "Empty Placeholder"}</div> : (
-                <Table><TableHeader className="sticky top-0 bg-card z-10"><TableRow><TableHead className="w-16 bg-card">No.</TableHead><TableHead className="bg-card">Country</TableHead><TableHead className="bg-card">Artist</TableHead><TableHead className="bg-card">Debut Year</TableHead><TableHead className="text-right bg-card">Actions</TableHead></TableRow></TableHeader><TableBody>{artists.map((artist, index) => (
-                  <TableRow key={artist.id}><TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell><TableCell>{artist.country || '—'}</TableCell><TableCell><div className="flex items-center gap-3"><img src={artist.avatar || DEFAULT_AVATAR_URL} alt={artist.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded-full object-cover" /><span className="font-medium">{artist.name}</span></div></TableCell><TableCell>{artist.debutYear || '—'}</TableCell><TableCell className="text-right"><div className="flex items-center justify-end gap-2"><Button variant="ghost" size="icon" onClick={() => handleEdit(artist)}><Pencil className="w-4 h-4" /></Button><Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)}><Trash2 className="w-4 h-4 text-destructive" /></Button></div></TableCell></TableRow>
-                ))}</TableBody></Table>
+                <>
+                  {/* Fixed Header */}
+                  <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                    <table className="w-full table-fixed">
+                      <thead>
+                        <tr>
+                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
+                          <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Quốc gia</th>
+                          <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">Nghệ sĩ</th>
+                          <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Năm debut</th>
+                          <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
+                        </tr>
+                      </thead>
+                    </table>
+                  </div>
+                  
+                  {/* Scrollable Body */}
+                  <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
+                    <table className="w-full table-fixed">
+                      <tbody>
+                        {artists.map((artist, index) => (
+                          <tr key={artist.id} className="border-b border-border hover:bg-muted/50">
+                            <td className="w-16 p-3 text-center">{currentPage * pageSize + index + 1}</td>
+                            <td className="w-48 p-3">{artist.country || '—'}</td>
+                            <td className="w-96 p-3">
+                              <div className="flex items-center gap-3">
+                                <img src={artist.avatar || DEFAULT_AVATAR_URL} alt={artist.name} onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }} className="w-10 h-10 rounded-full object-cover" />
+                                <span className="font-medium truncate">{artist.name}</span>
+                              </div>
+                            </td>
+                            <td className="w-32 p-3">{artist.debutYear || '—'}</td>
+                            <td className="w-32 text-right p-3">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button variant="ghost" size="icon" onClick={() => handleEdit(artist)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(artist)} className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -174,11 +218,25 @@ const AdminArtists = () => {
             <div className="flex items-center justify-between pt-4 flex-shrink-0">
               <div className="text-sm text-muted-foreground">Showing {artists.length} of {totalElements} artists</div>
               <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronsLeft className="w-4 h-4" /></Button>
-                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8"><ChevronLeft className="w-4 h-4" /></Button>
-                {getPageNumbers().map(page => (<Button key={page} variant={currentPage === page ? "default" : "outline"} size="icon" onClick={() => goToPage(page)} className="h-8 w-8">{page + 1}</Button>))}
-                <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronRight className="w-4 h-4" /></Button>
-                <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8"><ChevronsRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronsLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronLeft className="w-4 h-4" /></Button>
+                {getPageNumbers().map(page => (
+                  <Button 
+                    key={page} 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => goToPage(page)} 
+                    className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
+                      currentPage === page 
+                        ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]" 
+                        : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                    }`}
+                  >
+                    {page + 1}
+                  </Button>
+                ))}
+                <Button variant="outline" size="icon" onClick={goToNextPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronRight className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={goToLastPage} disabled={currentPage >= totalPages - 1} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronsRight className="w-4 h-4" /></Button>
               </div>
             </div>
           )}

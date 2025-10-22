@@ -76,6 +76,9 @@ All colors MUST be HSL.
     --admin-border: 214.3 31.8% 91.4%;
     --admin-card: 0 0% 98%;
     --admin-sidebar: 210 20% 98%;
+    --admin-hover: 40 90% 90%;
+    --admin-active: 40 85% 82%;
+    --admin-active-foreground: 40 95% 30%;
     
     /* Admin Gradients */
     --gradient-admin: linear-gradient(135deg, hsl(var(--admin-primary)), hsl(var(--admin-accent)));
@@ -145,6 +148,10 @@ All colors MUST be HSL.
     --admin-border: 220 26% 18%;
     --admin-card: 220 26% 10%;
     --admin-sidebar: 220 26% 8%;
+    --admin-hover: 220 26% 8%;
+    --admin-hover-text: 45 95% 70%;
+    --admin-active: 45 70% 25%;
+    --admin-active-foreground: 45 95% 75%;
     
     /* Admin Gradients - Dark Mode */
     --gradient-admin: linear-gradient(135deg, hsl(var(--admin-primary)), hsl(var(--admin-accent)));
@@ -187,3 +194,30 @@ All colors MUST be HSL.
 .scrollbar-custom::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary) / 0.8);
 }
+
+/* Admin Scrollbar Styles */
+.scrollbar-admin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--admin-hover)) hsl(var(--admin-card));
+}
+
+.scrollbar-admin::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scrollbar-admin::-webkit-scrollbar-track {
+  background: hsl(var(--admin-card));
+  border-radius: 5px;
+}
+
+.scrollbar-admin::-webkit-scrollbar-thumb {
+  background: hsl(var(--admin-active));
+  border-radius: 5px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-admin::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--admin-active-foreground));
+}
+

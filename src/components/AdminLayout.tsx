@@ -1,10 +1,9 @@
 import { ReactNode, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Sun, Moon } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
-import { useTheme } from "@/components/ThemeProvider";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -13,7 +12,6 @@ interface AdminLayoutProps {
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     const isAuthenticated = localStorage.getItem("adminAuth");
@@ -65,10 +63,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             <Link key={item.path} to={item.path}>
               <Button
                 variant="ghost"
-                className={`w-full justify-start transition-all ${
+                className={`w-full justify-start transition-all duration-200 ${
                   isActive 
-                    ? "bg-gradient-admin text-white hover:opacity-90" 
-                    : "hover:bg-[hsl(var(--admin-card))]"
+                    ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]" 
+                    : "hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-transparent dark:hover:text-[hsl(var(--admin-hover-text))]"
                 }`}
               >
                 <Icon className="w-4 h-4 mr-3" />
@@ -79,22 +77,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         })}
       </nav>
 
-      <div className="p-4 border-t border-[hsl(var(--admin-border))] space-y-2">
+      <div className="p-4 border-t border-[hsl(var(--admin-border))]">
         <Button
           variant="ghost"
-          className="w-full justify-start hover:bg-[hsl(var(--admin-card))]"
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-        >
-          {theme === "dark" ? (
-            <Sun className="w-4 h-4 mr-3" />
-          ) : (
-            <Moon className="w-4 h-4 mr-3" />
-          )}
-          {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
-        </Button>
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="w-full justify-start transition-all duration-200 text-destructive hover:text-destructive hover:bg-destructive/10"
           onClick={handleLogout}
         >
           <LogOut className="w-4 h-4 mr-3" />
@@ -120,29 +106,16 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
             </div>
             <h2 className="font-bold">Admin Panel</h2>
           </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            >
-              {theme === "dark" ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </Button>
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="w-6 h-6" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-0 bg-[hsl(var(--admin-sidebar))]">
-                <Sidebar />
-              </SheetContent>
-            </Sheet>
-          </div>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="w-6 h-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 p-0 bg-[hsl(var(--admin-sidebar))]">
+              <Sidebar />
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
 

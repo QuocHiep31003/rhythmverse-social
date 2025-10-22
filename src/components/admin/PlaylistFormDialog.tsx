@@ -173,8 +173,8 @@ export const PlaylistFormDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="text-white">
-            {mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}
+          <DialogTitle className="text-2xl font-bold">
+            {mode === "create" ? "Tạo Playlist mới" : "Chỉnh sửa Playlist"}
           </DialogTitle>
           <DialogDescription className="text-gray-400">
             {mode === "create"
