@@ -61,7 +61,7 @@ function msToMMSS(sec: number) {
 const AlbumDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { playSong, pause, isPlaying, currentSong, setQueue } = useMusic();
+  const { playSong, togglePlay, isPlaying, currentSong, setQueue } = useMusic();
 
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);
@@ -127,7 +127,7 @@ const AlbumDetail = () => {
   /* ========== Play / Pause logic chuẩn ========== */
   const handlePlayAlbum = () => {
     if (!songs.length) return;
-    if (isPlaying) pause();
+    if (isPlaying) togglePlay();
     else {
       if (currentSong && songs.find((s) => s.id === currentSong.id))
         playSong(currentSong); // resume đúng bài
@@ -224,7 +224,7 @@ const AlbumDetail = () => {
                   <div
                     key={song.id}
                     onClick={() =>
-                      active && isPlaying ? pause() : playSong(song)
+                      active && isPlaying ? togglePlay() : playSong(song)
                     }
                     className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
                       items-center gap-3 px-6 py-3 cursor-pointer transition-colors
