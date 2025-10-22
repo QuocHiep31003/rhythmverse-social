@@ -441,7 +441,7 @@ const loadAlbums = async () => {
         </Dialog>
 
         {/* Content */}
-        <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden">
+        <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader>
             {/* Filters + Search */}
             <div className="flex flex-col gap-4">
@@ -550,7 +550,7 @@ const loadAlbums = async () => {
           </CardHeader>
 
           {/* Table */}
-          <CardContent className="flex-1 overflow-auto">
+          <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
             {loading ? (
               <div className="text-center py-8">Đang tải...</div>
             ) : albums.length === 0 ? (
