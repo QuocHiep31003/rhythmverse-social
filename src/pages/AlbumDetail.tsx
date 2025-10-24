@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Footer from "@/components/Footer";
 import ShareButton from "@/components/ShareButton";
@@ -6,11 +6,11 @@ import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal } from "lucide-react";
+import { Play, Pause, Heart, Clock, Music } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
 
-/* ========== Helper: Lấy màu và định dạng thời gian ========== */
+/* 🎨 Helpers */
 async function getDominantColor(url: string): Promise<{ r: number; g: number; b: number }> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -57,7 +57,7 @@ function msToMMSS(sec: number) {
   return `${mm}:${ss}`;
 }
 
-/* ========== Component chính ========== */
+/* 🎵 Component */
 const AlbumDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -74,7 +74,7 @@ const AlbumDetail = () => {
     surfaceBottom: "rgb(12,12,16)",
   });
 
-  /* ========== Fetch album ========== */
+  /* 📦 Fetch album */
   useEffect(() => {
     (async () => {
       if (!id) return;
@@ -103,15 +103,11 @@ const AlbumDetail = () => {
         }));
         setAlbum(norm);
         setSongs(songList);
-        // Chỉ đồng bộ queue nếu bài hiện tại thuộc album này
-        if (currentSong && songList.some((s) => s.id === currentSong.id)) {
-          setQueue(songList);
-        }
+        setQueue(songList);
 
         const dom = await getDominantColor(norm.cover);
         setPalette(makePalette(dom));
 
-        // lấy related albums
         if (norm.artistId) {
           const all = await albumsApi.getAll({ size: 100 });
           const filtered = all.content.filter(
@@ -125,26 +121,14 @@ const AlbumDetail = () => {
         setLoading(false);
       }
     })();
-  }, [id, setQueue, currentSong]);
+  }, [id, setQueue]);
 
-  /* ========== Play / Pause logic chuẩn ========== */
+  /* ▶️ Play / Pause logic */
   const handlePlayAlbum = () => {
-    if (!songs.length) return;
-    if (isPlaying) togglePlay();
-    else {
-      if (currentSong && songs.find((s) => s.id === currentSong.id))
-        playSong(currentSong); // resume đúng bài
-      else playSong(songs[0]); // play bài đầu
-    }
-  };
-
-  // Phiên bản ổn định: toggle khi đang phát bài trong album, nếu không thì set queue + play từ đầu
-  const handlePlayAlbum2 = () => {
     const albumHasCurrent = currentSong && songs.some((s) => s.id === currentSong.id);
     if (!songs.length) return;
-    if (albumHasCurrent) {
-      togglePlay();
-    } else {
+    if (albumHasCurrent) togglePlay();
+    else {
       setQueue(songs);
       playSong(songs[0]);
     }
@@ -158,12 +142,12 @@ const AlbumDetail = () => {
   );
 
   return (
-    <div className="min-h-screen transition-colors duration-500 text-foreground bg-background">
-      {/* header */}
+    <div className="min-h-screen text-foreground bg-background transition-colors duration-500">
+      {/* 🟣 Album Header */}
       <div className="w-full border-b border-border" style={headerStyle}>
         <div className="container mx-auto px-4 py-10 md:py-14 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div
-            className="relative w-64 h-64 md:w-72 md:h-72 rounded-lg overflow-hidden shadow-2xl flex items-center justify-center bg-gradient-to-br from-primary to-primary-glow"
+            className="relative w-60 h-60 md:w-72 md:h-72 rounded-xl overflow-hidden shadow-xl flex items-center justify-center bg-black/20 dark:bg-black/40"
             style={{
               boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 0 24px 2px ${palette.primary}`,
             }}
@@ -171,17 +155,21 @@ const AlbumDetail = () => {
             <img
               src={album?.cover}
               alt={album?.title}
-              className={`w-full h-full object-cover object-center transition-transform duration-300 ${
-                isPlaying && currentSong && songs.some((s) => s.id === currentSong.id) ? "spin-slower" : ""
-              }`}
+              className="w-full h-full object-cover object-center"
             />
           </div>
 
           <div className="flex-1 flex flex-col justify-end text-center md:text-left">
-            <Badge className="w-fit mb-3 bg-primary/20 text-primary">
-              ALBUM
-            </Badge>
-            <h1 className="text-6xl md:text-7xl font-extrabold leading-tight">
+            <Badge className="w-fit mb-3 bg-primary/20 text-primary">ALBUM</Badge>
+            <h1
+              className="text-5xl md:text-6xl font-extrabold leading-tight truncate max-w-full"
+              style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+              title={album?.title}
+            >
               {album?.title}
             </h1>
             <div className="mt-2 text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2">
@@ -197,7 +185,7 @@ const AlbumDetail = () => {
 
             <div className="mt-6 flex justify-center md:justify-start gap-3">
               <Button
-                onClick={handlePlayAlbum2}
+                onClick={handlePlayAlbum}
                 className="rounded-full px-6 h-11 font-semibold text-black dark:text-white"
                 style={{ background: palette.primary }}
               >
@@ -206,7 +194,9 @@ const AlbumDetail = () => {
                 ) : (
                   <Play className="w-5 h-5 mr-2" />
                 )}
-                {isPlaying && currentSong && songs.some((s) => s.id === currentSong.id) ? "Pause" : "Play"}
+                {isPlaying && currentSong && songs.some((s) => s.id === currentSong.id)
+                  ? "Pause"
+                  : "Play"}
               </Button>
 
               <Button
@@ -222,16 +212,20 @@ const AlbumDetail = () => {
         </div>
       </div>
 
-      {/* song list */}
+      {/* 🧾 Song List */}
       <div className="container mx-auto px-4 py-8">
         <Card className="border-border bg-card backdrop-blur-md">
-          <CardContent className="p-0">
-            <div className="grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px] px-6 py-3 text-xs uppercase text-muted-foreground border-b border-border">
-              <div className="text-left">#</div>
-              <div className="text-left">Title</div>
-              <div className="text-left hidden sm:block">Released</div>
-              <div className="text-left">Duration</div>
-              <div className="text-left">Actions</div>
+          <CardContent className="p-0 divide-y divide-border/30">
+            {/* header */}
+            <div className="grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
+              items-center px-6 min-h-[60px] text-xs uppercase tracking-wide text-muted-foreground border-b border-border">
+              <div className="text-center">#</div>
+              <div>Title</div>
+              <div className="hidden sm:block text-center">Released</div>
+              <div className="text-center">
+                <Clock className="w-3.5 h-3.5 inline-block mr-1" /> Duration
+              </div>
+              <div className="text-center">Actions</div>
             </div>
 
             {songs.length ? (
@@ -241,21 +235,22 @@ const AlbumDetail = () => {
                   <div
                     key={song.id}
                     onClick={() => {
-                      if (active) {
-                        togglePlay();
-                      } else {
+                      if (active) togglePlay();
+                      else {
                         setQueue(songs);
                         playSong(song);
                       }
                     }}
                     className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
-                      items-center gap-3 px-6 py-3 cursor-pointer transition-colors
+                      items-center gap-3 px-6 cursor-pointer select-none transition-colors
+                      min-h-[60px] rounded-md
                       ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}
                   >
-                    <div className="flex justify-center">
+                    {/* index / equalizer */}
+                    <div className="flex items-center justify-center h-full">
                       {active ? (
                         isPlaying ? (
-                          <span className="flex gap-0.5 h-4 items-end">
+                          <span className="flex gap-[2px] items-center justify-center h-4">
                             <i className="bar" />
                             <i className="bar delay-100" />
                             <i className="bar delay-200" />
@@ -268,12 +263,9 @@ const AlbumDetail = () => {
                       )}
                     </div>
 
+                    {/* title + artist */}
                     <div>
-                      <div
-                        className={`truncate font-medium ${
-                          active ? "text-primary" : ""
-                        }`}
-                      >
+                      <div className={`truncate font-medium ${active ? "text-primary" : ""}`}>
                         {song.title}
                       </div>
                       <div className="text-sm text-muted-foreground truncate">
@@ -281,15 +273,15 @@ const AlbumDetail = () => {
                       </div>
                     </div>
 
-                    <div className="hidden sm:flex justify-start text-sm">
+                    <div className="hidden sm:flex justify-center text-sm">
                       {album?.releaseDate
                         ? new Date(album.releaseDate).toLocaleDateString()
                         : "—"}
                     </div>
-                    <div className="flex items-center justify-start text-sm">
+                    <div className="flex justify-center text-sm">
                       {song.duration ? msToMMSS(song.duration) : "—"}
                     </div>
-                    <div className="flex items-center justify-start gap-2">
+                    <div className="flex justify-center gap-2">
                       <Button
                         size="icon"
                         variant="ghost"
@@ -327,12 +319,10 @@ const AlbumDetail = () => {
         </Card>
       </div>
 
-      {/* related albums */}
+      {/* related */}
       {related.length > 0 && (
         <div className="container mx-auto px-4 pb-16">
-          <h2 className="text-2xl font-semibold mb-5">
-            More from {album?.artist}
-          </h2>
+          <h2 className="text-2xl font-semibold mb-5">More from {album?.artist}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {related.map((rel: any) => (
               <Card
@@ -341,18 +331,22 @@ const AlbumDetail = () => {
                 className="cursor-pointer border-border hover:border-primary/40 bg-card hover:bg-muted/30 transition-all overflow-hidden"
               >
                 <div className="aspect-square overflow-hidden">
-                  <img
-                    src={rel.coverUrl}
-                    alt={rel.name}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
-                  />
+                  {rel.coverUrl ? (
+                    <img
+                      src={rel.coverUrl}
+                      alt={rel.name}
+                      className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-black/30 flex items-center justify-center">
+                      <Music className="w-10 h-10 text-white/40" />
+                    </div>
+                  )}
                 </div>
                 <CardContent className="p-3">
                   <p className="font-medium truncate">{rel.name}</p>
                   <p className="text-sm text-muted-foreground truncate">
-                    {rel.releaseDate
-                      ? new Date(rel.releaseDate).getFullYear()
-                      : ""}
+                    {rel.releaseDate ? new Date(rel.releaseDate).getFullYear() : ""}
                   </p>
                 </CardContent>
               </Card>
@@ -370,6 +364,7 @@ const AlbumDetail = () => {
           display:inline-block;
           width:2px;
           height:8px;
+          vertical-align:middle;
           background:${isPlaying ? palette.primary : "transparent"};
           animation:${isPlaying ? "ev 1s ease-in-out infinite" : "none"};
         }
