@@ -127,7 +127,12 @@ const AlbumDetail = () => {
   const handlePlayAlbum = () => {
     const albumHasCurrent = currentSong && songs.some((s) => s.id === currentSong.id);
     if (!songs.length) return;
-    if (albumHasCurrent) togglePlay();
+if (albumHasCurrent) togglePlay();
+else {
+  setQueue(songs);
+  playSong(songs[0]);
+}
+
     else {
       setQueue(songs);
       playSong(songs[0]);
@@ -234,13 +239,14 @@ const AlbumDetail = () => {
                 return (
                   <div
                     key={song.id}
-                    onClick={() => {
-                      if (active) togglePlay();
-                      else {
-                        setQueue(songs);
-                        playSong(song);
-                      }
-                    }}
+onClick={() => {
+  if (active) togglePlay();
+  else {
+    setQueue(songs);
+    playSong(song);
+  }
+}}
+
                     className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
                       items-center gap-3 px-6 cursor-pointer select-none transition-colors
                       min-h-[60px] rounded-md

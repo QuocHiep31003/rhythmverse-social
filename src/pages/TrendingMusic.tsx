@@ -7,11 +7,12 @@ import { useMusic } from "@/contexts/MusicContext";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
 import { formatPlayCount } from "@/lib/utils";
+import { songsApi } from "@/services/api";
 
 const TrendingMusic = () => {
   const navigate = useNavigate();
   const { playSong, setQueue } = useMusic();
-  const [allSongs, setAllSongs] = useState<any[]>([]); // Toàn bộ bài hát đã sort
+  const [allSongs, setAllSongs] = useState<any[]>([]); // Top 100 bài trending
   const [filteredSongs, setFilteredSongs] = useState<any[]>([]);
   const [displayedSongs, setDisplayedSongs] = useState<any[]>([]); // Bài hát hiển thị theo page
   const [currentPage, setCurrentPage] = useState(1);
@@ -19,19 +20,51 @@ const TrendingMusic = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
-  // Fetch toàn bộ bài hát và sort một lần
+  // Fetch top 100 trending songs
   useEffect(() => {
-    fetch(`http://localhost:8080/api/songs?size=10000`)
-      .then((res) => res.json())
-      .then((data) => {
+    const fetchTrending = async () => {
+      try {
+        console.log('🔍 Fetching trending songs...');
+        
+        // Thử API trending trước
+        const trendingSongs = await songsApi.getTrending(100);
+        
+        if (trendingSongs && trendingSongs.length > 0) {
+          console.log('✅ Loaded from trending API:', trendingSongs.length, 'songs');
+          
+          // Backend đã sort sẵn theo trendingScore, không cần sort lại
+          setAllSongs(trendingSongs);
+          setFilteredSongs(trendingSongs);
+          setTotalPages(Math.ceil(trendingSongs.length / itemsPerPage));
+          return;
+        }
+        
+        // Nếu API trending không có data, dùng cách cũ
+        console.log('⚠️ No trending data, falling back to fetching all songs...');
+        const response = await fetch('http://localhost:8080/api/songs?size=1000');
+        const data = await response.json();
+        
         if (data && data.content) {
-          const sorted = data.content.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
+          const sorted = data.content
+            .sort((a, b) => {
+              // Chỉ sort theo trendingScore
+              const scoreA = a.trendingScore || 0;
+              const scoreB = b.trendingScore || 0;
+              return scoreB - scoreA;
+            })
+            .slice(0, 100); // ⭐ Chỉ lấy top 100
+          
+          console.log('✅ Loaded from fallback:', sorted.length, 'songs');
           setAllSongs(sorted);
           setFilteredSongs(sorted);
           setTotalPages(Math.ceil(sorted.length / itemsPerPage));
         }
-      })
-      .catch((err) => console.error("Lỗi tải bài hát:", err));
+      } catch (err) {
+        console.error("❌ Lỗi tải bài hát trending:", err);
+      }
+    };
+    
+    fetchTrending();
   }, []);
 
   // Lọc theo tìm kiếm
@@ -43,6 +76,7 @@ const TrendingMusic = () => {
       const filtered = allSongs.filter((song) => {
         const title = (song.name || song.title || "").toLowerCase();
         const artist =
+          song.artistNames?.join(" ").toLowerCase() ||
           song.artists?.map((a: any) => a.name).join(" ").toLowerCase() ||
           (song.artist || "").toLowerCase();
         return title.includes(searchLower) || artist.includes(searchLower);
@@ -64,7 +98,7 @@ const TrendingMusic = () => {
     const formattedSong = {
       id: song.id,
       title: song.name || song.title,
-      artist: song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
+      artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
       album: song.album?.name || song.album || "",
       duration: song.duration || 0,
       cover: song.cover || "",
@@ -74,7 +108,7 @@ const TrendingMusic = () => {
     const formattedQueue = allSongs.map((s) => ({
       id: s.id,
       title: s.name || s.title,
-      artist: s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
+      artist: s.artistNames?.join(", ") || s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
       album: s.album?.name || s.album || "",
       duration: s.duration || 0,
       cover: s.cover || "",
@@ -170,7 +204,8 @@ const TrendingMusic = () => {
                           {song.name || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artists?.map((a) => a.name).join(", ") ||
+                          {song.artistNames?.join(", ") ||
+                            song.artists?.map((a) => a.name).join(", ") ||
                             song.artist ||
                             "Unknown"}
                         </p>

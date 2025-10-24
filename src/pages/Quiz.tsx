@@ -155,7 +155,7 @@ const Quiz = () => {
     }
   }, [gameStarted, gameFinished, timeLeft]);
 
-  // ✅ Chọn đáp án
+ 
   const handleAnswer = (answer: string) => {
     setSelectedAnswer(answer);
 
@@ -167,7 +167,7 @@ const Quiz = () => {
     setTimeout(() => handleNextQuestion(), 1000);
   };
 
-  // ✅ Câu tiếp theo
+ 
   const handleNextQuestion = () => {
     if (currentQuestion < questions.length - 1) {
       setCurrentQuestion((prev) => prev + 1);
@@ -192,7 +192,7 @@ const Quiz = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentQuizzes = quizzes.slice(startIndex, startIndex + itemsPerPage);
 
-  // 🎮 Khi đang chơi quiz
+ 
   if (gameStarted && !gameFinished) {
     const currentQ = questions[currentQuestion];
     const progress = ((currentQuestion + 1) / questions.length) * 100;
@@ -263,7 +263,7 @@ const Quiz = () => {
     );
   }
 
-  // 🎉 Kết thúc quiz
+
   if (gameFinished) {
     const finalScore = Math.round((score / (questions.length * 100)) * 100);
 
@@ -298,7 +298,7 @@ const Quiz = () => {
     );
   }
 
-  // 📋 Danh sách quiz
+  
   return (
     <div className="min-h-screen bg-gradient-dark">
       <ChatBubble />

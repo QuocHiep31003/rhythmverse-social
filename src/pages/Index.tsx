@@ -22,6 +22,7 @@ import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import { formatPlayCount } from "@/lib/utils";
+import { songsApi } from "@/services/api";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ const Index = () => {
   const topHits100 = mockSongs.slice(0, 5);
   const aiPicks = mockSongs.slice(0, 3);
 
-  // Danh sách Editor’s albums
+  // Danh sách Editor's albums
   const editorsChoice = [
     {
       id: 1,
@@ -49,23 +50,48 @@ const Index = () => {
     },
   ];
 
-  // Dữ liệu từ API thực tế
+  // Dữ liệu từ API thực tế - Hot Today (Trending 7 ngày)
   const [topHitsToday, setTopHitsToday] = useState([]);
 
   useEffect(() => {
-    // Fetch tất cả bài hát để sort toàn bộ
-    fetch("http://localhost:8080/api/songs?size=10000")
-      .then((res) => res.json())
-      .then((data) => {
+    // Hot Today: Ưu tiên API trending mới, fallback về cách cũ nếu không có data
+    const fetchHotToday = async () => {
+      try {
+        // Thử dùng API trending mới trước
+        const trendingSongs = await songsApi.getTrendingSimple(5);
+        
+        if (trendingSongs && trendingSongs.length > 0) {
+          console.log('✅ Loaded from trending API:', trendingSongs.length, 'songs');
+          
+          // Backend đã sort sẵn theo trendingScore, không cần sort lại
+          setTopHitsToday(trendingSongs.slice(0, 5));
+          return;
+        }
+        
+        // Nếu API trending không có data, dùng cách cũ
+        console.log('⚠️ No trending data, falling back to fetching all songs...');
+        const response = await fetch("http://localhost:8080/api/songs?size=1000");
+        const data = await response.json();
+        
         if (data && data.content) {
-          const songs = data.content;
-          const sorted = songs
-            .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+          const sorted = data.content
+            .sort((a, b) => {
+              // Chỉ sort theo trendingScore
+              const scoreA = a.trendingScore || 0;
+              const scoreB = b.trendingScore || 0;
+              return scoreB - scoreA;
+            })
             .slice(0, 5);
+          
+          console.log('✅ Loaded from fallback:', sorted.length, 'songs');
           setTopHitsToday(sorted);
         }
-      })
-      .catch((err) => console.error("Lỗi tải bài hát:", err));
+      } catch (err) {
+        console.error("❌ Lỗi tải bài hát trending:", err);
+      }
+    };
+    
+    fetchHotToday();
   }, []);
 
   return (
@@ -210,11 +236,11 @@ const Index = () => {
                         const formattedSongs = topHitsToday.map(s => ({
                           id: s.id,
                           title: s.name,
-                          artist: s.artists?.map((a) => a.name).join(", ") || "Unknown",
+                          artist: s.artistNames?.join(", ") || s.artists?.map((a) => a.name).join(", ") || "Unknown",
                           album: s.album?.name || "Unknown",
                           duration: s.duration || 0,
                           cover: s.cover || "",
-                          genre: s.genres?.[0]?.name || "Unknown",
+                          genre: s.genreNames?.[0] || s.genres?.[0]?.name || "Unknown",
                           plays: formatPlayCount(s.playCount || 0),
                           audio: s.audioUrl,
                           audioUrl: s.audioUrl,
@@ -251,7 +277,7 @@ const Index = () => {
                           {song.name}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artists?.map((a) => a.name).join(", ")}
+                          {song.artistNames?.join(", ") || song.artists?.map((a) => a.name).join(", ") || "Unknown"}
                         </p>
                       </div>
 

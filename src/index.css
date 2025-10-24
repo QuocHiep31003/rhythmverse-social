@@ -53,11 +53,14 @@ All colors MUST be HSL.
     --gradient-secondary: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--neon-green)));
     --gradient-dark: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted)));
     --gradient-glass: linear-gradient(135deg, hsla(0, 0%, 100%, 0.8), hsla(210, 40%, 96%, 0.4));
+    --gradient-navbar: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 50%, hsl(var(--neon-pink)) 100%);
+    --gradient-search: linear-gradient(135deg, hsl(var(--primary) / 0.1), hsl(var(--accent) / 0.1));
 
     /* Shadows and Effects */
     --shadow-glow: 0 0 40px hsla(280, 100%, 65%, 0.3);
     --shadow-neon: 0 0 20px hsla(195, 100%, 65%, 0.4);
     --shadow-card: 0 10px 30px hsla(0, 0%, 0%, 0.1);
+    --shadow-navbar: 0 4px 20px hsla(280, 100%, 65%, 0.15);
 
     /* Animations */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -123,11 +126,14 @@ All colors MUST be HSL.
     --gradient-secondary: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--neon-green)));
     --gradient-dark: linear-gradient(180deg, hsl(var(--music-dark)), hsl(var(--background)));
     --gradient-glass: linear-gradient(135deg, hsla(220, 26%, 8%, 0.8), hsla(220, 26%, 12%, 0.4));
+    --gradient-navbar: linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 50%, hsl(var(--neon-pink)) 100%);
+    --gradient-search: linear-gradient(135deg, hsl(var(--primary) / 0.15), hsl(var(--accent) / 0.15));
 
     /* Shadows and Effects */
     --shadow-glow: 0 0 40px hsla(280, 100%, 65%, 0.3);
     --shadow-neon: 0 0 20px hsla(195, 100%, 65%, 0.4);
     --shadow-card: 0 10px 30px hsla(220, 26%, 0%, 0.5);
+    --shadow-navbar: 0 4px 20px hsla(280, 100%, 65%, 0.2);
 
     /* Admin Panel Specific Colors - Dark Mode */
     --admin-primary: 45 93% 58%;
