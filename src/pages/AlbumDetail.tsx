@@ -61,7 +61,7 @@ function msToMMSS(sec: number) {
 const AlbumDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { playSong, pause, isPlaying, currentSong, setQueue } = useMusic();
+  const { playSong, togglePlay, isPlaying, currentSong, setQueue } = useMusic();
 
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);
@@ -103,7 +103,10 @@ const AlbumDetail = () => {
         }));
         setAlbum(norm);
         setSongs(songList);
-        setQueue(songList);
+        // Chỉ đồng bộ queue nếu bài hiện tại thuộc album này
+        if (currentSong && songList.some((s) => s.id === currentSong.id)) {
+          setQueue(songList);
+        }
 
         const dom = await getDominantColor(norm.cover);
         setPalette(makePalette(dom));
@@ -122,16 +125,28 @@ const AlbumDetail = () => {
         setLoading(false);
       }
     })();
-  }, [id, setQueue]);
+  }, [id, setQueue, currentSong]);
 
   /* ========== Play / Pause logic chuẩn ========== */
   const handlePlayAlbum = () => {
     if (!songs.length) return;
-    if (isPlaying) pause();
+    if (isPlaying) togglePlay();
     else {
       if (currentSong && songs.find((s) => s.id === currentSong.id))
         playSong(currentSong); // resume đúng bài
       else playSong(songs[0]); // play bài đầu
+    }
+  };
+
+  // Phiên bản ổn định: toggle khi đang phát bài trong album, nếu không thì set queue + play từ đầu
+  const handlePlayAlbum2 = () => {
+    const albumHasCurrent = currentSong && songs.some((s) => s.id === currentSong.id);
+    if (!songs.length) return;
+    if (albumHasCurrent) {
+      togglePlay();
+    } else {
+      setQueue(songs);
+      playSong(songs[0]);
     }
   };
 
@@ -148,7 +163,7 @@ const AlbumDetail = () => {
       <div className="w-full border-b border-border" style={headerStyle}>
         <div className="container mx-auto px-4 py-10 md:py-14 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div
-            className="relative w-52 h-52 md:w-60 md:h-60 rounded-2xl overflow-hidden shadow-xl flex items-center justify-center bg-black/10 dark:bg-black/30"
+            className="relative w-64 h-64 md:w-72 md:h-72 rounded-lg overflow-hidden shadow-2xl flex items-center justify-center bg-gradient-to-br from-primary to-primary-glow"
             style={{
               boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 0 24px 2px ${palette.primary}`,
             }}
@@ -156,7 +171,9 @@ const AlbumDetail = () => {
             <img
               src={album?.cover}
               alt={album?.title}
-              className="w-full h-full object-cover object-center"
+              className={`w-full h-full object-cover object-center transition-transform duration-300 ${
+                isPlaying && currentSong && songs.some((s) => s.id === currentSong.id) ? "spin-slower" : ""
+              }`}
             />
           </div>
 
@@ -164,7 +181,7 @@ const AlbumDetail = () => {
             <Badge className="w-fit mb-3 bg-primary/20 text-primary">
               ALBUM
             </Badge>
-            <h1 className="text-4xl md:text-5xl font-extrabold">
+            <h1 className="text-6xl md:text-7xl font-extrabold leading-tight">
               {album?.title}
             </h1>
             <div className="mt-2 text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2">
@@ -180,16 +197,16 @@ const AlbumDetail = () => {
 
             <div className="mt-6 flex justify-center md:justify-start gap-3">
               <Button
-                onClick={handlePlayAlbum}
+                onClick={handlePlayAlbum2}
                 className="rounded-full px-6 h-11 font-semibold text-black dark:text-white"
                 style={{ background: palette.primary }}
               >
-                {isPlaying ? (
+                {isPlaying && currentSong && songs.some((s) => s.id === currentSong.id) ? (
                   <Pause className="w-5 h-5 mr-2" />
                 ) : (
                   <Play className="w-5 h-5 mr-2" />
                 )}
-                {isPlaying ? "Pause" : "Play"}
+                {isPlaying && currentSong && songs.some((s) => s.id === currentSong.id) ? "Pause" : "Play"}
               </Button>
 
               <Button
@@ -210,11 +227,11 @@ const AlbumDetail = () => {
         <Card className="border-border bg-card backdrop-blur-md">
           <CardContent className="p-0">
             <div className="grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px] px-6 py-3 text-xs uppercase text-muted-foreground border-b border-border">
-              <div className="text-center">#</div>
-              <div>Title</div>
-              <div className="text-center hidden sm:block">Released</div>
-              <div className="text-center">Duration</div>
-              <div className="text-center">Actions</div>
+              <div className="text-left">#</div>
+              <div className="text-left">Title</div>
+              <div className="text-left hidden sm:block">Released</div>
+              <div className="text-left">Duration</div>
+              <div className="text-left">Actions</div>
             </div>
 
             {songs.length ? (
@@ -223,9 +240,14 @@ const AlbumDetail = () => {
                 return (
                   <div
                     key={song.id}
-                    onClick={() =>
-                      active && isPlaying ? pause() : playSong(song)
-                    }
+                    onClick={() => {
+                      if (active) {
+                        togglePlay();
+                      } else {
+                        setQueue(songs);
+                        playSong(song);
+                      }
+                    }}
                     className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
                       items-center gap-3 px-6 py-3 cursor-pointer transition-colors
                       ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}
@@ -259,15 +281,15 @@ const AlbumDetail = () => {
                       </div>
                     </div>
 
-                    <div className="hidden sm:flex justify-center text-sm">
+                    <div className="hidden sm:flex justify-start text-sm">
                       {album?.releaseDate
                         ? new Date(album.releaseDate).toLocaleDateString()
                         : "—"}
                     </div>
-                    <div className="flex justify-center text-sm">
+                    <div className="flex items-center justify-start text-sm">
                       {song.duration ? msToMMSS(song.duration) : "—"}
                     </div>
-                    <div className="flex justify-center gap-2">
+                    <div className="flex items-center justify-start gap-2">
                       <Button
                         size="icon"
                         variant="ghost"
