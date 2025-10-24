@@ -10,7 +10,7 @@ import { Play, Pause, Heart, Clock, Music } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
 
-/* dYZ" Helpers */
+/* 🎨 Helpers */
 async function getDominantColor(url: string): Promise<{ r: number; g: number; b: number }> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -57,7 +57,7 @@ function msToMMSS(sec: number) {
   return `${mm}:${ss}`;
 }
 
-/* dYZ� Component */
+/* 🎵 Component */
 const AlbumDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -74,7 +74,7 @@ const AlbumDetail = () => {
     surfaceBottom: "rgb(12,12,16)",
   });
 
-  /* dY"� Fetch album */
+  /* 📦 Fetch album */
   useEffect(() => {
     (async () => {
       if (!id) return;
@@ -123,11 +123,16 @@ const AlbumDetail = () => {
     })();
   }, [id, setQueue]);
 
-  /* �-�,? Play / Pause logic */
+  /* ▶️ Play / Pause logic */
   const handlePlayAlbum = () => {
     const albumHasCurrent = currentSong && songs.some((s) => s.id === currentSong.id);
     if (!songs.length) return;
-    if (albumHasCurrent) togglePlay();
+if (albumHasCurrent) togglePlay();
+else {
+  setQueue(songs);
+  playSong(songs[0]);
+}
+
     else {
       setQueue(songs);
       playSong(songs[0]);
@@ -143,7 +148,7 @@ const AlbumDetail = () => {
 
   return (
     <div className="min-h-screen text-foreground bg-background transition-colors duration-500">
-      {/* dYY� Album Header */}
+      {/* 🟣 Album Header */}
       <div className="w-full border-b border-border" style={headerStyle}>
         <div className="container mx-auto px-4 py-10 md:py-14 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div
@@ -174,13 +179,13 @@ const AlbumDetail = () => {
             </h1>
             <div className="mt-2 text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2">
               <span>{album?.artist}</span>
-              <span>�?�</span>
+              <span>•</span>
               <span>
                 {album?.releaseDate
                   ? new Date(album.releaseDate).getFullYear()
                   : "-"}
               </span>
-              <span>�?� {songs.length} songs</span>
+              <span>• {songs.length} songs</span>
             </div>
 
             <div className="mt-6 flex justify-center md:justify-start gap-3">
@@ -212,7 +217,7 @@ const AlbumDetail = () => {
         </div>
       </div>
 
-      {/* dY_ Song List */}
+      {/* 🧾 Song List */}
       <div className="container mx-auto px-4 py-8">
         <Card className="border-border bg-card backdrop-blur-md">
           <CardContent className="p-0 divide-y divide-border/30">
@@ -234,13 +239,13 @@ const AlbumDetail = () => {
                 return (
                   <div
                     key={song.id}
-                    onClick={() => {
-                      if (active) togglePlay();
-                      else {
-                        setQueue(songs);
-                        playSong(song);
-                      }
-                    }}
+onClick={() => {
+  if (active) togglePlay();
+  else {
+    setQueue(songs);
+    playSong(song);
+  }
+}}
 
                     className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
                       items-center gap-3 px-6 cursor-pointer select-none transition-colors
@@ -277,10 +282,10 @@ const AlbumDetail = () => {
                     <div className="hidden sm:flex justify-center text-sm">
                       {album?.releaseDate
                         ? new Date(album.releaseDate).toLocaleDateString()
-                        : "-"}
+                        : "—"}
                     </div>
                     <div className="flex justify-center text-sm">
-                      {song.duration ? msToMMSS(song.duration) : "-"}
+                      {song.duration ? msToMMSS(song.duration) : "—"}
                     </div>
                     <div className="flex justify-center gap-2">
                       <Button
@@ -378,4 +383,3 @@ const AlbumDetail = () => {
 };
 
 export default AlbumDetail;
-
