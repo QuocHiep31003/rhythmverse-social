@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -21,17 +21,18 @@ import {
   Search,
   Download,
   Upload,
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Music,
 } from "lucide-react";
 import { SongFormDialog } from "@/components/admin/SongFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { songsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { debounce, formatPlayCount } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const DEFAULT_AVATAR_URL =
   "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
@@ -193,9 +194,9 @@ const AdminSongs = () => {
       artist: s.artists?.map((a: any) => a.name).join(", ") || "Unknown",
       genre: s.genres?.[0]?.name || "Unknown",
     }));
-    
+
     const playableSong = playableSongs.find(s => s.id === song.id);
-    
+
     if (currentSong?.id === song.id) {
       togglePlay();
     } else {
@@ -229,276 +230,278 @@ const AdminSongs = () => {
 
   return (
     <div className="h-screen overflow-hidden p-6 flex flex-col">
-      <div className="w-full flex-1 flex flex-col overflow-hidden">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(-1)}
-          className="mb-4 self-start hover:bg-[hsl(var(--admin-card))]"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Quay lại
-        </Button>
-
-        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
-          <div className="flex items-center justify-between">
+      <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
+        {/* Header Section with Modern Design */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0 mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-[hsl(var(--admin-active))] rounded-xl flex items-center justify-center shadow-lg">
+              <Music className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
+            </div>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Quản lý Bài hát</h1>
-              <p className="text-muted-foreground">
-                Tổng số: {totalElements} bài hát • Trang {currentPage + 1} /{" "}
-                {totalPages}
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
+                Quản lý Bài hát
+              </h1>
+              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+                <Badge variant="secondary" className="font-normal">
+                  {totalElements} bài hát
+                </Badge>
+                {loading && <span className="text-xs">Đang tải...</span>}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                onClick={handleExport}
-                className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              className="hidden"
+            />
+
+            {/* Export Button */}
+            <Button
+              variant="outline"
+              onClick={handleExport}
+              className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </Button>
+
+            {/* Import Button */}
+            <Button
+              variant="outline"
+              onClick={handleImportClick}
+              disabled={isSubmitting}
+              className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </Button>
+
+            {/* Add Song Button */}
+            <Button
+              onClick={handleCreate}
+              className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"
+            >
+              <Plus className="w-4 h-4" />
+              Thêm bài hát
+            </Button>
+          </div>
+        </div>
+
+        <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden min-h-0">
+          <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20 flex-shrink-0">
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div className="flex-1">
+                <CardTitle className="text-xl font-bold">Songs Directory</CardTitle>
+                <CardDescription>Manage and organize your music library</CardDescription>
+              </div>
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or artist..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(0);
+                  }}
+                  className="pl-10 bg-background"
+                />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 flex flex-col min-h-0">
+            {loading ? (
+              <div className="text-center py-8">Đang tải...</div>
+            ) : songs.length === 0 ? (
+              <div className="text-center py-8">
+                {searchQuery
+                  ? "Không tìm thấy bài hát phù hợp"
+                  : "Chưa có bài hát nào"}
+              </div>
+            ) : (
+              <>
+                {/* Fixed Header */}
+                <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                  <table className="w-full table-fixed">
+                    <thead>
+                      <tr>
+                        <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
+                        <th className="w-12 text-left text-sm font-medium text-muted-foreground p-3"></th>
+                        <th className="w-64 text-left text-sm font-medium text-muted-foreground p-3">Bài hát</th>
+                        <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Nghệ sĩ</th>
+                        <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Năm phát hành</th>
+                        <th className="w-56 text-left text-sm font-medium text-muted-foreground p-3">Thể loại</th>
+                        <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Lượt nghe</th>
+                        <th className="w-28 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
+                  <table className="w-full table-fixed">
+                    <tbody>
+                      {songs.map((song, index) => (
+                        <tr key={song.id} className="border-b border-border hover:bg-muted/50">
+                          <td className="w-16 text-center p-3">
+                            {currentPage * pageSize + index + 1}
+                          </td>
+                          <td className="w-12 p-3">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handlePlayClick(song)}
+                              className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+                            >
+                              {currentSong?.id === song.id && isPlaying ? (
+                                <Pause className="w-4 h-4" />
+                              ) : (
+                                <Play className="w-4 h-4" />
+                              )}
+                            </Button>
+                          </td>
+                          <td className="w-64 p-3">
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium truncate">{song.name}</span>
+                            </div>
+                          </td>
+                          <td className="w-48 p-3 truncate">
+                            {song.artists?.map((a: any) => a.name).join(", ") ||
+                              "—"}
+                          </td>
+                          <td className="w-32 p-3">{song.releaseYear || "—"}</td>
+                          <td className="w-56 p-3">
+                            <div className="flex flex-wrap gap-1">
+                              {song.genres?.map((g: any) => (
+                                <span
+                                  key={g.id}
+                                  className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs"
+                                >
+                                  {g.name}
+                                </span>
+                              )) || "—"}
+                            </div>
+                          </td>
+                          <td className="w-28 text-center p-3">
+                            <div className="flex flex-wrap gap-1">
+                              {formatPlayCount(song.playCount || 0)}
+                            </div>
+                          </td>
+                          <td className="w-28 text-right p-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEdit(song)}
+                                className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteClick(song)}
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Pagination outside of scrollable area */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4 flex-shrink-0">
+            <div className="text-sm text-muted-foreground">
+              Hiển thị {songs.length} trên tổng số {totalElements} bài hát
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={goToFirstPage}
+                disabled={currentPage === 0}
+                className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
               >
-                <Download className="w-4 h-4 mr-2" />
-                Export
+                <ChevronsLeft className="w-4 h-4" />
               </Button>
               <Button
                 variant="outline"
-                onClick={handleImportClick}
-                disabled={isSubmitting}
-                className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
+                size="icon"
+                onClick={goToPreviousPage}
+                disabled={currentPage === 0}
+                className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
               >
-                <Upload className="w-4 h-4 mr-2" />
-                Import
+                <ChevronLeft className="w-4 h-4" />
               </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleImport}
-                style={{ display: "none" }}
-              />
-              <Button 
-                onClick={handleCreate}
-                className="bg-gradient-admin hover:opacity-90"
+              {getPageNumbers().map((page) => (
+                <Button
+                  key={page}
+                  variant="outline"
+                  size="icon"
+                  onClick={() => goToPage(page)}
+                  className={`h-8 w-8 border-[hsl(var(--admin-border))] ${currentPage === page
+                    ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
+                    : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                    }`}
+                >
+                  {page + 1}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={goToNextPage}
+                disabled={currentPage >= totalPages - 1}
+                className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Thêm bài hát
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={goToLastPage}
+                disabled={currentPage >= totalPages - 1}
+                className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+              >
+                <ChevronsRight className="w-4 h-4" />
               </Button>
             </div>
           </div>
-
-          <Card className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] flex-1 flex flex-col overflow-hidden min-h-0">
-            <CardHeader className="flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Tìm kiếm bài hát..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setCurrentPage(0);
-                    }}
-                    className="pl-10 bg-background/50"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
-                    Hiển thị:
-                  </span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) =>
-                      handlePageSizeChange(Number(e.target.value))
-                    }
-                    className="bg-background border-[hsl(var(--admin-border))] rounded px-2 py-1 text-sm"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">
-                    mỗi trang
-                  </span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-auto min-h-0 scrollbar-custom">
-              {loading ? (
-                <div className="text-center py-8">Đang tải...</div>
-              ) : songs.length === 0 ? (
-                <div className="text-center py-8">
-                  {searchQuery
-                    ? "Không tìm thấy bài hát phù hợp"
-                    : "Chưa có bài hát nào"}
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader className="sticky top-0 bg-[hsl(var(--admin-card))] z-10">
-                    <TableRow>
-                      <TableHead className="w-16 bg-[hsl(var(--admin-card))]">STT</TableHead>
-                      <TableHead className="w-12 bg-[hsl(var(--admin-card))]"></TableHead>
-                      <TableHead className="bg-[hsl(var(--admin-card))]">Bài hát</TableHead>
-                      <TableHead className="bg-[hsl(var(--admin-card))]">Nghệ sĩ</TableHead>
-                      <TableHead className="bg-[hsl(var(--admin-card))]">Năm phát hành</TableHead>
-                      <TableHead className="bg-[hsl(var(--admin-card))]">Thể loại</TableHead>
-                      <TableHead className="bg-[hsl(var(--admin-card))]">Lượt nghe</TableHead>
-                      <TableHead className="text-right bg-[hsl(var(--admin-card))]">Hành động</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {songs.map((song, index) => (
-                      <TableRow key={song.id}>
-                        <TableCell className="text-center">
-                          {currentPage * pageSize + index + 1}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handlePlayClick(song)}
-                            className="hover:bg-gradient-admin hover:text-white"
-                          >
-                            {currentSong?.id === song.id && isPlaying ? (
-                              <Pause className="w-4 h-4" />
-                            ) : (
-                              <Play className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <span className="font-medium">{song.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {song.artists?.map((a: any) => a.name).join(", ") ||
-                            "—"}
-                        </TableCell>
-                        <TableCell>{song.releaseYear || "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {song.genres?.map((g: any) => (
-                              <span
-                                key={g.id}
-                                className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs"
-                              >
-                                {g.name}
-                              </span>
-                            )) || "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex flex-wrap gap-1 ">
-                            {formatPlayCount(song.playCount || 0)}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(song)}
-                              className="hover:bg-[hsl(var(--admin-primary))] hover:text-white"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteClick(song)}
-                              className="hover:bg-destructive hover:text-destructive-foreground"
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Pagination outside of scrollable area */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">
-                Hiển thị {songs.length} trên tổng số {totalElements} bài hát
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToFirstPage}
-                  disabled={currentPage === 0}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToPreviousPage}
-                  disabled={currentPage === 0}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                {getPageNumbers().map((page) => (
-                  <Button
-                    key={page}
-                    variant="outline"
-                    size="icon"
-                    onClick={() => goToPage(page)}
-                    className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
-                      currentPage === page 
-                        ? "bg-gradient-admin text-white hover:opacity-90" 
-                        : "hover:bg-[hsl(var(--admin-card))]"
-                    }`}
-                  >
-                    {page + 1}
-                  </Button>
-                ))}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToNextPage}
-                  disabled={currentPage >= totalPages - 1}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToLastPage}
-                  disabled={currentPage >= totalPages - 1}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-card))]"
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <SongFormDialog
-          open={formOpen}
-          onOpenChange={setFormOpen}
-          onSubmit={handleFormSubmit}
-          defaultValues={selectedSong}
-          isLoading={isSubmitting}
-          mode={formMode}
-        />
-        <DeleteConfirmDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          onConfirm={handleDelete}
-          title="Xóa bài hát?"
-          description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.name}"? Hành động này không thể hoàn tác.`}
-          isLoading={isSubmitting}
-        />
+        )}
       </div>
+      <SongFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSubmit={handleFormSubmit}
+        defaultValues={selectedSong}
+        isLoading={isSubmitting}
+        mode={formMode}
+      />
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        onConfirm={handleDelete}
+        title="Xóa bài hát?"
+        description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.name}"? Hành động này không thể hoàn tác.`}
+        isLoading={isSubmitting}
+      />
     </div>
+
+
+
   );
 };
 

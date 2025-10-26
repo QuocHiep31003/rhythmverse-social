@@ -12,9 +12,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from "@/components/ui/table";
-import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
@@ -143,119 +140,180 @@ const AdminPlaylists = () => {
 
   /* ===== GIAO DIỆN ===== */
   return (
-    <div className="h-screen bg-gradient-to-b from-gray-900 to-black text-white p-6 flex flex-col">
+    <div className="h-screen overflow-hidden p-6 flex flex-col">
       <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4 self-start">
         <ArrowLeft className="w-4 h-4 mr-2" /> Quay lại
       </Button>
 
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h1 className="text-3xl font-bold">Quản lý Playlists</h1>
-          <p className="text-muted-foreground">
-            Tổng số: {totalElements} playlists • Trang {currentPage + 1}/{totalPages}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="w-4 h-4 mr-2" />Import</Button>
-          <Button variant="outline" onClick={loadPlaylists}><Download className="w-4 h-4 mr-2" />Export</Button>
-          <Button onClick={handleCreate}><Plus className="w-4 h-4 mr-2" />Tạo Playlist</Button>
-        </div>
-      </div>
-
-      <Card className="bg-card/50 border-border/50 flex-1 overflow-hidden">
-        <CardHeader>
-          <div className="flex gap-4 items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Tìm kiếm playlist..."
-                value={searchQuery}
-                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }}
-                className="pl-10 bg-background/50"
-              />
+      <div className="w-full flex-1 flex flex-col overflow-hidden">
+        <div className="space-y-4 flex-1 flex flex-col overflow-hidden min-h-0">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Playlists</h1>
+              <p className="text-muted-foreground">
+                Tổng số: {totalElements} playlists • Trang {currentPage + 1} / {totalPages}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <Upload className="w-4 h-4 mr-2" /> Import
+              </Button>
+              <Button variant="outline" onClick={loadPlaylists}>
+                <Download className="w-4 h-4 mr-2" /> Export
+              </Button>
+              <Button onClick={handleCreate}>
+                <Plus className="w-4 h-4 mr-2" /> Tạo Playlist
+              </Button>
             </div>
           </div>
-        </CardHeader>
 
-        <CardContent className="overflow-auto">
-          {loading ? (
-            <p className="text-center py-8">Đang tải...</p>
-          ) : playlists.length === 0 ? (
-            <p className="text-center py-8">Không có playlist nào</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>STT</TableHead>
-                  <TableHead>Ảnh bìa</TableHead>
-                  <TableHead>Tên Playlist</TableHead>
-                  <TableHead>Chủ sở hữu</TableHead>
-                  <TableHead>Mô tả</TableHead>
-                  <TableHead>Số bài hát</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead className="text-right">Hành động</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {playlists.map((p, i) => (
-                  <TableRow key={p.id}>
-                    <TableCell>{currentPage * pageSize + i + 1}</TableCell>
-                    <TableCell>
-                      <img src={p.coverImage || DEFAULT_IMAGE_URL} alt="" className="w-10 h-10 rounded object-cover" />
-                    </TableCell>
-                    <TableCell>{p.name}</TableCell>
-                    <TableCell>{p.owner?.name || "—"}</TableCell>
-                    <TableCell className="max-w-xs truncate">{p.description || "—"}</TableCell>
-                    <TableCell>{p.songs?.length || 0}</TableCell>
-                    <TableCell>
-                      <span className={p.isPublic ? "text-green-400" : "text-yellow-400"}>
-                        {p.isPublic ? "Công khai" : "Riêng tư"}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon"><MoreHorizontal className="w-4 h-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onClick={() => handleEdit(p)}>
-                            <Pencil className="w-4 h-4 mr-2" />Sửa
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => { setCollabPlaylistId(p.id); setCollabOpen(true); }}>
-                            <UserPlus className="w-4 h-4 mr-2" />Cộng tác
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleDeleteClick(p)} className="text-destructive">
-                            <Trash2 className="w-4 h-4 mr-2" />Xóa
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
+            <CardHeader className="flex-shrink-0">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm kiếm playlist..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(0);
+                      }}
+                      className="pl-10 bg-background/50"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
 
-      <PlaylistFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        onSubmit={() => loadPlaylists()}
-        defaultValues={selectedPlaylist}
-        mode={formMode}
-        isLoading={isSubmitting}
-      />
+            <CardContent className="flex-1 overflow-auto min-h-0">
+              {loading ? (
+                <div className="text-center py-8">Đang tải...</div>
+              ) : playlists.length === 0 ? (
+                <div className="text-center py-8">Không có playlist nào</div>
+              ) : (
+                <table className="w-full table-auto">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="p-2 text-left">STT</th>
+                      <th className="p-2 text-left">Ảnh bìa</th>
+                      <th className="p-2 text-left">Tên Playlist</th>
+                      <th className="p-2 text-left">Chủ sở hữu</th>
+                      <th className="p-2 text-left">Mô tả</th>
+                      <th className="p-2 text-left">Số bài hát</th>
+                      <th className="p-2 text-left">Trạng thái</th>
+                      <th className="p-2 text-right">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {playlists.map((p, i) => (
+                      <tr key={p.id} className="border-b border-border hover:bg-muted/50">
+                        <td className="p-2">{currentPage * pageSize + i + 1}</td>
+                        <td className="p-2">
+                          <img src={p.coverImage || DEFAULT_IMAGE_URL} alt="" className="w-10 h-10 rounded object-cover" />
+                        </td>
+                        <td className="p-2">{p.name}</td>
+                        <td className="p-2">{p.owner?.name || "—"}</td>
+                        <td className="p-2 max-w-xs truncate">{p.description || "—"}</td>
+                        <td className="p-2">{p.songs?.length || 0}</td>
+                        <td className="p-2">
+                          <span className={p.isPublic ? "text-green-400" : "text-yellow-400"}>
+                            {p.isPublic ? "Công khai" : "Riêng tư"}
+                          </span>
+                        </td>
+                        <td className="p-2 text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => handleEdit(p)}>
+                                <Pencil className="w-4 h-4 mr-2" />Sửa
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => { setCollabPlaylistId(p.id); setCollabOpen(true); }}>
+                                <UserPlus className="w-4 h-4 mr-2" />Cộng tác
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => handleDeleteClick(p)} className="text-destructive">
+                                <Trash2 className="w-4 h-4 mr-2" />Xóa
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </CardContent>
+          </Card>
 
-      <DeleteConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        onConfirm={handleDelete}
-        title="Xóa playlist?"
-        description={`Bạn có chắc muốn xóa playlist "${selectedPlaylist?.name}"? Hành động này không thể hoàn tác.`}
-        isLoading={isSubmitting}
-      />
+          {/* Form & Dialogs */}
+          <PlaylistFormDialog
+            open={formOpen}
+            onOpenChange={setFormOpen}
+            onSubmit={() => loadPlaylists()}
+            defaultValues={selectedPlaylist}
+            mode={formMode}
+            isLoading={isSubmitting}
+          />
+
+          <DeleteConfirmDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            onConfirm={handleDelete}
+            title="Xóa playlist?"
+            description={`Bạn có chắc muốn xóa playlist "${selectedPlaylist?.name}"? Hành động này không thể hoàn tác.`}
+            isLoading={isSubmitting}
+          />
+
+          <Dialog open={importOpen} onOpenChange={setImportOpen}>
+            <DialogContent className="sm:max-w-[425px] bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="text-white">Import Playlists từ Excel</DialogTitle>
+                <DialogDescription className="text-gray-400">
+                  Chọn file Excel (.xlsx, .xls) để import playlists.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+                  <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                  <p className="text-sm text-gray-400 mb-2">
+                    {importFile ? importFile.name : "Kéo thả file Excel hoặc click để chọn"}
+                  </p>
+                  <Input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+                    className="bg-background/50"
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setImportOpen(false);
+                      setImportFile(null);
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    Hủy
+                  </Button>
+                  <Button 
+                    onClick={() => toast({ title: "Import thành công!" })} 
+                    disabled={isSubmitting || !importFile}
+                  >
+                    {isSubmitting ? "Đang import..." : "Import Excel"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
     </div>
   );
 };

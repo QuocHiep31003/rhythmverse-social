@@ -10,11 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Footer from "@/components/Footer";
-import { 
-  MessageCircle, 
-  Users, 
-  Heart, 
-  Share2, 
+import {
+  MessageCircle,
+  Users,
+  Heart,
+  Share2,
   Send,
   Search,
   UserPlus,
@@ -141,7 +141,7 @@ const Social = () => {
         const me = await authApi.me();
         setProfileName(me?.name || me?.username || "");
         setProfileEmail(me?.email || "");
-      } catch {}
+      } catch { }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -254,7 +254,7 @@ const Social = () => {
       const result = await inviteLinksApi.create(Number(me));
       if (result?.shareUrl) {
         setShareUrl(result.shareUrl);
-        try { await navigator.clipboard.writeText(result.shareUrl); } catch {}
+        try { await navigator.clipboard.writeText(result.shareUrl); } catch { }
         toast.success('Invite link created and copied!', { description: result.shareUrl });
       } else {
         toast.success('Invite link created');
@@ -327,11 +327,10 @@ const Social = () => {
       {friends.map((friend) => (
         <div
           key={friend.id}
-          className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${
-            selectedChat === friend.id
-              ? "bg-primary/20 border border-primary/40"
-              : "bg-muted/10 hover:bg-muted/20"
-          }`}
+          className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${selectedChat === friend.id
+            ? "bg-primary/20 border border-primary/40"
+            : "bg-muted/10 hover:bg-muted/20"
+            }`}
           onClick={() => setSelectedChat(friend.id)}
         >
           <div className="flex items-center gap-3">
@@ -345,7 +344,7 @@ const Social = () => {
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background" />
               )}
             </div>
-            
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <p className="font-medium truncate">{friend.name}</p>
@@ -375,7 +374,7 @@ const Social = () => {
 
   const renderMessages = () => {
     const currentMessages = selectedChat ? messages[selectedChat] || [] : [];
-    
+
     return (
       <div className="space-y-4">
         {currentMessages.map((message) => (
@@ -384,11 +383,10 @@ const Social = () => {
             className={`flex ${message.sender === "You" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                message.sender === "You"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/20"
-              }`}
+              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.sender === "You"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted/20"
+                }`}
             >
               {message.type === "song" && message.songData ? (
                 <div className="space-y-2">
@@ -511,11 +509,11 @@ const Social = () => {
                           </div>
                         </div>
                       </CardHeader>
-                      
+
                       <CardContent className="flex-1 p-4 overflow-y-auto">
                         {renderMessages()}
                       </CardContent>
-                      
+
                       <div className="p-4 border-t border-border/20">
                         <div className="flex gap-2">
                           <Input
@@ -577,15 +575,15 @@ const Social = () => {
                             <p className="text-xs text-muted-foreground">Requested at {request.createdAt}</p>
                           </div>
                           <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
+                            <Button
+                              size="sm"
                               variant="hero"
                               onClick={() => handleAcceptFriendRequest(String(request.id))}
                             >
                               Accept
                             </Button>
-                            <Button 
-                              size="sm" 
+                            <Button
+                              size="sm"
                               variant="outline"
                               onClick={() => handleRejectFriendRequest(String(request.id))}
                             >
@@ -675,8 +673,8 @@ const Social = () => {
                           <p className="text-sm text-muted-foreground">{person.username}</p>
                           <p className="text-xs text-muted-foreground">{person.mutualFriends} mutual friends</p>
                         </div>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
                           onClick={() => handleSendFriendRequest(person.id)}
                           disabled={requestedIds.includes(person.id)}
@@ -689,7 +687,7 @@ const Social = () => {
                   </CardContent>
                 </Card>
               </div>
-              
+
               {/* Friends List */}
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {friends.map((friend) => (
@@ -717,7 +715,7 @@ const Social = () => {
                           </div>
                         )}
                       </div>
-                      
+
                       {friend.currentlyListening && (
                         <div className="bg-muted/10 rounded-lg p-3 mb-4">
                           <div className="flex items-center gap-2 mb-1">
@@ -728,7 +726,7 @@ const Social = () => {
                           <p className="text-xs text-muted-foreground">{friend.currentlyListening.artist}</p>
                         </div>
                       )}
-                      
+
                       <div className="flex gap-2">
                         <Button variant="outline" size="sm" className="flex-1">
                           <MessageCircle className="w-4 h-4 mr-2" />
