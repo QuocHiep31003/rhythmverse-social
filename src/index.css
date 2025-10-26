@@ -37,7 +37,7 @@ All colors MUST be HSL.
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 280 100% 65%;
+    --ring: 40 100% 50%;
 
     --radius: 0.75rem;
 
@@ -115,7 +115,7 @@ All colors MUST be HSL.
 
     --border: 220 26% 12%;
     --input: 220 26% 12%;
-    --ring: 280 100% 65%;
+    --ring: 45 93% 58%;
 
     /* Music Platform Specific Colors */
     --neon-pink: 320 100% 70%;
@@ -219,5 +219,18 @@ All colors MUST be HSL.
 
 .scrollbar-admin::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--admin-active-foreground));
+}
+
+/* Admin Input Focus Styles */
+.admin-input:focus {
+  border-color: hsl(var(--admin-active)) !important;
+  box-shadow: 0 0 0 2px hsl(var(--admin-active) / 0.2) !important;
+  outline: none !important;
+}
+
+.admin-input:focus-visible {
+  border-color: hsl(var(--admin-active)) !important;
+  box-shadow: 0 0 0 2px hsl(var(--admin-active) / 0.2) !important;
+  outline: none !important;
 }
 

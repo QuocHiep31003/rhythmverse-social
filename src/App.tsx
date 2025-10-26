@@ -38,6 +38,8 @@ import AdminAlbums from "./pages/admin/AdminAlbums";
 import AdminArtists from "./pages/admin/AdminArtists";
 import AdminGenres from "./pages/admin/AdminGenres";
 import AdminSettings from "./pages/admin/AdminSettings";
+import MusicRecognition from "./pages/MusicRecognition";
+import MusicRecognitionResult from "./pages/MusicRecognitionResult";
 
 const queryClient = new QueryClient();
 
@@ -91,6 +93,8 @@ const App = () => (
                   <Route path="/song/:id" element={<SongDetail />} />
                   <Route path="/album/:id" element={<AlbumDetail />} />
                   <Route path="/artist/:id" element={<ArtistDetail />} />
+                  <Route path="/music-recognition" element={<MusicRecognition />} />
+                  <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AppLayout>

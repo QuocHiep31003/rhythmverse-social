@@ -9,7 +9,8 @@ import {
   ChevronLeft,
   TrendingUp,
   Trophy,
-  Library
+  Library,
+  Mic
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,6 +48,7 @@ const menuItems = [
   { title: "Trending", url: "/trending", icon: TrendingUp },
   { title: "Top 100", url: "/top100", icon: Trophy },
   { title: "Playlist", url: "/playlist", icon: ListMusic },
+  { title: "Music Recognition", url: "/music-recognition", icon: Mic },
   { title: "Quiz", url: "/quiz", icon: Brain },
   { title: "Social", url: "/social", icon: Users },
 ];

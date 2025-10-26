@@ -762,3 +762,30 @@ export const searchApi = {
     }
   },
 };
+
+// AUDD Music Recognition API
+export const auddApi = {
+  recognizeMusic: async (audioBlob: Blob) => {
+    try {
+      const formData = new FormData();
+      formData.append("api_token", "66d916cc0aca58ac85faa0f3794f3b63"); // 🔹 thay bằng token thật của bạn
+      formData.append("file", audioBlob, "recorded.wav");
+      formData.append("return", "apple_music,spotify");
+
+      const response = await fetch("https://api.audd.io/", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error("Error recognizing music:", error);
+      throw error;
+    }
+  },
+};
