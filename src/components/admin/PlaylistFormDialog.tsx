@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { uploadImage } from "@/config/cloudinary";
 
 const playlistFormSchema = z.object({
-  name: z.string().min(1, "Tên playlist không được trống").max(200),
+  name: z.string().min(1, "TÃªn playlist khÃ´ng Ä‘Æ°á»£c trá»‘ng").max(200),
   description: z.string().max(500).optional().or(z.literal("")),
   isPublic: z.boolean().default(true),
   songLimit: z.number().min(1).max(1000).default(500),
@@ -114,25 +114,14 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-<<<<<<< HEAD
           <DialogTitle className="text-white">{mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}</DialogTitle>
-          <DialogDescription className="text-gray-400">Nhập thông tin playlist và tải ảnh bìa.</DialogDescription>
-=======
-          <DialogTitle className="text-2xl font-bold">
-            {mode === "create" ? "Tạo Playlist mới" : "Chỉnh sửa Playlist"}
-          </DialogTitle>
-          <DialogDescription className="text-gray-400">
-            {mode === "create"
-              ? "Nhập thông tin để tạo playlist mới"
-              : "Cập nhật thông tin playlist"}
-          </DialogDescription>
->>>>>>> d3ca79b09b40f6cbdffd24c2a741399444806ff6
+          <DialogDescription className="text-gray-400">{mode === "create" ? "Nhập thông tin playlist và tải ảnh bìa." : "Cập nhật thông tin playlist và ảnh bìa."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
             <FormField control={form.control} name="coverUrl" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-white">Ảnh bìa</FormLabel>
+                <FormLabel className="text-white">áº¢nh bÃ¬a</FormLabel>
                 <div className="flex items-center gap-4">
                   <div className="relative w-24 h-24 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
                     {coverPreview ? (
@@ -145,7 +134,7 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
                     ) : (
                       <div className="text-center p-2">
                         <Image className="w-6 h-6 mx-auto mb-1 text-gray-400" />
-                        <p className="text-xs text-gray-400">Upload ảnh</p>
+                        <p className="text-xs text-gray-400">Upload áº£nh</p>
                       </div>
                     )}
                   </div>
@@ -154,9 +143,9 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
                       <Input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} className="bg-background/50 border-border text-white" />
                     </FormControl>
                     <FormMessage />
-                    <p className="text-xs text-gray-400 mt-1">Khuyến nghị: 1000x1000px, tối đa 5MB (JPG, PNG, WebP)</p>
+                    <p className="text-xs text-gray-400 mt-1">Khuyáº¿n nghá»‹: 1000x1000px, tá»‘i Ä‘a 5MB (JPG, PNG, WebP)</p>
                     <div className="mt-2 space-y-1">
-                      <FormLabel className="text-xs text-gray-400">Hoặc dán URL ảnh</FormLabel>
+                      <FormLabel className="text-xs text-gray-400">Hoáº·c dÃ¡n URL áº£nh</FormLabel>
                       <Input placeholder="https://...jpg" value={field.value || ""} onChange={(e) => { field.onChange(e.target.value); setCoverPreview(e.target.value); }} className="bg-background/50 border-border text-white" />
                     </div>
                   </div>
@@ -166,29 +155,29 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
 
             <FormField control={form.control} name="name" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-white">Tên playlist *</FormLabel>
-                <FormControl><Input placeholder="Tên playlist" {...field} className="bg-background/50 border-border text-white" /></FormControl>
+                <FormLabel className="text-white">TÃªn playlist *</FormLabel>
+                <FormControl><Input placeholder="TÃªn playlist" {...field} className="bg-background/50 border-border text-white" /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
 
             <FormField control={form.control} name="description" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-white">Mô tả</FormLabel>
-                <FormControl><Textarea placeholder="Mô tả playlist..." className="min-h-[60px] resize-none bg-background/50 border-border text-white" {...field} /></FormControl>
+                <FormLabel className="text-white">MÃ´ táº£</FormLabel>
+                <FormControl><Textarea placeholder="MÃ´ táº£ playlist..." className="min-h-[60px] resize-none bg-background/50 border-border text-white" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
 
             <FormField control={form.control} name="isPublic" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-white">Chế độ công khai</FormLabel>
+                <FormLabel className="text-white">Cháº¿ Ä‘á»™ cÃ´ng khai</FormLabel>
                 <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border">
                   <div className="flex items-center gap-3">
                     {field.value ? <Globe className="w-5 h-5 text-green-500" /> : <Lock className="w-5 h-5 text-orange-500" />}
                     <div>
-                      <p className="font-medium text-white">{field.value ? "Công khai" : "Riêng tư"}</p>
-                      <p className="text-sm text-gray-400">{field.value ? "Ai cũng có thể xem" : "Chỉ bạn có thể xem"}</p>
+                      <p className="font-medium text-white">{field.value ? "CÃ´ng khai" : "RiÃªng tÆ°"}</p>
+                      <p className="text-sm text-gray-400">{field.value ? "Ai cÅ©ng cÃ³ thá»ƒ xem" : "Chá»‰ báº¡n cÃ³ thá»ƒ xem"}</p>
                     </div>
                   </div>
                   <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} className="data-[state=checked]:bg-green-500" /></FormControl>
@@ -199,10 +188,10 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
 
             <FormField control={form.control} name="songLimit" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-white">Giới hạn bài hát</FormLabel>
+                <FormLabel className="text-white">Giá»›i háº¡n bÃ i hÃ¡t</FormLabel>
                 <div className="flex items-center gap-4">
                   <FormControl><Input type="number" min={1} max={1000} className="w-32 bg-background/50 border-border text-white" {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 500)} /></FormControl>
-                  <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">{songLimit} bài hát tối đa</Badge>
+                  <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">{songLimit} bÃ i hÃ¡t tá»‘i Ä‘a</Badge>
                 </div>
                 <FormMessage />
               </FormItem>
@@ -210,15 +199,15 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
 
             <FormField control={form.control} name="songIds" render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-white">Chọn bài hát</FormLabel>
+                <FormLabel className="text-white">Chá»n bÃ i hÃ¡t</FormLabel>
                 <div className="bg-background/30 border border-border rounded-lg p-3 space-y-2">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input placeholder="Tìm kiếm bài hát..." value={songSearch} onChange={(e) => setSongSearch(e.target.value)} className="pl-10 bg-background/50 border-border text-white" />
+                    <Input placeholder="TÃ¬m kiáº¿m bÃ i hÃ¡t..." value={songSearch} onChange={(e) => setSongSearch(e.target.value)} className="pl-10 bg-background/50 border-border text-white" />
                   </div>
                   <div className="max-h-48 overflow-y-auto space-y-1">
                     {filteredSongs.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-2">Không có bài hát</p>
+                      <p className="text-sm text-gray-400 text-center py-2">KhÃ´ng cÃ³ bÃ i hÃ¡t</p>
                     ) : (
                       filteredSongs.map((s) => {
                         const checked = (field.value || []).includes(s.id);
@@ -237,8 +226,8 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
             )} />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Hủy</Button>
-              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">{isLoading ? "Đang lưu..." : mode === "create" ? "Tạo playlist" : "Cập nhật"}</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Há»§y</Button>
+              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">{isLoading ? "Äang lÆ°u..." : mode === "create" ? "Táº¡o playlist" : "Cáº­p nháº­t"}</Button>
             </DialogFooter>
           </form>
         </Form>
