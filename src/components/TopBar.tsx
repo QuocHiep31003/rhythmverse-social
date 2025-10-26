@@ -29,8 +29,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import { useState, useRef } from "react";
-import { auddApi } from "@/services/api";
+import { useState, useRef, useEffect } from "react";
+import { auddApi, authApi } from "@/services/api";
+
+
 const TopBar = () => {
   const [searchText, setSearchText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -39,11 +41,6 @@ const TopBar = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
-  
-import { useEffect, useState } from "react";
-import { authApi } from "@/services/api";
-const TopBar = () => {
-  const [searchText, setSearchText] = useState("");
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const navigate = useNavigate();
@@ -87,7 +84,7 @@ const TopBar = () => {
         setAudioBlob(blob);
         setAudioUrl(url);
         setError("");
-        
+
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
       };
@@ -112,10 +109,10 @@ const TopBar = () => {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
-      
+
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
-      
+
       audio.onended = () => setIsPlaying(false);
       audio.play();
       setIsPlaying(true);
@@ -140,11 +137,11 @@ const TopBar = () => {
 
     try {
       const result = await auddApi.recognizeMusic(audioBlob);
-      
+
       // Navigate to search results with recognition data
       navigate("/search", {
-        state: { 
-          recognitionResult: result, 
+        state: {
+          recognitionResult: result,
           audioUrl: audioUrl,
           searchType: 'recognition'
         },
@@ -169,7 +166,7 @@ const TopBar = () => {
       fileInputRef.current.value = "";
     }
   };
-     useEffect(() => {
+  useEffect(() => {
     const loadMe = async () => {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (!token) return;
@@ -183,12 +180,12 @@ const TopBar = () => {
     };
     loadMe();
   }, []);
-  
+
   const handleLogout = () => {
     try {
       localStorage.removeItem('token');
       localStorage.removeItem('userId');
-    } catch {}
+    } catch { }
     navigate('/login');
   }
 
@@ -209,21 +206,21 @@ const TopBar = () => {
                 className="pl-10 pr-4 bg-gradient-search dark:bg-none dark:bg-zinc-900 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 transition-all duration-300 focus:shadow-[0_0_20px_rgba(59,130,246,0.3)] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
               />
             </div>
-            
+
             {/* Search Button */}
-            <Button 
+            <Button
               type="submit"
               className="bg-primary hover:bg-primary/90 text-primary-foreground px-4"
             >
               <Search className="h-4 w-4" />
             </Button>
-            
+
             {/* Music Recognition Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button 
+                <Button
                   type="button"
-                  variant="outline" 
+                  variant="outline"
                   className="border-gray-300 dark:border-gray-600 hover:bg-muted/50"
                 >
                   <Music className="h-4 w-4 mr-2" />
@@ -231,7 +228,7 @@ const TopBar = () => {
                   <ChevronDown className="h-3 w-3 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent 
+              <DropdownMenuContent
                 className="w-80 bg-background/95 backdrop-blur-xl border-[hsl(var(--primary)/0.3)] shadow-[0_8px_30px_hsl(var(--primary)/0.2)]"
                 align="end"
               >
@@ -242,8 +239,8 @@ const TopBar = () => {
                       <Upload className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Upload Audio File</span>
                     </div>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="w-full justify-start"
                       onClick={() => fileInputRef.current?.click()}
                     >
@@ -258,14 +255,14 @@ const TopBar = () => {
                       className="hidden"
                     />
                   </div>
-                  
+
                   {/* Recording Section */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Mic className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Record Audio</span>
                     </div>
-                    <Button 
+                    <Button
                       variant={isRecording ? "destructive" : "outline"}
                       className="w-full justify-start"
                       onClick={isRecording ? stopRecording : startRecording}
@@ -283,7 +280,7 @@ const TopBar = () => {
                       )}
                     </Button>
                   </div>
-                  
+
                   {/* Audio Preview */}
                   {audioBlob && (
                     <div className="space-y-2 pt-2 border-t">
@@ -323,7 +320,7 @@ const TopBar = () => {
                           ×
                         </Button>
                       </div>
-                      
+
                       {/* Recognition Button */}
                       <Button
                         onClick={handleRecognize}
@@ -342,7 +339,7 @@ const TopBar = () => {
                           </>
                         )}
                       </Button>
-                      
+
                       {/* Error Display */}
                       {error && (
                         <div className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 p-2 rounded">
@@ -382,8 +379,8 @@ const TopBar = () => {
           </Button>
 
           {/* Get Premium */}
-          <Button 
-            variant="hero" 
+          <Button
+            variant="hero"
             size="sm"
             className="bg-gradient-primary hover:shadow-[0_0_30px_hsl(var(--primary)/0.5)] transition-all duration-300 hover:scale-105 font-semibold"
           >
