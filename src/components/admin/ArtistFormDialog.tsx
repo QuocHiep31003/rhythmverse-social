@@ -111,7 +111,7 @@ export const ArtistFormDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="text-2xl font-bold">
             {mode === "create" ? "Thêm nghệ sĩ mới" : "Chỉnh sửa nghệ sĩ"}
           </DialogTitle>
           <DialogDescription>

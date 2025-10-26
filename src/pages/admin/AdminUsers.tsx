@@ -263,32 +263,23 @@ const AdminUsers = () => {
   );
 
   return (
-    <div className="h-screen overflow-hidden bg-gradient-dark text-white p-6 flex flex-col">
+    <div className="h-screen overflow-hidden p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
-        <Button 
-          variant="ghost" 
-          onClick={() => navigate(-1)} 
-          className="mb-4 self-start"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Quay lại
-        </Button>
-        
         {/* Header Section with Modern Design */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6 rounded-xl border border-primary/10 flex-shrink-0 mb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0 mb-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
-              <UsersIcon className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 bg-[hsl(var(--admin-active))] rounded-xl flex items-center justify-center shadow-lg">
+              <UsersIcon className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                User Management
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
+                Quản lý Người dùng
               </h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1">
                 <Badge variant="secondary" className="font-normal">
-                  {totalElements} total users
+                  {totalElements} người dùng
                 </Badge>
-                {loading && <span className="text-xs">Loading...</span>}
+                {loading && <span className="text-xs">Đang tải...</span>}
               </p>
             </div>
           </div>
@@ -302,33 +293,33 @@ const AdminUsers = () => {
               className="hidden"
             />
             
-            {/* Import Button */}
-            <Button 
-              variant="outline" 
-              onClick={handleImportClick}
-              className="gap-2 hover:bg-green-50 hover:text-green-700 hover:border-green-300 transition-colors"
-            >
-              <Upload className="w-4 h-4" />
-              Import
-            </Button>
-            
             {/* Export Button */}
             <Button 
               variant="outline" 
               onClick={handleExport}
-              className="gap-2 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+              className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))] transition-colors"
             >
               <Download className="w-4 h-4" />
               Export
             </Button>
             
+            {/* Import Button */}
+            <Button 
+              variant="outline" 
+              onClick={handleImportClick}
+              className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              Import
+            </Button>
+            
             {/* Add User Button */}
             <Button 
               onClick={handleCreate}
-              className="gap-2 bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg"
+              className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"
             >
               <Plus className="w-4 h-4" />
-              Add User
+              Thêm người dùng
             </Button>
           </div>
         </div>
@@ -351,173 +342,178 @@ const AdminUsers = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-0 flex-1 overflow-auto min-h-0 scrollbar-custom">
-          <Table>
-            <TableHeader className="sticky top-0 bg-card z-10">
-              <TableRow className="hover:bg-transparent border-b">
-                <TableHead className="w-16 font-semibold bg-card">STT</TableHead>
-                <TableHead className="font-semibold bg-card">User</TableHead>
-                <TableHead className="font-semibold bg-card">Email</TableHead>
-                <TableHead className="font-semibold bg-card">Role</TableHead>
-                <TableHead className="text-right font-semibold bg-card">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                      <p className="text-sm text-muted-foreground">Loading users...</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12">
-                    <div className="flex flex-col items-center gap-2">
-                      <UsersIcon className="w-12 h-12 text-muted-foreground/50" />
-                      <p className="text-sm font-medium">No users found</p>
-                      <p className="text-xs text-muted-foreground">
-                        {searchQuery ? 'Try adjusting your search' : 'Get started by adding a new user'}
-                      </p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredUsers.map((user, index) => (
-                  <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
-                    <TableCell className="text-center">{currentPage * pageSize + index + 1}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10 border-2 border-primary/10">
-                          <AvatarImage 
-                            src={user.avatar || user.profileImage || DEFAULT_AVATAR_URL} 
-                            alt={user.name}
-                            onError={(e: any) => {
-                              e.currentTarget.src = DEFAULT_AVATAR_URL;
-                            }}
-                          />
-                          <AvatarFallback className="bg-gradient-primary text-white font-semibold">
-                            {user.name?.[0]?.toUpperCase() || 'U'}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-sm">{user.name}</span>
-                          {user.phone && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              📱 {user.phone}
-                            </span>
-                          )}
+        <CardContent className="p-0 flex-1 flex flex-col min-h-0">
+          {/* Fixed Header */}
+          <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+            <table className="w-full table-fixed">
+              <thead>
+                <tr>
+                  <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
+                  <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">User</th>
+                  <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">Email</th>
+                  <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Role</th>
+                  <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Actions</th>
+                </tr>
+              </thead>
+            </table>
+          </div>
+          
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
+            <table className="w-full table-fixed">
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-8 h-8 border-4 border-[hsl(var(--admin-active))] border-t-transparent rounded-full animate-spin" />
+                        <p className="text-sm text-muted-foreground">Đang tải...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <UsersIcon className="w-12 h-12 text-muted-foreground/50" />
+                        <p className="text-sm font-medium">Không tìm thấy người dùng</p>
+                        <p className="text-xs text-muted-foreground">
+                          {searchQuery ? 'Thử điều chỉnh tìm kiếm' : 'Bắt đầu bằng cách thêm người dùng mới'}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((user, index) => (
+                    <tr key={user.id} className="border-b border-border hover:bg-muted/50 transition-colors">
+                      <td className="w-16 p-3 text-center">{currentPage * pageSize + index + 1}</td>
+                      <td className="w-96 p-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-10 h-10 border-2 border-[hsl(var(--admin-active))]/10">
+                            <AvatarImage 
+                              src={user.avatar || user.profileImage || DEFAULT_AVATAR_URL} 
+                              alt={user.name}
+                              onError={(e: any) => {
+                                e.currentTarget.src = DEFAULT_AVATAR_URL;
+                              }}
+                            />
+                            <AvatarFallback className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold">
+                              {user.name?.[0]?.toUpperCase() || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm truncate">{user.name}</span>
+                            {user.phone && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                📱 {user.phone}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">{user.email}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Badge 
-                          variant={(user.roles?.includes("ADMIN") || user.roleId === 1) ? "default" : "secondary"}
-                          className="gap-1"
-                        >
-                          {(user.roles?.includes("ADMIN") || user.roleId === 1) && <Shield className="w-3 h-3" />}
-                          {(user.roles?.includes("ADMIN") || user.roleId === 1) ? 'ADMIN' : 'USER'}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleEdit(user)}
-                          className="hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleDeleteClick(user)}
-                          className="hover:bg-red-50 hover:text-red-700 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      </td>
+                      <td className="w-96 p-3">
+                        <span className="text-sm truncate">{user.email}</span>
+                      </td>
+                      <td className="w-32 p-3">
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={(user.roles?.includes("ADMIN") || user.roleId === 1) ? "default" : "secondary"}
+                            className="gap-1"
+                          >
+                            {(user.roles?.includes("ADMIN") || user.roleId === 1) && <Shield className="w-3 h-3" />}
+                            {(user.roles?.includes("ADMIN") || user.roleId === 1) ? 'ADMIN' : 'USER'}
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="w-32 text-right p-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleEdit(user)}
+                            className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleDeleteClick(user)}
+                            className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Modern Pagination Controls */}
+      {/* Pagination */}
       {totalPages > 0 && (
-        <Card className="border-none shadow-md flex-shrink-0">
-          <CardContent className="p-4">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="text-sm text-muted-foreground">
-                Showing <span className="font-semibold text-foreground">{currentPage * pageSize + 1}</span> to{' '}
-                <span className="font-semibold text-foreground">{Math.min((currentPage + 1) * pageSize, totalElements)}</span> of{' '}
-                <span className="font-semibold text-foreground">{totalElements}</span> users
-              </div>
+        <div className="flex items-center justify-between pt-4 flex-shrink-0">
+          <div className="text-sm text-muted-foreground">
+            Hiển thị <span className="font-semibold text-foreground">{currentPage * pageSize + 1}</span> đến{' '}
+            <span className="font-semibold text-foreground">{Math.min((currentPage + 1) * pageSize, totalElements)}</span> trong tổng{' '}
+            <span className="font-semibold text-foreground">{totalElements}</span> người dùng
+          </div>
+          
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+              disabled={currentPage === 0}
+              className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i;
+              } else if (currentPage < 3) {
+                pageNum = i;
+              } else if (currentPage > totalPages - 3) {
+                pageNum = totalPages - 5 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
               
-              <div className="flex items-center gap-2">
+              return (
                 <Button
+                  key={pageNum}
                   variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
-                  disabled={currentPage === 0}
-                  className="gap-1"
+                  size="icon"
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
+                    currentPage === pageNum 
+                      ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]" 
+                      : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                  }`}
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                  Previous
+                  {pageNum + 1}
                 </Button>
-                
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i;
-                    } else if (currentPage < 3) {
-                      pageNum = i;
-                    } else if (currentPage > totalPages - 3) {
-                      pageNum = totalPages - 5 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`w-9 ${currentPage === pageNum ? 'bg-gradient-primary shadow-md' : ''}`}
-                      >
-                        {pageNum + 1}
-                      </Button>
-                    );
-                  })}
-                </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
-                  disabled={currentPage >= totalPages - 1}
-                  className="gap-1"
-                >
-                  Next
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              );
+            })}
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+              disabled={currentPage >= totalPages - 1}
+              className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       )}
 
       <UserFormDialog

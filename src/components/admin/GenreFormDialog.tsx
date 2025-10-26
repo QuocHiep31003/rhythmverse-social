@@ -70,8 +70,8 @@ export const GenreFormDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "Thêm thể loại mới" : "Chỉnh sửa thể loại"}
+          <DialogTitle className="text-2xl font-bold">
+            {mode === "create" ? "Thêm Thể loại mới" : "Chỉnh sửa Thể loại"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
