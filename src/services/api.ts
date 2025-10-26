@@ -513,6 +513,78 @@ export const songsApi = {
       return [];
     }
   },
+
+  // ========================================
+  // NEW TRENDING APIs (Weekly & Monthly)
+  // ========================================
+
+  /**
+   * Lấy top 5 bài hát trending hàng tuần (7 ngày)
+   * GET /api/trending/weekly/top5
+   */
+  getWeeklyTop5: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/weekly/top5`, {
+        headers: buildJsonHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch weekly top 5");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching weekly top 5:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 bài hát trending hàng tuần (7 ngày)
+   * GET /api/trending/weekly/top100
+   */
+  getWeeklyTop100: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/weekly/top100`, {
+        headers: buildJsonHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch weekly top 100");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching weekly top 100:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 5 bài hát trending hàng tháng (30 ngày)
+   * GET /api/trending/monthly/top5
+   */
+  getMonthlyTop5: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/monthly/top5`, {
+        headers: buildJsonHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch monthly top 5");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching monthly top 5:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 bài hát trending hàng tháng (30 ngày)
+   * GET /api/trending/monthly/top100
+   */
+  getMonthlyTop100: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/trending/monthly/top100`, {
+        headers: buildJsonHeaders(),
+      });
+      if (!response.ok) throw new Error("Failed to fetch monthly top 100");
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching monthly top 100:", error);
+      return [];
+    }
+  },
 };
 
 // Playlists API
@@ -917,6 +989,195 @@ export const searchApi = {
     } catch (error) {
       console.error("Error fetching search results:", error);
       return { artists: [], songs: [], albums: [] };
+    }
+  },
+};
+
+// Quiz Attempts API - Based on new API structure
+export const quizAttemptsApi = {
+  // Start a new quiz attempt
+  startQuiz: async (userId: number, quizId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/start`, {
+        method: 'POST',
+        headers: buildJsonHeaders(),
+        body: JSON.stringify({ userId, quizId }),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to start quiz');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error starting quiz:", error);
+      throw error;
+    }
+  },
+
+  // Submit an answer for a question
+  submitAnswer: async (attemptId: number, questionId: number, selectedAnswerId: number, timeSpentSeconds: number = 0) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/${attemptId}/answers`, {
+        method: 'POST',
+        headers: buildJsonHeaders(),
+        body: JSON.stringify({
+          questionId,
+          selectedAnswerId,
+          timeSpentSeconds,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to submit answer');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error submitting answer:", error);
+      throw error;
+    }
+  },
+
+  // Submit the entire quiz
+  submitQuiz: async (attemptId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/${attemptId}/submit`, {
+        method: 'POST',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to submit quiz');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error submitting quiz:", error);
+      throw error;
+    }
+  },
+
+  // Get attempt details
+  getAttemptDetails: async (attemptId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/${attemptId}`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to get attempt details');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting attempt details:", error);
+      throw error;
+    }
+  },
+
+  // Get user's quiz history
+  getUserQuizHistory: async (userId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/user/${userId}`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to get user quiz history');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting user quiz history:", error);
+      throw error;
+    }
+  },
+
+  // Get quiz results for a specific quiz
+  getQuizResults: async (quizId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/quiz/${quizId}/results`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to get quiz results');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting quiz results:", error);
+      throw error;
+    }
+  },
+
+  // Get user's quiz results
+  getUserQuizResults: async (userId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/user/${userId}/results`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to get user quiz results');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting user quiz results:", error);
+      throw error;
+    }
+  },
+
+  // Get user's best score for a quiz
+  getUserBestScore: async (userId: number, quizId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/user/${userId}/quiz/${quizId}/best`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to get user best score');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting user best score:", error);
+      throw error;
+    }
+  },
+
+  // Get quiz leaderboard
+  getQuizLeaderboard: async (quizId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/quiz-attempts/quiz/${quizId}/leaderboard`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const error = await parseErrorResponse(response);
+        throw new Error(error || 'Failed to get quiz leaderboard');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error getting quiz leaderboard:", error);
+      throw error;
     }
   },
 };
