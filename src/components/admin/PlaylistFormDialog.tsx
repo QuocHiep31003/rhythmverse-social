@@ -114,8 +114,19 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
+<<<<<<< HEAD
           <DialogTitle className="text-white">{mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}</DialogTitle>
           <DialogDescription className="text-gray-400">Nhập thông tin playlist và tải ảnh bìa.</DialogDescription>
+=======
+          <DialogTitle className="text-2xl font-bold">
+            {mode === "create" ? "Tạo Playlist mới" : "Chỉnh sửa Playlist"}
+          </DialogTitle>
+          <DialogDescription className="text-gray-400">
+            {mode === "create"
+              ? "Nhập thông tin để tạo playlist mới"
+              : "Cập nhật thông tin playlist"}
+          </DialogDescription>
+>>>>>>> d3ca79b09b40f6cbdffd24c2a741399444806ff6
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">

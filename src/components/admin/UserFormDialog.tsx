@@ -92,8 +92,8 @@ export const UserFormDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>
-            {mode === "create" ? "Add New User" : "Edit User"}
+          <DialogTitle className="text-2xl font-bold">
+            {mode === "create" ? "Thêm Người dùng mới" : "Chỉnh sửa Người dùng"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"

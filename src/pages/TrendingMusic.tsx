@@ -20,47 +20,41 @@ const TrendingMusic = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
-  // Fetch top 100 trending songs
+  // Fetch weekly top 100 trending songs
   useEffect(() => {
     const fetchTrending = async () => {
       try {
-        console.log('🔍 Fetching trending songs...');
+        console.log('🔍 Fetching weekly trending songs...');
         
-        // Thử API trending trước
-        const trendingSongs = await songsApi.getTrending(100);
+        // Sử dụng API weekly top 100
+        const weeklyTop100 = await songsApi.getWeeklyTop100();
         
-        if (trendingSongs && trendingSongs.length > 0) {
-          console.log('✅ Loaded from trending API:', trendingSongs.length, 'songs');
+        if (weeklyTop100 && weeklyTop100.length > 0) {
+          console.log('✅ Loaded weekly top 100:', weeklyTop100.length, 'songs');
           
-          // Backend đã sort sẵn theo trendingScore, không cần sort lại
-          setAllSongs(trendingSongs);
-          setFilteredSongs(trendingSongs);
-          setTotalPages(Math.ceil(trendingSongs.length / itemsPerPage));
+          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
+          const sortedSongs = weeklyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
+          setAllSongs(sortedSongs);
+          setFilteredSongs(sortedSongs);
+          setTotalPages(Math.ceil(sortedSongs.length / itemsPerPage));
           return;
         }
         
-        // Nếu API trending không có data, dùng cách cũ
-        console.log('⚠️ No trending data, falling back to fetching all songs...');
-        const response = await fetch('http://localhost:8080/api/songs?size=1000');
-        const data = await response.json();
-        
-        if (data && data.content) {
-          const sorted = data.content
-            .sort((a, b) => {
-              // Chỉ sort theo trendingScore
-              const scoreA = a.trendingScore || 0;
-              const scoreB = b.trendingScore || 0;
-              return scoreB - scoreA;
-            })
-            .slice(0, 100); // ⭐ Chỉ lấy top 100
-          
-          console.log('✅ Loaded from fallback:', sorted.length, 'songs');
-          setAllSongs(sorted);
-          setFilteredSongs(sorted);
-          setTotalPages(Math.ceil(sorted.length / itemsPerPage));
-        }
+        // Fallback nếu API không có data
+        console.log('⚠️ No weekly data, falling back to mock data...');
+        const mockData = Array.from({ length: 50 }, (_, i) => ({
+          id: `mock-${i}`,
+          name: `Mock Song ${i + 1}`,
+          artistNames: [`Mock Artist ${i + 1}`],
+          playCount: Math.floor(Math.random() * 1000000),
+          cover: '',
+          duration: 180 + Math.floor(Math.random() * 120)
+        }));
+        setAllSongs(mockData);
+        setFilteredSongs(mockData);
+        setTotalPages(Math.ceil(mockData.length / itemsPerPage));
       } catch (err) {
-        console.error("❌ Lỗi tải bài hát trending:", err);
+        console.error("❌ Lỗi tải weekly trending:", err);
       }
     };
     
@@ -127,7 +121,7 @@ const TrendingMusic = () => {
           <div className="flex items-center gap-3 mb-4">
             <TrendingUp className="w-8 h-8 text-primary" />
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
-              Trending Music
+              Weekly Trending
             </h1>
           </div>
           <p className="text-muted-foreground text-lg">
@@ -146,19 +140,12 @@ const TrendingMusic = () => {
           </div>
         </div>
 
-        {/* Hot Today */}
-        <Card
-          // className="
-          //   bg-gradient-glass backdrop-blur-sm border-white/10 
-          //   transition-all duration-500 
-          //   hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(255,255,255,0.15)]
-          //   hover:border-white/20 hover:bg-gradient-to-br hover:from-white/10 hover:to-white/5
-          // "
-        >
+        {/* Hot Week */}
+        <Card>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-neon-pink" />
-              Hot Today
+              Hot Week
             </CardTitle>
           </CardHeader>
 
