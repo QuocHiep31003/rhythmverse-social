@@ -7,11 +7,12 @@ import { useMusic } from "@/contexts/MusicContext";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
 import { formatPlayCount } from "@/lib/utils";
+import { songsApi } from "@/services/api";
 
 const TrendingMusic = () => {
   const navigate = useNavigate();
   const { playSong, setQueue } = useMusic();
-  const [allSongs, setAllSongs] = useState<any[]>([]); // Toàn bộ bài hát đã sort
+  const [allSongs, setAllSongs] = useState<any[]>([]); // Top 100 bài trending
   const [filteredSongs, setFilteredSongs] = useState<any[]>([]);
   const [displayedSongs, setDisplayedSongs] = useState<any[]>([]); // Bài hát hiển thị theo page
   const [currentPage, setCurrentPage] = useState(1);
@@ -19,19 +20,45 @@ const TrendingMusic = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
-  // Fetch toàn bộ bài hát và sort một lần
+  // Fetch weekly top 100 trending songs
   useEffect(() => {
-    fetch(`http://localhost:8080/api/songs?size=10000`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.content) {
-          const sorted = data.content.sort((a, b) => (b.playCount || 0) - (a.playCount || 0));
-          setAllSongs(sorted);
-          setFilteredSongs(sorted);
-          setTotalPages(Math.ceil(sorted.length / itemsPerPage));
+    const fetchTrending = async () => {
+      try {
+        console.log('🔍 Fetching weekly trending songs...');
+        
+        // Sử dụng API weekly top 100
+        const weeklyTop100 = await songsApi.getWeeklyTop100();
+        
+        if (weeklyTop100 && weeklyTop100.length > 0) {
+          console.log('✅ Loaded weekly top 100:', weeklyTop100.length, 'songs');
+          
+          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
+          const sortedSongs = weeklyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
+          setAllSongs(sortedSongs);
+          setFilteredSongs(sortedSongs);
+          setTotalPages(Math.ceil(sortedSongs.length / itemsPerPage));
+          return;
         }
-      })
-      .catch((err) => console.error("Lỗi tải bài hát:", err));
+        
+        // Fallback nếu API không có data
+        console.log('⚠️ No weekly data, falling back to mock data...');
+        const mockData = Array.from({ length: 50 }, (_, i) => ({
+          id: `mock-${i}`,
+          name: `Mock Song ${i + 1}`,
+          artistNames: [`Mock Artist ${i + 1}`],
+          playCount: Math.floor(Math.random() * 1000000),
+          cover: '',
+          duration: 180 + Math.floor(Math.random() * 120)
+        }));
+        setAllSongs(mockData);
+        setFilteredSongs(mockData);
+        setTotalPages(Math.ceil(mockData.length / itemsPerPage));
+      } catch (err) {
+        console.error("❌ Lỗi tải weekly trending:", err);
+      }
+    };
+    
+    fetchTrending();
   }, []);
 
   // Lọc theo tìm kiếm
@@ -43,6 +70,7 @@ const TrendingMusic = () => {
       const filtered = allSongs.filter((song) => {
         const title = (song.name || song.title || "").toLowerCase();
         const artist =
+          song.artistNames?.join(" ").toLowerCase() ||
           song.artists?.map((a: any) => a.name).join(" ").toLowerCase() ||
           (song.artist || "").toLowerCase();
         return title.includes(searchLower) || artist.includes(searchLower);
@@ -64,7 +92,7 @@ const TrendingMusic = () => {
     const formattedSong = {
       id: song.id,
       title: song.name || song.title,
-      artist: song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
+      artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
       album: song.album?.name || song.album || "",
       duration: song.duration || 0,
       cover: song.cover || "",
@@ -74,7 +102,7 @@ const TrendingMusic = () => {
     const formattedQueue = allSongs.map((s) => ({
       id: s.id,
       title: s.name || s.title,
-      artist: s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
+      artist: s.artistNames?.join(", ") || s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
       album: s.album?.name || s.album || "",
       duration: s.duration || 0,
       cover: s.cover || "",
@@ -93,7 +121,7 @@ const TrendingMusic = () => {
           <div className="flex items-center gap-3 mb-4">
             <TrendingUp className="w-8 h-8 text-primary" />
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
-              Trending Music
+              Weekly Trending
             </h1>
           </div>
           <p className="text-muted-foreground text-lg">
@@ -112,19 +140,12 @@ const TrendingMusic = () => {
           </div>
         </div>
 
-        {/* Hot Today */}
-        <Card
-          // className="
-          //   bg-gradient-glass backdrop-blur-sm border-white/10 
-          //   transition-all duration-500 
-          //   hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(255,255,255,0.15)]
-          //   hover:border-white/20 hover:bg-gradient-to-br hover:from-white/10 hover:to-white/5
-          // "
-        >
+        {/* Hot Week */}
+        <Card>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-neon-pink" />
-              Hot Today
+              Hot Week
             </CardTitle>
           </CardHeader>
 
@@ -170,7 +191,8 @@ const TrendingMusic = () => {
                           {song.name || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artists?.map((a) => a.name).join(", ") ||
+                          {song.artistNames?.join(", ") ||
+                            song.artists?.map((a) => a.name).join(", ") ||
                             song.artist ||
                             "Unknown"}
                         </p>

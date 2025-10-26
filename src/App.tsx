@@ -26,6 +26,8 @@ import Settings from "./pages/Settings";
 import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
+import InviteFriend from "./pages/InviteFriend";
+import ListeningHistory from "./pages/ListeningHistory";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
@@ -95,6 +97,9 @@ const App = () => (
                   <Route path="/artist/:id" element={<ArtistDetail />} />
                   <Route path="/music-recognition" element={<MusicRecognition />} />
                   <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
+                  <Route path="/invite/friend/:code" element={<InviteFriend />} />
+                  <Route path="/listening-history" element={<ListeningHistory />} />
+
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AppLayout>

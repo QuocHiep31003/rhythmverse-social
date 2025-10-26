@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -8,21 +8,82 @@ import { Play, Heart, Trophy, TrendingUp, TrendingDown, Minus } from "lucide-rea
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
+import { songsApi } from "@/services/api";
+import { useMusic } from "@/contexts/MusicContext";
 
 const Top100 = () => {
   const [likedItems, setLikedItems] = useState<string[]>([]);
+  const [topSongs, setTopSongs] = useState<any[]>([]);
+  const { playSong, setQueue } = useMusic();
 
-  const topSongs = Array.from({ length: 100 }, (_, i) => ({
-    id: `song-${i + 1}`,
-    title: `Song Title ${i + 1}`,
-    artist: `Artist ${i + 1}`,
-    album: `Album ${i + 1}`,
-    duration: "3:45",
-    rank: i + 1,
-    previousRank: i + Math.floor(Math.random() * 10) - 5,
-    plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
-    cover: "/placeholder.svg"
-  }));
+  // Fetch monthly top 100 trending songs
+  useEffect(() => {
+    const fetchMonthlyTop100 = async () => {
+      try {
+        console.log('🔍 Fetching monthly top 100...');
+        
+        const monthlyTop100 = await songsApi.getMonthlyTop100();
+        
+        if (monthlyTop100 && monthlyTop100.length > 0) {
+          console.log('✅ Loaded monthly top 100:', monthlyTop100.length, 'songs');
+          
+          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
+          const sortedSongs = monthlyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
+          
+          // Format songs for display
+          const formattedSongs = sortedSongs.map((song, index) => ({
+            id: song.id,
+            title: song.name || song.title,
+            artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
+            album: song.album?.name || song.album || "Unknown",
+            duration: song.duration ? `${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, "0")}` : "0:00",
+            rank: index + 1,
+            previousRank: index + Math.floor(Math.random() * 10) - 5,
+            plays: `${((song.playCount || 0) / 1000000).toFixed(1)}M`,
+            cover: song.cover || "/placeholder.svg",
+            audioUrl: song.audioUrl || ""
+          }));
+          
+          setTopSongs(formattedSongs);
+          return;
+        }
+        
+        // Fallback nếu API không có data
+        console.log('⚠️ No monthly data, falling back to mock data...');
+        const mockSongs = Array.from({ length: 100 }, (_, i) => ({
+          id: `song-${i + 1}`,
+          title: `Song Title ${i + 1}`,
+          artist: `Artist ${i + 1}`,
+          album: `Album ${i + 1}`,
+          duration: "3:45",
+          rank: i + 1,
+          previousRank: i + Math.floor(Math.random() * 10) - 5,
+          plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
+          cover: "/placeholder.svg",
+          audioUrl: ""
+        }));
+        setTopSongs(mockSongs);
+      } catch (err) {
+        console.error("❌ Lỗi tải monthly top 100:", err);
+        // Fallback to mock data
+        const mockSongs = Array.from({ length: 100 }, (_, i) => ({
+          id: `song-${i + 1}`,
+          title: `Song Title ${i + 1}`,
+          artist: `Artist ${i + 1}`,
+          album: `Album ${i + 1}`,
+          duration: "3:45",
+          rank: i + 1,
+          previousRank: i + Math.floor(Math.random() * 10) - 5,
+          plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
+          cover: "/placeholder.svg",
+          audioUrl: ""
+        }));
+        setTopSongs(mockSongs);
+      }
+    };
+    
+    fetchMonthlyTop100();
+  }, []);
 
   const topArtists = Array.from({ length: 50 }, (_, i) => ({
     id: `artist-${i + 1}`,
@@ -45,16 +106,30 @@ const Top100 = () => {
     cover: "/placeholder.svg"
   }));
 
-  const toggleLike = (itemId: string) => {
-    setLikedItems(prev =>
-      prev.includes(itemId)
-        ? prev.filter(id => id !== itemId)
-        : [...prev, itemId]
-    );
-    toast({
-      title: likedItems.includes(itemId) ? "Removed from favorites" : "Added to favorites",
-      duration: 2000,
-    });
+  const handlePlaySong = (song: any) => {
+    const formattedSong = {
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+      cover: song.cover,
+      audioUrl: song.audioUrl,
+    };
+
+    const formattedQueue = topSongs.map((s) => ({
+      id: s.id,
+      title: s.title,
+      artist: s.artist,
+      album: s.album,
+      duration: s.duration,
+      cover: s.cover,
+      audioUrl: s.audioUrl,
+    }));
+
+    setQueue(formattedQueue);
+    playSong(formattedSong);
+    toast({ title: `Playing ${song.title}` });
   };
 
   const getRankIcon = (currentRank: number, previousRank: number) => {
@@ -70,6 +145,18 @@ const Top100 = () => {
     return change > 0 ? `+${change}` : `${change}`;
   };
 
+  const toggleLike = (itemId: string) => {
+    setLikedItems(prev =>
+      prev.includes(itemId)
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+    toast({
+      title: likedItems.includes(itemId) ? "Removed from favorites" : "Added to favorites",
+      duration: 2000,
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-dark text-white">
       <div className="container mx-auto px-4 py-8">
@@ -78,7 +165,7 @@ const Top100 = () => {
           <div className="flex items-center gap-3 mb-4">
             <Trophy className="w-8 h-8 text-yellow-500" />
             <h1 className="text-4xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">
-              Top 100 Charts
+              Hot Month Charts
             </h1>
           </div>
           <p className="text-muted-foreground text-lg">
@@ -99,7 +186,7 @@ const Top100 = () => {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Trophy className="w-5 h-5 text-yellow-500" />
-                  Top 100 Songs
+                  Hot Month Top 100
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -125,7 +212,7 @@ const Top100 = () => {
                       <Button
                         size="icon"
                         className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => toast({ title: `Playing ${song.title}` })}
+                        onClick={() => handlePlaySong(song)}
                       >
                         <Play className="w-4 h-4" />
                       </Button>

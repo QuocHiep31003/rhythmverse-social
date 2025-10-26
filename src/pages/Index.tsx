@@ -22,17 +22,18 @@ import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import { formatPlayCount } from "@/lib/utils";
+import { songsApi } from "@/services/api";
 
 const Index = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { playSong, setQueue } = useMusic();
 
-  // Dữ liệu local (mock)
-  const topHits100 = mockSongs.slice(0, 5);
+  // Dữ liệu từ API thực tế - Hot Month (Monthly Trending)
+  const [topHitsMonth, setTopHitsMonth] = useState([]);
   const aiPicks = mockSongs.slice(0, 3);
 
-  // Danh sách Editor’s albums
+  // Danh sách Editor's albums
   const editorsChoice = [
     {
       id: 1,
@@ -49,23 +50,60 @@ const Index = () => {
     },
   ];
 
-  // Dữ liệu từ API thực tế
-  const [topHitsToday, setTopHitsToday] = useState([]);
+  // Dữ liệu từ API thực tế - Hot Week (Weekly Trending)
+  const [topHitsWeek, setTopHitsWeek] = useState([]);
 
   useEffect(() => {
-    // Fetch tất cả bài hát để sort toàn bộ
-    fetch("http://localhost:8080/api/songs?size=10000")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data && data.content) {
-          const songs = data.content;
-          const sorted = songs
-            .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
-            .slice(0, 5);
-          setTopHitsToday(sorted);
+    // Hot Week: Sử dụng API weekly top 5
+    const fetchHotWeek = async () => {
+      try {
+        const weeklyTop5 = await songsApi.getWeeklyTop5();
+        
+        if (weeklyTop5 && weeklyTop5.length > 0) {
+          console.log('✅ Loaded weekly top 5:', weeklyTop5.length, 'songs');
+          
+          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
+          const sortedSongs = weeklyTop5.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
+          setTopHitsWeek(sortedSongs);
+          return;
         }
-      })
-      .catch((err) => console.error("Lỗi tải bài hát:", err));
+        
+       
+        
+      } catch (err) {
+        console.error("❌ Lỗi tải weekly trending:", err);
+        setTopHitsWeek(mockSongs.slice(0, 5));
+      }
+    };
+    
+    fetchHotWeek();
+  }, []);
+
+  // Fetch monthly top 100 trending songs
+  useEffect(() => {
+    const fetchHotMonth = async () => {
+      try {
+        const monthlyTop100 = await songsApi.getMonthlyTop100();
+        
+        if (monthlyTop100 && monthlyTop100.length > 0) {
+          console.log('✅ Loaded monthly top 100:', monthlyTop100.length, 'songs');
+          
+          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
+          const sortedSongs = monthlyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
+          setTopHitsMonth(sortedSongs.slice(0, 5)); // Show top 5 on homepage
+          return;
+        }
+        
+        // Fallback nếu API không có data
+        console.log('⚠️ No monthly data, falling back to mock data...');
+        setTopHitsMonth(mockSongs.slice(0, 5));
+      } catch (err) {
+        console.error("❌ Lỗi tải monthly trending:", err);
+        setTopHitsMonth(mockSongs.slice(0, 5));
+      }
+    };
+    
+    fetchHotMonth();
   }, []);
 
   return (
@@ -119,69 +157,7 @@ const Index = () => {
 
             {/* Music Lists Grid */}
             <div className="grid lg:grid-cols-2 gap-8">
-              {/* Top Hits 100 */}
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center gap-2">
-                    <Star className="w-5 h-5 text-yellow-500" />
-                    Top Hits 100
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {topHits100.map((song, index) => (
-                    <div
-                      key={song.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/10 group cursor-pointer"
-                      onClick={() => {
-                        setQueue(topHits100);
-                        playSong(song);
-                      }}
-                    >
-                      <span className="w-6 text-sm text-muted-foreground text-center">
-                        {index + 1}
-                      </span>
-                      <div className="w-10 h-10 bg-gradient-primary rounded flex items-center justify-center overflow-hidden">
-                        {song.cover ? (
-                          <img
-                            src={song.cover}
-                            alt={song.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate text-sm">
-                          {song.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {song.artist}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">
-                          {song.plays}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {Math.floor(song.duration / 60)}:
-                          {(song.duration % 60).toString().padStart(2, "0")}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    className="w-full mt-4"
-                    size="sm"
-                    onClick={() => navigate("/top100")}
-                  >
-                    View All 100
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Top Hits Today */}
+              {/* Hot Month */}
               <Card
                 className="
     bg-gradient-glass backdrop-blur-sm border-white/10 
@@ -192,13 +168,13 @@ const Index = () => {
               >
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5 text-neon-pink" />
-                    Hot Today
+                    <Star className="w-5 h-5 text-yellow-500" />
+                    Hot Month
                   </CardTitle>
                 </CardHeader>
 
-                <CardContent >
-                  {topHitsToday.map((song, index) => (
+                <CardContent>
+                  {topHitsMonth.map((song, index) => (
                     <div
                       key={song.id}
                       className="
@@ -207,14 +183,14 @@ const Index = () => {
           hover:bg-white/5 hover:scale-[1.02] hover:shadow-inner
         "
                       onClick={() => {
-                        const formattedSongs = topHitsToday.map(s => ({
+                        const formattedSongs = topHitsMonth.map(s => ({
                           id: s.id,
                           title: s.name,
-                          artist: s.artists?.map((a) => a.name).join(", ") || "Unknown",
+                          artist: s.artistNames?.join(", ") || s.artists?.map((a) => a.name).join(", ") || "Unknown",
                           album: s.album?.name || "Unknown",
                           duration: s.duration || 0,
                           cover: s.cover || "",
-                          genre: s.genres?.[0]?.name || "Unknown",
+                          genre: s.genreNames?.[0] || s.genres?.[0]?.name || "Unknown",
                           plays: formatPlayCount(s.playCount || 0),
                           audio: s.audioUrl,
                           audioUrl: s.audioUrl,
@@ -248,10 +224,105 @@ const Index = () => {
                       {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {song.name}
+                          {(song as any).name || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artists?.map((a) => a.name).join(", ")}
+                          {(song as any).artistNames?.join(", ") || (song as any).artists?.map((a: any) => a.name).join(", ") || "Unknown"}
+                        </p>
+                      </div>
+
+                      {/* Lượt nghe */}
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
+                          <Headphones className="w-3 h-3" />
+                          {formatPlayCount(song.playCount || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4"
+                    size="sm"
+                    onClick={() => navigate("/top100")}
+                  >
+                    View All 100
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Hot Week */}
+              <Card
+                className="
+    bg-gradient-glass backdrop-blur-sm border-white/10 
+    transition-all duration-500 
+    hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(255,255,255,0.15)]
+    hover:border-white/20 hover:bg-gradient-to-br hover:from-white/10 hover:to-white/5
+  "
+              >
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-neon-pink" />
+                    Hot Week
+                  </CardTitle>
+                </CardHeader>
+
+                <CardContent >
+                  {topHitsWeek.map((song, index) => (
+                    <div
+                      key={song.id}
+                      className="
+          flex items-center gap-3 p-2 rounded-lg 
+          group cursor-pointer transition-all 
+          hover:bg-white/5 hover:scale-[1.02] hover:shadow-inner
+        "
+                      onClick={() => {
+                        const formattedSongs = topHitsWeek.map(s => ({
+                          id: s.id,
+                          title: s.name,
+                          artist: s.artistNames?.join(", ") || s.artists?.map((a) => a.name).join(", ") || "Unknown",
+                          album: s.album?.name || "Unknown",
+                          duration: s.duration || 0,
+                          cover: s.cover || "",
+                          genre: s.genreNames?.[0] || s.genres?.[0]?.name || "Unknown",
+                          plays: formatPlayCount(s.playCount || 0),
+                          audio: s.audioUrl,
+                          audioUrl: s.audioUrl,
+                        }));
+                        setQueue(formattedSongs);
+                        const currentFormatted = formattedSongs.find(s => s.id === song.id);
+                        playSong(currentFormatted);
+                      }}
+                    >
+                      {/* Số thứ tự */}
+                      <span className="w-6 text-sm text-muted-foreground text-center">
+                        {index + 1}
+                      </span>
+
+                      {/* Ảnh bìa hoặc ảnh mặc định */}
+                      <div className="w-12 h-12 rounded-md overflow-hidden bg-muted flex items-center justify-center">
+                        {song.cover ? (
+                          <img
+                            src={song.cover}
+                            alt={song.name}
+                            className="
+                w-full h-full object-cover 
+                transition-transform duration-500 group-hover:scale-110
+              "
+                          />
+                        ) : (
+                          <Headphones className="w-6 h-6 text-gray-400" />
+                        )}
+                      </div>
+
+                      {/* Thông tin bài hát */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
+                          {(song as any).name || song.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {(song as any).artistNames?.join(", ") || (song as any).artists?.map((a: any) => a.name).join(", ") || "Unknown"}
                         </p>
                       </div>
 
@@ -298,7 +369,7 @@ const Index = () => {
                         {song.cover ? (
                           <img
                             src={song.cover}
-                            alt={song.title}
+                            alt={(song as any).name || song.title}
                             className="w-full h-full object-cover"
                           />
                         ) : (
@@ -350,3 +421,4 @@ const Index = () => {
 };
 
 export default Index;
+

@@ -1,4 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { authApi } from "@/services/api";
+import { friendsApi, inviteLinksApi } from "@/services/api/friendsApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,7 +42,7 @@ interface Friend {
   id: string;
   name: string;
   username: string;
-  avatar?: string;
+  avatar?: string | null;
   isOnline: boolean;
   currentlyListening?: {
     title: string;
@@ -47,49 +51,100 @@ interface Friend {
   streak: number;
 }
 
+interface ApiFriendDTO {
+  id: number; // relationship id
+  friendId: number;
+  friendName: string;
+  friendEmail: string;
+  friendAvatar: string | null;
+  createdAt: string;
+}
+interface ApiPendingDTO {
+  id: number;
+  senderId: number;
+  senderName: string;
+  senderAvatar?: string | null;
+  receiverId: number;
+  receiverName?: string;
+  status: string;
+  createdAt: string;
+}
+
 const Social = () => {
-  const [selectedChat, setSelectedChat] = useState<string | null>("1");
+  const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [requestedIds, setRequestedIds] = useState<string[]>([]);
+  const navigate = useNavigate();
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
+  const [searchParams] = useSearchParams();
+  const inviteCode = (searchParams.get('inviteCode') || '').trim();
+  const [pending, setPending] = useState<ApiPendingDTO[]>([]);
+  const [loadingPending, setLoadingPending] = useState<boolean>(false);
+  const [profileName, setProfileName] = useState<string>("");
+  const [profileEmail, setProfileEmail] = useState<string>("");
+  const [shareUrl, setShareUrl] = useState<string>("");
 
-  const friends: Friend[] = [
-    {
-      id: "1",
-      name: "Sarah Chen",
-      username: "@sarahc",
-      isOnline: true,
-      currentlyListening: {
-        title: "Midnight City",
-        artist: "M83"
-      },
-      streak: 12
-    },
-    {
-      id: "2",
-      name: "Mike Rodriguez",
-      username: "@mikerod",
-      isOnline: true,
-      currentlyListening: {
-        title: "Bohemian Rhapsody",
-        artist: "Queen"
-      },
-      streak: 7
-    },
-    {
-      id: "3",
-      name: "Emma Davis",
-      username: "@emmad",
-      isOnline: false,
-      streak: 3
-    },
-    {
-      id: "4",
-      name: "Alex Johnson",
-      username: "@alexj",
-      isOnline: true,
-      streak: 25
+  // Note: do not memoize userId; always read latest from localStorage
+  const meId = useMemo(() => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  }, [localStorage.getItem('userId')]);
+
+  const loadFriends = async () => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const idNum = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(idNum)) return;
+    setLoadingFriends(true);
+    try {
+      const apiFriends: ApiFriendDTO[] = await friendsApi.getFriends(idNum);
+      const mapped: Friend[] = apiFriends.map((f) => ({
+        id: String(f.friendId || f.id),
+        name: f.friendName || `User ${f.friendId}`,
+        username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
+        avatar: f.friendAvatar || undefined,
+        isOnline: false,
+        streak: 0,
+      }));
+      setFriends(mapped);
+      if (mapped.length > 0) setSelectedChat((prev) => prev ?? mapped[0].id);
+    } catch (e) {
+      console.error('Failed to load friends', e);
+    } finally {
+      setLoadingFriends(false);
     }
-  ];
+  };
+
+  const loadPending = async () => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const idNum = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(idNum)) return;
+    setLoadingPending(true);
+    try {
+      const data: ApiPendingDTO[] = await friendsApi.getPending(idNum);
+      setPending(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to load pending requests', e);
+      setPending([]);
+    } finally {
+      setLoadingPending(false);
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      await Promise.all([loadFriends(), loadPending()]);
+      // Load current profile for "My Profile" section
+      try {
+        const me = await authApi.me();
+        setProfileName(me?.name || me?.username || "");
+        setProfileEmail(me?.email || "");
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const messages: Record<string, Message[]> = {
     "1": [
@@ -142,19 +197,43 @@ const Social = () => {
     { id: "10", name: "Jake Thompson", username: "@jaket", mutualFriends: 1 }
   ];
 
-  const handleAcceptFriendRequest = (requestId: string) => {
-    console.log('Accepted friend request:', requestId);
-    // Handle accept friend request logic
+  const handleAcceptFriendRequest = async (requestId: string) => {
+    try {
+      const idNum = Number(requestId);
+      if (!Number.isFinite(idNum)) throw new Error("Invalid request id");
+      const msg = await friendsApi.accept(idNum);
+      toast.success(msg || "Friend request accepted");
+      await Promise.all([loadPending(), loadFriends()]);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to accept request");
+      console.error(e);
+    }
   };
 
   const handleRejectFriendRequest = (requestId: string) => {
-    console.log('Rejected friend request:', requestId);
-    // Handle reject friend request logic
+    toast('Decline is not supported by API');
   };
 
-  const handleSendFriendRequest = (userId: string) => {
-    console.log('Sent friend request to:', userId);
-    // Handle send friend request logic
+  const handleSendFriendRequest = async (userId: string) => {
+    try {
+      const me = localStorage.getItem('userId');
+      if (!me) {
+        toast.error('Please login to add friends');
+        navigate('/login');
+        return;
+      }
+      const senderId = Number(me);
+      const receiverId = Number(userId);
+      if (!Number.isFinite(senderId) || !Number.isFinite(receiverId)) {
+        throw new Error('Invalid user id');
+      }
+      const msg = await friendsApi.sendRequest(senderId, receiverId);
+      toast.success(msg || 'Friend request sent');
+      setRequestedIds((prev) => Array.from(new Set([...prev, userId])));
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to send request');
+      console.error(e);
+    }
   };
 
   const handleSendMessage = () => {
@@ -162,6 +241,85 @@ const Social = () => {
       // Add message to chat
       setNewMessage("");
     }
+  };
+
+  const handleCreateInviteLink = async () => {
+    try {
+      const me = localStorage.getItem('userId');
+      if (!me) {
+        toast.error('Please login to create invite link');
+        navigate('/login');
+        return;
+      }
+      const result = await inviteLinksApi.create(Number(me));
+      if (result?.shareUrl) {
+        setShareUrl(result.shareUrl);
+        try { await navigator.clipboard.writeText(result.shareUrl); } catch {}
+        toast.success('Invite link created and copied!', { description: result.shareUrl });
+      } else {
+        toast.success('Invite link created');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to create invite link');
+      console.error(e);
+    }
+  };
+
+  const handleAcceptInviteFromQuery = async () => {
+    if (!inviteCode) return;
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        toast.error('Please login to accept the invite');
+        navigate('/login');
+        return;
+      }
+      const prevCount = friends.length;
+      const res = await inviteLinksApi.accept(inviteCode);
+      // After accepting, try to refresh friends immediately
+      if (meId) {
+        try {
+          const apiFriends: ApiFriendDTO[] = await friendsApi.getFriends(meId);
+          const mapped: Friend[] = apiFriends.map((f) => ({
+            id: String(f.friendId || f.id),
+            name: f.friendName || `User ${f.friendId}`,
+            username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
+            avatar: f.friendAvatar || undefined,
+            isOnline: false,
+            streak: 0,
+          }));
+          setFriends(mapped);
+          if (mapped.length > 0) setSelectedChat((prev) => prev ?? mapped[0].id);
+          const becameFriends = mapped.length > prevCount;
+          const msg = typeof res === 'string' ? res : (res?.message || (becameFriends ? 'You are now friends!' : 'Request sent to inviter'));
+          toast.success(msg);
+        } catch {
+          const msg = typeof res === 'string' ? res : (res?.message || 'Request sent to inviter');
+          toast.success(msg);
+        }
+      } else {
+        const msg = typeof res === 'string' ? res : (res?.message || 'Request sent to inviter');
+        toast.success(msg);
+      }
+      navigate('/social');
+    } catch (e: any) {
+      const raw = String(e?.message || 'Failed to accept invite');
+      // Surface clearer messages for common domain errors
+      if (/already\s*friend/i.test(raw)) {
+        toast.error('Already friends');
+      } else if (/already\s*sent|duplicate/i.test(raw)) {
+        toast.error('Friend request already sent');
+      } else if (/expired|invalid\s*invite/i.test(raw)) {
+        toast.error('Invalid or expired invite link');
+      } else {
+        toast.error(raw);
+      }
+    }
+  };
+
+  const handleDeclineInviteFromQuery = () => {
+    toast('Invite dismissed');
+    navigate('/social');
   };
 
   const renderFriendsList = () => (
@@ -273,6 +431,23 @@ const Social = () => {
             </p>
           </div>
 
+          {inviteCode && (
+            <div className="mb-6">
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-lg">Friend Invite</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col sm:flex-row gap-2">
+                  <p className="text-sm text-muted-foreground flex-1">You received a friend invite. Accept to send a request to the inviter.</p>
+                  <div className="flex gap-2">
+                    <Button variant="hero" onClick={handleAcceptInviteFromQuery}>Accept</Button>
+                    <Button variant="outline" onClick={handleDeclineInviteFromQuery}>Decline</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           <Tabs defaultValue="chat" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="chat" className="gap-2">
@@ -305,7 +480,13 @@ const Social = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="p-4 overflow-y-auto">
-                    {renderFriendsList()}
+                    {loadingFriends ? (
+                      <p className="text-sm text-muted-foreground">Loading friends...</p>
+                    ) : friends.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
+                    ) : (
+                      renderFriendsList()
+                    )}
                   </CardContent>
                 </Card>
 
@@ -365,50 +546,58 @@ const Social = () => {
 
             <TabsContent value="friends">
               {/* Friend Requests */}
-              {friendRequests.length > 0 && (
-                <div className="mb-6">
-                  <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                    <CardHeader>
+              <div className="mb-6">
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
                       <CardTitle className="flex items-center gap-2">
                         <UserPlus className="w-5 h-5" />
-                        Friend Requests ({friendRequests.length})
+                        Friend Requests{!loadingPending ? ` (${pending.length})` : ''}
                       </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {friendRequests.map((request) => (
+                      <Button size="sm" variant="outline" onClick={loadPending}>
+                        Refresh
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {loadingPending ? (
+                      <p className="text-sm text-muted-foreground">Loading pending requests...</p>
+                    ) : pending.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No pending requests</p>
+                    ) : (
+                      pending.map((request) => (
                         <div key={request.id} className="flex items-center gap-3 p-3 bg-muted/10 rounded-lg">
                           <Avatar className="w-10 h-10">
                             <AvatarFallback className="bg-gradient-accent text-white">
-                              {request.name.split(' ').map(n => n[0]).join('')}
+                              {request.senderName.split(' ').map(n => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
-                            <h4 className="font-medium">{request.name}</h4>
-                            <p className="text-sm text-muted-foreground">{request.username}</p>
-                            <p className="text-xs text-muted-foreground">{request.mutualFriends} mutual friends</p>
+                            <h4 className="font-medium">{request.senderName}</h4>
+                            <p className="text-xs text-muted-foreground">Requested at {request.createdAt}</p>
                           </div>
                           <div className="flex gap-2">
                             <Button 
                               size="sm" 
                               variant="hero"
-                              onClick={() => handleAcceptFriendRequest(request.id)}
+                              onClick={() => handleAcceptFriendRequest(String(request.id))}
                             >
                               Accept
                             </Button>
                             <Button 
                               size="sm" 
                               variant="outline"
-                              onClick={() => handleRejectFriendRequest(request.id)}
+                              onClick={() => handleRejectFriendRequest(String(request.id))}
                             >
                               Decline
                             </Button>
                           </div>
                         </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
 
               {/* My Profile */}
               <div className="mb-6">
@@ -423,24 +612,40 @@ const Social = () => {
                     <div className="flex items-center gap-4 p-4 bg-muted/10 rounded-lg">
                       <Avatar className="w-16 h-16">
                         <AvatarFallback className="bg-gradient-primary text-white text-lg">
-                          YU
+                          {(() => {
+                            const name = profileName && profileName.trim().length > 0 ? profileName : (profileEmail.split('@')[0] || 'U');
+                            const parts = name.trim().split(' ').filter(Boolean);
+                            const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]) : name[0];
+                            return (initials || 'U').toUpperCase();
+                          })()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <h3 className="text-xl font-bold">Your Username</h3>
-                        <p className="text-muted-foreground">@yourusername</p>
+                        <h3 className="text-xl font-bold">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'Your Username')}</h3>
+                        <p className="text-muted-foreground">
+                          @{profileEmail ? profileEmail.split('@')[0] : (profileName ? profileName.toLowerCase().replace(/\s+/g, '') : 'yourusername')}
+                        </p>
                         <div className="flex items-center gap-2 mt-2">
-                          <Badge variant="secondary">154 friends</Badge>
+                          <Badge variant="secondary">{friends.length} friends</Badge>
                           <Badge variant="outline">Premium</Badge>
                         </div>
                       </div>
                       <div className="text-right">
-                        <Button variant="hero" size="sm" className="mb-2">
+                        <Button variant="hero" size="sm" className="mb-2" onClick={handleCreateInviteLink}>
                           <Share2 className="w-4 h-4 mr-2" />
                           Share Profile
                         </Button>
-                        <p className="text-xs text-muted-foreground">
-                          Share: echoverse.app/user/yourusername
+                        <p className="text-xs text-muted-foreground break-all">
+                          {shareUrl
+                            ? (
+                              <a href={shareUrl} target="_blank" rel="noreferrer" className="underline">
+                                {shareUrl}
+                              </a>
+                            ) : (
+                              <>
+                                Share: Click "Share Profile" to generate an invite link
+                              </>
+                            )}
                         </p>
                       </div>
                     </div>
@@ -474,9 +679,10 @@ const Social = () => {
                           size="sm" 
                           variant="outline"
                           onClick={() => handleSendFriendRequest(person.id)}
+                          disabled={requestedIds.includes(person.id)}
                         >
                           <UserPlus className="w-4 h-4 mr-2" />
-                          Add Friend
+                          {requestedIds.includes(person.id) ? 'Requested' : 'Add Friend'}
                         </Button>
                       </div>
                     ))}

@@ -8,24 +8,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Play, Trophy, Clock, Music, Target, Plus, Download, Upload } from "lucide-react";
+import { quizAttemptsApi } from "@/services/api";
 
 const Quiz = () => {
   const navigate = useNavigate();
 
-  const [selectedQuiz, setSelectedQuiz] = useState<any | null>(null);
-  const [questions, setQuestions] = useState<any[]>([]);
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [score, setScore] = useState(0);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [gameFinished, setGameFinished] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(30);
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-
   const itemsPerPage = 6;
 
-  // ✅ Fetch danh sách quiz
+  // Quiz attempt state
+  const [currentAttempt, setCurrentAttempt] = useState<any | null>(null);
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswerId, setSelectedAnswerId] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameFinished, setGameFinished] = useState(false);
+  const [quizResult, setQuizResult] = useState<any | null>(null);
+
+  // Mock user ID
+  const currentUserId = 1;
+
+  // Fetch quiz list
   useEffect(() => {
     const fetchQuizzes = async () => {
       try {
@@ -116,86 +121,136 @@ const Quiz = () => {
       alert("Export thất bại!");
     }
   };
-  // ✅ Bắt đầu quiz - lấy câu hỏi theo ID
+  // Start quiz using new API
   const startQuiz = async (quizId: number) => {
     try {
+      console.log("🎯 Starting quiz:", quizId, "for user:", currentUserId);
+      
+      // Start quiz attempt
+      const attempt = await quizAttemptsApi.startQuiz(currentUserId, quizId);
+      console.log("📝 Quiz attempt started:", attempt);
+      
+      setCurrentAttempt(attempt);
+      
+      // Get quiz details to display questions
       const response = await fetch(`http://localhost:8080/api/quizDetails/${quizId}`);
       if (!response.ok) throw new Error("Failed to fetch quiz details");
 
       const quizDetail = await response.json();
       console.log("🎯 Quiz detail:", quizDetail);
 
-      // ✅ Chuyển đổi dữ liệu từ backend
+      // Format questions for display
       const formattedQuestions = (quizDetail.questions || []).map((q: any) => ({
         id: q.id,
         content: q.content,
-        options: q.answers.map((a: any) => a.content),
-        correctAnswers: q.answers.filter((a: any) => a.isCorrect).map((a: any) => a.content),
+        answers: q.answers.map((a: any) => ({
+          id: a.id,
+          content: a.content,
+          isCorrect: a.isCorrect,
+        })),
       }));
 
-      setSelectedQuiz(quizDetail);
       setQuestions(formattedQuestions);
       setGameStarted(true);
-      setCurrentQuestion(0);
-      setScore(0);
+      setCurrentQuestionIndex(0);
       setTimeLeft(30);
       setGameFinished(false);
+      setQuizResult(null);
+      setSelectedAnswerId(null);
+      setShowAnswerFeedback(false);
     } catch (error) {
-      console.error("❌ Error fetching quiz details:", error);
+      console.error("❌ Error starting quiz:", error);
+      alert("Failed to start quiz. Please try again.");
     }
   };
 
-  // ✅ Timer
+  // Timer
   useEffect(() => {
     if (gameStarted && !gameFinished && timeLeft > 0) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
       return () => clearTimeout(timer);
     } else if (timeLeft === 0) {
-      handleNextQuestion();
+      handleAnswerSubmission(null); // Auto-submit when time runs out
     }
   }, [gameStarted, gameFinished, timeLeft]);
 
-  // ✅ Chọn đáp án
-  const handleAnswer = (answer: string) => {
-    setSelectedAnswer(answer);
+  // Handle answer submission
+  const handleAnswerSubmission = async (answerId: number | null) => {
+    if (!currentAttempt || !questions[currentQuestionIndex]) return;
 
-    const correctAnswers = questions[currentQuestion].correctAnswers || [];
-    if (correctAnswers.includes(answer)) {
-      setScore((prev) => prev + 100);
+    try {
+      const question = questions[currentQuestionIndex];
+      const timeSpent = 30 - timeLeft;
+      
+      // Submit answer to API
+      await quizAttemptsApi.submitAnswer(
+        currentAttempt.id,
+        question.id,
+        answerId || 0,
+        timeSpent
+      );
+
+      // Move to next question
+      setTimeout(() => {
+        handleNextQuestion();
+      }, 1000);
+    } catch (error) {
+      console.error("❌ Error submitting answer:", error);
+      // Still move to next question
+      setTimeout(() => {
+        handleNextQuestion();
+      }, 1000);
     }
-
-    setTimeout(() => handleNextQuestion(), 1000);
   };
 
-  // ✅ Câu tiếp theo
   const handleNextQuestion = () => {
-    if (currentQuestion < questions.length - 1) {
-      setCurrentQuestion((prev) => prev + 1);
-      setSelectedAnswer(null);
+    setSelectedAnswerId(null);
+    
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex((prev) => prev + 1);
       setTimeLeft(30);
     } else {
+      finishQuiz();
+    }
+  };
+
+  const finishQuiz = async () => {
+    try {
+      if (!currentAttempt) return;
+
+      console.log("🏁 Finishing quiz attempt:", currentAttempt.id);
+      
+      // Submit the entire quiz
+      const result = await quizAttemptsApi.submitQuiz(currentAttempt.id);
+      console.log("🎯 Quiz result:", result);
+      
+      setQuizResult(result);
+      setGameFinished(true);
+    } catch (error) {
+      console.error("❌ Error finishing quiz:", error);
       setGameFinished(true);
     }
   };
 
   const resetGame = () => {
-    setSelectedQuiz(null);
+    setCurrentAttempt(null);
     setGameStarted(false);
     setGameFinished(false);
     setQuestions([]);
-    setCurrentQuestion(0);
-    setScore(0);
-    setSelectedAnswer(null);
+    setCurrentQuestionIndex(0);
+    setSelectedAnswerId(null);
+    setTimeLeft(30);
+    setQuizResult(null);
   };
 
   const totalPages = Math.ceil(quizzes.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentQuizzes = quizzes.slice(startIndex, startIndex + itemsPerPage);
 
-  // 🎮 Khi đang chơi quiz
+ 
   if (gameStarted && !gameFinished) {
-    const currentQ = questions[currentQuestion];
-    const progress = ((currentQuestion + 1) / questions.length) * 100;
+    const currentQ = questions[currentQuestionIndex];
+    const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
     return (
       <div className="min-h-screen bg-gradient-dark">
@@ -204,13 +259,9 @@ const Quiz = () => {
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">
-                {selectedQuiz?.name || "Quiz Challenge"}
+                Quiz Challenge
               </h1>
               <div className="flex justify-center items-center gap-6 mb-6">
-                <div className="flex items-center gap-2">
-                  <Target className="w-5 h-5 text-primary" />
-                  <span>Score: {score}</span>
-                </div>
                 <div className="flex items-center gap-2">
                   <Clock className="w-5 h-5 text-accent" />
                   <span>Time: {timeLeft}s</span>
@@ -218,7 +269,7 @@ const Quiz = () => {
                 <div className="flex items-center gap-2">
                   <Music className="w-5 h-5 text-secondary" />
                   <span>
-                    Question {currentQuestion + 1}/{questions.length}
+                    Question {currentQuestionIndex + 1}/{questions.length}
                   </span>
                 </div>
               </div>
@@ -233,18 +284,20 @@ const Quiz = () => {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {currentQ?.options?.map((option: string, index: number) => (
+                  {currentQ?.answers?.map((answer: any, index: number) => (
                     <Button
-                      key={index}
-                      variant={selectedAnswer === option ? "hero" : "outline"}
+                      key={answer.id}
+                      variant={selectedAnswerId === answer.id ? "hero" : "outline"}
                       className="p-6 text-lg h-auto justify-start"
-                      onClick={() => handleAnswer(option)}
-                      disabled={selectedAnswer !== null}
+                      onClick={() => {
+                        setSelectedAnswerId(answer.id);
+                        handleAnswerSubmission(answer.id);
+                      }}
                     >
                       <span className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center mr-3 text-sm">
                         {String.fromCharCode(65 + index)}
                       </span>
-                      {option}
+                      {answer.content}
                     </Button>
                   ))}
                 </div>
@@ -263,9 +316,11 @@ const Quiz = () => {
     );
   }
 
-  // 🎉 Kết thúc quiz
+
   if (gameFinished) {
-    const finalScore = Math.round((score / (questions.length * 100)) * 100);
+    const finalScore = quizResult?.scorePercentage || 0;
+    const correctAnswers = quizResult?.correctAnswers || 0;
+    const totalQuestions = questions.length;
 
     return (
       <div className="min-h-screen bg-gradient-dark">
@@ -280,7 +335,14 @@ const Quiz = () => {
           <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 mb-8 mt-8">
             <CardContent className="p-8">
               <div className="text-6xl font-bold text-primary mb-4">{finalScore}%</div>
-              <div className="text-2xl font-semibold mb-2">Score: {score} points</div>
+              <div className="text-2xl font-semibold mb-2">
+                {correctAnswers}/{totalQuestions} correct answers
+              </div>
+              {quizResult?.totalTimeSpent && (
+                <div className="text-lg text-muted-foreground">
+                  Time: {Math.round(quizResult.totalTimeSpent / 60)}m {quizResult.totalTimeSpent % 60}s
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -298,7 +360,7 @@ const Quiz = () => {
     );
   }
 
-  // 📋 Danh sách quiz
+  
   return (
     <div className="min-h-screen bg-gradient-dark">
       <ChatBubble />

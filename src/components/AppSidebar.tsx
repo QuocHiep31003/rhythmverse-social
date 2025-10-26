@@ -10,7 +10,8 @@ import {
   TrendingUp,
   Trophy,
   Library,
-  Mic
+  Mic,
+  Clock
 } from "lucide-react";
 import {
   Sidebar,
@@ -45,6 +46,7 @@ const menuItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Discover", url: "/discover", icon: Compass },
   { title: "My Library", url: "/playlists", icon: Library },
+  { title: "Listening History", url: "/listening-history", icon: Clock },
   { title: "Trending", url: "/trending", icon: TrendingUp },
   { title: "Top 100", url: "/top100", icon: Trophy },
   { title: "Playlist", url: "/playlist", icon: ListMusic },
