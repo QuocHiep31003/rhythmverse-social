@@ -515,33 +515,7 @@ export const songsApi = {
   },
 };
 
-// Playlists API
-export const playlistsApi = {
-  getAll: async () => {
-    await delay(300);
-    return mockPlaylists;
-  },
-
-  getById: async (id: string) => {
-    await delay(200);
-    return mockPlaylists.find(p => p.id === id);
-  },
-
-  create: async (data: any) => {
-    await delay(500);
-    return { id: Date.now().toString(), ...data, songs: [] };
-  },
-
-  update: async (id: string, data: any) => {
-    await delay(500);
-    return { id, ...data };
-  },
-
-  delete: async (id: string) => {
-    await delay(500);
-    return { success: true };
-  },
-};
+// Playlists API moved to src/services/api/playlistApi.ts
 
 // Albums API
 export const albumsApi = {

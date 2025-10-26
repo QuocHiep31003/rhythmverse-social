@@ -10,30 +10,47 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Share2, Send, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { friendsApi } from "@/services/api/friendsApi";
+import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 
 interface ShareButtonProps {
   title: string;
   type: "song" | "album" | "playlist" | "quiz";
   url?: string;
+  playlistId?: number; // when type === 'playlist'
 }
 
 const ShareButton = ({ title, type, url }: ShareButtonProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [friends, setFriends] = useState<{ id: string; name: string; avatar?: string | null }[]>([]);
+  const meId = useMemo(() => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  }, [typeof window !== 'undefined' ? localStorage.getItem('userId') : undefined]);
 
-  const friends = [
-    { id: "1", name: "Alex M.", avatar: "", online: true },
-    { id: "2", name: "Sarah K.", avatar: "", online: false },
-    { id: "3", name: "Mike R.", avatar: "", online: true },
-    { id: "4", name: "Emma L.", avatar: "", online: true },
-    { id: "5", name: "David S.", avatar: "", online: false },
-  ];
+  useEffect(() => {
+    const loadFriends = async () => {
+      if (!meId) return;
+      try {
+        const apiFriends: any[] = await friendsApi.getFriends(meId);
+        const mapped = apiFriends.map((f) => ({
+          id: String(f.friendId || f.id),
+          name: f.friendName || `User ${f.friendId}`,
+          avatar: f.friendAvatar || null,
+        }));
+        setFriends(mapped);
+      } catch (e) {
+        // swallow
+      }
+    };
+    loadFriends();
+  }, [meId]);
 
-  const filteredFriends = friends.filter(friend =>
-    friend.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredFriends = friends.filter(friend => friend.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const toggleFriend = (friendId: string) => {
     setSelectedFriends(prev =>
@@ -43,13 +60,30 @@ const ShareButton = ({ title, type, url }: ShareButtonProps) => {
     );
   };
 
-  const handleShare = () => {
-    // Handle sharing logic
-    console.log("Sharing:", { title, type, selectedFriends, message });
-    // Reset form
-    setSelectedFriends([]);
-    setMessage("");
-    setSearchQuery("");
+  const handleShare = async () => {
+    try {
+      if (type === 'playlist' && playlistId && selectedFriends.length) {
+        // Send collaborator invites via backend
+        for (const fid of selectedFriends) {
+          await playlistCollabInvitesApi.send(playlistId, Number(fid), 'VIEWER');
+        }
+        // reset
+        setSelectedFriends([]);
+        setMessage("");
+        setSearchQuery("");
+        return;
+      }
+      // Fallback: just copy URL if provided
+      if (url) {
+        try { await navigator.clipboard.writeText(url); } catch {}
+      }
+      setSelectedFriends([]);
+      setMessage("");
+      setSearchQuery("");
+    } catch (e: any) {
+      // show error toast through console to avoid circular deps
+      console.error('Share failed', e?.message || e);
+    }
   };
 
   return (
@@ -96,9 +130,6 @@ const ShareButton = ({ title, type, url }: ShareButtonProps) => {
                     <AvatarImage src={friend.avatar} alt={friend.name} />
                     <AvatarFallback>{friend.name.charAt(0)}</AvatarFallback>
                   </Avatar>
-                  {friend.online && (
-                    <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
-                  )}
                 </div>
                 <span className="font-medium text-sm flex-1">{friend.name}</span>
                 {selectedFriends.includes(friend.id) && (
