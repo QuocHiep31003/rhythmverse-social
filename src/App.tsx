@@ -26,6 +26,7 @@ import Settings from "./pages/Settings";
 import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
+import InviteFriend from "./pages/InviteFriend";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
@@ -91,6 +92,7 @@ const App = () => (
                   <Route path="/song/:id" element={<SongDetail />} />
                   <Route path="/album/:id" element={<AlbumDetail />} />
                   <Route path="/artist/:id" element={<ArtistDetail />} />
+                  <Route path="/invite/friend/:code" element={<InviteFriend />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AppLayout>
