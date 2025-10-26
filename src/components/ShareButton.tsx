@@ -59,7 +59,7 @@ const ShareButton = ({ title, type, url }: ShareButtonProps) => {
           <Share2 className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto scrollbar-custom">
         <DialogHeader>
           <DialogTitle>Share {type}</DialogTitle>
         </DialogHeader>
@@ -82,7 +82,7 @@ const ShareButton = ({ title, type, url }: ShareButtonProps) => {
           </div>
 
           {/* Friends list */}
-          <div className="max-h-48 overflow-y-auto space-y-2">
+          <div className="max-h-48 overflow-y-auto space-y-2 scrollbar-custom">
             {filteredFriends.map((friend) => (
               <div
                 key={friend.id}

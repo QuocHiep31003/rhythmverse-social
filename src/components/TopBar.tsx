@@ -21,9 +21,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { authApi } from "@/services/api";
 const TopBar = () => {
   const [searchText, setSearchText] = useState("");
+  const [profileName, setProfileName] = useState<string>("");
+  const [profileEmail, setProfileEmail] = useState<string>("");
   const navigate = useNavigate();
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
@@ -32,6 +35,29 @@ const TopBar = () => {
     if (trimmed) {
       navigate(`/search?query=${encodeURIComponent(trimmed)}`);
     }
+  }
+  
+  useEffect(() => {
+    const loadMe = async () => {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!token) return;
+      try {
+        const me = await authApi.me();
+        setProfileName(me?.name || me?.username || "");
+        setProfileEmail(me?.email || "");
+      } catch {
+        // ignore
+      }
+    };
+    loadMe();
+  }, []);
+  
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userId');
+    } catch {}
+    navigate('/login');
   }
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 shadow-[0_4px_20px_rgba(168,85,247,0.1)]" style={{ borderImage: 'var(--gradient-navbar) 1' }}>
@@ -100,7 +126,14 @@ const TopBar = () => {
                 <Avatar className="h-8 w-8 ring-2 ring-[hsl(var(--primary)/0.5)] hover:ring-[hsl(var(--primary))] transition-all">
                   <AvatarImage src="/placeholder.svg" alt="User" />
                   <AvatarFallback className="bg-gradient-primary text-white font-semibold shadow-[0_0_15px_hsl(var(--primary)/0.4)]">
-                    U
+                    {(() => {
+                      const base = (profileName && profileName.trim().length > 0)
+                        ? profileName
+                        : (profileEmail ? profileEmail.split('@')[0] : 'U');
+                      const parts = base.trim().split(' ').filter(Boolean);
+                      const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]) : base[0];
+                      return (initials || 'U').toUpperCase();
+                    })()}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -111,10 +144,12 @@ const TopBar = () => {
             >
               <div className="flex items-center justify-start gap-2 p-2">
                 <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">John Doe</p>
-                  <p className="w-[200px] truncate text-sm text-muted-foreground">
-                    john.doe@example.com
-                  </p>
+                  <p className="font-medium">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'User')}</p>
+                  {profileEmail && (
+                    <p className="w-[200px] truncate text-sm text-muted-foreground">
+                      {profileEmail}
+                    </p>
+                  )}
                 </div>
               </div>
               <DropdownMenuSeparator />
@@ -131,7 +166,7 @@ const TopBar = () => {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex items-center gap-2">
+              <DropdownMenuItem className="flex items-center gap-2" onClick={handleLogout}>
                 <LogOut className="h-4 w-4" />
                 Log out
               </DropdownMenuItem>

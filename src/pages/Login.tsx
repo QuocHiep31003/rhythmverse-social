@@ -42,9 +42,13 @@ const Login = () => {
       });
       
       setSuccess("Login successful!");
-      // Store token or user data if needed
-      if (response.token) {
+      // Persist auth data
+      if (response?.token) {
         localStorage.setItem('token', response.token);
+      }
+      const userId = response?.userId ?? response?.user?.id ?? response?.id ?? response?.user?.userId;
+      if (userId) {
+        localStorage.setItem('userId', String(userId));
       }
       
       // Navigate to home page after successful login

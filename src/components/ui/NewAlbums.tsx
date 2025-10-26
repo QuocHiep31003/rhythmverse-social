@@ -6,15 +6,15 @@ import { Music, Play } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 
 interface Album {
-  id: number;
-  name: string;
-  artist?: {
-    id: number;
-    name: string;
-  };
+  id: number | string;
+  name?: string;
+  title?: string;
+  artist?: { id: number | string; name?: string } | string;
   coverUrl?: string;
+  cover?: string;
   releaseDate?: string;
   songs?: any[];
+  tracks?: number;
 }
 
 const NewAlbums = () => {
@@ -62,10 +62,10 @@ const NewAlbums = () => {
               onClick={() => navigate(`/album/${album.id}`)} // ✅ nhấn để chuyển sang chi tiết album
             >
               <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-subtle">
-                {album.coverUrl ? (
+                {album.coverUrl || album.cover ? (
                   <img
-                    src={album.coverUrl}
-                    alt={album.name}
+                    src={album.coverUrl || album.cover || ""}
+                    alt={album.name || album.title || "Album cover"}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -74,12 +74,12 @@ const NewAlbums = () => {
               </div>
 
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate text-sm">{album.name}</p>
+                <p className="font-medium truncate text-sm">{album.name || album.title}</p>
                 <p className="text-xs text-muted-foreground">
-                  by {album.artist?.name || "Unknown Artist"}
+                  by {typeof album.artist === 'string' ? album.artist : album.artist?.name || "Unknown Artist"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {album.songs?.length || 0} tracks
+                  {(album.songs?.length ?? album.tracks ?? 0)} tracks
                 </p>
               </div>
 

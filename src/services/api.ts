@@ -1,6 +1,6 @@
 import { mockSongs, mockUsers, mockPlaylists, mockAlbums, mockArtists, mockGenres } from "@/data/mockData";
 
-const API_BASE_URL = "http://localhost:8080/api";
+export const API_BASE_URL = "http://localhost:8080/api";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -13,14 +13,14 @@ const getAuthToken = (): string | null => {
   }
 };
 
-const buildJsonHeaders = (): Record<string, string> => {
+export const buildJsonHeaders = (): Record<string, string> => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = getAuthToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 };
 
-const parseErrorResponse = async (response: Response): Promise<string> => {
+export const parseErrorResponse = async (response: Response): Promise<string> => {
   try {
     const data = await response.json();
     return (data && (data.message || data.error || data.details)) || JSON.stringify(data);
@@ -207,7 +207,9 @@ export const songsApi = {
       if (params?.sort) queryParams.append('sort', params.sort);
       if (params?.search) queryParams.append('search', params.search);
 
-      const response = await fetch(`${API_BASE_URL}/songs?${queryParams.toString()}`);
+      const response = await fetch(`${API_BASE_URL}/songs?${queryParams.toString()}`, {
+        headers: buildJsonHeaders(),
+      });
       if (!response.ok) {
         throw new Error("Failed to fetch songs");
       }
@@ -215,16 +217,16 @@ export const songsApi = {
       return data;
     } catch (error) {
       console.error("Error fetching songs:", error);
-
+      // Return empty instead of mock to ensure real API only
       return {
-        content: mockSongs,
-        totalElements: mockSongs.length,
-        totalPages: 1,
-        size: 10,
-        number: 0,
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
         first: true,
         last: true,
-        empty: false
+        empty: true
       } as PaginatedResponse<any>;
     }
   },
@@ -366,7 +368,9 @@ export const songsApi = {
    */
   getTrendingSimple: async (limit: number = 20) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/trending/simple?limit=${limit}`);
+      const response = await fetch(`${API_BASE_URL}/trending/simple?limit=${limit}`, {
+        headers: buildJsonHeaders(),
+      });
       if (!response.ok) throw new Error("Failed to fetch trending");
       return await response.json();
     } catch (error) {
