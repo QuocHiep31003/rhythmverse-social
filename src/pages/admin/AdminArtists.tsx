@@ -173,7 +173,7 @@ const AdminArtists = () => {
             </div>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col min-h-0">
-            {loading ? <div className="text-center py-8">Loading...</div> : artists.length === 0 ? <div className="text-center py-8 text-muted-foreground">{searchQuery || countryFilter || debutYearFilter ? "No artists found" : "Empty Placeholder"}</div> : (
+            {loading ? <div className="text-center py-8">Loading...</div> : artists.length === 0 ? <div className="text-center py-8 text-muted-foreground">{searchQuery || countryFilter || debutYearFilter ? "No artists found" : "Chưa có nghệ sĩ nào"}</div> : (
               <>
                 {/* Fixed Header */}
                 <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
@@ -239,8 +239,8 @@ const AdminArtists = () => {
                   size="icon"
                   onClick={() => goToPage(page)}
                   className={`h-8 w-8 border-[hsl(var(--admin-border))] ${currentPage === page
-                      ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
-                      : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                    ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
+                    : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
                     }`}
                 >
                   {page + 1}

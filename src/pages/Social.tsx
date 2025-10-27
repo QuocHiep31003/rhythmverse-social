@@ -18,9 +18,7 @@ import {
   Send,
   Search,
   UserPlus,
-  UserMinus,
   Music,
-  Clock,
   Flame,
   Headphones,
   Play
