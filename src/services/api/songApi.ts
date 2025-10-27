@@ -31,6 +31,7 @@ export interface SongCreateUpdateData {
   genreIds: number[];
   artistIds: number[];
   audioUrl: string;
+  duration?: string;
 }
 
 // Songs API sử dụng axios
@@ -139,6 +140,7 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
+        duration: data.duration,
       };
 
       const response = await apiClient.post('/songs', payload);
@@ -158,6 +160,7 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
+        duration: data.duration,
       };
 
       const response = await apiClient.put(`/songs/${id}`, payload);
