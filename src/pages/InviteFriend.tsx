@@ -30,7 +30,7 @@ const InviteFriend = () => {
     }
     try {
       setSubmitting(true);
-      const res = await inviteLinksApi.accept(inviteCode);
+      const res = await inviteLinksApi.accept(inviteCode, userId);
       const msg = typeof res === 'string' ? res : (res?.message || 'Invite accepted');
       toast.success(msg);
       navigate('/social');

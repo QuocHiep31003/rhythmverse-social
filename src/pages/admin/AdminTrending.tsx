@@ -236,24 +236,23 @@ const AdminTrending = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden p-6 flex flex-col">
-      <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
-        <div className="flex items-center justify-between flex-shrink-0 mb-4">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Tính lại Trending</h1>
-            <p className="text-muted-foreground">Quản lý và tính toán điểm trending cho bài hát</p>
-          </div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Tính lại Trending</h1>
+          <p className="text-muted-foreground">Quản lý và tính toán điểm trending cho bài hát</p>
         </div>
+      </div>
 
-        <Tabs defaultValue="week" className="flex-1 flex flex-col overflow-hidden min-h-0 space-y-4">
+      <Tabs defaultValue="week" className="space-y-4">
         <TabsList>
           <TabsTrigger value="week">Trending Tuần</TabsTrigger>
           <TabsTrigger value="month">Trending Tháng</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="week" className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] flex-1 flex flex-col overflow-hidden min-h-0">
-            <CardHeader className="flex-shrink-0">
+        <TabsContent value="week" className="space-y-4">
+          <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+            <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-foreground">Top 100 Trending Tuần</CardTitle>
@@ -278,116 +277,118 @@ const AdminTrending = () => {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-6">
+            <CardContent>
               {isLoadingWeek ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-[hsl(var(--admin-primary))]" />
                   <span className="ml-3 text-muted-foreground">Đang tải dữ liệu...</span>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {top100Week.map((song: any) => (
-                    <div 
-                      key={song.id} 
-                      className="flex items-center gap-4 p-3 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8 text-center">
-                          {song.rank || 0}
-                        </span>
-                        <div className="w-14 h-14 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                          <Music className="w-7 h-7 text-muted-foreground" />
+                <>
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {top100Week.map((song: any) => (
+                      <div 
+                        key={song.id} 
+                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8 text-center">
+                            {song.rank || 0}
+                          </span>
+                          <div className="w-14 h-14 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                            <Music className="w-7 h-7 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate text-foreground">{song.title}</p>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {song.artist}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate text-foreground">{song.title}</p>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {song.artist}
-                          </p>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
+                            {song.plays?.toLocaleString() || 0} lượt phát
+                          </span>
+                          {song.trendingScore && (
+                            <span className="text-sm text-green-500 font-medium">
+                              Score: {song.trendingScore.toFixed(2)}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
-                          {song.plays?.toLocaleString() || 0} lượt phát
-                        </span>
-                        {song.trendingScore && (
-                          <span className="text-sm text-green-500 font-medium">
-                            Score: {song.trendingScore.toFixed(2)}
-                          </span>
-                        )}
+                    ))}
+                  </div>
+                  
+                  {/* Pagination */}
+                  {totalPagesWeek > 1 && (
+                    <div className="flex items-center justify-between pt-4 mt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Hiển thị {top100Week.length} trên tổng số {totalElementsWeek} bài hát
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToFirstPageWeek}
+                          disabled={currentPageWeek === 0}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronsLeft className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToPreviousPageWeek}
+                          disabled={currentPageWeek === 0}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        {getPageNumbers(totalPagesWeek, currentPageWeek).map((page) => (
+                          <Button
+                            key={page}
+                            variant="outline"
+                            size="icon"
+                            onClick={() => goToPageWeek(page)}
+                            className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
+                              currentPageWeek === page
+                                ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
+                                : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                            }`}
+                          >
+                            {page + 1}
+                          </Button>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToNextPageWeek}
+                          disabled={currentPageWeek >= totalPagesWeek - 1}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToLastPageWeek}
+                          disabled={currentPageWeek >= totalPagesWeek - 1}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronsRight className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
-          
-          {/* Pagination outside of Card */}
-          {totalPagesWeek > 1 && (
-            <div className="flex items-center justify-between pt-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">
-                Hiển thị {top100Week.length} trên tổng số {totalElementsWeek} bài hát
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToFirstPageWeek}
-                  disabled={currentPageWeek === 0}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToPreviousPageWeek}
-                  disabled={currentPageWeek === 0}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                {getPageNumbers(totalPagesWeek, currentPageWeek).map((page) => (
-                  <Button
-                    key={page}
-                    variant="outline"
-                    size="icon"
-                    onClick={() => goToPageWeek(page)}
-                    className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
-                      currentPageWeek === page
-                        ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
-                        : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                    }`}
-                  >
-                    {page + 1}
-                  </Button>
-                ))}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToNextPageWeek}
-                  disabled={currentPageWeek >= totalPagesWeek - 1}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToLastPageWeek}
-                  disabled={currentPageWeek >= totalPagesWeek - 1}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
         </TabsContent>
 
-        <TabsContent value="month" className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] flex-1 flex flex-col overflow-hidden min-h-0">
-            <CardHeader className="flex-shrink-0">
+        <TabsContent value="month" className="space-y-4">
+          <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+            <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-foreground">Top 100 Trending Tháng</CardTitle>
@@ -412,114 +413,115 @@ const AdminTrending = () => {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto p-6">
+            <CardContent>
               {isLoadingMonth ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 animate-spin text-[hsl(var(--admin-primary))]" />
                   <span className="ml-3 text-muted-foreground">Đang tải dữ liệu...</span>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {top100Month.map((song: any) => (
-                    <div 
-                      key={song.id} 
-                      className="flex items-center gap-4 p-3 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8 text-center">
-                          {song.rank || 0}
-                        </span>
-                        <div className="w-14 h-14 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                          <Music className="w-7 h-7 text-muted-foreground" />
+                <>
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto">
+                    {top100Month.map((song: any) => (
+                      <div 
+                        key={song.id} 
+                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8 text-center">
+                            {song.rank || 0}
+                          </span>
+                          <div className="w-14 h-14 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                            <Music className="w-7 h-7 text-muted-foreground" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate text-foreground">{song.title}</p>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {song.artist}
+                            </p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate text-foreground">{song.title}</p>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {song.artist}
-                          </p>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
+                            {song.plays?.toLocaleString() || 0} lượt phát
+                          </span>
+                          {song.trendingScore && (
+                            <span className="text-sm text-green-500 font-medium">
+                              Score: {song.trendingScore.toFixed(2)}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
-                          {song.plays?.toLocaleString() || 0} lượt phát
-                        </span>
-                        {song.trendingScore && (
-                          <span className="text-sm text-green-500 font-medium">
-                            Score: {song.trendingScore.toFixed(2)}
-                          </span>
-                        )}
+                    ))}
+                  </div>
+                  
+                  {/* Pagination */}
+                  {totalPagesMonth > 1 && (
+                    <div className="flex items-center justify-between pt-4 mt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Hiển thị {top100Month.length} trên tổng số {totalElementsMonth} bài hát
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToFirstPageMonth}
+                          disabled={currentPageMonth === 0}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronsLeft className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToPreviousPageMonth}
+                          disabled={currentPageMonth === 0}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        {getPageNumbers(totalPagesMonth, currentPageMonth).map((page) => (
+                          <Button
+                            key={page}
+                            variant="outline"
+                            size="icon"
+                            onClick={() => goToPageMonth(page)}
+                            className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
+                              currentPageMonth === page
+                                ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
+                                : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                            }`}
+                          >
+                            {page + 1}
+                          </Button>
+                        ))}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToNextPageMonth}
+                          disabled={currentPageMonth >= totalPagesMonth - 1}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={goToLastPageMonth}
+                          disabled={currentPageMonth >= totalPagesMonth - 1}
+                          className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
+                        >
+                          <ChevronsRight className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
-          
-          {/* Pagination outside of Card */}
-          {totalPagesMonth > 1 && (
-            <div className="flex items-center justify-between pt-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">
-                Hiển thị {top100Month.length} trên tổng số {totalElementsMonth} bài hát
-              </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToFirstPageMonth}
-                  disabled={currentPageMonth === 0}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToPreviousPageMonth}
-                  disabled={currentPageMonth === 0}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                {getPageNumbers(totalPagesMonth, currentPageMonth).map((page) => (
-                  <Button
-                    key={page}
-                    variant="outline"
-                    size="icon"
-                    onClick={() => goToPageMonth(page)}
-                    className={`h-8 w-8 border-[hsl(var(--admin-border))] ${
-                      currentPageMonth === page
-                        ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
-                        : "hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                    }`}
-                  >
-                    {page + 1}
-                  </Button>
-                ))}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToNextPageMonth}
-                  disabled={currentPageMonth >= totalPagesMonth - 1}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={goToLastPageMonth}
-                  disabled={currentPageMonth >= totalPagesMonth - 1}
-                  className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          )}
         </TabsContent>
       </Tabs>
-      </div>
     </div>
   );
 };
