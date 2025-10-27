@@ -1,0 +1,425 @@
+import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse } from './config';
+import { mockSongs } from '@/data/mockData';
+
+// Interface cho Song data
+export interface Song {
+  id: string;
+  name: string;
+  releaseYear: number;
+  genreIds: number[];
+  artistIds: number[];
+  audioUrl: string;
+  plays?: string;
+  duration?: string;
+  artists?: any[];
+  genres?: any[];
+}
+
+// Interface cho Song creation/update
+export interface SongCreateUpdateData {
+  name: string;
+  releaseYear: number;
+  genreIds: number[];
+  artistIds: number[];
+  audioUrl: string;
+}
+
+// Songs API sử dụng axios
+export const songsApi = {
+  // Lấy songs theo artist
+  getByArtist: async (artistId: number): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/by-artist/${artistId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching songs by artist:", error);
+      return [];
+    }
+  },
+
+  // Lấy tất cả songs với pagination
+  getAll: async (params?: PaginationParams): Promise<PaginatedResponse<Song>> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+
+      const response = await apiClient.get(`/songs?${queryParams.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching songs:", error);
+      // Return empty paginated response instead of mock
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
+        first: true,
+        last: true,
+        empty: true,
+        pageable: {
+          pageNumber: params?.page ?? 0,
+          pageSize: params?.size ?? 0,
+          sort: { empty: true, sorted: false, unsorted: true },
+          offset: 0,
+          paged: true,
+          unpaged: false
+        },
+        sort: { empty: true, sorted: false, unsorted: true },
+        numberOfElements: 0
+      } as PaginatedResponse<Song>;
+    }
+  },
+
+  // Lấy songs không có album với pagination
+  getWithoutAlbum: async (params?: PaginationParams): Promise<PaginatedResponse<Song>> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+
+      const response = await apiClient.get(`/songs/without-album?${queryParams.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching songs without album:", error);
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
+        first: true,
+        last: true,
+        empty: true,
+        pageable: {
+          pageNumber: params?.page ?? 0,
+          pageSize: params?.size ?? 0,
+          sort: { empty: true, sorted: false, unsorted: true },
+          offset: 0,
+          paged: true,
+          unpaged: false
+        },
+        sort: { empty: true, sorted: false, unsorted: true },
+        numberOfElements: 0
+      } as PaginatedResponse<Song>;
+    }
+  },
+
+  // Lấy song theo ID
+  getById: async (id: string): Promise<Song | null> => {
+    try {
+      const response = await apiClient.get(`/songs/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching song:", error);
+      return mockSongs.find(s => s.id === id) || null;
+    }
+  },
+
+  // Tạo song mới
+  create: async (data: SongCreateUpdateData): Promise<Song> => {
+    try {
+      const payload = {
+        name: data.name,
+        releaseYear: data.releaseYear,
+        genreIds: data.genreIds,
+        artistIds: data.artistIds,
+        audioUrl: data.audioUrl,
+      };
+
+      const response = await apiClient.post('/songs', payload);
+      return response.data;
+    } catch (error) {
+      console.error("Error creating song:", error);
+      throw error;
+    }
+  },
+
+  // Cập nhật song
+  update: async (id: string, data: SongCreateUpdateData): Promise<Song> => {
+    try {
+      const payload = {
+        name: data.name,
+        releaseYear: data.releaseYear,
+        genreIds: data.genreIds,
+        artistIds: data.artistIds,
+        audioUrl: data.audioUrl,
+      };
+
+      const response = await apiClient.put(`/songs/${id}`, payload);
+      return response.data;
+    } catch (error) {
+      console.error("Error updating song:", error);
+      throw error;
+    }
+  },
+
+  // Xóa song
+  delete: async (id: string): Promise<{ success: boolean }> => {
+    try {
+      await apiClient.delete(`/songs/${id}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Error deleting song:", error);
+      throw error;
+    }
+  },
+
+  // Lấy số lượng songs
+  getCount: async (search?: string): Promise<number> => {
+    try {
+      const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await apiClient.get(`/songs/count${queryParams}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching song count:", error);
+      return mockSongs.length;
+    }
+  },
+
+  // Export songs to Excel
+  exportExcel: async (): Promise<void> => {
+    try {
+      const response = await apiClient.get('/songs/export', {
+        responseType: 'blob'
+      });
+
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'songs.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting songs:", error);
+      throw error;
+    }
+  },
+
+  // Import songs from Excel
+  importExcel: async (file: File): Promise<string> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await apiClient.post('/songs/import', formData, {
+        headers: createFormDataHeaders()
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error("Error importing songs:", error);
+      throw error;
+    }
+  },
+
+  // ========================================
+  // TRENDING APIs - Backend đã sort sẵn
+  // ========================================
+
+  /**
+   * Lấy trending 7 ngày (simple) - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/simple?limit=X
+   */
+  getTrendingSimple: async (limit: number = 20): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/trending/simple?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching trending:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy trending với limit tùy chỉnh - ĐÃ SORT SẴN Ở BACKEND
+   * Tự động chọn endpoint tối ưu dựa trên limit
+   */
+  getTrending: async (limit: number = 100): Promise<Song[]> => {
+    try {
+      let endpoint = `/trending/simple?limit=${limit}`;
+
+      // Chọn endpoint tối ưu
+      if (limit === 100) {
+        endpoint = '/trending/top100';
+      } else if (limit === 50) {
+        endpoint = '/trending/top50';
+      } else if (limit === 10) {
+        endpoint = '/trending/top10';
+      }
+
+      console.log('🌐 Calling endpoint:', endpoint);
+      const response = await apiClient.get(endpoint);
+      console.log('📡 Response status:', response.status);
+      console.log('✅ Data received:', response.data?.length, 'songs');
+
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("❌ Error fetching trending:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/top100
+   */
+  getTop100: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/top100');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching top 100:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 50 - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/top50
+   */
+  getTop50: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/top50');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching top 50:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 10 - ĐÃ SORT SẴN Ở BACKEND
+   * GET /api/trending/top10
+   */
+  getTop10: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/top10');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching top 10:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy trending với sorting options - ĐÃ SORT Ở BACKEND
+   * GET /api/trending/sorted?limit=X&sortBy=score&order=desc
+   */
+  getTrendingSorted: async (
+    limit: number = 20,
+    sortBy: 'score' | 'name' | 'plays' = 'score',
+    order: 'asc' | 'desc' = 'desc'
+  ): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(
+        `/trending/sorted?limit=${limit}&sortBy=${sortBy}&order=${order}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching sorted trending:", error);
+      return [];
+    }
+  },
+
+  // Trending theo period (từ TrendingScore entity)
+  getDailyTrending: async (limit: number = 20): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/trending/daily?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching daily trending:", error);
+      return [];
+    }
+  },
+
+  getWeeklyTrending: async (limit: number = 20): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/trending/weekly?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching weekly trending:", error);
+      return [];
+    }
+  },
+
+  getMonthlyTrending: async (limit: number = 20): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/trending/monthly?limit=${limit}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching monthly trending:", error);
+      return [];
+    }
+  },
+
+  // ========================================
+  // NEW TRENDING APIs (Weekly & Monthly)
+  // ========================================
+
+  /**
+   * Lấy top 5 bài hát trending hàng tuần (7 ngày)
+   * GET /api/trending/weekly/top5
+   */
+  getWeeklyTop5: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/weekly/top5');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching weekly top 5:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 bài hát trending hàng tuần (7 ngày)
+   * GET /api/trending/weekly/top100
+   */
+  getWeeklyTop100: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/weekly/top100');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching weekly top 100:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 5 bài hát trending hàng tháng (30 ngày)
+   * GET /api/trending/monthly/top5
+   */
+  getMonthlyTop5: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/monthly/top5');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching monthly top 5:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 bài hát trending hàng tháng (30 ngày)
+   * GET /api/trending/monthly/top100
+   */
+  getMonthlyTop100: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/monthly/top100');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching monthly top 100:", error);
+      return [];
+    }
+  },
+};
+
+export default songsApi;

@@ -52,21 +52,29 @@ const AdminSongs = () => {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [showWithoutAlbum, setShowWithoutAlbum] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadSongs();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, showWithoutAlbum]);
 
   const loadSongs = async () => {
     try {
       setLoading(true);
-      const data = await songsApi.getAll({
-        page: currentPage,
-        size: pageSize,
-        sort: "name,asc",
-        search: searchQuery || undefined,
-      });
+      const data = showWithoutAlbum 
+        ? await songsApi.getWithoutAlbum({
+            page: currentPage,
+            size: pageSize,
+            sort: "name,asc",
+            search: searchQuery || undefined,
+          })
+        : await songsApi.getAll({
+            page: currentPage,
+            size: pageSize,
+            sort: "name,asc",
+            search: searchQuery || undefined,
+          });
       setSongs(data.content || []);
       setTotalPages(data.totalPages || 0);
       setTotalElements(data.totalElements || 0);
@@ -293,22 +301,42 @@ const AdminSongs = () => {
 
         <Card className="border-none shadow-lg flex-1 flex flex-col overflow-hidden min-h-0">
           <CardHeader className="border-b bg-gradient-to-r from-background to-muted/20 flex-shrink-0">
-            <div className="flex flex-col md:flex-row md:items-center gap-4">
-              <div className="flex-1">
-                <CardTitle className="text-xl font-bold">Songs Directory</CardTitle>
-                <CardDescription>Manage and organize your music library</CardDescription>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <div className="flex-1">
+                  <CardTitle className="text-xl font-bold">Songs Directory</CardTitle>
+                  <CardDescription>Manage and organize your music library</CardDescription>
+                </div>
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or artist..."
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(0);
+                    }}
+                    className="pl-10 bg-background"
+                  />
+                </div>
               </div>
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name or artist..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
+              {/* Filter Toggle */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={showWithoutAlbum ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setShowWithoutAlbum(!showWithoutAlbum);
                     setCurrentPage(0);
                   }}
-                  className="pl-10 bg-background"
-                />
+                  className="gap-2"
+                >
+                  <Music className="w-4 h-4" />
+                  {showWithoutAlbum ? "Hide songs without album" : "Show songs without album"}
+                </Button>
+                <Badge variant="secondary">
+                  {showWithoutAlbum ? `${totalElements} songs without album` : `${totalElements} total songs`}
+                </Badge>
               </div>
             </div>
           </CardHeader>
