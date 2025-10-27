@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
 import AppLayout from "@/components/AppLayout";
 import AdminLayout from "@/components/AdminLayout";
+
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
@@ -31,6 +32,8 @@ import ListeningHistory from "./pages/ListeningHistory";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
+
+// ✅ Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminHome from "./pages/admin/AdminHome";
 import AdminSongs from "./pages/admin/AdminSongs";
