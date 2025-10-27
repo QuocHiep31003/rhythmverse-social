@@ -45,12 +45,57 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { genresApi, artistsApi } from "@/services/api";
 
+// Utility function to get audio duration from file or URL
+const getAudioDuration = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    const url = URL.createObjectURL(file);
+    
+    audio.addEventListener('loadedmetadata', () => {
+      const duration = audio.duration;
+      const minutes = Math.floor(duration / 60);
+      const seconds = Math.floor(duration % 60);
+      const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      URL.revokeObjectURL(url);
+      resolve(formatted);
+    });
+    
+    audio.addEventListener('error', () => {
+      URL.revokeObjectURL(url);
+      resolve("0:00");
+    });
+    
+    audio.src = url;
+  });
+};
+
+const getAudioDurationFromUrl = async (url: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    
+    audio.addEventListener('loadedmetadata', () => {
+      const duration = audio.duration;
+      const minutes = Math.floor(duration / 60);
+      const seconds = Math.floor(duration % 60);
+      const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      resolve(formatted);
+    });
+    
+    audio.addEventListener('error', () => {
+      resolve("0:00");
+    });
+    
+    audio.src = url;
+  });
+};
+
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
   audioUrl: z.string().optional(),
+  duration: z.string().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -90,6 +135,7 @@ export const SongFormDialog = ({
       genreIds: [],
       artistIds: [],
       audioUrl: "",
+      duration: "",
       ...defaultValues,
     },
   });
@@ -128,12 +174,13 @@ export const SongFormDialog = ({
   useEffect(() => {
     if (open && defaultValues) {
       // Xử lý data từ API: artists và genres là array of objects
-      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], audioUrl?: string};
+      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], audioUrl?: string, duration?: string};
       const formValues = {
         ...defaultValues,
         artistIds: apiData.artists?.map((a: {id: number}) => a.id) || defaultValues.artistIds || [],
         genreIds: apiData.genres?.map((g: {id: number}) => g.id) || defaultValues.genreIds || [],
         audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
+        duration: apiData.duration || defaultValues.duration || "",
       };
       form.reset(formValues);
     } else if (open) {
@@ -143,6 +190,7 @@ export const SongFormDialog = ({
         genreIds: [],
         artistIds: [],
         audioUrl: "",
+        duration: "",
       });
     }
   }, [open, defaultValues, form]);
@@ -184,6 +232,10 @@ export const SongFormDialog = ({
     setUploadProgress(0);
     
     try {
+      // Get duration from file
+      const duration = await getAudioDuration(file);
+      form.setValue("duration", duration);
+      
       // Simulate progress (Cloudinary doesn't provide real-time progress)
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => Math.min(prev + 10, 90));
@@ -622,14 +674,35 @@ export const SongFormDialog = ({
                           )}
                         </>
                       ) : (
-                        <Input
-                          placeholder="https://example.com/audio.mp3"
-                          {...field}
-                          onChange={(e) => {
-                            field.onChange(e);
-                          }}
-                          className="admin-input transition-all duration-200"
-                        />
+                        <div className="space-y-2">
+                          <Input
+                            placeholder="https://example.com/audio.mp3"
+                            {...field}
+                            onChange={(e) => {
+                              field.onChange(e);
+                            }}
+                            className="admin-input transition-all duration-200"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              if (field.value) {
+                                try {
+                                  const duration = await getAudioDurationFromUrl(field.value);
+                                  form.setValue("duration", duration);
+                                } catch (error) {
+                                  console.error("Error getting duration from URL:", error);
+                                }
+                              }
+                            }}
+                            disabled={!field.value || uploading}
+                            className="w-full"
+                          >
+                            Lấy thời lượng từ URL
+                          </Button>
+                        </div>
                       )}
                       {field.value && !uploading && (
                         <div className="text-sm text-muted-foreground">
@@ -637,6 +710,24 @@ export const SongFormDialog = ({
                         </div>
                       )}
                     </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="duration"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Thời lượng (mm:ss)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="3:45" 
+                      {...field} 
+                      className="admin-input transition-all duration-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
