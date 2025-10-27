@@ -20,7 +20,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { searchApi } from "@/services/api";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { useSearchParams, useLocation, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 
 interface AuddResult {
@@ -45,6 +45,7 @@ interface AuddResponse {
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const queryParam = searchParams.get("query") || ""; // lấy giá trị query trên URL
 
   const [searchResults, setSearchResults] = useState({
@@ -443,21 +444,31 @@ const SearchResults = () => {
             {(activeFilter === "all" || activeFilter === "artists") && searchResults.artists.length > 0 && !isRecognitionMode && (
               <div className="mb-8">
                 <h3 className="text-xl font-bold mb-4 text-foreground">Artists</h3>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="flex flex-wrap justify-center gap-4">
                   {searchResults.artists.map((artist) => (
-                    <Card key={artist.id} className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer">
-                      <CardContent className="p-6 text-center">
-                        <div className="w-24 h-24 bg-muted rounded-full mx-auto mb-4 flex items-center justify-center">
-                          <User className="w-12 h-12 text-muted-foreground" />
+                    <Card 
+                      key={artist.id} 
+                      className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer group w-fit"
+                      onClick={() => navigate(`/artist/${artist.id}`)}
+                    >
+                      <CardContent className="p-4 text-center min-w-[150px] max-w-[200px]">
+                        <div className="w-16 h-16 bg-muted rounded-full mx-auto mb-3 flex items-center justify-center overflow-hidden">
+                          {artist.avatar ? (
+                            <img 
+                              src={artist.avatar} 
+                              alt={artist.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-8 h-8 text-muted-foreground" />
+                          )}
                         </div>
-                        <h3 className="font-bold text-lg mb-2 flex items-center justify-center gap-2 text-foreground">
+                        <h3 className="font-semibold text-base mb-1 text-foreground">
                           {artist.name}
-                          {artist.verified && <Badge variant="secondary" className="bg-primary text-primary-foreground">✓</Badge>}
                         </h3>
-                        <p className="text-muted-foreground mb-4">{artist.followers} followers</p>
-                        <Button variant="outline">
-                          Follow
-                        </Button>
+                        <p className="text-sm text-muted-foreground">
+                          {artist.country || "Unknown"}
+                        </p>
                       </CardContent>
                     </Card>
                   ))}

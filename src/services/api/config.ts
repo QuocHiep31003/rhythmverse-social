@@ -4,9 +4,9 @@ import axios from 'axios';
 export const API_BASE_URL = "http://localhost:8080/api";
 
 // Auth helpers for API requests
-const getAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   try {
-    return typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    return typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : null;
   } catch {
     return null;
   }
@@ -65,6 +65,29 @@ export const createFormDataHeaders = (): Record<string, string> => {
   const token = getAuthToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
+};
+
+// Helper function để tạo headers cho JSON
+export const buildJsonHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
+// Helper function để parse error response
+export const parseErrorResponse = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.json();
+    return (data && (data.message || data.error || data.details)) || JSON.stringify(data);
+  } catch {
+    try {
+      const text = await response.text();
+      return text || `${response.status} ${response.statusText}`;
+    } catch {
+      return `${response.status} ${response.statusText}`;
+    }
+  }
 };
 
 // Interface cho pagination params
