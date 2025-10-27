@@ -157,7 +157,6 @@ const Quiz = () => {
       setGameFinished(false);
       setQuizResult(null);
       setSelectedAnswerId(null);
-      setShowAnswerFeedback(false);
     } catch (error) {
       console.error("❌ Error starting quiz:", error);
       alert("Failed to start quiz. Please try again.");
