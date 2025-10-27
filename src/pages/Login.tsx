@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Music, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from "lucide-react";
 import { authApi } from "@/services/api";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -16,7 +17,12 @@ const Login = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [activeTab, setActiveTab] = useState("login");
-  
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+
+
+
   const [loginData, setLoginData] = useState({
     email: "",
     password: ""
@@ -28,72 +34,116 @@ const Login = () => {
     password: "",
     confirmPassword: ""
   });
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccess("");
-    
+
     try {
+      console.log('🔐 Attempting login...');
       const response = await authApi.login({
         email: loginData.email,
-        password: loginData.password
+        password: loginData.password,
+        rememberMe,
       });
-      
-      setSuccess("Login successful!");
-      // Store token or user data if needed
-      if (response.token) {
-        localStorage.setItem('token', response.token);
+
+      console.log('✅ Login response:', response);
+
+      if (!response.token) {
+        throw new Error('No token received from server');
       }
-      
+
+      setSuccess("Login successful!");
+      if (rememberMe) {
+        localStorage.setItem("token", response.token); // Giữ lại sau khi tắt trình duyệt
+      } else {
+        sessionStorage.setItem("token", response.token); // Mất khi tắt trình duyệt
+      }
+
+      // ⭐ Use AuthContext to save token and fetch user
+
+      console.log('✅ User authenticated, redirecting...');
+
       // Navigate to home page after successful login
       setTimeout(() => {
         navigate('/');
       }, 1000);
     } catch (err) {
+      console.error('❌ Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // const handleLogin = async (e: React.FormEvent) => {
+  //   e.preventDefault();
+  //   setIsLoading(true);
+  //   setError("");
+  //   setSuccess("");
+
+  //   try {
+  //     const response = await authApi.login({
+  //       email: loginData.email,
+  //       password: loginData.password
+  //     });
+
+  //     setSuccess("Login successful!");
+  //     // Store token or user data if needed
+  //     if (response.token) {
+  //       localStorage.setItem('token', response.token);
+  //     }
+
+  //     // Navigate to home page after successful login
+  //     setTimeout(() => {
+  //       navigate('/');
+  //     }, 1000);
+  //   } catch (err) {
+  //     setError(err instanceof Error ? err.message : 'Login failed');
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
-    
+
     // Validate passwords match
     if (registerData.password !== registerData.confirmPassword) {
       setError("Passwords do not match");
       return;
     }
-    
+
     // Validate password length
     if (registerData.password.length < 6) {
       setError("Password must be at least 6 characters long");
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       const response = await authApi.register({
         name: registerData.name,
         email: registerData.email,
         password: registerData.password
       });
-      
-      setSuccess("Registration successful! Please log in.");
-      
-      // Clear form
+
+      setSuccess("OTP sent! Please check your email.");
+      setPendingEmail(registerData.email);
+      setShowOtpModal(true); 
+
+      // Clear the form
       setRegisterData({
         name: "",
         email: "",
         password: "",
         confirmPassword: ""
       });
-      
+
       // Switch to login tab after successful registration
       setTimeout(() => {
         setActiveTab("login");
@@ -104,6 +154,21 @@ const Login = () => {
       setIsLoading(false);
     }
   };
+  const handleVerifyOtp = async (otp: string) => {
+    try {
+      const response = await authApi.verifyOtp({
+        email: pendingEmail,
+        otp
+      });
+  
+      setSuccess("Registration successful! Please log in.");
+      setShowOtpModal(false);
+      setTimeout(() => setActiveTab("login"), 1000);
+    } catch (err: any) {
+      throw new Error(err.message || "Invalid OTP");
+    }
+  };
+  
 
   const handleSocialLogin = (provider: string) => {
     setIsLoading(true);
@@ -160,7 +225,7 @@ const Login = () => {
                     {error}
                   </div>
                 )}
-                
+
                 {success && (
                   <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
                     {success}
@@ -178,7 +243,7 @@ const Login = () => {
                         placeholder="Enter your email"
                         className="pl-10"
                         value={loginData.email}
-                        onChange={(e) => setLoginData({...loginData, email: e.target.value})}
+                        onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                         required
                       />
                     </div>
@@ -194,7 +259,7 @@ const Login = () => {
                         placeholder="Enter your password"
                         className="pl-10 pr-10"
                         value={loginData.password}
-                        onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                        onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                         required
                       />
                       <Button
@@ -211,7 +276,12 @@ const Login = () => {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" id="remember" className="rounded border-gray-300" />
+                      <input 
+                        type="checkbox" 
+                        id="remember" 
+                        className="rounded border-gray-300"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)} />
                       <Label htmlFor="remember" className="text-sm">Remember me</Label>
                     </div>
                     <Button variant="link" className="p-0 h-auto text-sm">
@@ -219,9 +289,9 @@ const Login = () => {
                     </Button>
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
+                  <Button
+                    type="submit"
+                    className="w-full"
                     variant="hero"
                     disabled={isLoading}
                   >
@@ -243,7 +313,7 @@ const Login = () => {
                     {error}
                   </div>
                 )}
-                
+
                 {success && (
                   <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
                     {success}
@@ -261,7 +331,7 @@ const Login = () => {
                         placeholder="Enter your full name"
                         className="pl-10"
                         value={registerData.name}
-                        onChange={(e) => setRegisterData({...registerData, name: e.target.value})}
+                        onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
                         required
                       />
                     </div>
@@ -277,7 +347,7 @@ const Login = () => {
                         placeholder="Enter your email"
                         className="pl-10"
                         value={registerData.email}
-                        onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
+                        onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                         required
                       />
                     </div>
@@ -293,7 +363,7 @@ const Login = () => {
                         placeholder="Create a password"
                         className="pl-10 pr-10"
                         value={registerData.password}
-                        onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
+                        onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                         required
                       />
                       <Button
@@ -318,7 +388,7 @@ const Login = () => {
                         placeholder="Confirm your password"
                         className="pl-10"
                         value={registerData.confirmPassword}
-                        onChange={(e) => setRegisterData({...registerData, confirmPassword: e.target.value})}
+                        onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
                         required
                       />
                     </div>
@@ -338,9 +408,9 @@ const Login = () => {
                     </Label>
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
+                  <Button
+                    type="submit"
+                    className="w-full"
                     variant="hero"
                     disabled={isLoading}
                   >
@@ -363,8 +433,8 @@ const Login = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4 mt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => handleSocialLogin("google")}
                   disabled={isLoading}
@@ -372,8 +442,8 @@ const Login = () => {
                   <Chrome className="w-4 h-4 mr-2" />
                   Google
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => handleSocialLogin("github")}
                   disabled={isLoading}
@@ -398,6 +468,13 @@ const Login = () => {
             </div>
           </CardContent>
         </Card>
+        <OtpModal
+  open={showOtpModal}
+  email={pendingEmail}
+  onClose={() => setShowOtpModal(false)}
+  onVerify={handleVerifyOtp}
+/>
+
 
         {/* Premium Upsell */}
         <Card className="mt-4 bg-gradient-primary/10 border-primary/20">
@@ -413,6 +490,72 @@ const Login = () => {
         </Card>
       </div>
     </div>
+  );
+};
+interface OTPDialogProps {
+  open: boolean;
+  email: string;
+  onClose: () => void;
+  onVerify: (otp: string) => Promise<void>;
+}
+const OtpModal = ({ open, email, onClose, onVerify }: OTPDialogProps) => {
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setLoading(true);
+
+    try {
+      await onVerify(otp);
+      setSuccess("✅ Verification successful!");
+      setTimeout(() => onClose(), 1500);
+    } catch (err: any) {
+      setError(err.message || "❌ Invalid or expired OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Email Verification</DialogTitle>
+          <DialogDescription>
+            We've sent a 6-digit verification code to <b>{email}</b>.
+            Please enter it below to verify your account.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-3">
+          <Input
+            type="text"
+            maxLength={6}
+            placeholder="Enter 6-digit code"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            className="text-center text-lg tracking-widest font-mono"
+            required
+          />
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          {success && <p className="text-sm text-green-500">{success}</p>}
+
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "Verifying..." : "Verify OTP"}
+          </Button>
+
+          <p className="text-center text-xs text-muted-foreground mt-2">
+            Didn’t receive the code? <Button variant="link" className="p-0 text-xs">Resend</Button>
+          </p>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 };
 

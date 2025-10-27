@@ -30,6 +30,8 @@ const Auth = () => {
   const [resetEmail, setResetEmail] = useState("");
   const [activeTab, setActiveTab] = useState("login");
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +154,9 @@ const Auth = () => {
 
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <input type="checkbox" id="remember" className="rounded" />
+                      <input 
+                        type="checkbox" 
+                        id="remember" className="rounded" />
                       <Label htmlFor="remember" className="text-sm">Remember me</Label>
                     </div>
                     <Button 

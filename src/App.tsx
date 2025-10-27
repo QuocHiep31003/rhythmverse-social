@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
 import AppLayout from "@/components/AppLayout";
 import AdminLayout from "@/components/AdminLayout";
+
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
@@ -29,6 +30,8 @@ import ArtistDetail from "./pages/ArtistDetail";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
+
+// ✅ Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminHome from "./pages/admin/AdminHome";
 import AdminSongs from "./pages/admin/AdminSongs";
@@ -49,56 +52,51 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            
-            {/* Admin Routes */}
-            <Route path="/admin/*" element={
-              <AdminLayout>
-                <Routes>
-                  <Route path="login" element={<AdminLogin />} />
-                  <Route path="home" element={<AdminHome />} />
-                  <Route path="songs" element={<AdminSongs />} />
-                  <Route path="albums" element={<AdminAlbums />} />
-                  <Route path="artists" element={<AdminArtists />} />
-                  <Route path="genres" element={<AdminGenres />} />
-                  <Route path="users" element={<AdminUsers />} />
-                  <Route path="playlists" element={<AdminPlaylists />} />
-                  <Route path="settings" element={<AdminSettings />} />
-                </Routes>
-              </AdminLayout>
-            } />
+            <Routes>
+              {/* Public Login */}
+              <Route path="/login" element={<Login />} />
 
-            {/* Main App Routes */}
-            <Route path="*" element={
-              <AppLayout>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/discover" element={<Discover />} />
-                  <Route path="/playlist" element={<Playlist />} />
-                  <Route path="/playlists" element={<PlaylistLibrary />} />
-                  <Route path="/playlist/:id" element={<PlaylistDetail />} />
-                  <Route path="/create-playlist" element={<CreatePlaylist />} />
-                  <Route path="/trending" element={<TrendingMusic />} />
-                  <Route path="/top100" element={<Top100 />} />
-                  <Route path="/quiz" element={<Quiz />} />
-                  <Route path="/quiz/create" element={<CreateQuiz />} />
-                  <Route path="/search" element={<SearchResults />} />
-                  <Route path="/premium" element={<Premium />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/social" element={<Social />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/song/:id" element={<SongDetail />} />
-                  <Route path="/album/:id" element={<AlbumDetail />} />
-                  <Route path="/artist/:id" element={<ArtistDetail />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </AppLayout>
-            } />
-          </Routes>
-          <MusicPlayer />
-          <ChatBubble />
-        </BrowserRouter>
+              {/* ✅ Admin routes */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route path="home" element={<AdminHome />} />
+                <Route path="songs" element={<AdminSongs />} />
+                <Route path="albums" element={<AdminAlbums />} />
+                <Route path="artists" element={<AdminArtists />} />
+                <Route path="genres" element={<AdminGenres />} />
+                <Route path="users" element={<AdminUsers />} />
+                <Route path="playlists" element={<AdminPlaylists />} />
+                <Route path="settings" element={<AdminSettings />} />
+              </Route>
+
+              {/* ✅ Main App layout */}
+              <Route path="/" element={<AppLayout />}>
+                <Route index element={<Index />} />
+                <Route path="discover" element={<Discover />} />
+                <Route path="playlist" element={<Playlist />} />
+                <Route path="playlists" element={<PlaylistLibrary />} />
+                <Route path="playlist/:id" element={<PlaylistDetail />} />
+                <Route path="create-playlist" element={<CreatePlaylist />} />
+                <Route path="trending" element={<TrendingMusic />} />
+                <Route path="top100" element={<Top100 />} />
+                <Route path="quiz" element={<Quiz />} />
+                <Route path="quiz/create" element={<CreateQuiz />} />
+                <Route path="search" element={<SearchResults />} />
+                <Route path="premium" element={<Premium />} />
+                <Route path="profile" element={<Profile />} />
+                <Route path="social" element={<Social />} />
+                <Route path="settings" element={<Settings />} />
+                <Route path="song/:id" element={<SongDetail />} />
+                <Route path="album/:id" element={<AlbumDetail />} />
+                <Route path="artist/:id" element={<ArtistDetail />} />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+
+            {/* Global UI components */}
+            <MusicPlayer />
+            <ChatBubble />
+          </BrowserRouter>
         </TooltipProvider>
       </MusicProvider>
     </ThemeProvider>
