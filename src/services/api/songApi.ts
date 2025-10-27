@@ -3,16 +3,25 @@ import { mockSongs } from '@/data/mockData';
 
 // Interface cho Song data
 export interface Song {
-  id: string;
+  id: string | number;
   name: string;
+  title?: string;
   releaseYear: number;
   genreIds: number[];
   artistIds: number[];
+  artistNames?: string[];
   audioUrl: string;
+  audio?: string;
+  url?: string;
   plays?: string;
-  duration?: string;
+  playCount?: number;
+  duration?: string | number;
+  cover?: string;
+  album?: string | { name: string };
+  albumId?: number;
   artists?: any[];
   genres?: any[];
+  trendingScore?: number;
 }
 
 // Interface cho Song creation/update
@@ -117,7 +126,7 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching song:", error);
-      return mockSongs.find(s => s.id === id) || null;
+      return null;
     }
   },
 

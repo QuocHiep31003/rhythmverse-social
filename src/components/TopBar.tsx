@@ -171,9 +171,11 @@ const TopBar = () => {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (!token) return;
       try {
-        const me = await authApi.me();
-        setProfileName(me?.name || me?.username || "");
-        setProfileEmail(me?.email || "");
+        // Get user info from localStorage
+        const userName = localStorage.getItem('userName') || '';
+        const userEmail = localStorage.getItem('userEmail') || '';
+        setProfileName(userName);
+        setProfileEmail(userEmail);
       } catch {
         // ignore
       }

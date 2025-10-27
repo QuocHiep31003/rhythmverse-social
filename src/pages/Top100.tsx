@@ -35,13 +35,13 @@ const Top100 = () => {
             id: song.id,
             title: song.name || song.title,
             artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
-            album: song.album?.name || song.album || "Unknown",
-            duration: song.duration ? `${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, "0")}` : "0:00",
+            album: typeof song.album === 'string' ? song.album : song.album?.name || "Unknown",
+            duration: typeof song.duration === 'number' ? `${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, "0")}` : song.duration || "0:00",
             rank: index + 1,
             previousRank: index + Math.floor(Math.random() * 10) - 5,
             plays: `${((song.playCount || 0) / 1000000).toFixed(1)}M`,
             cover: song.cover || "/placeholder.svg",
-            audioUrl: song.audioUrl || ""
+            audioUrl: song.audioUrl || song.audio || ""
           }));
           
           setTopSongs(formattedSongs);

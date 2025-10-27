@@ -98,7 +98,7 @@ const MusicRecognitionResult = () => {
     );
   }
 
-  const recognitionResult = result.result
+  const recognitionResult = result.result?.[0];
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -216,9 +216,9 @@ const MusicRecognitionResult = () => {
   <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
   <div className="flex flex-wrap gap-3">
 
-    {recognitionResult.spotify?.url && (
+    {recognitionResult.spotify && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.spotify!.url!)}
+        onClick={() => openExternalLink(recognitionResult.spotify!)}
         className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
       >
         <svg
@@ -237,9 +237,9 @@ const MusicRecognitionResult = () => {
       </Button>
     )}
 
-    {recognitionResult.apple_music?.url && (
+    {recognitionResult.apple_music && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.apple_music!.url!)}
+        onClick={() => openExternalLink(recognitionResult.apple_music!)}
         variant="outline"
         className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
       >
@@ -248,9 +248,9 @@ const MusicRecognitionResult = () => {
       </Button>
     )}
 
-    {recognitionResult.deezer?.url && (
+    {recognitionResult.deezer && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.deezer!.url!)}
+        onClick={() => openExternalLink(recognitionResult.deezer!)}
         variant="outline"
         className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
       >
