@@ -81,7 +81,7 @@ const TrendingMusic = () => {
   const handlePlaySong = (song: any, index: number) => {
     const formattedSong = {
       id: song.id,
-      title: song.name || song.title,
+      title: song.songName || song.title,
       artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
       album: song.album?.name || song.album || "",
       duration: song.duration || 0,
@@ -91,7 +91,7 @@ const TrendingMusic = () => {
 
     const formattedQueue = allSongs.map((s) => ({
       id: s.id,
-      title: s.name || s.title,
+      title: s.songName || s.title,
       artist: s.artistNames?.join(", ") || s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
       album: s.album?.name || s.album || "",
       duration: s.duration || 0,
@@ -178,7 +178,7 @@ const TrendingMusic = () => {
 
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {song.name || song.title}
+                          {song.songName || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {song.artistNames?.join(", ") ||
@@ -191,7 +191,7 @@ const TrendingMusic = () => {
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
-                          {formatPlayCount(song.playCount || 0)}
+                          {formatPlayCount(song.duration || 0)}
                         </p>
                       </div>
                     </div>

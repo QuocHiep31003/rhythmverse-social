@@ -277,7 +277,7 @@ const Index = () => {
                       onClick={() => {
                         const formattedSongs = topHitsWeek.map(s => ({
                           id: s.id,
-                          title: s.name,
+                          title: s.songName,
                           artist: s.artistNames?.join(", ") || s.artists?.map((a) => a.name).join(", ") || "Unknown",
                           album: s.album?.name || "Unknown",
                           duration: s.duration || 0,
@@ -302,7 +302,7 @@ const Index = () => {
                         {song.cover ? (
                           <img
                             src={song.cover}
-                            alt={song.name}
+                            alt={song.songName}
                             className="
                 w-full h-full object-cover 
                 transition-transform duration-500 group-hover:scale-110
@@ -316,7 +316,7 @@ const Index = () => {
                       {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {(song as any).name || song.title}
+                          {(song as any).songName || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {(song as any).artistNames?.join(", ") || (song as any).artists?.map((a: any) => a.name).join(", ") || "Unknown"}
@@ -327,7 +327,7 @@ const Index = () => {
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
-                          {formatPlayCount(song.playCount || 0)}
+                          {formatPlayCount(song.duration || 0)}
                         </p>
                       </div>
                     </div>
