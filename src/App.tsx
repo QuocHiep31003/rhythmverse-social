@@ -40,6 +40,7 @@ import AdminAlbums from "./pages/admin/AdminAlbums";
 import AdminArtists from "./pages/admin/AdminArtists";
 import AdminGenres from "./pages/admin/AdminGenres";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminTrending from "./pages/admin/AdminTrending";
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
 
@@ -68,6 +69,7 @@ const App = () => (
                   <Route path="genres" element={<AdminGenres />} />
                   <Route path="users" element={<AdminUsers />} />
                   <Route path="playlists" element={<AdminPlaylists />} />
+                  <Route path="trending" element={<AdminTrending />} />
                   <Route path="settings" element={<AdminSettings />} />
                 </Routes>
               </AdminLayout>
