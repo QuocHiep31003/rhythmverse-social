@@ -104,8 +104,8 @@ const MusicRecognition = () => {
   };
 
  const handleRecognize = async () => {
-  if (!audioBlob) {
-    setError("Please record or upload an audio file first.");
+  if (!audioBlob && !audioUrl) {
+    setError("Please record, upload an audio file, or enter a URL first.");
     return;
   }
 
@@ -113,8 +113,33 @@ const MusicRecognition = () => {
   setError("");
 
   try {
-    const result = await auddApi.recognizeMusic(audioBlob);
+    // If we have audioBlob, use it. Otherwise, fetch from URL
+    let blobToRecognize = audioBlob;
+    if (!audioBlob && audioUrl) {
+      // Fetch audio from URL and convert to blob
+      const response = await fetch(audioUrl);
+      blobToRecognize = await response.blob();
+    }
 
+    const result = await auddApi.recognizeMusic(blobToRecognize);
+    console.log("AUDD API Response:", result);
+
+    // Check if result is valid and has actual data
+    if (!result || !result.result || (typeof result.result === 'object' && Object.keys(result.result).length === 0)) {
+      console.log("No recognition result found");
+      navigate("/music-recognition-result", {
+        state: { 
+          result: { 
+            status: "success", 
+            result: {} as any
+          }, 
+          audioUrl: audioUrlPreview 
+        },
+      });
+      return;
+    }
+
+    console.log("Recognized song:", result.result);
     navigate("/music-recognition-result", {
       state: { result, audioUrl: audioUrlPreview },
     });
@@ -244,7 +269,7 @@ const MusicRecognition = () => {
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
-                  disabled={isLoading || !audioUrl}
+                  disabled={isLoading || (!audioBlob && !audioUrl)}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   size="lg"
                 >

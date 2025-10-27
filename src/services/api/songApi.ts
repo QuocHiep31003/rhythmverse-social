@@ -19,8 +19,8 @@ export interface Song {
   cover?: string;
   album?: string | { name: string };
   albumId?: number;
-  artists?: any[];
-  genres?: any[];
+  artists?: Array<{ id: number; name: string }>;
+  genres?: Array<{ id: number; name: string }>;
   trendingScore?: number;
 }
 
@@ -43,6 +43,19 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching songs by artist:", error);
+      return [];
+    }
+  },
+
+  // Tìm bài hát theo tên nghệ sĩ và tên bài hát
+  findByTitleAndArtist: async (title: string, artist: string): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/find-by-title-and-artist`, {
+        params: { title, artist }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error finding song by title and artist:", error);
       return [];
     }
   },

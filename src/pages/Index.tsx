@@ -140,7 +140,17 @@ const Index = () => {
                 <Card
                   key={i}
                   className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer"
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    if (item.label === "Genres") {
+                      // Scroll to genres section on the same page
+                      const genresSection = document.getElementById("genres-section");
+                      if (genresSection) {
+                        genresSection.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
                 >
                   <CardContent className="p-4 text-center">
                     <item.icon

@@ -23,35 +23,35 @@ import { Button } from "@/components/ui/button";
 import { Upload, X } from "lucide-react";
 import { uploadImage } from "@/config/cloudinary";
 
-const genreFormSchema = z.object({
-  name: z.string().min(1, "Tên thể loại không được để trống").max(100),
+const moodFormSchema = z.object({
+  name: z.string().min(1, "Tên mood không được để trống").max(100),
   iconUrl: z.string().optional(),
 });
 
-type GenreFormValues = z.infer<typeof genreFormSchema>;
+type MoodFormValues = z.infer<typeof moodFormSchema>;
 
-interface GenreFormDialogProps {
+interface MoodFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: GenreFormValues) => void;
-  defaultValues?: Partial<GenreFormValues>;
+  onSubmit: (data: MoodFormValues) => void;
+  defaultValues?: Partial<MoodFormValues>;
   isLoading?: boolean;
   mode: "create" | "edit";
 }
 
-export const GenreFormDialog = ({
+export const MoodFormDialog = ({
   open,
   onOpenChange,
   onSubmit,
   defaultValues,
   isLoading = false,
   mode,
-}: GenreFormDialogProps) => {
+}: MoodFormDialogProps) => {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
 
-  const form = useForm<GenreFormValues>({
-    resolver: zodResolver(genreFormSchema),
+  const form = useForm<MoodFormValues>({
+    resolver: zodResolver(moodFormSchema),
     defaultValues: {
       name: "",
       iconUrl: "",
@@ -93,7 +93,7 @@ export const GenreFormDialog = ({
     form.setValue("iconUrl", "");
   };
 
-  const handleSubmit = (data: GenreFormValues) => {
+  const handleSubmit = (data: MoodFormValues) => {
     onSubmit(data);
   };
 
@@ -102,12 +102,12 @@ export const GenreFormDialog = ({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
-            {mode === "create" ? "Thêm Thể loại mới" : "Chỉnh sửa Thể loại"}
+            {mode === "create" ? "Thêm Mood mới" : "Chỉnh sửa Mood"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Nhập tên thể loại nhạc mới"
-              : "Cập nhật tên thể loại"}
+              ? "Nhập tên mood nhạc mới"
+              : "Cập nhật tên mood"}
           </DialogDescription>
         </DialogHeader>
 
@@ -118,9 +118,9 @@ export const GenreFormDialog = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tên thể loại *</FormLabel>
+                  <FormLabel>Tên mood *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Pop, Rock, Jazz..." {...field} />
+                    <Input placeholder="Happy, Sad, Relaxed..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -193,3 +193,4 @@ export const GenreFormDialog = ({
     </Dialog>
   );
 };
+

@@ -14,8 +14,11 @@ import {
   Apple,
   AlertCircle,
   CheckCircle,
-  Clock
+  Clock,
+  Headphones
 } from "lucide-react";
+import { songsApi } from "@/services/api";
+import { useMusic } from "@/contexts/MusicContext";
 
 interface AuddResult {
   artist?: string;
@@ -26,22 +29,32 @@ interface AuddResult {
   timecode?: string;
   song_link?: string;
   albumart?: string;
-  spotify?: string;
+  spotify?: { 
+    url?: string;
+    external_urls?: { spotify?: string };
+    album?: Record<string, unknown>;
+  };
   deezer?: string;
-  apple_music?: string;
+  apple_music?: {
+    url?: string;
+    previews?: Array<{ url?: string }>;
+  };
 }
 
 interface AuddResponse {
   status: string;
-  result: AuddResult[];
+  result: AuddResult;
 }
 
 const MusicRecognitionResult = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { playSong, setQueue } = useMusic();
   const [result, setResult] = useState<AuddResponse | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
+  const [echoverseSong, setEchoverseSong] = useState<unknown>(null);
+  const [isSearchingEchoverse, setIsSearchingEchoverse] = useState(false);
 
   useEffect(() => {
     if (location.state?.result) {
@@ -50,6 +63,38 @@ const MusicRecognitionResult = () => {
     }
     setIsLoading(false);
   }, [location.state]);
+
+  // Search for song in echoverse database when recognition is successful
+  useEffect(() => {
+    const searchEchoverseDatabase = async () => {
+      const recognitionResult = result?.result; // AUDD trả về object, không phải array
+      console.log("Recognition result for echoverse search:", recognitionResult);
+      
+      if (recognitionResult && recognitionResult.title && recognitionResult.artist) {
+        setIsSearchingEchoverse(true);
+        try {
+          console.log("Searching echoverse for:", recognitionResult.title, "by", recognitionResult.artist);
+          const songs = await songsApi.findByTitleAndArtist(
+            recognitionResult.title,
+            recognitionResult.artist
+          );
+          console.log("Found echoverse songs:", songs);
+          if (songs && songs.length > 0) {
+            setEchoverseSong(songs[0]);
+            console.log("Set echoverse song:", songs[0]);
+          }
+        } catch (error) {
+          console.error("Error searching echoverse database:", error);
+        } finally {
+          setIsSearchingEchoverse(false);
+        }
+      }
+    };
+
+    if (result && !isLoading) {
+      searchEchoverseDatabase();
+    }
+  }, [result, isLoading]);
 
   const handleBackToRecognition = () => {
     navigate('/music-recognition');
@@ -64,6 +109,28 @@ const MusicRecognitionResult = () => {
 
   const openExternalLink = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handlePlayOnEchoverse = () => {
+    if (!echoverseSong) return;
+    
+    const song = echoverseSong as Record<string, unknown>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const formattedSong: any = {
+      id: song.id,
+      title: song.name,
+      artist: (song.artists as Array<{ name: string }>)?.map((a) => a.name).join(", ") || "Unknown",
+      album: typeof song.album === 'object' && song.album ? (song.album as { name: string }).name : "Unknown",
+      duration: song.duration || 0,
+      cover: song.urlImageAlbum || "",
+      genre: (song.genres as Array<{ name: string }>)?.[0]?.name || "Unknown",
+      plays: song.playCount || 0,
+      audio: song.audioUrl,
+      audioUrl: song.audioUrl,
+    };
+
+    setQueue([formattedSong]);
+    playSong(formattedSong);
   };
 
   if (isLoading) {
@@ -98,7 +165,8 @@ const MusicRecognitionResult = () => {
     );
   }
 
-  const recognitionResult = result.result?.[0];
+  const recognitionResult = result.result; // AUDD trả về object, không phải array
+  const hasResult = recognitionResult && Object.keys(recognitionResult).length > 0;
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -121,7 +189,7 @@ const MusicRecognitionResult = () => {
 
           {/* Status */}
           <div className="mb-6">
-            {result.status === "success" ? (
+            {result.status === "success" && hasResult ? (
               <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-800 dark:text-green-200">
@@ -132,14 +200,14 @@ const MusicRecognitionResult = () => {
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Recognition failed. Status: {result.status}
+                  {hasResult ? `Recognition failed. Status: ${result.status}` : "No song was recognized. Please try again with a different audio file."}
                 </AlertDescription>
               </Alert>
             )}
           </div>
 
           {/* Results */}
-          {recognitionResult ? (
+          {hasResult ? (
             <div className="space-y-6">
               {/* Main Result Card */}
               <Card className="bg-card border-border">
@@ -216,9 +284,9 @@ const MusicRecognitionResult = () => {
   <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
   <div className="flex flex-wrap gap-3">
 
-    {recognitionResult.spotify && (
+    {recognitionResult.spotify?.external_urls?.spotify && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.spotify!)}
+        onClick={() => openExternalLink(recognitionResult.spotify.external_urls.spotify!)}
         className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
       >
         <svg
@@ -237,9 +305,9 @@ const MusicRecognitionResult = () => {
       </Button>
     )}
 
-    {recognitionResult.apple_music && (
+    {recognitionResult.apple_music?.url && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.apple_music!)}
+        onClick={() => openExternalLink(recognitionResult.apple_music.url!)}
         variant="outline"
         className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
       >
@@ -269,7 +337,41 @@ const MusicRecognitionResult = () => {
         More Info
       </Button>
     )}
+
+    {/* Echoverse Play Button - Highlighted */}
+    {echoverseSong && (
+      <div className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border-2 border-primary/30">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+              <Headphones className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Có sẵn trên Echoverse!</p>
+              <p className="text-sm text-muted-foreground">Nghe ngay trên nền tảng của chúng tôi</p>
+            </div>
+          </div>
+          <Button
+            onClick={handlePlayOnEchoverse}
+            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 px-6 py-2 font-semibold"
+          >
+            <Play className="w-5 h-5" />
+            Play Now
+          </Button>
+        </div>
+      </div>
+    )}
   </div>
+  
+  {/* Search status indicator */}
+  {isSearchingEchoverse && (
+    <Alert className="bg-muted border-border">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription className="text-muted-foreground">
+        Đang tìm kiếm bài hát trên nền tảng Echoverse...
+      </AlertDescription>
+    </Alert>
+  )}
 </div>
 
                   {/* Audio Preview */}
@@ -302,18 +404,36 @@ const MusicRecognitionResult = () => {
             </div>
           ) : (
             <Card className="bg-card border-border">
-              <CardContent className="pt-6">
-                <div className="text-center space-y-4">
-                  <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto" />
-                  <h3 className="text-lg font-semibold text-foreground">
-                    No song was recognized
-                  </h3>
-                  <p className="text-muted-foreground">
-                    The audio might be too short, unclear, or not in our database.
-                  </p>
-                  <Button onClick={handleBackToRecognition} variant="outline">
-                    Try Again
-                  </Button>
+              <CardContent className="py-6">
+                <div className="text-center space-y-6">
+                  <div className="flex justify-center">
+                    <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-10 h-10 text-muted-foreground" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-semibold text-foreground">
+                      Không nhận diện được bài hát
+                    </h3>
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      Chúng tôi không tìm thấy bài hát khớp với audio bạn cung cấp. Vui lòng thử lại với file audio rõ ràng hơn hoặc bài hát khác.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 justify-center">
+                    <Button 
+                      onClick={handleBackToRecognition} 
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                    >
+                      Thử lại
+                    </Button>
+                    <Button 
+                      onClick={() => navigate('/discover')} 
+                      variant="outline"
+                      className="bg-muted border-border hover:bg-muted/80"
+                    >
+                      Khám phá nhạc mới
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
