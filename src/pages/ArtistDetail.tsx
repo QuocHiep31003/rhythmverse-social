@@ -18,6 +18,7 @@ import {
   User
 } from "lucide-react";
 import { artistsApi, songsApi } from "@/services/api";
+import { useMusic } from "@/contexts/MusicContext";
 
 interface Artist {
   id: number;
@@ -36,6 +37,9 @@ interface Song {
   title?: string;
   duration?: string;
   releaseYear?: number;
+  audioUrl?: string;
+  urlImageAlbum?: string;
+  playCount?: number;
 }
 
 interface Album {
@@ -44,7 +48,9 @@ interface Album {
   title?: string;
   year?: number;
   releaseYear?: number;
+  releaseDate?: string;
   type?: string;
+  coverUrl?: string;
 }
 
 interface RelatedArtist {
@@ -58,6 +64,7 @@ interface RelatedArtist {
 const ArtistDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { playSong: playSongFromContext, setQueue } = useMusic();
   const [isFollowing, setIsFollowing] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
@@ -71,6 +78,39 @@ const ArtistDetail = () => {
     navigate(`/artist/${artistId}`);
   };
 
+  const handleAlbumClick = (albumId: number) => {
+    navigate(`/album/${albumId}`);
+  };
+
+  const handlePlayAlbum = (e: React.MouseEvent, albumId: number) => {
+    e.stopPropagation(); // Prevent navigation when clicking play button
+    
+    try {
+      // For now, just play all songs from the artist
+      // TODO: Filter by album when backend provides album info in songs
+      if (songs && songs.length > 0) {
+        // Map songs to format expected by player
+        const formattedSongs = songs.map((song) => ({
+          id: String(song.id),
+          title: song.name || song.title || "",
+          artist: artist?.name || "Unknown",
+          album: albums.find(a => a.id === albumId)?.name || "Unknown",
+          duration: 0,
+          cover: song.urlImageAlbum || "",
+          audio: song.audioUrl || "",
+          audioUrl: song.audioUrl || "",
+        }));
+        
+        setQueue(formattedSongs);
+        if (formattedSongs[0]) {
+          playSongFromContext(formattedSongs[0]);
+        }
+      }
+    } catch (error) {
+      console.error("Error playing album:", error);
+    }
+  };
+
   useEffect(() => {
     const fetchArtistData = async () => {
       if (!id) return;
@@ -78,10 +118,13 @@ const ArtistDetail = () => {
       try {
         setLoading(true);
         
-        // Fetch artist data
-        const artistData = await artistsApi.getById(parseInt(id));
-        if (artistData) {
-          setArtist(artistData);
+        // Fetch artist data with details (songs and albums)
+        const artistDetailData = await artistsApi.getByIdWithDetails(parseInt(id));
+        if (artistDetailData) {
+          setArtist(artistDetailData);
+          // Set songs and albums from detail data
+          setSongs(artistDetailData.songs || []);
+          setAlbums(artistDetailData.albums || []);
         }
 
         // Fetch random artists for "Fans also like" section
@@ -128,9 +171,27 @@ const ArtistDetail = () => {
     );
   };
 
-  const playSong = (songId: string) => {
-    console.log("Playing song:", songId);
+  const handlePlaySong = (song: Song) => {
+    console.log("Playing song:", song.id);
     setIsPlaying(true);
+    
+    // Map songs to format expected by player
+    const formattedSongs = songs.map((s) => ({
+      id: String(s.id),
+      title: s.name || s.title || "",
+      artist: artist?.name || "Unknown",
+      album: "Unknown",
+      duration: 0,
+      cover: s.urlImageAlbum || "",
+      audio: s.audioUrl || "",
+      audioUrl: s.audioUrl || "",
+    }));
+    
+    setQueue(formattedSongs);
+    const currentSong = formattedSongs.find(s => s.id === String(song.id));
+    if (currentSong) {
+      playSongFromContext(currentSong);
+    }
   };
 
   if (loading) {
@@ -199,10 +260,6 @@ const ArtistDetail = () => {
             </div>
             
             <div className="flex items-center gap-4">
-              <Button variant="hero" size="lg" className="rounded-full px-8">
-                <Play className="w-5 h-5 mr-2" />
-                Play
-              </Button>
               <Button 
                 variant={isFollowing ? "outline" : "secondary"} 
                 size="lg" 
@@ -229,7 +286,7 @@ const ArtistDetail = () => {
                   <div
                     key={song.id}
                     className="flex items-center gap-4 p-4 hover:bg-white/5 group transition-colors cursor-pointer"
-                    onClick={() => playSong(String(song.id))}
+                    onClick={() => handlePlaySong(song)}
                   >
                     <div className="flex items-center justify-center w-8 text-muted-foreground group-hover:hidden">
                       {index + 1}
@@ -285,15 +342,28 @@ const ArtistDetail = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {albums.length > 0 ? (
               albums.map((album) => (
-                <Card key={album.id} className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10">
+                <Card 
+                  key={album.id} 
+                  className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                  onClick={() => handleAlbumClick(album.id as number)}
+                >
                   <CardContent className="p-4">
                     <div className="aspect-square rounded-lg bg-gradient-accent mb-4 flex items-center justify-center relative overflow-hidden">
-                      <Music className="w-12 h-12 text-white" />
+                      {album.coverUrl ? (
+                        <img 
+                          src={album.coverUrl} 
+                          alt={album.name || album.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Music className="w-12 h-12 text-white" />
+                      )}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center">
                         <Button
                           variant="hero"
                           size="icon"
                           className="opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                          onClick={(e) => handlePlayAlbum(e, album.id as number)}
                         >
                           <Play className="w-5 h-5" />
                         </Button>

@@ -25,6 +25,37 @@ export interface ArtistCreateUpdateData {
     avatar?: string;
 }
 
+// Interface cho Song
+export interface Song {
+    id: number;
+    name: string;
+    duration?: string;
+    releaseYear?: number;
+    audioUrl?: string;
+    playCount?: number;
+    urlImageAlbum?: string;
+}
+
+// Interface cho Album
+export interface Album {
+    id: number;
+    name: string;
+    coverUrl?: string;
+    releaseDate?: string;
+}
+
+// Interface cho Artist detail bao gồm songs và albums
+export interface ArtistDetailDTO {
+    id: number;
+    name: string;
+    country?: string;
+    debutYear?: number;
+    description?: string;
+    avatar?: string;
+    songs?: Song[];
+    albums?: Album[];
+}
+
 // Artists API sử dụng axios
 export const artistsApi = {
     // Lấy tất cả artists với pagination
@@ -76,12 +107,7 @@ export const artistsApi = {
     },
 
     // Lấy artist với thông tin chi tiết (bao gồm songs, albums)
-    getByIdWithDetails: async (id: number): Promise<{
-        artist: Artist;
-        songs: any[];
-        albums: any[];
-        relatedArtists: Artist[];
-    } | null> => {
+    getByIdWithDetails: async (id: number): Promise<ArtistDetailDTO | null> => {
         try {
             const response = await apiClient.get(`/artists/${id}/details`);
             return response.data;
@@ -91,10 +117,14 @@ export const artistsApi = {
             if (!artist) return null;
 
             return {
-                artist,
+                id: artist.id,
+                name: artist.name,
+                country: artist.country,
+                debutYear: artist.debutYear,
+                description: artist.country,
+                avatar: artist.avatar,
                 songs: [],
-                albums: [],
-                relatedArtists: []
+                albums: []
             };
         }
     },
@@ -200,7 +230,7 @@ export const artistsApi = {
     },
 
     // Lấy songs của artist
-    getSongs: async (artistId: number, params?: PaginationParams): Promise<PaginatedResponse<any>> => {
+    getSongs: async (artistId: number, params?: PaginationParams): Promise<PaginatedResponse<Song>> => {
         try {
             const queryParams = new URLSearchParams();
             if (params?.page !== undefined) queryParams.append('page', params.page.toString());
@@ -230,12 +260,12 @@ export const artistsApi = {
                 },
                 sort: { empty: true, sorted: false, unsorted: true },
                 numberOfElements: 0
-            } as PaginatedResponse<any>;
+            } as PaginatedResponse<Song>;
         }
     },
 
     // Lấy albums của artist
-    getAlbums: async (artistId: number, params?: PaginationParams): Promise<PaginatedResponse<any>> => {
+    getAlbums: async (artistId: number, params?: PaginationParams): Promise<PaginatedResponse<Album>> => {
         try {
             const queryParams = new URLSearchParams();
             if (params?.page !== undefined) queryParams.append('page', params.page.toString());
@@ -265,7 +295,7 @@ export const artistsApi = {
                 },
                 sort: { empty: true, sorted: false, unsorted: true },
                 numberOfElements: 0
-            } as PaginatedResponse<any>;
+            } as PaginatedResponse<Album>;
         }
     },
 
