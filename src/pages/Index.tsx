@@ -54,24 +54,21 @@ const Index = () => {
   const [topHitsWeek, setTopHitsWeek] = useState([]);
 
   useEffect(() => {
-    // Hot Week: Sử dụng API weekly top 5
+    // Hot Week: Sử dụng API /api/trending/top-5
     const fetchHotWeek = async () => {
       try {
-        const weeklyTop5 = await songsApi.getWeeklyTop5();
+        const top5Trending = await songsApi.getTop5Trending();
         
-        if (weeklyTop5 && weeklyTop5.length > 0) {
-          console.log('✅ Loaded weekly top 5:', weeklyTop5.length, 'songs');
-          
-          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
-          const sortedSongs = weeklyTop5.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
-          setTopHitsWeek(sortedSongs);
+        if (top5Trending && top5Trending.length > 0) {
+          console.log('✅ Loaded top 5 trending:', top5Trending.length, 'songs');
+          setTopHitsWeek(top5Trending);
           return;
         }
         
-       
-        
+        console.log('⚠️ No trending data, falling back to mock data...');
+        setTopHitsWeek(mockSongs.slice(0, 5));
       } catch (err) {
-        console.error("❌ Lỗi tải weekly trending:", err);
+        console.error("❌ Lỗi tải trending:", err);
         setTopHitsWeek(mockSongs.slice(0, 5));
       }
     };

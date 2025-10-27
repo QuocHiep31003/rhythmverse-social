@@ -378,6 +378,20 @@ export const songsApi = {
   // ========================================
 
   /**
+   * Lấy top 5 bài hát trending
+   * GET /api/trending/top-5
+   */
+  getTop5Trending: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/top-5');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching top 5 trending:", error);
+      return [];
+    }
+  },
+
+  /**
    * Lấy top 5 bài hát trending hàng tuần (7 ngày)
    * GET /api/trending/weekly/top5
    */

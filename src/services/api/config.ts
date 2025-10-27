@@ -96,10 +96,10 @@ export interface PaginationParams {
   size?: number;
   sort?: string;
   search?: string;
-  // name?: string;  
-  // country?: string;
-  // debutYear?: string;
-  // releaseYear?: number;
+  name?: string;
+  country?: string;
+  debutYear?: string;
+  releaseYear?: number;
 }
 
 // Interface cho paginated response
