@@ -4,13 +4,17 @@ import TopBar from "./TopBar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Outlet } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
-/**
- * Mobile menu trigger with notification badge.
- */
+interface AppLayoutProps {
+  children: React.ReactNode;
+}
+
+
+
+
 const MobileTrigger = () => {
-  const totalNotifications = 5; // TODO: replace with real data from global state or API
+  const totalNotifications = 5; // This would come from global state
 
   return (
     <SidebarTrigger className="fixed top-4 left-4 z-50 lg:hidden h-10 w-10 bg-background/80 backdrop-blur-sm border border-border/40">
@@ -29,31 +33,31 @@ const MobileTrigger = () => {
   );
 };
 
-/**
- * App layout with sidebar and topbar.
- * Uses Outlet instead of props.children for nested routes.
- */
-const AppLayout = () => {
+const AppLayout = ({ children }: AppLayoutProps) => {
+
+
+
+
   const isMobile = useIsMobile();
 
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-dark">
-        {/* Sidebar */}
+
         <AppSidebar />
 
-        {/* Main area */}
+
         <SidebarInset className="flex flex-col min-w-0 lg:ml-64">
-          {/* Top bar */}
+
           {!isMobile && <TopBar />}
 
-          {/* Main content */}
+
           <main className="flex-1 p-0">
-            <Outlet /> {/* ✅ render route con tại đây */}
+            {children}
           </main>
         </SidebarInset>
 
-        {/* Mobile trigger */}
+
         <MobileTrigger />
       </div>
     </SidebarProvider>

@@ -1,4 +1,3 @@
-import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -35,17 +34,160 @@ import { auddApi, authApi } from "@/services/api";
 
 
 const TopBar = () => {
+  const [searchText, setSearchText] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [isRecognizing, setIsRecognizing] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string>("");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [error, setError] = useState("");
+  const [profileName, setProfileName] = useState<string>("");
+  const [profileEmail, setProfileEmail] = useState<string>("");
   const navigate = useNavigate();
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 🔐 Hàm xử lý logout
-  const handleLogout = () => {
-    // Xoá token ở cả localStorage và sessionStorage
-    localStorage.removeItem("token");
-    sessionStorage.removeItem("token");
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmed = searchText.trim();
+    if (trimmed) {
+      navigate(`/search?query=${encodeURIComponent(trimmed)}`);
+    }
+  }
 
-    // Chuyển về trang login
-    navigate("/login");
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAudioUrl(url);
+      setAudioBlob(file);
+      setError("");
+    }
   };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        chunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
+        setAudioUrl(url);
+        setError("");
+
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      setError("Failed to access microphone. Please check permissions.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const playAudio = () => {
+    if (audioUrl) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => setIsPlaying(false);
+      audio.play();
+      setIsPlaying(true);
+    }
+  };
+
+  const pauseAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  const handleRecognize = async () => {
+    if (!audioBlob) {
+      setError("Please record or upload an audio file first.");
+      return;
+    }
+
+    setIsRecognizing(true);
+    setError("");
+
+    try {
+      const result = await auddApi.recognizeMusic(audioBlob);
+
+      // Navigate to search results with recognition data
+      navigate("/search", {
+        state: {
+          recognitionResult: result,
+          audioUrl: audioUrl,
+          searchType: 'recognition'
+        },
+      });
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "Failed to recognize music. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsRecognizing(false);
+    }
+  };
+
+  const clearAudio = () => {
+    setAudioBlob(null);
+    setAudioUrl("");
+    setIsPlaying(false);
+    setError("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+  useEffect(() => {
+    const loadMe = async () => {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!token) return;
+      try {
+        const me = await authApi.me();
+        setProfileName(me?.name || me?.username || "");
+        setProfileEmail(me?.email || "");
+      } catch {
+        // ignore
+      }
+    };
+    loadMe();
+  }, []);
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userId');
+    } catch { }
+    navigate('/login');
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 shadow-[0_4px_20px_rgba(168,85,247,0.1)]" style={{ borderImage: 'var(--gradient-navbar) 1' }}>
@@ -213,45 +355,69 @@ const TopBar = () => {
         </div>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 relative z-10">
           {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]">
             <Bell className="h-5 w-5" />
-            <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs">
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
+            >
               3
             </Badge>
           </Button>
 
           {/* Messages */}
-          <Button variant="ghost" size="icon" className="relative">
+          <Button variant="ghost" size="icon" className="relative hover:bg-gradient-secondary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--accent)/0.4)]">
             <MessageCircle className="h-5 w-5" />
-            <Badge variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs">
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
+            >
               5
             </Badge>
           </Button>
 
           {/* Get Premium */}
-          <Button variant="hero" size="sm">
+          <Button
+            variant="hero"
+            size="sm"
+            className="bg-gradient-primary hover:shadow-[0_0_30px_hsl(var(--primary)/0.5)] transition-all duration-300 hover:scale-105 font-semibold"
+          >
             Get Premium
           </Button>
 
           {/* Profile Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <Avatar className="h-8 w-8">
+              <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-110 transition-all duration-300">
+                <Avatar className="h-8 w-8 ring-2 ring-[hsl(var(--primary)/0.5)] hover:ring-[hsl(var(--primary))] transition-all">
                   <AvatarImage src="/placeholder.svg" alt="User" />
-                  <AvatarFallback className="bg-primary text-primary-foreground">U</AvatarFallback>
+                  <AvatarFallback className="bg-gradient-primary text-white font-semibold shadow-[0_0_15px_hsl(var(--primary)/0.4)]">
+                    {(() => {
+                      const base = (profileName && profileName.trim().length > 0)
+                        ? profileName
+                        : (profileEmail ? profileEmail.split('@')[0] : 'U');
+                      const parts = base.trim().split(' ').filter(Boolean);
+                      const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]) : base[0];
+                      return (initials || 'U').toUpperCase();
+                    })()}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 bg-background/95 backdrop-blur-sm border-border/40" align="end">
+            <DropdownMenuContent
+              className="w-56 bg-background/95 backdrop-blur-xl border-[hsl(var(--primary)/0.3)] shadow-[0_8px_30px_hsl(var(--primary)/0.2)]"
+              align="end"
+            >
               <div className="flex items-center justify-start gap-2 p-2">
                 <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">John Doe</p>
-                  <p className="w-[200px] truncate text-sm text-muted-foreground">
-                    john.doe@example.com
-                  </p>
+                  <p className="font-medium">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'User')}</p>
+                  {profileEmail && (
+                    <p className="w-[200px] truncate text-sm text-muted-foreground">
+                      {profileEmail}
+                    </p>
+                  )}
                 </div>
               </div>
               <DropdownMenuSeparator />
@@ -268,12 +434,12 @@ const TopBar = () => {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              
-              {/* ✅ Nút logout có logic thực tế */}
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="flex items-center gap-2 text-destructive cursor-pointer"
-              >
+              <DropdownMenuItem className="flex items-center gap-2" onClick={handleLogout}>
+
+
+
+
+
                 <LogOut className="h-4 w-4" />
                 Log out
               </DropdownMenuItem>

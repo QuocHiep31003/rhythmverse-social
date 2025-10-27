@@ -1,43 +1,43 @@
-import { useEffect } from "react";
-import { useNavigate, useLocation, Link, Outlet } from "react-router-dom";
+import { ReactNode, useEffect } from "react";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, TrendingUp } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
-/**
- * Admin layout with sidebar navigation, mobile sheet menu,
- * and authentication check via JWT token in localStorage.
- */
-const AdminLayout = () => {
+interface AdminLayoutProps {
+  children: ReactNode;
+}
+
+const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Kiểm tra token admin
-  useEffect(() => {
-    const token = localStorage.getItem("adminToken");
 
-    // Nếu chưa đăng nhập và không phải trang login → redirect về login
-    if (!token && location.pathname !== "/admin/login") {
+  useEffect(() => {
+    const isAuthenticated = localStorage.getItem("adminAuth");
+    if (!isAuthenticated && location.pathname !== "/admin/login") {
+
+
       navigate("/admin/login");
     }
   }, [navigate, location]);
 
-  // ✅ Xử lý logout
+
   const handleLogout = () => {
-    localStorage.removeItem("adminToken");
-    localStorage.removeItem("adminEmail");
-    localStorage.removeItem("adminRole");
+    localStorage.removeItem("adminAuth");
+
+
     toast.success("Đã đăng xuất");
     navigate("/admin/login");
   };
 
-  // Nếu đang ở trang login, không hiển thị layout
+
   if (location.pathname === "/admin/login") {
-    return <Outlet />;
+    return <>{children}</>;
   }
 
-  // ✅ Menu sidebar
+
   const menuItems = [
     { icon: Home, label: "Dashboard", path: "/admin/home" },
     { icon: Music, label: "Bài hát", path: "/admin/songs" },
@@ -51,14 +51,14 @@ const AdminLayout = () => {
   ];
 
   const Sidebar = () => (
-<<<<<<< ui/email-verification
-    <div className="flex flex-col h-full bg-card border-r">
-      {/* Header logo */}
-      <div className="p-6 border-b">
-=======
+
+
+
+
+
     <div className="flex flex-col h-full bg-[hsl(var(--admin-sidebar))] border-r border-[hsl(var(--admin-border))]">
       <div className="p-6 border-b border-[hsl(var(--admin-border))]">
->>>>>>> main
+
         <div className="flex items-center gap-2">
           <div className="w-10 h-10 rounded-lg bg-gradient-admin flex items-center justify-center">
             <Music className="w-6 h-6 text-white" />
@@ -70,7 +70,7 @@ const AdminLayout = () => {
         </div>
       </div>
 
-      {/* Navigation items */}
+
       <nav className="flex-1 p-4 space-y-2">
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -79,11 +79,10 @@ const AdminLayout = () => {
             <Link key={item.path} to={item.path}>
               <Button
                 variant="ghost"
-                className={`w-full justify-start transition-all duration-200 ${
-                  isActive 
-                    ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]" 
-                    : "hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-transparent dark:hover:text-[hsl(var(--admin-hover-text))]"
-                }`}
+                className={`w-full justify-start transition-all duration-200 ${isActive
+                  ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]"
+                  : "hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-transparent dark:hover:text-[hsl(var(--admin-hover-text))]"
+                  }`}
               >
                 <Icon className="w-4 h-4 mr-3" />
                 {item.label}
@@ -93,12 +92,12 @@ const AdminLayout = () => {
         })}
       </nav>
 
-<<<<<<< ui/email-verification
-      {/* Logout */}
-      <div className="p-4 border-t">
-=======
+
+
+
+
       <div className="p-4 border-t border-[hsl(var(--admin-border))]">
->>>>>>> main
+
         <Button
           variant="ghost"
           className="w-full justify-start transition-all duration-200 text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -111,7 +110,7 @@ const AdminLayout = () => {
     </div>
   );
 
-  // ✅ Layout hiển thị chính
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Desktop Sidebar */}
@@ -142,13 +141,13 @@ const AdminLayout = () => {
       </div>
 
       {/* Main Content */}
-<<<<<<< ui/email-verification
-      <main className="flex-1 overflow-y-auto">
-        <div className="pt-16 md:pt-0 p-6 md:p-8">
-          <Outlet /> {/* ✅ Render route con tại đây */}
-        </div>
-      </main>
-=======
+
+
+
+
+
+
+
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-y-auto">
           <div className="pt-16 md:pt-0 p-6 md:p-8">
@@ -156,7 +155,7 @@ const AdminLayout = () => {
           </div>
         </main>
       </div>
->>>>>>> main
+
     </div>
   );
 };
