@@ -1,48 +1,29 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Search } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Search, Image, X, Lock, Globe, Music2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Globe, Upload, Image } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { uploadImage } from "@/config/cloudinary";
 
 const playlistFormSchema = z.object({
-  name: z.string().min(1, "Tên playlist không được để trống").max(200),
+  name: z.string().min(1, "TÃªn playlist khÃ´ng Ä‘Æ°á»£c trá»‘ng").max(200),
   description: z.string().max(500).optional().or(z.literal("")),
   isPublic: z.boolean().default(true),
   songLimit: z.number().min(1).max(1000).default(500),
   songIds: z.array(z.number()).default([]),
-  coverImage: z.string().optional().or(z.literal("")),
+  coverUrl: z.string().optional().or(z.literal("")),
 });
 
-interface Song {
-  id: number;
-  name: string;
-  releaseYear: number;
-}
-
 export type PlaylistFormValues = z.infer<typeof playlistFormSchema>;
+
+interface Song { id: number; name: string; releaseYear: number; }
 
 interface PlaylistFormDialogProps {
   open: boolean;
@@ -53,19 +34,12 @@ interface PlaylistFormDialogProps {
   mode: "create" | "edit";
 }
 
-export const PlaylistFormDialog = ({
-  open,
-  onOpenChange,
-  onSubmit,
-  defaultValues,
-  isLoading = false,
-  mode,
-}: PlaylistFormDialogProps) => {
+export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues, isLoading = false, mode }: PlaylistFormDialogProps) => {
   const [coverPreview, setCoverPreview] = useState<string>("");
-  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [allSongs, setAllSongs] = useState<Song[]>([]);
+  const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
   const [songSearch, setSongSearch] = useState("");
-  const [loadingSongs, setLoadingSongs] = useState(false);
 
   const form = useForm<PlaylistFormValues>({
     resolver: zodResolver(playlistFormSchema),
@@ -75,329 +49,185 @@ export const PlaylistFormDialog = ({
       isPublic: true,
       songLimit: 500,
       songIds: [],
-      coverImage: "",
+      coverUrl: "",
       ...defaultValues,
     },
   });
 
   useEffect(() => {
-    if (open) {
-      loadAllSongs();
-      if (defaultValues) {
-        form.reset(defaultValues);
-        if (defaultValues.coverImage) {
-          setCoverPreview(defaultValues.coverImage);
-        }
-      } else {
-        form.reset({
-          name: "",
-          description: "",
-          isPublic: true,
-          songLimit: 500,
-          songIds: [],
-          coverImage: "",
-        });
-        setCoverPreview("");
-        setCoverFile(null);
+    if (!open) return;
+    // load songs for selection
+    (async () => {
+      try {
+        const res = await fetch(`http://localhost:8080/api/songs?page=0&size=1000`);
+        const data = await res.json();
+        const items: Song[] = (data?.content || []).map((s: any) => ({ id: s.id, name: s.name, releaseYear: s.releaseYear }));
+        setAllSongs(items);
+        setFilteredSongs(items);
+      } catch {
+        setAllSongs([]);
+        setFilteredSongs([]);
       }
-    }
-  }, [open, defaultValues, form]);
+    })();
 
-  const loadAllSongs = async () => {
-    try {
-      setLoadingSongs(true);
-      const response = await fetch(`http://localhost:8080/api/songs?page=0&size=1000`);
-      if (response.ok) {
-        const data = await response.json();
-        setAllSongs(data.content || []);
-      }
-    } catch (error) {
-      console.error("Failed to load songs:", error);
-    } finally {
-      setLoadingSongs(false);
-    }
-  };
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        form.setError("coverImage", {
-          type: "manual",
-          message: "File ảnh không được vượt quá 5MB",
-        });
-        return;
-      }
-
-      if (!file.type.startsWith('image/')) {
-        form.setError("coverImage", {
-          type: "manual",
-          message: "File phải là định dạng ảnh",
-        });
-        return;
-      }
-
-      setCoverFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setCoverPreview(result);
-        form.setValue("coverImage", result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleSubmit = (data: PlaylistFormValues) => {
-    onSubmit(data);
-  };
-
-  const handleSongToggle = (songId: number) => {
-    const currentSongs = form.getValues("songIds") || [];
-    if (currentSongs.includes(songId)) {
-      form.setValue("songIds", currentSongs.filter(id => id !== songId));
+    if (defaultValues) {
+      form.reset({ ...form.getValues(), ...defaultValues });
+      setCoverPreview(defaultValues.coverUrl || "");
     } else {
-      form.setValue("songIds", [...currentSongs, songId]);
+      form.reset({ name: "", description: "", isPublic: true, songLimit: 500, songIds: [], coverUrl: "" });
+      setCoverPreview("");
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const q = songSearch.trim().toLowerCase();
+    if (!q) { setFilteredSongs(allSongs); return; }
+    setFilteredSongs(allSongs.filter(s => s.name.toLowerCase().includes(q) || String(s.releaseYear).includes(q)));
+  }, [songSearch, allSongs]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploading(true);
+      const result = await uploadImage(file);
+      setCoverPreview(result.secure_url);
+      form.setValue("coverUrl", result.secure_url, { shouldDirty: true, shouldValidate: true });
+    } finally {
+      setUploading(false);
     }
   };
 
-  const filteredSongs = allSongs.filter(song =>
-    song.name.toLowerCase().includes(songSearch.toLowerCase())
-  );
+  const handleSongToggle = (id: number) => {
+    const current = form.getValues("songIds") || [];
+    form.setValue("songIds", current.includes(id) ? current.filter(x => x !== id) : [...current, id]);
+  };
+
+  const handleSubmit = (values: PlaylistFormValues) => {
+    onSubmit({ ...values, songIds: (values.songIds || []).map(Number) });
+  };
 
   const isPublic = form.watch("isPublic");
   const songLimit = form.watch("songLimit");
-  const name = form.watch("name");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="text-white">
-            {mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}
-          </DialogTitle>
-          <DialogDescription className="text-gray-400">
-            {mode === "create"
-              ? "Nhập thông tin để tạo playlist mới"
-              : "Cập nhật thông tin playlist"}
-          </DialogDescription>
+          <DialogTitle className="text-white">{mode === "create" ? "Tạo playlist mới" : "Chỉnh sửa playlist"}</DialogTitle>
+          <DialogDescription className="text-gray-400">{mode === "create" ? "Nhập thông tin playlist và tải ảnh bìa." : "Cập nhật thông tin playlist và ảnh bìa."}</DialogDescription>
         </DialogHeader>
-
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Cover Image Upload */}
-            <FormField
-              control={form.control}
-              name="coverImage"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Ảnh bìa</FormLabel>
-                  <div className="flex items-center gap-4">
-                    <div className="w-24 h-24 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
-                      {coverPreview ? (
-                        <img 
-                          src={coverPreview} 
-                          alt="Preview" 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-center p-2">
-                          <Image className="w-6 h-6 mx-auto mb-1 text-gray-400" />
-                          <p className="text-xs text-gray-400">Upload ảnh</p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <FormControl>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="bg-background/50 border-border text-white"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                      <p className="text-xs text-gray-400 mt-1">
-                        Đề xuất: 1000x1000px, tối đa 5MB (JPG, PNG, WebP)
-                      </p>
-                    </div>
-                  </div>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Tên playlist *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="Tên playlist" 
-                      {...field} 
-                      className="bg-background/50 border-border text-white"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Mô tả (không bắt buộc)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Mô tả playlist..."
-                      className="min-h-[60px] resize-none bg-background/50 border-border text-white"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Privacy Settings */}
-            <FormField
-              control={form.control}
-              name="isPublic"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Chế độ công khai</FormLabel>
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border">
-                    <div className="flex items-center gap-3">
-                      {field.value ? (
-                        <Globe className="w-5 h-5 text-green-500" />
-                      ) : (
-                        <Lock className="w-5 h-5 text-orange-500" />
-                      )}
-                      <div>
-                        <p className="font-medium text-white">{field.value ? "Công khai" : "Riêng tư"}</p>
-                        <p className="text-sm text-gray-400">
-                          {field.value
-                            ? "Mọi người có thể tìm kiếm và xem playlist này"
-                            : "Chỉ bạn có thể xem playlist này"}
-                        </p>
-                      </div>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                        className="data-[state=checked]:bg-green-500"
-                      />
-                    </FormControl>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Song Limit */}
-            <FormField
-              control={form.control}
-              name="songLimit"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Giới hạn bài hát</FormLabel>
-                  <div className="flex items-center gap-4">
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={1000}
-                        className="w-32 bg-background/50 border-border text-white"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 500)}
-                      />
-                    </FormControl>
-                    <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">
-                      {songLimit} bài hát tối đa
-                    </Badge>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Songs Multi-select */}
-            <FormField
-              control={form.control}
-              name="songIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-white">Chọn bài hát</FormLabel>
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                      <Input
-                        placeholder="Tìm kiếm bài hát..."
-                        value={songSearch}
-                        onChange={(e) => setSongSearch(e.target.value)}
-                        className="pl-10 bg-background/50 border-border text-white"
-                      />
-                    </div>
-                    {loadingSongs ? (
-                      <div className="p-4 bg-muted/30 border border-border rounded-lg text-center">
-                        <p className="text-sm text-gray-400">Đang tải bài hát...</p>
-                      </div>
+            <FormField control={form.control} name="coverUrl" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white">áº¢nh bÃ¬a</FormLabel>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-24 h-24 rounded-lg bg-muted/50 border-2 border-dashed border-border flex items-center justify-center overflow-hidden">
+                    {coverPreview ? (
+                      <>
+                        <img src={coverPreview} alt="Preview" className="w-full h-full object-cover" />
+                        <button type="button" onClick={() => { setCoverPreview(""); field.onChange(""); }} className="absolute top-1 right-1 p-1 bg-red-600 text-white rounded-full">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </>
                     ) : (
-                      <div className="space-y-2 max-h-[200px] overflow-y-auto border border-border rounded-lg p-3 bg-background/30">
-                        {filteredSongs.length === 0 ? (
-                          <p className="text-sm text-gray-400 text-center py-2">Không tìm thấy bài hát</p>
-                        ) : (
-                          filteredSongs.map((song) => (
-                            <div
-                              key={song.id}
-                              className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded cursor-pointer"
-                              onClick={() => handleSongToggle(song.id)}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={field.value?.includes(song.id)}
-                                onChange={() => handleSongToggle(song.id)}
-                                className="w-4 h-4"
-                              />
-                              <span className="text-white text-sm">{song.name}</span>
-                              <span className="text-xs text-gray-400 ml-auto">({song.releaseYear})</span>
-                            </div>
-                          ))
-                        )}
+                      <div className="text-center p-2">
+                        <Image className="w-6 h-6 mx-auto mb-1 text-gray-400" />
+                        <p className="text-xs text-gray-400">Upload áº£nh</p>
                       </div>
                     )}
                   </div>
-                  <FormMessage />
-                  {field.value && field.value.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      Đã chọn {field.value.length} bài hát
-                    </p>
-                  )}
-                </FormItem>
-              )}
-            />
+                  <div className="flex-1">
+                    <FormControl>
+                      <Input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} className="bg-background/50 border-border text-white" />
+                    </FormControl>
+                    <FormMessage />
+                    <p className="text-xs text-gray-400 mt-1">Khuyáº¿n nghá»‹: 1000x1000px, tá»‘i Ä‘a 5MB (JPG, PNG, WebP)</p>
+                    <div className="mt-2 space-y-1">
+                      <FormLabel className="text-xs text-gray-400">Hoáº·c dÃ¡n URL áº£nh</FormLabel>
+                      <Input placeholder="https://...jpg" value={field.value || ""} onChange={(e) => { field.onChange(e.target.value); setCoverPreview(e.target.value); }} className="bg-background/50 border-border text-white" />
+                    </div>
+                  </div>
+                </div>
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white">TÃªn playlist *</FormLabel>
+                <FormControl><Input placeholder="TÃªn playlist" {...field} className="bg-background/50 border-border text-white" /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="description" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white">MÃ´ táº£</FormLabel>
+                <FormControl><Textarea placeholder="MÃ´ táº£ playlist..." className="min-h-[60px] resize-none bg-background/50 border-border text-white" {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="isPublic" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white">Cháº¿ Ä‘á»™ cÃ´ng khai</FormLabel>
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border">
+                  <div className="flex items-center gap-3">
+                    {field.value ? <Globe className="w-5 h-5 text-green-500" /> : <Lock className="w-5 h-5 text-orange-500" />}
+                    <div>
+                      <p className="font-medium text-white">{field.value ? "CÃ´ng khai" : "RiÃªng tÆ°"}</p>
+                      <p className="text-sm text-gray-400">{field.value ? "Ai cÅ©ng cÃ³ thá»ƒ xem" : "Chá»‰ báº¡n cÃ³ thá»ƒ xem"}</p>
+                    </div>
+                  </div>
+                  <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} className="data-[state=checked]:bg-green-500" /></FormControl>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="songLimit" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white">Giá»›i háº¡n bÃ i hÃ¡t</FormLabel>
+                <div className="flex items-center gap-4">
+                  <FormControl><Input type="number" min={1} max={1000} className="w-32 bg-background/50 border-border text-white" {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 500)} /></FormControl>
+                  <Badge variant="outline" className="bg-primary/20 text-primary border-primary/30">{songLimit} bÃ i hÃ¡t tá»‘i Ä‘a</Badge>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )} />
+
+            <FormField control={form.control} name="songIds" render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-white">Chá»n bÃ i hÃ¡t</FormLabel>
+                <div className="bg-background/30 border border-border rounded-lg p-3 space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input placeholder="TÃ¬m kiáº¿m bÃ i hÃ¡t..." value={songSearch} onChange={(e) => setSongSearch(e.target.value)} className="pl-10 bg-background/50 border-border text-white" />
+                  </div>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {filteredSongs.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-2">KhÃ´ng cÃ³ bÃ i hÃ¡t</p>
+                    ) : (
+                      filteredSongs.map((s) => {
+                        const checked = (field.value || []).includes(s.id);
+                        return (
+                          <div key={s.id} className={`flex items-center gap-2 px-2 py-1 rounded border text-xs ${checked ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white'} cursor-pointer`} onClick={() => handleSongToggle(s.id)}>
+                            <Music2 className="w-3 h-3" />
+                            <div className="flex-1 min-w-0"><p className="truncate">{s.name}</p></div>
+                            <span className="text-xs text-gray-300">{s.releaseYear}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </FormItem>
+            )} />
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isLoading}
-                className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
-              >
-                Hủy
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={isLoading}
-                className="bg-primary hover:bg-primary/90"
-              >
-                {isLoading ? "Đang lưu..." : mode === "create" ? "Tạo playlist" : "Cập nhật"}
-              </Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Há»§y</Button>
+              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">{isLoading ? "Äang lÆ°u..." : mode === "create" ? "Táº¡o playlist" : "Cáº­p nháº­t"}</Button>
             </DialogFooter>
           </form>
         </Form>
@@ -405,3 +235,6 @@ export const PlaylistFormDialog = ({
     </Dialog>
   );
 };
+
+export default PlaylistFormDialog;
+

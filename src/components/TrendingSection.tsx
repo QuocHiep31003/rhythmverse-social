@@ -1,13 +1,18 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import MusicCard from "./MusicCard";
-import { TrendingUp, Clock, Heart } from "lucide-react";
+import { TrendingUp, Clock, Heart, Headphones } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { getTrendingSongs, mockSongs } from "@/data/mockData";
-import { handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
+import { handleImageError, DEFAULT_AVATAR_URL, formatPlayCount } from "@/lib/utils";
 
 const TrendingSection = () => {
   const { playSong, setQueue } = useMusic();
-  const trendingSongs = getTrendingSongs();
+  const allSongs = getTrendingSongs();
+  const trendingSongs = [...allSongs].sort((a, b) => {
+    const playsA = typeof a.plays === 'string' ? parseInt(a.plays.replace(/[^0-9]/g, '')) || 0 : a.plays || 0;
+    const playsB = typeof b.plays === 'string' ? parseInt(b.plays.replace(/[^0-9]/g, '')) || 0 : b.plays || 0;
+    return playsB - playsA;
+  });
   const recentlyPlayed = mockSongs.slice(5, 9);
 
   return (
@@ -49,9 +54,15 @@ const TrendingSection = () => {
                       <h4 className="font-medium text-foreground truncate">{song.title}</h4>
                       <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Heart className="h-4 w-4 text-muted-foreground hover:text-neon-pink cursor-pointer transition-colors" />
-                      <span className="text-sm text-muted-foreground">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
+                    <div className="flex flex-col items-end space-y-1">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Headphones className="h-3 w-3" />
+                        <span>{formatPlayCount(typeof song.plays === 'string' ? parseInt(song.plays.replace(/[^0-9]/g, '')) || 0 : song.plays || 0)}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <Heart className="h-4 w-4 text-muted-foreground hover:text-neon-pink cursor-pointer transition-colors" />
+                        <span className="text-sm text-muted-foreground">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
+                      </div>
                     </div>
                   </div>
                 ))}

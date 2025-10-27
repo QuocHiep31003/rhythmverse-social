@@ -34,7 +34,6 @@ const albumSchema = z.object({
   songIds: z.array(z.number()).optional().default([]),
   releaseDate: z.string().min(1, "Release date is required"),
   coverUrl: z.string().optional().or(z.literal("")),
-  description: z.string().optional(),
 });
 
 export type AlbumFormValues = z.infer<typeof albumSchema>;
@@ -91,7 +90,6 @@ export const AlbumFormDialog = ({
       songIds: [],
       releaseDate: new Date().toISOString().split("T")[0],
       coverUrl: "",
-      description: "",
       ...defaultValues,
     },
   });
@@ -108,12 +106,12 @@ export const AlbumFormDialog = ({
         songIds: [],
         releaseDate: new Date().toISOString().split("T")[0],
         coverUrl: "",
-        description: "",
       });
       setCoverPreview("");
       setArtistQuery("");
       setSongs([]);
       setFilteredSongs([]);
+      setSongQuery("");
     }
     if (open && defaultValues) {
       // Normalize date format for the date input
@@ -125,7 +123,6 @@ export const AlbumFormDialog = ({
           ? new Date(defaultValues.releaseDate).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0],
         coverUrl: defaultValues.coverUrl || "",
-        description: defaultValues.description || "",
       } as AlbumFormValues;
 
       form.reset(normalized);
@@ -136,7 +133,7 @@ export const AlbumFormDialog = ({
         setArtistQuery(currentArtist.name);
       }
     }
-  }, [open]);
+  }, [open, mode, defaultValues, form, artists]);
 
   // Keep artist query in sync if artistId changes while editing and query is empty
   useEffect(() => {
@@ -149,7 +146,7 @@ export const AlbumFormDialog = ({
         setArtistQuery(currentArtist.name);
       }
     }
-  }, [artistId, mode, open]);
+  }, [artistId, mode, open, artistQuery, artists]);
 
   // ✅ Load songs by artist, filter out those already in another album
   useEffect(() => {
@@ -174,7 +171,7 @@ export const AlbumFormDialog = ({
       setSongs([]);
       setFilteredSongs([]);
     }
-  }, [artistId]);
+  }, [artistId, defaultValues]);
 
   // ✅ Debounced song search
   const handleSongSearch = debounce((query: string) => {
@@ -218,6 +215,7 @@ export const AlbumFormDialog = ({
       form.setValue("coverUrl", result.secure_url, { shouldDirty: true, shouldValidate: true });
     } catch (error) {
       console.error("Upload error:", error);
+      toast.error("Upload ảnh thất bại");
     } finally {
       setUploading(false);
     }
@@ -242,10 +240,10 @@ export const AlbumFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[880px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
+      <DialogContent className="sm:max-w-[700px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-zinc-800">
-          <DialogTitle className="text-lg font-semibold">
-            {mode === "create" ? "Create New Album" : "Edit Album"}
+          <DialogTitle className="text-2xl font-bold">
+            {mode === "create" ? "Tạo Album mới" : "Chỉnh sửa Album"}
           </DialogTitle>
           <DialogDescription className="text-gray-400">
             Fill in the album details. You can add songs later.
@@ -255,13 +253,14 @@ export const AlbumFormDialog = ({
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit(handleFormSubmit)}
-            className="flex flex-col sm:flex-row gap-8 px-6 py-6"
+            className="flex flex-col sm:flex-row gap-6 px-6 py-6"
           >
             {/* Hidden field to register coverUrl with RHF */}
             <input type="hidden" {...form.register("coverUrl")} />
+            
             {/* === LEFT: COVER PREVIEW === */}
-            <div className="flex flex-col items-center justify-start gap-4 w-full sm:w-1/3">
-              <div className="relative w-48 h-48 border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden flex items-center justify-center bg-zinc-900">
+            <div className="flex flex-col items-center justify-start gap-4 w-full sm:w-2/5">
+              <div className="relative w-40 h-40 border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden flex items-center justify-center bg-zinc-900">
                 {coverPreview ? (
                   <>
                     <img
@@ -272,16 +271,16 @@ export const AlbumFormDialog = ({
                     <button
                       type="button"
                       onClick={handleRemoveImage}
-                      className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full hover:bg-red-700"
+                      className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 transition-colors"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3 h-3" />
                     </button>
                   </>
                 ) : (
-                  <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer hover:bg-zinc-800">
-                    <Upload className="w-8 h-8 mb-2 text-gray-400" />
-                    <span className="text-sm text-gray-500">
-                      {uploading ? "Đang upload..." : "Upload cover"}
+                  <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer hover:bg-zinc-800 transition-colors">
+                    <Upload className="w-6 h-6 mb-1 text-gray-400" />
+                    <span className="text-xs text-gray-500 text-center px-2">
+                      {uploading ? "Uploading..." : "Upload cover"}
                     </span>
                     <input
                       type="file"
@@ -294,24 +293,24 @@ export const AlbumFormDialog = ({
                 )}
               </div>
               <p className="text-xs text-gray-500 text-center">
-                Tối đa 5MB. Cloudinary sẽ tự động xử lý.
+                Max 5MB. Supported formats
               </p>
             </div>
 
             {/* === RIGHT: FORM FIELDS === */}
-            <div className="flex-1 space-y-5">
+            <div className="flex-1 space-y-4">
               {/* Album Name */}
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Album Name *</FormLabel>
+                    <FormLabel className="text-sm">Album Name *</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         placeholder="Enter album name..."
-                        className="bg-zinc-900 border-zinc-700"
+                        className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm"
                       />
                     </FormControl>
                     <FormMessage />
@@ -325,31 +324,32 @@ export const AlbumFormDialog = ({
                 name="artistId"
                 render={() => (
                   <FormItem>
-                    <FormLabel>Artist *</FormLabel>
+                    <FormLabel className="text-sm">Artist *</FormLabel>
                     <div className="relative">
-                      <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                      <Search className="absolute left-3 top-2.5 w-3 h-3 text-gray-400" />
                       <Input
                         value={artistQuery}
                         onChange={(e) => {
                           setArtistQuery(e.target.value);
                           setShowArtistDropdown(true);
                         }}
+                        onFocus={() => setShowArtistDropdown(true)}
                         placeholder="Search artist..."
-                        className="pl-9 bg-zinc-900 border-zinc-700"
+                        className="pl-8 bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm"
                       />
                       {showArtistDropdown && filteredArtists.length > 0 && (
-                        <div className="absolute z-30 w-full bg-zinc-900 border border-zinc-700 rounded-lg mt-1 max-h-60 overflow-y-auto shadow-lg">
+                        <div className="absolute z-30 w-full bg-zinc-900 border border-zinc-700 rounded-lg mt-1 max-h-48 overflow-y-auto shadow-lg [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:hidden">
                           {filteredArtists.map((artist) => (
                             <div
                               key={artist.id}
                               onClick={() => handleArtistSelect(artist)}
-                              className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-800 cursor-pointer"
+                              className="flex items-center gap-2 px-3 py-2 hover:bg-zinc-800 cursor-pointer transition-colors"
                             >
                               {artist.avatar ? (
                                 <img
                                   src={artist.avatar}
                                   alt={artist.name}
-                                  className="w-7 h-7 rounded-full object-cover"
+                                  className="w-6 h-6 rounded-full object-cover"
                                 />
                               ) : (
                                 <User className="w-4 h-4 text-gray-400" />
@@ -378,12 +378,12 @@ export const AlbumFormDialog = ({
                 name="releaseDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Release Date *</FormLabel>
+                    <FormLabel className="text-sm">Release Date *</FormLabel>
                     <FormControl>
                       <Input
                         type="date"
                         {...field}
-                        className="bg-zinc-900 border-zinc-700"
+                        className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm"
                       />
                     </FormControl>
                     <FormMessage />
@@ -391,23 +391,22 @@ export const AlbumFormDialog = ({
                 )}
               />
 
-              {/* Song Selection */}
+              {/* Song Selection - COMPACT VERSION */}
               <FormField
                 control={form.control}
                 name="songIds"
                 render={() => (
                   <FormItem>
-                    <FormLabel>
-                      Songs{" "}
-                      <span className="text-gray-500 text-xs">(optional)</span>
+                    <FormLabel className="text-sm">
+                      Songs <span className="text-gray-500 text-xs">(optional)</span>
                     </FormLabel>
-                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 space-y-3">
+                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 space-y-2">
                       {loadingSongs ? (
-                        <p className="text-center text-gray-400 text-sm">
+                        <p className="text-center text-gray-400 text-sm py-2">
                           Loading songs...
                         </p>
                       ) : songs.length === 0 ? (
-                        <p className="text-center text-gray-500 text-sm">
+                        <p className="text-center text-gray-500 text-sm py-2">
                           {artistId
                             ? "No songs available for this artist."
                             : "Select an artist first."}
@@ -421,9 +420,11 @@ export const AlbumFormDialog = ({
                               setSongQuery(e.target.value);
                               handleSongSearch(e.target.value);
                             }}
-                            className="bg-zinc-950 border-zinc-700 text-sm"
+                            className="bg-zinc-950 border-zinc-700 text-sm h-8 focus:border-indigo-500 transition-colors"
                           />
-                          <div className="flex flex-wrap gap-2 mt-2">
+                          
+                          {/* Compact scrollable song list - CHỈ HIỆN 2 DÒNG */}
+                          <div className="max-h-16 overflow-y-auto space-y-1 [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:hidden">
                             {filteredSongs.map((song) => {
                               const checked = selectedSongs.includes(song.id);
                               const disabled = song.isInOtherAlbum;
@@ -433,31 +434,44 @@ export const AlbumFormDialog = ({
                                   onClick={() =>
                                     !disabled && handleSongToggle(song.id)
                                   }
-                                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all ${
+                                  className={`flex items-center gap-2 px-2 py-1 rounded border text-xs transition-all ${
                                     disabled
                                       ? "bg-zinc-800 border-zinc-700 opacity-50 cursor-not-allowed"
                                       : checked
-                                      ? "bg-indigo-600 border-indigo-600 cursor-pointer"
-                                      : "bg-zinc-800 border-zinc-700 hover:border-zinc-500 cursor-pointer"
+                                      ? "bg-indigo-600 border-indigo-600 cursor-pointer hover:bg-indigo-700"
+                                      : "bg-zinc-800 border-zinc-700 hover:border-zinc-500 cursor-pointer hover:bg-zinc-700"
                                   }`}
                                 >
-                                  <Music2 className="w-4 h-4" />
-                                  <span>{song.name}</span>
-                                  <span className="text-xs text-gray-500 ml-auto">
+                                  <Music2 className="w-3 h-3 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate">{song.name}</p>
+                                  </div>
+                                  <span className="text-xs text-gray-400 whitespace-nowrap">
                                     {song.releaseYear}
                                   </span>
                                   {disabled && (
-                                    <span className="text-xs text-red-400 ml-2">
-                                      (Already in album)
+                                    <span className="text-xs text-red-400 whitespace-nowrap ml-1">
+                                      (taken)
                                     </span>
                                   )}
-                                  {checked && (
-                                    <X className="w-3 h-3 ml-1 text-white" />
+                                  {checked && !disabled && (
+                                    <div className="w-3 h-3 bg-white rounded-full flex items-center justify-center ml-1">
+                                      <div className="w-1 h-1 bg-indigo-600 rounded-full" />
+                                    </div>
                                   )}
                                 </div>
                               );
                             })}
                           </div>
+                          
+                          {/* Selected songs count */}
+                          {selectedSongs.length > 0 && (
+                            <div className="pt-2 border-t border-zinc-700">
+                              <p className="text-xs text-gray-400">
+                                Selected: {selectedSongs.length} song{selectedSongs.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -465,43 +479,24 @@ export const AlbumFormDialog = ({
                 )}
               />
 
-              {/* Description */}
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        placeholder="Write something about this album..."
-                        className="min-h-[70px] resize-none bg-zinc-900 border-zinc-700"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Footer */}
-              <DialogFooter className="pt-4 border-t border-zinc-800 flex justify-end gap-3">
+              <DialogFooter className="pt-4 border-t border-zinc-800 flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => onOpenChange(false)}
                   disabled={isLoading || uploading}
-                  className="bg-transparent border-zinc-700 text-white hover:bg-zinc-800"
+                  className="bg-transparent border-zinc-700 text-white hover:bg-zinc-800 transition-colors h-8 text-xs px-3"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={isLoading || uploading}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed h-8 text-xs px-3"
                 >
                   {uploading
-                    ? "Đang upload..."
+                    ? "Uploading..."
                     : isLoading
                     ? "Saving..."
                     : mode === "create"

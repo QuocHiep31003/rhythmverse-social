@@ -72,14 +72,15 @@ export const SongFormDialog = ({
   isLoading = false,
   mode,
 }: SongFormDialogProps) => {
-  const [allGenres, setAllGenres] = useState<any[]>([]);
-  const [allArtists, setAllArtists] = useState<any[]>([]);
+  const [allGenres, setAllGenres] = useState<{id: number, name: string}[]>([]);
+  const [allArtists, setAllArtists] = useState<{id: number, name: string, avatar?: string, country?: string}[]>([]);
   const [artistSearchQuery, setArtistSearchQuery] = useState("");
   const [genreSearchQuery, setGenreSearchQuery] = useState("");
   const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [audioInputMode, setAudioInputMode] = useState<"upload" | "url">("upload");
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -127,11 +128,11 @@ export const SongFormDialog = ({
   useEffect(() => {
     if (open && defaultValues) {
       // Xử lý data từ API: artists và genres là array of objects
-      const apiData = defaultValues as any;
+      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], audioUrl?: string};
       const formValues = {
         ...defaultValues,
-        artistIds: apiData.artists?.map((a: any) => a.id) || defaultValues.artistIds || [],
-        genreIds: apiData.genres?.map((g: any) => g.id) || defaultValues.genreIds || [],
+        artistIds: apiData.artists?.map((a: {id: number}) => a.id) || defaultValues.artistIds || [],
+        genreIds: apiData.genres?.map((g: {id: number}) => g.id) || defaultValues.genreIds || [],
         audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
       };
       form.reset(formValues);
@@ -216,7 +217,7 @@ export const SongFormDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="text-2xl font-bold">
             {mode === "create" ? "Thêm bài hát mới" : "Chỉnh sửa bài hát"}
           </DialogTitle>
           <DialogDescription>
@@ -235,7 +236,11 @@ export const SongFormDialog = ({
                 <FormItem>
                   <FormLabel>Tên bài hát *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Tên bài hát" {...field} />
+                    <Input 
+                      placeholder="Tên bài hát" 
+                      {...field} 
+                      className="admin-input transition-all duration-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -249,7 +254,12 @@ export const SongFormDialog = ({
                 <FormItem>
                   <FormLabel>Năm phát hành *</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="2024" {...field} />
+                    <Input 
+                      type="number" 
+                      placeholder="2024" 
+                      {...field} 
+                      className="admin-input transition-all duration-200"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -261,7 +271,14 @@ export const SongFormDialog = ({
               name="genreIds"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Thể loại * (chọn ít nhất 1)</FormLabel>
+                  <FormLabel className="text-sm font-medium flex items-center gap-2">
+                    Thể loại *
+                    {field.value?.length > 0 && (
+                      <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
+                        {field.value.length} đã chọn
+                      </span>
+                    )}
+                  </FormLabel>
                   <Popover open={genrePopoverOpen} onOpenChange={setGenrePopoverOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -269,73 +286,105 @@ export const SongFormDialog = ({
                           variant="outline"
                           role="combobox"
                           className={cn(
-                            "w-full justify-between",
-                            !field.value?.length && "text-muted-foreground"
+                            "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
+                            !field.value?.length && "text-muted-foreground",
+                            field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
                           )}
                         >
-                          {field.value?.length
-                            ? `Đã chọn ${field.value.length} thể loại`
-                            : "Tìm kiếm và chọn thể loại..."}
+                          <div className="flex items-center gap-2 flex-1 text-left">
+                            {field.value?.length ? (
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
+                                <span className="font-medium">
+                                  {field.value.length} thể loại đã chọn
+                                </span>
+                              </div>
+                            ) : (
+                              <span>Tìm kiếm và chọn thể loại...</span>
+                            )}
+                          </div>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
+                    <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
                       <Command shouldFilter={false}>
-                        <CommandInput
-                          placeholder="Tìm kiếm thể loại..."
-                          value={genreSearchQuery}
-                          onValueChange={setGenreSearchQuery}
-                        />
-                        <CommandEmpty>
-                          Không tìm thấy thể loại
+                        <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                          <CommandInput
+                            placeholder="Tìm kiếm thể loại..."
+                            value={genreSearchQuery}
+                            onValueChange={setGenreSearchQuery}
+                            className="border-0 focus:ring-0"
+                          />
+                        </div>
+                        <CommandEmpty className="py-6 text-center text-muted-foreground">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                              <span className="text-xs">🔍</span>
+                            </div>
+                            <span>Không tìm thấy thể loại</span>
+                          </div>
                         </CommandEmpty>
-                        <CommandGroup className="max-h-[300px] overflow-y-auto">
-                          {filteredGenres.map((genre) => (
-                            <CommandItem
-                              key={genre.id}
-                              value={genre.id.toString()}
-                              onSelect={() => {
-                                const isSelected = field.value?.includes(genre.id);
-                                if (isSelected) {
-                                  field.onChange(
-                                    field.value?.filter((id: number) => id !== genre.id)
-                                  );
-                                } else {
-                                  field.onChange([...(field.value || []), genre.id]);
-                                }
-                              }}
-                            >
-                              <div className="flex items-center gap-2 flex-1">
-                                <span className="font-medium">{genre.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ID: {genre.id}
-                                </span>
-                              </div>
-                              <Check
+                        <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                          {filteredGenres.map((genre) => {
+                            const isSelected = field.value?.includes(genre.id);
+                            return (
+                              <CommandItem
+                                key={genre.id}
+                                value={genre.id.toString()}
+                                onSelect={() => {
+                                  if (isSelected) {
+                                    field.onChange(
+                                      field.value?.filter((id: number) => id !== genre.id)
+                                    );
+                                  } else {
+                                    field.onChange([...(field.value || []), genre.id]);
+                                  }
+                                }}
                                 className={cn(
-                                  "ml-2 h-4 w-4",
-                                  field.value?.includes(genre.id)
-                                    ? "opacity-100"
-                                    : "opacity-0"
+                                  "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
+                                  isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
                                 )}
-                              />
-                            </CommandItem>
-                          ))}
+                              >
+                                <div className="flex items-center gap-3 flex-1">
+                                  <div className={cn(
+                                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                    isSelected 
+                                      ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
+                                      : "border-muted-foreground"
+                                  )}>
+                                    {isSelected && (
+                                      <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{genre.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ID: {genre.id}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
+                                )}
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       </Command>
                     </PopoverContent>
                   </Popover>
                   {field.value?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-3">
                       {field.value.map((genreId: number) => {
                         const genre = allGenres.find(g => g.id === genreId);
                         return (
                           <div
                             key={genreId}
-                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
+                            className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
                           >
-                            <span>{genre?.name || `ID: ${genreId}`}</span>
+                            <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
+                            <span className="truncate max-w-[120px]">{genre?.name || `ID: ${genreId}`}</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -343,9 +392,9 @@ export const SongFormDialog = ({
                                   field.value?.filter((id: number) => id !== genreId)
                                 );
                               }}
-                              className="ml-1 hover:text-destructive"
+                              className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
                             >
-                              ×
+                              <span className="text-xs">×</span>
                             </button>
                           </div>
                         );
@@ -362,7 +411,14 @@ export const SongFormDialog = ({
               name="artistIds"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nghệ sĩ * (chọn ít nhất 1)</FormLabel>
+                  <FormLabel className="text-sm font-medium flex items-center gap-2">
+                    Nghệ sĩ *
+                    {field.value?.length > 0 && (
+                      <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
+                        {field.value.length} đã chọn
+                      </span>
+                    )}
+                  </FormLabel>
                   <Popover open={artistPopoverOpen} onOpenChange={setArtistPopoverOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -370,84 +426,117 @@ export const SongFormDialog = ({
                           variant="outline"
                           role="combobox"
                           className={cn(
-                            "w-full justify-between",
-                            !field.value?.length && "text-muted-foreground"
+                            "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
+                            !field.value?.length && "text-muted-foreground",
+                            field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
                           )}
                         >
-                          {field.value?.length
-                            ? `Đã chọn ${field.value.length} nghệ sĩ`
-                            : "Tìm kiếm và chọn nghệ sĩ..."}
+                          <div className="flex items-center gap-2 flex-1 text-left">
+                            {field.value?.length ? (
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
+                                <span className="font-medium">
+                                  {field.value.length} nghệ sĩ đã chọn
+                                </span>
+                              </div>
+                            ) : (
+                              <span>Tìm kiếm và chọn nghệ sĩ...</span>
+                            )}
+                          </div>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
                       </FormControl>
                     </PopoverTrigger>
-                    <PopoverContent className="w-full p-0" align="start">
+                    <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
                       <Command shouldFilter={false}>
-                        <CommandInput
-                          placeholder="Tìm kiếm nghệ sĩ..."
-                          value={artistSearchQuery}
-                          onValueChange={setArtistSearchQuery}
-                        />
-                        <CommandEmpty>
-                          Không tìm thấy nghệ sĩ
+                        <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                          <CommandInput
+                            placeholder="Tìm kiếm nghệ sĩ..."
+                            value={artistSearchQuery}
+                            onValueChange={setArtistSearchQuery}
+                            className="border-0 focus:ring-0"
+                          />
+                        </div>
+                        <CommandEmpty className="py-6 text-center text-muted-foreground">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                              <span className="text-xs">🎤</span>
+                            </div>
+                            <span>Không tìm thấy nghệ sĩ</span>
+                          </div>
                         </CommandEmpty>
-                        <CommandGroup className="max-h-[300px] overflow-y-auto">
-                          {filteredArtists.map((artist) => (
-                            <CommandItem
-                              key={artist.id}
-                              value={artist.id.toString()}
-                              onSelect={() => {
-                                const isSelected = field.value?.includes(artist.id);
-                                if (isSelected) {
-                                  field.onChange(
-                                    field.value?.filter((id: number) => id !== artist.id)
-                                  );
-                                } else {
-                                  field.onChange([...(field.value || []), artist.id]);
-                                }
-                              }}
-                            >
-                              <div className="flex items-center gap-2 flex-1">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarImage src={artist.avatar} alt={artist.name} />
-                                  <AvatarFallback>{artist.name[0]}</AvatarFallback>
-                                </Avatar>
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{artist.name}</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    ID: {artist.id} • {artist.country || "N/A"}
-                                  </span>
-                                </div>
-                              </div>
-                              <Check
+                        <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                          {filteredArtists.map((artist) => {
+                            const isSelected = field.value?.includes(artist.id);
+                            return (
+                              <CommandItem
+                                key={artist.id}
+                                value={artist.id.toString()}
+                                onSelect={() => {
+                                  if (isSelected) {
+                                    field.onChange(
+                                      field.value?.filter((id: number) => id !== artist.id)
+                                    );
+                                  } else {
+                                    field.onChange([...(field.value || []), artist.id]);
+                                  }
+                                }}
                                 className={cn(
-                                  "ml-2 h-4 w-4",
-                                  field.value?.includes(artist.id)
-                                    ? "opacity-100"
-                                    : "opacity-0"
+                                  "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
+                                  isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
                                 )}
-                              />
-                            </CommandItem>
-                          ))}
+                              >
+                                <div className="flex items-center gap-3 flex-1">
+                                  <div className={cn(
+                                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                    isSelected 
+                                      ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
+                                      : "border-muted-foreground"
+                                  )}>
+                                    {isSelected && (
+                                      <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
+                                    )}
+                                  </div>
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={artist.avatar} alt={artist.name} />
+                                    <AvatarFallback className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] text-xs">
+                                      {artist.name[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{artist.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ID: {artist.id} • {artist.country || "N/A"}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
+                                )}
+                              </CommandItem>
+                            );
+                          })}
                         </CommandGroup>
                       </Command>
                     </PopoverContent>
                   </Popover>
                   {field.value?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-3">
                       {field.value.map((artistId: number) => {
                         const artist = allArtists.find((a) => a.id === artistId);
                         if (!artist) return null;
                         return (
                           <div
                             key={artistId}
-                            className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-1 rounded-md text-sm"
+                            className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
                           >
-                            <Avatar className="h-4 w-4">
+                            <Avatar className="h-5 w-5">
                               <AvatarImage src={artist.avatar} alt={artist.name} />
-                              <AvatarFallback className="text-xs">{artist.name[0]}</AvatarFallback>
+                              <AvatarFallback className="bg-[hsl(var(--admin-active-foreground))] text-[hsl(var(--admin-active))] text-xs">
+                                {artist.name[0]}
+                              </AvatarFallback>
                             </Avatar>
-                            <span>{artist.name}</span>
+                            <span className="truncate max-w-[120px]">{artist.name}</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -455,9 +544,9 @@ export const SongFormDialog = ({
                                   field.value?.filter((id: number) => id !== artistId)
                                 );
                               }}
-                              className="ml-1 hover:text-destructive"
+                              className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
                             >
-                              ×
+                              <span className="text-xs">×</span>
                             </button>
                           </div>
                         );
@@ -474,34 +563,77 @@ export const SongFormDialog = ({
               name="audioUrl"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới nếu muốn thay đổi)"}</FormLabel>
+                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới hoặc cập nhật URL)"}</FormLabel>
+                  <div className="flex gap-2 mb-2">
+                    <Button
+                      type="button"
+                      variant={audioInputMode === "upload" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setAudioInputMode("upload")}
+                      className={cn(
+                        "flex-1 transition-all duration-200",
+                        audioInputMode === "upload" 
+                          ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85" 
+                          : "border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-active-foreground))]"
+                      )}
+                    >
+                      Upload File
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={audioInputMode === "url" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setAudioInputMode("url")}
+                      className={cn(
+                        "flex-1 transition-all duration-200",
+                        audioInputMode === "url" 
+                          ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85" 
+                          : "border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-active-foreground))]"
+                      )}
+                    >
+                      Nhập URL
+                    </Button>
+                  </div>
                   <FormControl>
                     <div className="space-y-2">
-                      <Input
-                        type="file"
-                        accept="audio/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          handleFileChange(file);
-                        }}
-                        disabled={uploading}
-                      />
-                      {uploading && (
-                        <div className="space-y-1">
-                          <div className="text-sm text-muted-foreground">
-                            Đang upload... {uploadProgress}%
-                          </div>
-                          <div className="w-full bg-secondary rounded-full h-2">
-                            <div
-                              className="bg-primary h-2 rounded-full transition-all duration-300"
-                              style={{ width: `${uploadProgress}%` }}
-                            />
-                          </div>
-                        </div>
+                      {audioInputMode === "upload" ? (
+                        <>
+                          <Input
+                            type="file"
+                            accept="audio/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              handleFileChange(file);
+                            }}
+                            disabled={uploading}
+                          />
+                          {uploading && (
+                            <div className="space-y-1">
+                              <div className="text-sm text-muted-foreground">
+                                Đang upload... {uploadProgress}%
+                              </div>
+                              <div className="w-full bg-secondary rounded-full h-2">
+                                <div
+                                  className="bg-[hsl(var(--admin-active))] h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${uploadProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <Input
+                          placeholder="https://example.com/audio.mp3"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                          }}
+                          className="admin-input transition-all duration-200"
+                        />
                       )}
                       {field.value && !uploading && (
                         <div className="text-sm text-muted-foreground">
-                          ✓ Audio URL: {field.value.substring(0, 50)}...
+                          ✓ Audio URL: {field.value.substring(0, 60)}...
                         </div>
                       )}
                     </div>
@@ -517,10 +649,15 @@ export const SongFormDialog = ({
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={isLoading}
+                className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-active-foreground))] transition-all duration-200"
               >
                 Hủy
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button 
+                type="submit" 
+                disabled={isLoading}
+                className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 transition-all duration-200"
+              >
                 {isLoading ? "Đang lưu..." : mode === "create" ? "Tạo" : "Cập nhật"}
               </Button>
             </DialogFooter>

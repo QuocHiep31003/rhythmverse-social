@@ -40,13 +40,21 @@ const lyricsMock = [
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, isPlaying, togglePlay, playNext, playPrevious } = useMusic();
+  const { 
+    currentSong, 
+    isPlaying, 
+    togglePlay, 
+    playNext, 
+    playPrevious,
+    isShuffled,
+    repeatMode,
+    toggleShuffle,
+    setRepeatMode 
+  } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
   const [isMuted, setIsMuted] = useState(false);
-  const [isShuffled, setIsShuffled] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<"off" | "one" | "all">("off");
   const [isLiked, setIsLiked] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [currentLyric, setCurrentLyric] = useState(0);
@@ -271,7 +279,18 @@ const MusicPlayer = () => {
   }, [listenTime, currentSong, hasReportedListen]);
 
   const toggleMute = () => setIsMuted(!isMuted);
-  const toggleShuffle = () => setIsShuffled(!isShuffled);
+  
+  const handleShuffleToggle = () => {
+    toggleShuffle();
+    toast({
+      title: isShuffled ? "Shuffle off" : "Shuffle on",
+      description: isShuffled 
+        ? "Playing songs in order" 
+        : "Playing songs in random order",
+      duration: 2000,
+    });
+  };
+  
   const toggleLike = () => {
     setIsLiked(!isLiked);
     toast({
@@ -308,8 +327,20 @@ const MusicPlayer = () => {
 
   const cycleRepeat = () => {
     const modes: Array<"off" | "one" | "all"> = ["off", "one", "all"];
+    const modeNames = ["Repeat off", "Repeat one", "Repeat all"];
     const currentIndex = modes.indexOf(repeatMode);
-    setRepeatMode(modes[(currentIndex + 1) % modes.length]);
+    const nextMode = modes[(currentIndex + 1) % modes.length];
+    const nextModeName = modeNames[(currentIndex + 1) % modes.length];
+    
+    setRepeatMode(nextMode);
+    toast({
+      title: nextModeName,
+      description: 
+        nextMode === "one" ? "Current song will repeat" :
+        nextMode === "all" ? "All songs will repeat" :
+        "Songs will play once",
+      duration: 2000,
+    });
   };
 
   // Hide player on login page or if no song is playing
@@ -327,54 +358,60 @@ const MusicPlayer = () => {
         <div className="container mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Song Info */}
-            <div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
-              <div
-                className="relative group cursor-pointer"
-                onClick={() => setIsExpanded(true)}
-              >
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
-                  {currentSong.cover ? (
-                    <img
-                      src={currentSong.cover}
-                      alt={currentSong.title}
-                      onError={handleImageError}
-                      className={cn(
-                        "w-full h-full object-cover transition-transform duration-300",
-                        isPlaying && "spin-reverse-slower"
-                      )}
-                    />
-                  ) : (
-                    <div className={cn(
-                      "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-                      isPlaying && "spin-reverse-slower"
-                    )}>
-                      <Music className="w-5 h-5 text-white" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="min-w-0 flex-1">
-                <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
-                  {currentSong.title}
-                </h4>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                  {currentSong.artist}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-                onClick={toggleLike}
-              >
-                <Heart
-                  className={cn(
-                    "w-4 h-4",
-                    isLiked && "fill-red-500 text-red-500"
-                  )}
-                />
-              </Button>
-            </div>
+           {/* Song Info */}
+<div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
+  <div
+    className="relative group cursor-pointer"
+    onClick={() => setIsExpanded(true)}
+  >
+    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
+      {currentSong.cover ? (
+        <img
+          src={currentSong.cover}
+          alt={currentSong.title}
+          onError={handleImageError}
+          className={cn(
+            "w-full h-full object-cover transition-transform duration-300",
+            isPlaying && "spin-reverse-slower"
+          )}
+        />
+      ) : (
+        <div
+          className={cn(
+            "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+            isPlaying && "spin-reverse-slower"
+          )}
+        >
+          <Music className="w-5 h-5 text-white" />
+        </div>
+      )}
+    </div>
+  </div>
+
+  <div className="min-w-0 flex-1">
+    <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
+      {currentSong.title}
+    </h4>
+    <p className="text-xs sm:text-sm text-muted-foreground truncate">
+      {currentSong.artist || "Unknown Artist"}
+    </p>
+  </div>
+
+  <Button
+    variant="ghost"
+    size="icon"
+    className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+    onClick={toggleLike}
+  >
+    <Heart
+      className={cn(
+        "w-4 h-4",
+        isLiked && "fill-red-500 text-red-500"
+      )}
+    />
+  </Button>
+</div>
+
 
             {/* Player Controls */}
             <div className="flex flex-col items-center space-y-2 flex-1 max-w-md order-3 sm:order-none w-full sm:w-auto">
@@ -383,7 +420,7 @@ const MusicPlayer = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={toggleShuffle}
+                  onClick={handleShuffleToggle}
                 >
                   <Shuffle
                     className={cn("w-4 h-4", isShuffled && "text-primary")}

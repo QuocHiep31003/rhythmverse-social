@@ -27,6 +27,8 @@ import Settings from "./pages/Settings";
 import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
+import InviteFriend from "./pages/InviteFriend";
+import ListeningHistory from "./pages/ListeningHistory";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
@@ -41,6 +43,9 @@ import AdminAlbums from "./pages/admin/AdminAlbums";
 import AdminArtists from "./pages/admin/AdminArtists";
 import AdminGenres from "./pages/admin/AdminGenres";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminTrending from "./pages/admin/AdminTrending";
+import MusicRecognition from "./pages/MusicRecognition";
+import MusicRecognitionResult from "./pages/MusicRecognitionResult";
 
 const queryClient = new QueryClient();
 
@@ -52,51 +57,62 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <Routes>
-              {/* Public Login */}
-              <Route path="/login" element={<Login />} />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            
+            {/* Admin Routes */}
+            <Route path="/admin/*" element={
+              <AdminLayout>
+                <Routes>
+                  <Route path="login" element={<AdminLogin />} />
+                  <Route path="home" element={<AdminHome />} />
+                  <Route path="songs" element={<AdminSongs />} />
+                  <Route path="albums" element={<AdminAlbums />} />
+                  <Route path="artists" element={<AdminArtists />} />
+                  <Route path="genres" element={<AdminGenres />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="playlists" element={<AdminPlaylists />} />
+                  <Route path="trending" element={<AdminTrending />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                </Routes>
+              </AdminLayout>
+            } />
 
-              {/* ✅ Admin routes */}
-              <Route path="/admin/login" element={<AdminLogin />} />
-              <Route path="/admin" element={<AdminLayout />}>
-                <Route path="home" element={<AdminHome />} />
-                <Route path="songs" element={<AdminSongs />} />
-                <Route path="albums" element={<AdminAlbums />} />
-                <Route path="artists" element={<AdminArtists />} />
-                <Route path="genres" element={<AdminGenres />} />
-                <Route path="users" element={<AdminUsers />} />
-                <Route path="playlists" element={<AdminPlaylists />} />
-                <Route path="settings" element={<AdminSettings />} />
-              </Route>
+            {/* Main App Routes */}
+            <Route path="*" element={
+              <AppLayout>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/discover" element={<Discover />} />
+                  <Route path="/playlist" element={<Playlist />} />
+                  <Route path="/playlists" element={<PlaylistLibrary />} />
+                  <Route path="/playlist/:id" element={<PlaylistDetail />} />
+                  <Route path="/create-playlist" element={<CreatePlaylist />} />
+                  <Route path="/trending" element={<TrendingMusic />} />
+                  <Route path="/top100" element={<Top100 />} />
+                  <Route path="/quiz" element={<Quiz />} />
+                  <Route path="/quiz/create" element={<CreateQuiz />} />
+                  <Route path="/search" element={<SearchResults />} />
+                  <Route path="/premium" element={<Premium />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/social" element={<Social />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/song/:id" element={<SongDetail />} />
+                  <Route path="/album/:id" element={<AlbumDetail />} />
+                  <Route path="/artist/:id" element={<ArtistDetail />} />
+                  <Route path="/music-recognition" element={<MusicRecognition />} />
+                  <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
+                  <Route path="/invite/friend/:code" element={<InviteFriend />} />
+                  <Route path="/listening-history" element={<ListeningHistory />} />
 
-              {/* ✅ Main App layout */}
-              <Route path="/" element={<AppLayout />}>
-                <Route index element={<Index />} />
-                <Route path="discover" element={<Discover />} />
-                <Route path="playlist" element={<Playlist />} />
-                <Route path="playlists" element={<PlaylistLibrary />} />
-                <Route path="playlist/:id" element={<PlaylistDetail />} />
-                <Route path="create-playlist" element={<CreatePlaylist />} />
-                <Route path="trending" element={<TrendingMusic />} />
-                <Route path="top100" element={<Top100 />} />
-                <Route path="quiz" element={<Quiz />} />
-                <Route path="quiz/create" element={<CreateQuiz />} />
-                <Route path="search" element={<SearchResults />} />
-                <Route path="premium" element={<Premium />} />
-                <Route path="profile" element={<Profile />} />
-                <Route path="social" element={<Social />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="song/:id" element={<SongDetail />} />
-                <Route path="album/:id" element={<AlbumDetail />} />
-                <Route path="artist/:id" element={<ArtistDetail />} />
-                <Route path="*" element={<NotFound />} />
-              </Route>
-            </Routes>
-
-            {/* Global UI components */}
-            <MusicPlayer />
-            <ChatBubble />
-          </BrowserRouter>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AppLayout>
+            } />
+          </Routes>
+          <MusicPlayer />
+          <ChatBubble />
+        </BrowserRouter>
         </TooltipProvider>
       </MusicProvider>
     </ThemeProvider>

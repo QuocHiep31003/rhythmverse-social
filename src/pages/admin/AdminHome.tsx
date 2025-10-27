@@ -1,59 +1,111 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Music, ListMusic, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Users, Music, ListMusic, TrendingUp, RefreshCw, Loader2 } from "lucide-react";
 import { mockSongs, mockUsers, mockPlaylists } from "@/data/mockData";
+import { toast } from "sonner";
 
 const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
 
 const AdminHome = () => {
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  const handleRecalculate = async () => {
+    setIsRecalculating(true);
+    try {
+      const adminToken = localStorage.getItem("adminAuth") || "mock-admin-token";
+      
+      const res = await fetch('http://localhost:8080/api/trending/test/recalculate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        toast.success(data.message || "Trending scores recalculated successfully!");
+      } else {
+        toast.error(data.message || "Failed to recalculate trending scores");
+      }
+    } catch (error) {
+      console.error("Error recalculating trending:", error);
+      toast.error("Failed to recalculate trending scores");
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
   const stats = [
     {
       title: "Tổng người dùng",
       value: mockUsers.length.toString(),
       icon: Users,
       description: "+12% so với tháng trước",
-      color: "text-blue-500"
+      color: "text-[hsl(var(--admin-secondary))]"
     },
     {
       title: "Tổng bài hát",
       value: mockSongs.length.toString(),
       icon: Music,
       description: "+5 bài hát mới",
-      color: "text-green-500"
+      color: "text-[hsl(var(--admin-primary))]"
     },
     {
       title: "Playlists",
       value: mockPlaylists.length.toString(),
       icon: ListMusic,
       description: "Đang hoạt động",
-      color: "text-purple-500"
+      color: "text-[hsl(var(--primary))]"
     },
     {
       title: "Lượt phát",
       value: "1.2M",
       icon: TrendingUp,
       description: "+18% tuần này",
-      color: "text-orange-500"
+      color: "text-[hsl(var(--admin-accent))]"
     }
   ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Dashboard</h1>
+          <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
+        </div>
+        <Button 
+          onClick={handleRecalculate}
+          disabled={isRecalculating}
+          variant="outline"
+          className="gap-2"
+        >
+          {isRecalculating ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Đang tính lại...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="w-4 h-4" />
+              Tính lại Trending
+            </>
+          )}
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <Card key={stat.title}>
+          <Card key={stat.title} className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--admin-primary))]">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
+              <CardTitle className="text-sm font-medium text-foreground">
                 {stat.title}
               </CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
+              <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+              <div className="text-2xl font-bold text-foreground">{stat.value}</div>
               <p className="text-xs text-muted-foreground">
                 {stat.description}
               </p>
@@ -63,16 +115,16 @@ const AdminHome = () => {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300">
           <CardHeader>
-            <CardTitle>Bài hát phổ biến</CardTitle>
+            <CardTitle className="text-foreground">Bài hát phổ biến</CardTitle>
             <CardDescription>Top 5 bài hát được nghe nhiều nhất</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {mockSongs.slice(0, 5).map((song, index) => (
-                <div key={song.id} className="flex items-center gap-4">
-                  <span className="text-2xl font-bold text-muted-foreground w-8">
+                <div key={song.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200 cursor-pointer">
+                  <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8">
                     {index + 1}
                   </span>
                   <img
@@ -82,12 +134,12 @@ const AdminHome = () => {
                     className="w-12 h-12 rounded object-cover"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{song.title}</p>
+                    <p className="font-medium truncate text-foreground">{song.title}</p>
                     <p className="text-sm text-muted-foreground truncate">
                       {song.artist}
                     </p>
                   </div>
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
                     {song.plays}
                   </span>
                 </div>
@@ -96,28 +148,28 @@ const AdminHome = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300">
           <CardHeader>
-            <CardTitle>Người dùng mới</CardTitle>
+            <CardTitle className="text-foreground">Người dùng mới</CardTitle>
             <CardDescription>Người dùng đăng ký gần đây</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {mockUsers.map((user) => (
-                <div key={user.id} className="flex items-center gap-4">
+                <div key={user.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200 cursor-pointer">
                   <img
                     src={user.avatar}
                     alt={user.name}
                     onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }}
-                    className="w-10 h-10 rounded-full"
+                    className="w-10 h-10 rounded-full ring-2 ring-[hsl(var(--admin-border))]"
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{user.name}</p>
+                    <p className="font-medium truncate text-foreground">{user.name}</p>
                     <p className="text-sm text-muted-foreground truncate">
                       {user.email}
                     </p>
                   </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
+                  <span className="text-xs px-2 py-1 rounded-full bg-gradient-admin text-white font-medium">
                     {user.role}
                   </span>
                 </div>

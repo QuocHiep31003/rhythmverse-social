@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useLocation, Link, Outlet } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3 } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, TrendingUp } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
@@ -46,16 +46,22 @@ const AdminLayout = () => {
     { icon: Users, label: "Nghệ sĩ", path: "/admin/artists" },
     { icon: Music, label: "Thể loại", path: "/admin/genres" },
     { icon: Users, label: "Người dùng", path: "/admin/users" },
+    { icon: TrendingUp, label: "Tính lại Trending", path: "/admin/trending" },
     { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
   ];
 
   const Sidebar = () => (
+<<<<<<< ui/email-verification
     <div className="flex flex-col h-full bg-card border-r">
       {/* Header logo */}
       <div className="p-6 border-b">
+=======
+    <div className="flex flex-col h-full bg-[hsl(var(--admin-sidebar))] border-r border-[hsl(var(--admin-border))]">
+      <div className="p-6 border-b border-[hsl(var(--admin-border))]">
+>>>>>>> main
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Music className="w-6 h-6 text-primary" />
+          <div className="w-10 h-10 rounded-lg bg-gradient-admin flex items-center justify-center">
+            <Music className="w-6 h-6 text-white" />
           </div>
           <div>
             <h2 className="font-bold text-lg">Echoverse</h2>
@@ -72,8 +78,12 @@ const AdminLayout = () => {
           return (
             <Link key={item.path} to={item.path}>
               <Button
-                variant={isActive ? "secondary" : "ghost"}
-                className="w-full justify-start"
+                variant="ghost"
+                className={`w-full justify-start transition-all duration-200 ${
+                  isActive 
+                    ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-[hsl(var(--admin-active))] dark:hover:text-[hsl(var(--admin-active-foreground))]" 
+                    : "hover:bg-[hsl(var(--admin-hover))] dark:hover:bg-transparent dark:hover:text-[hsl(var(--admin-hover-text))]"
+                }`}
               >
                 <Icon className="w-4 h-4 mr-3" />
                 {item.label}
@@ -83,11 +93,15 @@ const AdminLayout = () => {
         })}
       </nav>
 
+<<<<<<< ui/email-verification
       {/* Logout */}
       <div className="p-4 border-t">
+=======
+      <div className="p-4 border-t border-[hsl(var(--admin-border))]">
+>>>>>>> main
         <Button
           variant="ghost"
-          className="w-full justify-start text-destructive hover:text-destructive"
+          className="w-full justify-start transition-all duration-200 text-destructive hover:text-destructive hover:bg-destructive/10"
           onClick={handleLogout}
         >
           <LogOut className="w-4 h-4 mr-3" />
@@ -106,10 +120,12 @@ const AdminLayout = () => {
       </aside>
 
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-[hsl(var(--admin-sidebar))] border-b border-[hsl(var(--admin-border))]">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-2">
-            <Music className="w-6 h-6 text-primary" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-admin flex items-center justify-center">
+              <Music className="w-5 h-5 text-white" />
+            </div>
             <h2 className="font-bold">Admin Panel</h2>
           </div>
           <Sheet>
@@ -118,7 +134,7 @@ const AdminLayout = () => {
                 <Menu className="w-6 h-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
+            <SheetContent side="left" className="w-64 p-0 bg-[hsl(var(--admin-sidebar))]">
               <Sidebar />
             </SheetContent>
           </Sheet>
@@ -126,11 +142,21 @@ const AdminLayout = () => {
       </div>
 
       {/* Main Content */}
+<<<<<<< ui/email-verification
       <main className="flex-1 overflow-y-auto">
         <div className="pt-16 md:pt-0 p-6 md:p-8">
           <Outlet /> {/* ✅ Render route con tại đây */}
         </div>
       </main>
+=======
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 overflow-y-auto">
+          <div className="pt-16 md:pt-0 p-6 md:p-8">
+            {children}
+          </div>
+        </main>
+      </div>
+>>>>>>> main
     </div>
   );
 };

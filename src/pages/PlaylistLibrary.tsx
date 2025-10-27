@@ -1,4 +1,6 @@
-import { useState } from "react";
+﻿import { useEffect, useState } from "react";
+
+
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,86 +22,85 @@ import {
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
+import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
+import { friendsApi } from "@/services/api/friendsApi";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input as UiInput } from "@/components/ui/input";
 
 const PlaylistLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [likedPlaylists, setLikedPlaylists] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [playlists, setPlaylists] = useState<any[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [editDefaults, setEditDefaults] = useState<any | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [collabOpen, setCollabOpen] = useState(false);
+  const [friends, setFriends] = useState<Array<{ id: number; name: string; avatar?: string | null }>>([]);
+  const [loadingFriends, setLoadingFriends] = useState(false);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
+  const [inviteRole, setInviteRole] = useState<"VIEWER" | "EDITOR">("VIEWER");
+  const [sendingInvites, setSendingInvites] = useState(false);
 
-  const myPlaylists = [
-    {
-      id: "1",
-      title: "My Favorites ❤️",
-      description: "My all-time favorite songs from different genres",
-      cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-      songCount: 45,
-      totalDuration: "3h 12m",
-      isPublic: true,
-      likes: 128,
-      createdAt: "2024-01-15",
-      updatedAt: "2024-01-20"
-    },
-    {
-      id: "2", 
-      title: "Workout Beast Mode 💪",
-      description: "High energy EDM and rap for intense gym sessions",
-      cover: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=400&fit=crop",
-      songCount: 32,
-      totalDuration: "2h 8m",
-      isPublic: true,
-      likes: 89,
-      createdAt: "2024-01-10",
-      updatedAt: "2024-01-18"
-    },
-    {
-      id: "3",
-      title: "Chill & Study 📚",
-      description: "Lo-fi beats and ambient sounds for focus",
-      cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-      songCount: 28,
-      totalDuration: "2h 45m",
-      isPublic: false,
-      likes: 0,
-      createdAt: "2024-01-05",
-      updatedAt: "2024-01-19"
-    },
-    {
-      id: "4",
-      title: "Road Trip Vibes 🚗",
-      description: "Perfect songs for long drives and adventures",
-      cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
-      songCount: 67,
-      totalDuration: "4h 23m",
-      isPublic: true,
-      likes: 245,
-      createdAt: "2023-12-20",
-      updatedAt: "2024-01-22"
-    },
-    {
-      id: "5",
-      title: "Night Jazz Sessions 🎷",
-      description: "Smooth jazz for late night relaxation",
-      cover: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop",
-      songCount: 34,
-      totalDuration: "2h 56m",
-      isPublic: true,
-      likes: 156,
-      createdAt: "2023-11-15",
-      updatedAt: "2024-01-21"
-    },
-    {
-      id: "6",
-      title: "Party Hits 2024 🎉",
-      description: "Latest party anthems and dance floor bangers",
-      cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
-      songCount: 52,
-      totalDuration: "3h 18m",
-      isPublic: true,
-      likes: 423,
-      createdAt: "2024-01-01",
-      updatedAt: "2024-01-23"
-    }
-  ];
+  
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+        const me = rawUserId ? Number(rawUserId) : NaN;
+        let sortParam = "dateUpdate,desc";
+        if (sortBy === 'name') sortParam = 'name,asc';
+        const page = Number.isFinite(me)
+          ? await playlistsApi.getByUser(me, { page: 0, size: 24, sort: sortParam, search: searchQuery || undefined })
+          : await playlistsApi.getAll({ page: 0, size: 24, sort: sortParam, search: searchQuery || undefined });
+        const mapped = (page.content || []).map((p: PlaylistDTO) => ({
+          id: String(p.id),
+          title: p.name,
+          description: p.description || '',
+          cover: p.coverUrl || (p as any).urlImagePlaylist || '',
+          songCount: Array.isArray(p.songs) ? p.songs.length : 0,
+          totalDuration: '--',
+          isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
+          likes: 0,
+          createdAt: p.dateUpdate || '',
+          updatedAt: p.dateUpdate || '',
+        }));
+        setPlaylists(mapped);
+      } catch (e) {
+        setPlaylists([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [searchQuery, sortBy]);
+
+  useEffect(() => {
+    const fetchFriends = async () => {
+      try {
+        setLoadingFriends(true);
+        const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+        const me = rawUserId ? Number(rawUserId) : undefined;
+        if (!me) { setFriends([]); return; }
+        const list = await friendsApi.getFriends(me);
+        const mapped = Array.isArray(list)
+          ? list.map((f: any) => ({ id: f.id ?? f.userId ?? f.friendId, name: f.name ?? f.username ?? f.email ?? `User ${f.id}`, avatar: f.avatar || null }))
+          : [];
+        setFriends(mapped.filter((x: any) => typeof x.id === 'number'));
+      } catch { setFriends([]); }
+      finally { setLoadingFriends(false); }
+    };
+    if (collabOpen) fetchFriends();
+  }, [collabOpen]);
+
 
   const favoriteSongs = [
     {
@@ -141,7 +142,7 @@ const PlaylistLibrary = () => {
   ];
 
 
-  const filteredMyPlaylists = myPlaylists.filter(playlist =>
+  const filteredMyPlaylists = playlists.filter(playlist =>
     playlist.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     playlist.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -175,6 +176,102 @@ const PlaylistLibrary = () => {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
     return num.toString();
+  };
+
+  const openEdit = async (pl: any) => {
+    setSelected(pl);
+    try {
+      const detail = await playlistsApi.getById(pl.id);
+      setEditDefaults({
+        name: detail.name,
+        description: detail.description || '',
+        coverUrl: detail.coverUrl || (detail as any).urlImagePlaylist || '',
+        isPublic: (detail.visibility || 'PUBLIC') === 'PUBLIC',
+        songLimit: detail.songLimit ?? 500,
+        songIds: Array.isArray(detail.songIds) ? detail.songIds : Array.isArray(detail.songs) ? detail.songs.map((s: any) => s.id) : [],
+      });
+    } catch {
+      setEditDefaults({
+        name: pl.title,
+        description: pl.description,
+        coverUrl: pl.cover,
+        isPublic: !!pl.isPublic,
+        songLimit: 500,
+        songIds: [],
+      });
+    } finally {
+      setEditOpen(true);
+    }
+  };
+  const openDelete = (pl: any) => { setSelected(pl); setDeleteOpen(true); };
+  const openCollaborate = (pl: any) => { setSelected(pl); setCollabOpen(true); };
+
+  const handleSave = async (values: any) => {
+    if (!selected) return;
+    try {
+      setIsSubmitting(true);
+      await playlistsApi.update(selected.id, {
+        name: values.name,
+        description: values.description,
+        coverUrl: values.coverUrl,
+        visibility: values.isPublic ? "PUBLIC" : "PRIVATE",
+        songLimit: values.songLimit,
+        songIds: values.songIds || [],
+      });
+      toast({ title: "Updated", description: "Playlist saved" });
+      setEditOpen(false);
+      // reload
+      const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const me = rawUserId ? Number(rawUserId) : NaN;
+      const page = Number.isFinite(me)
+        ? await playlistsApi.getByUser(me, { page: 0, size: 24 })
+        : await playlistsApi.getAll({ page: 0, size: 24 });
+      const mapped = (page.content || []).map((p: PlaylistDTO) => ({
+        id: String(p.id),
+        title: p.name,
+        description: p.description || '',
+        cover: p.coverUrl || (p as any).urlImagePlaylist || '',
+        songCount: Array.isArray(p.songs) ? p.songs.length : 0,
+        totalDuration: '--',
+        isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
+        likes: 0,
+        createdAt: p.dateUpdate || '',
+        updatedAt: p.dateUpdate || '',
+      }));
+      setPlaylists(mapped);
+    } catch (e) {
+      toast({ title: "Error", description: "Failed to save playlist", variant: "destructive" });
+    } finally { setIsSubmitting(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!selected) return;
+    try {
+      setIsSubmitting(true);
+      await playlistsApi.delete(selected.id);
+      toast({ title: "Deleted", description: "Playlist removed" });
+      setDeleteOpen(false);
+      setPlaylists((prev) => prev.filter((p) => p.id !== selected.id));
+    } catch {
+      toast({ title: "Error", description: "Failed to delete playlist", variant: "destructive" });
+    } finally { setIsSubmitting(false); }
+  };
+
+  const toggleSelectFriend = (id: number) => setSelectedFriendIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const sendInvites = async () => {
+    if (!selected) return;
+    try {
+      setSendingInvites(true);
+      for (const fid of selectedFriendIds) {
+        await playlistCollabInvitesApi.send(Number(selected.id), fid, inviteRole);
+      }
+      toast({ title: "Invites sent", description: `${selectedFriendIds.length} friends invited` });
+      setCollabOpen(false);
+      setSelectedFriendIds([]);
+    } catch (e) {
+      toast({ title: "Error", description: e instanceof Error ? e.message : 'Failed to send invites', variant: 'destructive' });
+    } finally { setSendingInvites(false); }
   };
 
   return (
@@ -307,10 +404,20 @@ const PlaylistLibrary = () => {
                           >
                             <Heart className={`w-4 h-4 ${likedPlaylists.includes(playlist.id) ? 'fill-current' : ''}`} />
                           </Button>
-                          <ShareButton title={playlist.title} type="playlist" />
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
+                          <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEdit(playlist)}>Edit</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openCollaborate(playlist)}>Collaborate</DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive" onClick={() => openDelete(playlist)}>Delete</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </div>
@@ -397,11 +504,79 @@ const PlaylistLibrary = () => {
               ))}
             </div>
           </TabsContent>
-        </Tabs>
-      </div>
-      <Footer />
+      </Tabs>
     </div>
+    <Footer />
+
+    {/* Edit dialog using PlaylistFormDialog */}
+    <PlaylistFormDialog
+      open={editOpen}
+      onOpenChange={setEditOpen}
+      onSubmit={handleSave}
+      defaultValues={editDefaults || undefined}
+      mode="edit"
+      isLoading={isSubmitting}
+    />
+
+    {/* Delete confirm */}
+    <DeleteConfirmDialog
+      open={deleteOpen}
+      onOpenChange={setDeleteOpen}
+      onConfirm={handleDelete}
+      title="Delete playlist?"
+      description={`Are you sure you want to delete "${selected?.title}"? This cannot be undone.`}
+      isLoading={isSubmitting}
+    />
+
+    {/* Collaborate dialog */}
+    <Dialog open={collabOpen} onOpenChange={(v) => { setCollabOpen(v); if (!v) setSelectedFriendIds([]); }}>
+      <DialogContent className="bg-card border-border">
+        <DialogHeader>
+          <DialogTitle>Invite collaborators</DialogTitle>
+          <DialogDescription>Select friends to invite to this playlist.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Role:</span>
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as any)} className="bg-background/50 border border-border rounded px-2 py-1 text-sm">
+              <option value="VIEWER">VIEWER</option>
+              <option value="EDITOR">EDITOR</option>
+            </select>
+          </div>
+          {loadingFriends ? (
+            <p className="text-sm text-muted-foreground">Loading friends...</p>
+          ) : friends.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No friends found.</p>
+          ) : (
+            friends.map((f) => (
+              <label key={f.id} className="flex items-center gap-3 p-2 rounded hover:bg-background/40">
+                <input type="checkbox" checked={selectedFriendIds.includes(f.id)} onChange={() => toggleSelectFriend(f.id)} />
+                <div className="flex items-center gap-2">
+                  {f.avatar ? <img src={f.avatar} alt="" className="w-6 h-6 rounded-full" /> : <div className="w-6 h-6 rounded-full bg-muted" />}
+                  <span>{f.name}</span>
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setCollabOpen(false)} disabled={sendingInvites}>Cancel</Button>
+          <Button onClick={sendInvites} disabled={sendingInvites || selectedFriendIds.length === 0}>{sendingInvites ? 'Sending...' : 'Send invites'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
   );
 };
 
 export default PlaylistLibrary;
+
+
+
+
+
+
+
+
+
+
