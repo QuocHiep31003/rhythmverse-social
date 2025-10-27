@@ -98,7 +98,7 @@ const MusicRecognitionResult = () => {
     );
   }
 
-  const recognitionResult = Array.isArray(result.result) && result.result.length > 0 ? result.result[0] : null;
+  const recognitionResult = result.result
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -216,9 +216,9 @@ const MusicRecognitionResult = () => {
   <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
   <div className="flex flex-wrap gap-3">
 
-    {recognitionResult?.spotify && (
+    {recognitionResult.spotify?.url && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.spotify)}
+        onClick={() => openExternalLink(recognitionResult.spotify!.url!)}
         className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
       >
         <svg
@@ -237,9 +237,9 @@ const MusicRecognitionResult = () => {
       </Button>
     )}
 
-    {recognitionResult?.apple_music && (
+    {recognitionResult.apple_music?.url && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.apple_music)}
+        onClick={() => openExternalLink(recognitionResult.apple_music!.url!)}
         variant="outline"
         className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
       >
@@ -248,9 +248,9 @@ const MusicRecognitionResult = () => {
       </Button>
     )}
 
-    {recognitionResult?.deezer && (
+    {recognitionResult.deezer?.url && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.deezer)}
+        onClick={() => openExternalLink(recognitionResult.deezer!.url!)}
         variant="outline"
         className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
       >
@@ -259,9 +259,9 @@ const MusicRecognitionResult = () => {
       </Button>
     )}
 
-    {recognitionResult?.song_link && (
+    {recognitionResult.song_link && (
       <Button
-        onClick={() => openExternalLink(recognitionResult.song_link)}
+        onClick={() => openExternalLink(recognitionResult.song_link!)}
         variant="outline"
         className="bg-muted border-border hover:bg-muted/80 flex items-center gap-2"
       >

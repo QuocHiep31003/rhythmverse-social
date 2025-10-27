@@ -21,7 +21,7 @@ interface ShareButtonProps {
   playlistId?: number; // when type === 'playlist'
 }
 
-const ShareButton = ({ title, type, url, playlistId }: ShareButtonProps) => {
+const ShareButton = ({ title, type, url }: ShareButtonProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [message, setMessage] = useState("");
