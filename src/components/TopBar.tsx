@@ -137,13 +137,13 @@ const TopBar = () => {
 
     try {
       const result = await auddApi.recognizeMusic(audioBlob);
+      console.log("AUDD API Response:", result);
 
-      // Navigate to search results with recognition data
-      navigate("/search", {
+      // Navigate to music recognition result page
+      navigate("/music-recognition-result", {
         state: {
-          recognitionResult: result,
-          audioUrl: audioUrl,
-          searchType: 'recognition'
+          result: result,
+          audioUrl: audioUrl
         },
       });
     } catch (err: unknown) {

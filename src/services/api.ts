@@ -9,11 +9,13 @@ export type { PaginationParams, PaginatedResponse } from './api/config';
 
 // Re-export all API modules
 export { artistsApi } from './api/artistApi';
-export { songsApi } from './api/songApi';
+export { songsApi, type Song } from './api/songApi';
 export { albumsApi } from './api/albumApi';
 export { playlistsApi, playlistCollabInvitesApi, playlistCollaboratorsApi } from './api/playlistApi';
 export { friendsApi, inviteLinksApi } from './api/friendsApi';
 export { listeningHistoryApi } from './api/listeningHistoryApi';
+export { lyricsApi } from './api/lyricsApi';
+export { moodsApi } from './api/moodApi';
 
 // Import mock data for fallback
 import { mockUsers, mockGenres } from "@/data/mockData";
@@ -173,7 +175,7 @@ export const genresApi = {
     }
   },
 
-  create: async (data: any) => {
+  create: async (data: { name: string; description?: string; iconUrl?: string }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres`, {
         method: 'POST',
@@ -187,7 +189,7 @@ export const genresApi = {
     }
   },
 
-  update: async (id: number, data: any) => {
+  update: async (id: number, data: { name: string; description?: string; iconUrl?: string }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/${id}`, {
         method: 'PUT',
@@ -386,7 +388,7 @@ export const auddApi = {
   recognizeMusic: async (audioBlob: Blob) => {
     try {
       const formData = new FormData();
-      formData.append("api_token", "66d916cc0aca58ac85faa0f3794f3b63"); // 🔹 thay bằng token thật của bạn
+      formData.append("api_token", "f912ca8d28d9812f5f6fb1970c813655"); // 🔹 thay bằng token thật của bạn
       formData.append("file", audioBlob, "recorded.wav");
       formData.append("return", "apple_music,spotify");
 

@@ -17,6 +17,7 @@ import {
   Users,
   ListPlus,
   Copy,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,14 +30,12 @@ import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
+import { lyricsApi } from "@/services/api/lyricsApi";
 
-const lyricsMock = [
-  { time: 0, text: "♪ Instrumental intro..." },
-  { time: 12, text: "In the cosmic dreams we fly..." },
-  { time: 24, text: "Lost in stars, just you and I..." },
-  { time: 36, text: "Echoes fading through the night..." },
-  { time: 48, text: "Guided by the endless light..." },
-];
+interface LyricLine {
+  time: number;
+  text: string;
+}
 
 const MusicPlayer = () => {
   const location = useLocation();
@@ -52,12 +51,16 @@ const MusicPlayer = () => {
     setRepeatMode 
   } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
+  const lyricsRef = useRef<HTMLDivElement>(null);
+  const currentLyricRef = useRef<HTMLParagraphElement>(null);
   const [volume, setVolume] = useState([75]);
   const [progress, setProgress] = useState([0]);
   const [isMuted, setIsMuted] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const [currentLyric, setCurrentLyric] = useState(0);
+  const [showLyrics, setShowLyrics] = useState(false);
+  const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+  const [currentLyricIndex, setCurrentLyricIndex] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasReportedListen, setHasReportedListen] = useState(false);
   const [listenTime, setListenTime] = useState(0);
@@ -71,7 +74,70 @@ const MusicPlayer = () => {
 
   const getCurrentTime = () => {
     if (!audioRef.current) return 0;
-    return Math.floor(audioRef.current.currentTime);
+    return audioRef.current.currentTime;
+  };
+
+  // Load lyrics when song changes
+  useEffect(() => {
+    if (!currentSong) {
+      setLyrics([]);
+      setCurrentLyricIndex(0);
+      return;
+    }
+
+    const loadLyrics = async () => {
+      try {
+        const loadedLyrics = await lyricsApi.getLyrics(currentSong.id);
+        setLyrics(loadedLyrics);
+        setCurrentLyricIndex(0);
+      } catch (error) {
+        console.error("Failed to load lyrics:", error);
+        setLyrics([{ time: 0, text: "♪ No lyrics available..." }]);
+      }
+    };
+
+    loadLyrics();
+  }, [currentSong]);
+
+  // Update current lyric based on playback time
+  useEffect(() => {
+    if (lyrics.length === 0) return;
+
+    const interval = setInterval(() => {
+      const currentTime = getCurrentTime();
+      let newIndex = 0;
+
+      for (let i = lyrics.length - 1; i >= 0; i--) {
+        if (currentTime >= lyrics[i].time) {
+          newIndex = i;
+          break;
+        }
+      }
+
+      if (newIndex !== currentLyricIndex) {
+        setCurrentLyricIndex(newIndex);
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [lyrics, currentLyricIndex]);
+
+  // Auto-scroll to current lyric
+  useEffect(() => {
+    if (currentLyricRef.current && lyricsRef.current) {
+      currentLyricRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [currentLyricIndex]);
+
+  // Handle clicking on a lyric to jump to that time
+  const handleLyricClick = (time: number) => {
+    if (audioRef.current && !isNaN(audioRef.current.duration)) {
+      audioRef.current.currentTime = time;
+      setProgress([(time / audioRef.current.duration) * 100]);
+    }
   };
 
   // Load new song - professional handling with proper state management
@@ -89,7 +155,7 @@ const MusicPlayer = () => {
     setHasReportedListen(false);
     setListenTime(0);
     setProgress([0]);
-    setCurrentLyric(0);
+    setCurrentLyricIndex(0);
     setDuration(0);
     
     // Set new audio source
@@ -144,7 +210,7 @@ const MusicPlayer = () => {
       audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("error", handleLoadError);
     };
-  }, [currentSong]); // Only depend on currentSong change
+  }, [currentSong]); // Only depend on currentSong change - eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle play/pause toggle separately
   useEffect(() => {
@@ -231,7 +297,7 @@ const MusicPlayer = () => {
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-  }, [repeatMode, playNext, toast]);
+  }, [repeatMode, playNext]);
 
   // Handle volume
   useEffect(() => {
@@ -250,17 +316,6 @@ const MusicPlayer = () => {
       audioRef.current.currentTime = newTime;
     }
   };
-
-  // Auto update lyrics highlight
-  useEffect(() => {
-    const currentTime = getCurrentTime();
-    const index = lyricsMock.findIndex(
-      (line, i) =>
-        currentTime >= line.time &&
-        (i === lyricsMock.length - 1 || currentTime < lyricsMock[i + 1].time)
-    );
-    if (index !== -1) setCurrentLyric(index);
-  }, [progress]);
 
   // Record listening history when 50% of song is played
   useEffect(() => {
@@ -354,7 +409,7 @@ const MusicPlayer = () => {
       <audio ref={audioRef} />
       
       {/* Mini Player */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t border-border/40">
+      <div className="fixed bottom-0 left-0 right-0 z-[55] bg-background/95 backdrop-blur-lg border-t border-border/40">
         <div className="container mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Song Info */}
@@ -362,7 +417,7 @@ const MusicPlayer = () => {
 <div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
   <div
     className="relative group cursor-pointer"
-    onClick={() => setIsExpanded(true)}
+    onClick={() => setShowLyrics(!showLyrics)}
   >
     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
       {currentSong.cover ? (
@@ -652,17 +707,79 @@ const MusicPlayer = () => {
               </div>
             </div>
 
-            {/* Lyrics */}
-            <div className="w-full max-w-lg text-center mt-6 space-y-2">
-              {lyricsMock.map((line, i) => (
+            {/* Lyrics in Expanded Player */}
+            {showLyrics && lyrics.length > 0 && (
+              <div className="w-full max-w-lg text-center mt-6 max-h-96 overflow-y-auto space-y-2">
+                {lyrics.map((line, i) => (
+                  <p
+                    key={i}
+                    className={cn(
+                      "text-sm transition-colors cursor-pointer hover:text-primary",
+                      i === currentLyricIndex
+                        ? "text-primary font-medium text-lg"
+                        : "text-muted-foreground"
+                    )}
+                    onClick={() => handleLyricClick(line.time)}
+                    ref={i === currentLyricIndex ? currentLyricRef : null}
+                  >
+                    {line.text}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Lyrics Panel */}
+      {showLyrics && (
+        <div className="fixed inset-0 z-[52]">
+          {/* Background overlay */}
+          <div 
+            className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/98 to-background backdrop-blur-md"
+            onClick={() => setShowLyrics(false)}
+          />
+          
+          {/* Content panel */}
+          <div className="relative h-full flex flex-col max-w-3xl mx-auto">
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-border/40 bg-background/90 backdrop-blur-sm">
+              <div>
+                <h3 className="text-lg font-semibold">Lyrics</h3>
+                <p className="text-sm text-muted-foreground">
+                  {currentSong?.title} • {currentSong?.artist}
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowLyrics(false)}>
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Lyrics Content - Hidden scrollbar */}
+            <div 
+              ref={lyricsRef}
+              className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 pb-24 space-y-2 sm:space-y-3 scrollbar-hide"
+              style={{
+                scrollbarWidth: 'none', /* Firefox */
+                msOverflowStyle: 'none', /* IE and Edge */
+              }}
+            >
+              <style>{`
+                .scrollbar-hide::-webkit-scrollbar {
+                  display: none; /* Chrome, Safari, Opera */
+                }
+              `}</style>
+              {lyrics.map((line, i) => (
                 <p
                   key={i}
                   className={cn(
-                    "text-sm transition-colors",
-                    i === currentLyric
-                      ? "text-primary font-medium"
-                      : "text-muted-foreground"
+                    "text-base sm:text-lg transition-all duration-300 cursor-pointer px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-center select-none",
+                    i === currentLyricIndex
+                      ? "text-primary font-bold text-lg sm:text-2xl bg-primary/10 scale-105 shadow-lg"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
                   )}
+                  onClick={() => handleLyricClick(line.time)}
+                  ref={i === currentLyricIndex ? currentLyricRef : null}
                 >
                   {line.text}
                 </p>

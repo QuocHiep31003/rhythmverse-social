@@ -43,7 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { genresApi, artistsApi } from "@/services/api";
+import { genresApi, artistsApi, moodsApi } from "@/services/api";
 
 // Utility function to get audio duration from file or URL
 const getAudioDuration = async (file: File): Promise<string> => {
@@ -94,6 +94,7 @@ const songFormSchema = z.object({
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
+  moodIds: z.array(z.number()).optional(),
   audioUrl: z.string().optional(),
   duration: z.string().optional(),
 });
@@ -119,10 +120,13 @@ export const SongFormDialog = ({
 }: SongFormDialogProps) => {
   const [allGenres, setAllGenres] = useState<{id: number, name: string}[]>([]);
   const [allArtists, setAllArtists] = useState<{id: number, name: string, avatar?: string, country?: string}[]>([]);
+  const [allMoods, setAllMoods] = useState<{id: number, name: string}[]>([]);
   const [artistSearchQuery, setArtistSearchQuery] = useState("");
   const [genreSearchQuery, setGenreSearchQuery] = useState("");
+  const [moodSearchQuery, setMoodSearchQuery] = useState("");
   const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
+  const [moodPopoverOpen, setMoodPopoverOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [audioInputMode, setAudioInputMode] = useState<"upload" | "url">("upload");
@@ -134,6 +138,7 @@ export const SongFormDialog = ({
       releaseYear: new Date().getFullYear(),
       genreIds: [],
       artistIds: [],
+      moodIds: [],
       audioUrl: "",
       duration: "",
       ...defaultValues,
@@ -153,17 +158,25 @@ export const SongFormDialog = ({
       )
     : allGenres;
 
-  // Load toàn bộ artists và genres khi component mount
+  const filteredMoods = moodSearchQuery.trim()
+    ? allMoods.filter((mood) =>
+        mood.name.toLowerCase().includes(moodSearchQuery.toLowerCase())
+      )
+    : allMoods;
+
+  // Load toàn bộ artists, genres và moods khi component mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [artistsData, genresData] = await Promise.all([
+        const [artistsData, genresData, moodsData] = await Promise.all([
           artistsApi.getAll({ page: 0, size: 1000, sort: "name,asc" }),
-          genresApi.getAll({ page: 0, size: 1000, sort: "name,asc" })
+          genresApi.getAll({ page: 0, size: 1000, sort: "name,asc" }),
+          moodsApi.getAll({ page: 0, size: 1000, sort: "name,asc" })
         ]);
         
         setAllArtists(Array.isArray(artistsData) ? artistsData : artistsData.content || []);
         setAllGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
+        setAllMoods(Array.isArray(moodsData) ? moodsData : moodsData.content || []);
       } catch (error) {
         console.error("Error loading data:", error);
       }
@@ -173,12 +186,13 @@ export const SongFormDialog = ({
 
   useEffect(() => {
     if (open && defaultValues) {
-      // Xử lý data từ API: artists và genres là array of objects
-      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], audioUrl?: string, duration?: string};
+      // Xử lý data từ API: artists, genres và moods là array of objects
+      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], moods?: {id: number}[], audioUrl?: string, duration?: string};
       const formValues = {
         ...defaultValues,
         artistIds: apiData.artists?.map((a: {id: number}) => a.id) || defaultValues.artistIds || [],
         genreIds: apiData.genres?.map((g: {id: number}) => g.id) || defaultValues.genreIds || [],
+        moodIds: apiData.moods?.map((m: {id: number}) => m.id) || defaultValues.moodIds || [],
         audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
         duration: apiData.duration || defaultValues.duration || "",
       };
@@ -189,6 +203,7 @@ export const SongFormDialog = ({
         releaseYear: new Date().getFullYear(),
         genreIds: [],
         artistIds: [],
+        moodIds: [],
         audioUrl: "",
         duration: "",
       });
@@ -594,6 +609,146 @@ export const SongFormDialog = ({
                               onClick={() => {
                                 field.onChange(
                                   field.value?.filter((id: number) => id !== artistId)
+                                );
+                              }}
+                              className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
+                            >
+                              <span className="text-xs">×</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="moodIds"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium flex items-center gap-2">
+                    Mood (tùy chọn)
+                    {field.value && field.value.length > 0 && (
+                      <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
+                        {field.value.length} đã chọn
+                      </span>
+                    )}
+                  </FormLabel>
+                  <Popover open={moodPopoverOpen} onOpenChange={setMoodPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          className={cn(
+                            "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
+                            !field.value?.length && "text-muted-foreground",
+                            field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
+                          )}
+                        >
+                          <div className="flex items-center gap-2 flex-1 text-left">
+                            {field.value?.length ? (
+                              <div className="flex items-center gap-1">
+                                <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
+                                <span className="font-medium">
+                                  {field.value.length} mood đã chọn
+                                </span>
+                              </div>
+                            ) : (
+                              <span>Tìm kiếm và chọn mood...</span>
+                            )}
+                          </div>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
+                      <Command shouldFilter={false}>
+                        <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                          <CommandInput
+                            placeholder="Tìm kiếm mood..."
+                            value={moodSearchQuery}
+                            onValueChange={setMoodSearchQuery}
+                            className="border-0 focus:ring-0"
+                          />
+                        </div>
+                        <CommandEmpty className="py-6 text-center text-muted-foreground">
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                              <span className="text-xs">😊</span>
+                            </div>
+                            <span>Không tìm thấy mood</span>
+                          </div>
+                        </CommandEmpty>
+                        <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                          {filteredMoods.map((mood) => {
+                            const isSelected = field.value?.includes(mood.id);
+                            return (
+                              <CommandItem
+                                key={mood.id}
+                                value={mood.id.toString()}
+                                onSelect={() => {
+                                  if (isSelected) {
+                                    field.onChange(
+                                      field.value?.filter((id: number) => id !== mood.id)
+                                    );
+                                  } else {
+                                    field.onChange([...(field.value || []), mood.id]);
+                                  }
+                                }}
+                                className={cn(
+                                  "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
+                                  isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
+                                )}
+                              >
+                                <div className="flex items-center gap-3 flex-1">
+                                  <div className={cn(
+                                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                    isSelected 
+                                      ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
+                                      : "border-muted-foreground"
+                                  )}>
+                                    {isSelected && (
+                                      <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{mood.name}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ID: {mood.id}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isSelected && (
+                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
+                                )}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {field.value && field.value.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {field.value.map((moodId: number) => {
+                        const mood = allMoods.find(m => m.id === moodId);
+                        return (
+                          <div
+                            key={moodId}
+                            className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
+                          >
+                            <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
+                            <span className="truncate max-w-[120px]">{mood?.name || `ID: ${moodId}`}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                field.onChange(
+                                  field.value?.filter((id: number) => id !== moodId)
                                 );
                               }}
                               className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
