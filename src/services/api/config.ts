@@ -4,16 +4,17 @@ import axios from 'axios';
 export const API_BASE_URL = "http://localhost:8080/api";
 
 // Auth helpers for API requests
-const getAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   try {
-    if (typeof window === 'undefined') return null;
-    return (
-      localStorage.getItem('token') ||
-      localStorage.getItem('adminToken') ||
-      ((): string | null => { try { return sessionStorage.getItem('token'); } catch { return null; } })()
-    );
+    return typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || localStorage.getItem('adminToken'))
+      : null;
   } catch {
-    try { return localStorage.getItem('token') || localStorage.getItem('adminToken'); } catch { return null; }
+    try {
+      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+    } catch {
+      return null;
+    }
   }
 };
 
@@ -25,6 +26,7 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
 
 // Request interceptor để thêm token vào headers
 apiClient.interceptors.request.use(
@@ -72,16 +74,39 @@ export const createFormDataHeaders = (): Record<string, string> => {
   return headers;
 };
 
+// Helper function để tạo headers cho JSON
+export const buildJsonHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
+// Helper function để parse error response
+export const parseErrorResponse = async (response: Response): Promise<string> => {
+  try {
+    const data = await response.json();
+    return (data && (data.message || data.error || data.details)) || JSON.stringify(data);
+  } catch {
+    try {
+      const text = await response.text();
+      return text || `${response.status} ${response.statusText}`;
+    } catch {
+      return `${response.status} ${response.statusText}`;
+    }
+  }
+};
+
 // Interface cho pagination params
 export interface PaginationParams {
   page?: number;
   size?: number;
   sort?: string;
   search?: string;
-  // name?: string;  
-  // country?: string;
-  // debutYear?: string;
-  // releaseYear?: number;
+  name?: string;
+  country?: string;
+  debutYear?: string;
+  releaseYear?: number;
 }
 
 // Interface cho paginated response

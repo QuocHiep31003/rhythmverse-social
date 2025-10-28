@@ -20,41 +20,31 @@ const TrendingMusic = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 20;
 
-  // Fetch weekly top 100 trending songs
+  // Fetch top 100 trending songs
   useEffect(() => {
     const fetchTrending = async () => {
       try {
-        console.log('🔍 Fetching weekly trending songs...');
+        console.log('🔍 Fetching top 100 trending songs...');
         
-        // Sử dụng API weekly top 100
-        const weeklyTop100 = await songsApi.getWeeklyTop100();
+        const top100 = await songsApi.getTop100Trending();
         
-        if (weeklyTop100 && weeklyTop100.length > 0) {
-          console.log('✅ Loaded weekly top 100:', weeklyTop100.length, 'songs');
-          
-          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
-          const sortedSongs = weeklyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
-          setAllSongs(sortedSongs);
-          setFilteredSongs(sortedSongs);
-          setTotalPages(Math.ceil(sortedSongs.length / itemsPerPage));
+        if (top100 && top100.length > 0) {
+          console.log('✅ Loaded top 100 trending:', top100.length, 'songs');
+          setAllSongs(top100);
+          setFilteredSongs(top100);
+          setTotalPages(Math.ceil(top100.length / itemsPerPage));
           return;
         }
         
-        // Fallback nếu API không có data
-        console.log('⚠️ No weekly data, falling back to mock data...');
-        const mockData = Array.from({ length: 50 }, (_, i) => ({
-          id: `mock-${i}`,
-          name: `Mock Song ${i + 1}`,
-          artistNames: [`Mock Artist ${i + 1}`],
-          playCount: Math.floor(Math.random() * 1000000),
-          cover: '',
-          duration: 180 + Math.floor(Math.random() * 120)
-        }));
-        setAllSongs(mockData);
-        setFilteredSongs(mockData);
-        setTotalPages(Math.ceil(mockData.length / itemsPerPage));
+        console.log('⚠️ No trending data');
+        setAllSongs([]);
+        setFilteredSongs([]);
+        setTotalPages(1);
       } catch (err) {
-        console.error("❌ Lỗi tải weekly trending:", err);
+        console.error("❌ Lỗi tải trending:", err);
+        setAllSongs([]);
+        setFilteredSongs([]);
+        setTotalPages(1);
       }
     };
     
@@ -91,7 +81,7 @@ const TrendingMusic = () => {
   const handlePlaySong = (song: any, index: number) => {
     const formattedSong = {
       id: song.id,
-      title: song.name || song.title,
+      title: song.songName || song.title,
       artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
       album: song.album?.name || song.album || "",
       duration: song.duration || 0,
@@ -101,7 +91,7 @@ const TrendingMusic = () => {
 
     const formattedQueue = allSongs.map((s) => ({
       id: s.id,
-      title: s.name || s.title,
+      title: s.songName || s.title,
       artist: s.artistNames?.join(", ") || s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
       album: s.album?.name || s.album || "",
       duration: s.duration || 0,
@@ -121,7 +111,7 @@ const TrendingMusic = () => {
           <div className="flex items-center gap-3 mb-4">
             <TrendingUp className="w-8 h-8 text-primary" />
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
-              Weekly Trending
+              Top 100 Trending
             </h1>
           </div>
           <p className="text-muted-foreground text-lg">
@@ -145,7 +135,7 @@ const TrendingMusic = () => {
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-neon-pink" />
-              Hot Week
+              Trending Now
             </CardTitle>
           </CardHeader>
 
@@ -188,7 +178,7 @@ const TrendingMusic = () => {
 
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {song.name || song.title}
+                          {song.songName || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {song.artistNames?.join(", ") ||
@@ -201,7 +191,7 @@ const TrendingMusic = () => {
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
-                          {formatPlayCount(song.playCount || 0)}
+                          {formatPlayCount(song.duration || 0)}
                         </p>
                       </div>
                     </div>

@@ -137,13 +137,13 @@ const TopBar = () => {
 
     try {
       const result = await auddApi.recognizeMusic(audioBlob);
+      console.log("AUDD API Response:", result);
 
-      // Navigate to search results with recognition data
-      navigate("/search", {
+      // Navigate to music recognition result page
+      navigate("/music-recognition-result", {
         state: {
-          recognitionResult: result,
-          audioUrl: audioUrl,
-          searchType: 'recognition'
+          result: result,
+          audioUrl: audioUrl
         },
       });
     } catch (err: unknown) {
@@ -166,25 +166,29 @@ const TopBar = () => {
       fileInputRef.current.value = "";
     }
   };
-  useEffect(() => {
-    const loadMe = async () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      if (!token) return;
+useEffect(() => {
+  const loadMe = async () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) return;
+
     try {
       const me = await authApi.me();
-      setProfileName(me?.name || me?.username || "");
-      setProfileEmail(me?.email || "");
-      // Cache userId for invite/share flows that check it
-      try {
-        const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
-        if (uid) localStorage.setItem('userId', uid);
-      } catch {}
-    } catch {
-      // ignore
+      if (me) {
+        setProfileName(me?.name || me?.username || "");
+        setProfileEmail(me?.email || "");
+
+        const uid = me.id || me.userId;
+        if (uid) localStorage.setItem("userId", String(uid));
+        localStorage.setItem("userName", me?.name || me?.username || "");
+        localStorage.setItem("userEmail", me?.email || "");
+      }
+    } catch (error) {
+      console.error("❌ Failed to load profile:", error);
     }
-    };
-    loadMe();
-  }, []);
+  };
+
+  loadMe();
+}, []);
 
   const handleLogout = () => {
     try {

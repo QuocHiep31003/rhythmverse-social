@@ -19,65 +19,69 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react";
-import { searchApi } from "@/services/api";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
-
-interface AuddResult {
-  artist?: string;
-  title?: string;
-  album?: string;
-  release_date?: string;
-  label?: string;
-  timecode?: string;
-  song_link?: string;
-  albumart?: string;
-  spotify?: { url: string };
-  deezer?: { url: string };
-  apple_music?: { url: string };
-}
-
-interface AuddResponse {
-  status: string;
-  result: AuddResult;
-}
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
-  const location = useLocation();
-  const queryParam = searchParams.get("query") || ""; // lấy giá trị query trên URL
+  const navigate = useNavigate();
+  const queryParam = searchParams.get("query") || "";
 
   const [searchResults, setSearchResults] = useState({
     songs: [],
     artists: [],
     albums: [],
   });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [detailedResults, setDetailedResults] = useState<any>({
+    songs: [],
+    artists: [],
+    albums: [],
+  });
   const [loading, setLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
-  const [recognitionResult, setRecognitionResult] = useState<AuddResponse | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string>("");
-  const [isRecognitionMode, setIsRecognitionMode] = useState(false);
   const { playSong, setQueue } = useMusic();
   useEffect(() => {
-    // Check if this is a music recognition result
-    if (location.state?.searchType === 'recognition') {
-      setRecognitionResult(location.state.recognitionResult);
-      setAudioUrl(location.state.audioUrl);
-      setIsRecognitionMode(true);
-      setActiveFilter("recognition");
-    } else if (queryParam) {
-      // Regular text search
-      setIsRecognitionMode(false);
+    if (queryParam) {
       fetchSearchResults(queryParam);
     }
-  }, [queryParam, location.state]);
+  }, [queryParam]);
   const fetchSearchResults = async (queryParam) => {
     if (!queryParam.trim()) return;
     setLoading(true);
     const data = await searchApi.getAll(queryParam);
     setSearchResults(data);
+    setDetailedResults({ songs: [], artists: [], albums: [] });
     console.log(data)
     setLoading(false);
+  };
+
+  const handleFilterChange = async (filterId: string) => {
+    setActiveFilter(filterId);
+    
+    if (filterId === 'all' || !queryParam) {
+      setDetailedResults({ songs: [], artists: [], albums: [] });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (filterId === 'songs') {
+        const data = await songsApi.getAll({ search: queryParam, size: 20, page: 0 });
+        setDetailedResults((prev) => ({ ...prev, songs: data.content || [] }));
+      } else if (filterId === 'artists') {
+        const data = await artistsApi.getAll({ search: queryParam, size: 20, page: 0 });
+        setDetailedResults((prev) => ({ ...prev, artists: data.content || [] }));
+      } else if (filterId === 'albums') {
+        const data = await albumsApi.getAll({ search: queryParam, size: 20, page: 0 });
+        setDetailedResults((prev) => ({ ...prev, albums: data.content || [] }));
+      }
+    } catch (error) {
+      console.error('Error fetching detailed results:', error);
+    } finally {
+      setLoading(false);
+    }
   };
   // 🔹 Gọi API mỗi khi searchQuery thay đổi
   // useEffect(() => {
@@ -131,14 +135,11 @@ const SearchResults = () => {
   // ];
 
   const totalCount = searchResults.songs.length + searchResults.artists.length + searchResults.albums.length;
-  const filters = isRecognitionMode ? [
-    { id: "recognition", label: "Recognition Result", count: recognitionResult ? 1 : 0 },
-  ] : [
+  const filters = [
     { id: "all", label: "All", count: totalCount },
     { id: "songs", label: "Songs", count: searchResults.songs.length },
     { id: "artists", label: "Artists", count: searchResults.artists.length },
     { id: "albums", label: "Albums", count: searchResults.albums.length },
-    // { id: "playlists", label: "Playlists", count: searchResults.playlists.length }
   ];
 
   const formatTimecode = (timecode: string) => {
@@ -171,6 +172,7 @@ const SearchResults = () => {
     playSong(currentFormatted);
   };
 
+
   return (
     <div className="min-h-screen bg-gradient-dark">
       <ChatBubble />
@@ -191,10 +193,10 @@ const SearchResults = () => {
                   key={filter.id}
                   variant={activeFilter === filter.id ? "default" : "outline"}
                   onClick={() => {
-                    if (!isDisabled) setActiveFilter(filter.id);
+                    if (!isDisabled) handleFilterChange(filter.id);
                   }}
                   disabled={isDisabled}
-                  className={`rounded-full px-4 py-2 whitespace-nowrap ${isDisabled
+                  className={`rounded-full px-6 py-2 whitespace-nowrap ${isDisabled
                       ? "opacity-50 cursor-not-allowed"
                       : activeFilter === filter.id
                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
@@ -202,9 +204,6 @@ const SearchResults = () => {
                     }`}
                 >
                   {filter.label}
-                  <Badge variant="secondary" className="ml-2">
-                    {filter.count}
-                  </Badge>
                 </Button>
               );
             })}
@@ -216,199 +215,18 @@ const SearchResults = () => {
         <div className="flex gap-8">
           {/* Main Results */}
           <div className="flex-1">
-            {/* Music Recognition Results */}
-            {isRecognitionMode && activeFilter === "recognition" && (
-              <div className="mb-8">
-                <h3 className="text-xl font-bold mb-4 text-foreground">Music Recognition Result</h3>
-                {recognitionResult ? (
-                  <Card className="bg-card border-border">
-                    <CardHeader>
-                      <CardTitle className="text-2xl text-foreground flex items-center gap-2">
-                        <Music className="w-6 h-6" />
-                        Song Information
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      {/* Status */}
-                      <div className="mb-4">
-                        {recognitionResult.status === "success" ? (
-                          <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            <AlertDescription className="text-green-800 dark:text-green-200">
-                              Music successfully recognized!
-                            </AlertDescription>
-                          </Alert>
-                        ) : (
-                          <Alert variant="destructive">
-                            <AlertCircle className="h-4 w-4" />
-                            <AlertDescription>
-                              Recognition failed. Status: {recognitionResult.status}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                      </div>
-
-                      {/* Song Details */}
-                      <div className="flex gap-6">
-                        {/* Album Art */}
-                        <div className="flex-shrink-0">
-                          <div className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
-                            {recognitionResult.result.albumart ? (
-                              <img
-                                src={recognitionResult.result.albumart}
-                                alt="Album Cover"
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Music className="w-12 h-12 text-muted-foreground" />
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Song Info */}
-                        <div className="flex-1 space-y-3">
-                          <div>
-                            <h2 className="text-2xl font-bold text-foreground">
-                              {recognitionResult.result.title || "Unknown Title"}
-                            </h2>
-                            <p className="text-lg text-muted-foreground flex items-center gap-2">
-                              <User className="w-4 h-4" />
-                              {recognitionResult.result.artist || "Unknown Artist"}
-                            </p>
-                          </div>
-
-                          {recognitionResult.result.album && (
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                                Album: {recognitionResult.result.album}
-                              </Badge>
-                            </div>
-                          )}
-
-                          <div className="flex flex-wrap gap-2">
-                            {recognitionResult.result.release_date && (
-                              <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                <Calendar className="w-3 h-3 mr-1" />
-                                {recognitionResult.result.release_date}
-                              </Badge>
-                            )}
-                            
-                            {recognitionResult.result.timecode && (
-                              <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                <Clock className="w-3 h-3 mr-1" />
-                                {formatTimecode(recognitionResult.result.timecode)}
-                              </Badge>
-                            )}
-
-                            {recognitionResult.result.label && (
-                              <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                Label: {recognitionResult.result.label}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Streaming Links */}
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
-                        <div className="flex flex-wrap gap-3">
-                          {recognitionResult.result.spotify?.url && (
-                            <Button
-                              onClick={() => openExternalLink(recognitionResult.result.spotify!.url!)}
-                              className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="w-4 h-4"
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                              >
-                                <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 
-                                12-12C24 5.372 18.627 0 12 0zM17.59 17.74a.747.747 0 0 
-                                1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 
-                                1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 
-                                1.02z" />
-                              </svg>
-                              Spotify
-                            </Button>
-                          )}
-
-                          {recognitionResult.result.apple_music?.url && (
-                            <Button
-                              onClick={() => openExternalLink(recognitionResult.result.apple_music!.url!)}
-                              variant="outline"
-                              className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
-                            >
-                              <Apple className="w-4 h-4" />
-                              Apple Music
-                            </Button>
-                          )}
-
-                          {recognitionResult.result.deezer?.url && (
-                            <Button
-                              onClick={() => openExternalLink(recognitionResult.result.deezer!.url!)}
-                              variant="outline"
-                              className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                              Deezer
-                            </Button>
-                          )}
-
-                          {recognitionResult.result.song_link && (
-                            <Button
-                              onClick={() => openExternalLink(recognitionResult.result.song_link!)}
-                              variant="outline"
-                              className="bg-muted border-border hover:bg-muted/80 flex items-center gap-2"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                              More Info
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Audio Preview */}
-                      {audioUrl && (
-                        <div className="space-y-2">
-                          <h3 className="text-lg font-semibold text-foreground">Original Audio:</h3>
-                          <audio controls className="w-full">
-                            <source src={audioUrl} type="audio/mpeg" />
-                            Your browser does not support the audio element.
-                          </audio>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card className="bg-card border-border">
-                    <CardContent className="pt-6">
-                      <div className="text-center space-y-4">
-                        <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto" />
-                        <h3 className="text-lg font-semibold text-foreground">
-                          No song was recognized
-                        </h3>
-                        <p className="text-muted-foreground">
-                          The audio might be too short, unclear, or not in our database.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            )}
-
-            {(activeFilter === "all" || activeFilter === "songs") && !isRecognitionMode && (
+            {(activeFilter === "all" || activeFilter === "songs") && (
               <div className="mb-8">
                 <h3 className="text-xl font-bold mb-4 text-foreground">Songs</h3>
                 {loading ? (
-                  <p className="text-muted-foreground">Loading...</p>
-                ) : searchResults.songs.length > 0 ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : (detailedResults.songs.length > 0 ? detailedResults.songs : searchResults.songs).length > 0 ? (
                   <Card className="bg-card border-border">
                     <CardContent className="p-0">
                       <div className="space-y-1">
-                        {searchResults.songs.slice(0, activeFilter === "all" ? 5 : searchResults.songs.length).map((song, index) => (
+                        {(detailedResults.songs.length > 0 ? detailedResults.songs : searchResults.songs).slice(0, activeFilter === "all" ? 5 : 20).map((song, index) => (
                           <div
                             key={song.id}
                             className="flex items-center gap-4 p-3 hover:bg-muted/50 group cursor-pointer rounded-lg transition-colors"
@@ -440,35 +258,45 @@ const SearchResults = () => {
               </div>
             )}
 
-            {(activeFilter === "all" || activeFilter === "artists") && searchResults.artists.length > 0 && !isRecognitionMode && (
+            {(activeFilter === "all" || activeFilter === "artists") && (detailedResults.artists.length > 0 ? detailedResults.artists : searchResults.artists).length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xl font-bold mb-4 text-foreground">Artists</h3>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {searchResults.artists.map((artist) => (
-                    <Card key={artist.id} className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer">
-                      <CardContent className="p-6 text-center">
-                        <div className="w-24 h-24 bg-muted rounded-full mx-auto mb-4 flex items-center justify-center">
-                          <User className="w-12 h-12 text-muted-foreground" />
+                <div className="grid grid-cols-3 gap-4">
+                  {(detailedResults.artists.length > 0 ? detailedResults.artists : searchResults.artists).slice(0, activeFilter === "all" ? 3 : 20).map((artist) => (
+                    <Card 
+                      key={artist.id} 
+                      className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer group w-fit"
+                      onClick={() => navigate(`/artist/${artist.id}`)}
+                    >
+                      <CardContent className="p-4 text-center min-w-[150px] max-w-[200px]">
+                        <div className="w-16 h-16 bg-muted rounded-full mx-auto mb-3 flex items-center justify-center overflow-hidden">
+                          {artist.avatar ? (
+                            <img 
+                              src={artist.avatar} 
+                              alt={artist.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-8 h-8 text-muted-foreground" />
+                          )}
                         </div>
-                        <h3 className="font-bold text-lg mb-2 flex items-center justify-center gap-2 text-foreground">
+                        <h3 className="font-semibold text-base mb-1 text-foreground">
                           {artist.name}
-                          {artist.verified && <Badge variant="secondary" className="bg-primary text-primary-foreground">✓</Badge>}
                         </h3>
-                        <p className="text-muted-foreground mb-4">{artist.followers} followers</p>
-                        <Button variant="outline">
-                          Follow
-                        </Button>
+                        <p className="text-sm text-muted-foreground">
+                          {artist.country || "Unknown"}
+                        </p>
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               </div>
             )}
-            {(activeFilter === "all" || activeFilter === "albums") && searchResults.albums.length > 0 && !isRecognitionMode && (
+            {(activeFilter === "all" || activeFilter === "albums") && (detailedResults.albums.length > 0 ? detailedResults.albums : searchResults.albums).length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xl font-bold mb-4 text-foreground">Albums</h3>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {searchResults.albums.map((album) => (
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {(detailedResults.albums.length > 0 ? detailedResults.albums : searchResults.albums).slice(0, activeFilter === "all" ? 4 : 20).map((album) => (
                     <Card
                       key={album.id}
                       className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer"
@@ -499,7 +327,7 @@ const SearchResults = () => {
           </div>
 
           {/* Compact Sidebar */}
-          {!isRecognitionMode && (
+          {(searchResults.songs.length > 0) && (
             <div className="w-80 space-y-6">
             <Card className="bg-card border-border">
               <CardHeader className="pb-4">

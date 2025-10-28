@@ -3,16 +3,25 @@ import { mockSongs } from '@/data/mockData';
 
 // Interface cho Song data
 export interface Song {
-  id: string;
+  id: string | number;
   name: string;
+  title?: string;
   releaseYear: number;
   genreIds: number[];
   artistIds: number[];
+  artistNames?: string[];
   audioUrl: string;
+  audio?: string;
+  url?: string;
   plays?: string;
-  duration?: string;
-  artists?: any[];
-  genres?: any[];
+  playCount?: number;
+  duration?: string | number;
+  cover?: string;
+  album?: string | { name: string };
+  albumId?: number;
+  artists?: Array<{ id: number; name: string }>;
+  genres?: Array<{ id: number; name: string }>;
+  trendingScore?: number;
 }
 
 // Interface cho Song creation/update
@@ -22,6 +31,7 @@ export interface SongCreateUpdateData {
   genreIds: number[];
   artistIds: number[];
   audioUrl: string;
+  duration?: string;
 }
 
 // Songs API sử dụng axios
@@ -33,6 +43,19 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching songs by artist:", error);
+      return [];
+    }
+  },
+
+  // Tìm bài hát theo tên nghệ sĩ và tên bài hát
+  findByTitleAndArtist: async (title: string, artist: string): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/find-by-title-and-artist`, {
+        params: { title, artist }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error finding song by title and artist:", error);
       return [];
     }
   },
@@ -117,7 +140,7 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching song:", error);
-      return mockSongs.find(s => s.id === id) || null;
+      return null;
     }
   },
 
@@ -130,6 +153,7 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
+        duration: data.duration,
       };
 
       const response = await apiClient.post('/songs', payload);
@@ -149,6 +173,7 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
+        duration: data.duration,
       };
 
       const response = await apiClient.put(`/songs/${id}`, payload);
@@ -364,6 +389,34 @@ export const songsApi = {
   // ========================================
   // NEW TRENDING APIs (Weekly & Monthly)
   // ========================================
+
+  /**
+   * Lấy top 5 bài hát trending
+   * GET /api/trending/top-5
+   */
+  getTop5Trending: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/top-5');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching top 5 trending:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Lấy top 100 bài hát trending
+   * GET /api/trending/top-100
+   */
+  getTop100Trending: async (): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/trending/top-100');
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching top 100 trending:", error);
+      return [];
+    }
+  },
 
   /**
    * Lấy top 5 bài hát trending hàng tuần (7 ngày)

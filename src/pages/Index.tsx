@@ -54,24 +54,21 @@ const Index = () => {
   const [topHitsWeek, setTopHitsWeek] = useState([]);
 
   useEffect(() => {
-    // Hot Week: Sử dụng API weekly top 5
+    // Hot Week: Sử dụng API /api/trending/top-5
     const fetchHotWeek = async () => {
       try {
-        const weeklyTop5 = await songsApi.getWeeklyTop5();
+        const top5Trending = await songsApi.getTop5Trending();
         
-        if (weeklyTop5 && weeklyTop5.length > 0) {
-          console.log('✅ Loaded weekly top 5:', weeklyTop5.length, 'songs');
-          
-          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
-          const sortedSongs = weeklyTop5.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
-          setTopHitsWeek(sortedSongs);
+        if (top5Trending && top5Trending.length > 0) {
+          console.log('✅ Loaded top 5 trending:', top5Trending.length, 'songs');
+          setTopHitsWeek(top5Trending);
           return;
         }
         
-       
-        
+        console.log('⚠️ No trending data, falling back to mock data...');
+        setTopHitsWeek(mockSongs.slice(0, 5));
       } catch (err) {
-        console.error("❌ Lỗi tải weekly trending:", err);
+        console.error("❌ Lỗi tải trending:", err);
         setTopHitsWeek(mockSongs.slice(0, 5));
       }
     };
@@ -143,7 +140,17 @@ const Index = () => {
                 <Card
                   key={i}
                   className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer"
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    if (item.label === "Genres") {
+                      // Scroll to genres section on the same page
+                      const genresSection = document.getElementById("genres-section");
+                      if (genresSection) {
+                        genresSection.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
                 >
                   <CardContent className="p-4 text-center">
                     <item.icon
@@ -280,7 +287,7 @@ const Index = () => {
                       onClick={() => {
                         const formattedSongs = topHitsWeek.map(s => ({
                           id: s.id,
-                          title: s.name,
+                          title: s.songName,
                           artist: s.artistNames?.join(", ") || s.artists?.map((a) => a.name).join(", ") || "Unknown",
                           album: s.album?.name || "Unknown",
                           duration: s.duration || 0,
@@ -305,7 +312,7 @@ const Index = () => {
                         {song.cover ? (
                           <img
                             src={song.cover}
-                            alt={song.name}
+                            alt={song.songName}
                             className="
                 w-full h-full object-cover 
                 transition-transform duration-500 group-hover:scale-110
@@ -319,7 +326,7 @@ const Index = () => {
                       {/* Thông tin bài hát */}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate text-sm group-hover:text-neon-pink transition-colors">
-                          {(song as any).name || song.title}
+                          {(song as any).songName || song.title}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {(song as any).artistNames?.join(", ") || (song as any).artists?.map((a: any) => a.name).join(", ") || "Unknown"}
@@ -330,7 +337,7 @@ const Index = () => {
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
                           <Headphones className="w-3 h-3" />
-                          {formatPlayCount(song.playCount || 0)}
+                          {formatPlayCount(song.duration || 0)}
                         </p>
                       </div>
                     </div>

@@ -29,6 +29,7 @@ import {
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
+  
   const [profileData, setProfileData] = useState({
     name: "Alex Johnson",
     username: "@alexjohnson",
@@ -51,7 +52,7 @@ const Profile = () => {
 
   const stats = {
     totalListeningTime: "1,247 hours",
-    songsPlayed: "15,678",
+    songsPlayed: "342",
     playlistsCreated: 24,
     followersCount: 156,
     followingCount: 89,
@@ -59,10 +60,11 @@ const Profile = () => {
   };
 
   const recentActivity = [
-    { type: "played", item: "Cosmic Dreams", artist: "StarGazer", time: "2 hours ago" },
-    { type: "liked", item: "Night Vibes", artist: "Chill Collective", time: "5 hours ago" },
-    { type: "playlist", item: "Created 'Road Trip 2024'", time: "Yesterday" },
-    { type: "followed", item: "Followed DJ ElectroFlow", time: "2 days ago" }
+    { song: "Midnight Dreams", artist: "Luna Bay", time: "2h ago", action: "played" },
+    { song: "Electric Nights", artist: "Nova Sound", time: "5h ago", action: "liked" },
+    { song: "Summer Waves", artist: "Coast Line", time: "1d ago", action: "added to playlist" },
+    { song: "Urban Stories", artist: "City Lights", time: "2d ago", action: "played" },
+    { song: "Neon Skies", artist: "Digital Dreams", time: "3d ago", action: "played" }
   ];
 
   const topGenres = [
@@ -246,24 +248,22 @@ const Profile = () => {
                 <CardHeader>
                   <CardTitle>Recent Activity</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 rounded-lg bg-muted/10">
-                      <div className="w-8 h-8 bg-gradient-primary rounded-full flex items-center justify-center">
-                        {activity.type === "played" && <Play className="w-4 h-4 text-white" />}
-                        {activity.type === "liked" && <Heart className="w-4 h-4 text-white" />}
-                        {activity.type === "playlist" && <Music className="w-4 h-4 text-white" />}
-                        {activity.type === "followed" && <Users className="w-4 h-4 text-white" />}
+                <CardContent>
+                  <div className="space-y-4">
+                    {recentActivity.map((activity, index) => (
+                      <div key={index} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
+                        <Music className="w-10 h-10 text-primary" />
+                        <div className="flex-1">
+                          <p className="font-medium">{activity.song}</p>
+                          <p className="text-sm text-muted-foreground">{activity.artist}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-muted-foreground">{activity.time}</p>
+                          <p className="text-xs text-muted-foreground">{activity.action}</p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-medium">{activity.item}</p>
-                        {activity.artist && (
-                          <p className="text-sm text-muted-foreground">by {activity.artist}</p>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">{activity.time}</div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

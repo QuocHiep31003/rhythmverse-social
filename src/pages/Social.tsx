@@ -184,9 +184,10 @@ const Social = () => {
       await Promise.all([loadFriends(), loadPending(), loadCollabInvites()]);
       // Load current profile for "My Profile" section
       try {
-        const me = await authApi.me();
-        setProfileName(me?.name || me?.username || "");
-        setProfileEmail(me?.email || "");
+        const userName = localStorage.getItem('userName') || '';
+        const userEmail = localStorage.getItem('userEmail') || '';
+        setProfileName(userName);
+        setProfileEmail(userEmail);
       } catch { }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

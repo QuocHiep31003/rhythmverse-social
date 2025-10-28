@@ -1,83 +1,32 @@
-import { mockSongs, mockUsers, mockPlaylists, mockAlbums, mockArtists, mockGenres } from "@/data/mockData";
+// Re-export API_BASE_URL from config
+export { API_BASE_URL } from './api/config';
 
-export const API_BASE_URL = "http://localhost:8080/api";
+// Re-export common utilities
+export { buildJsonHeaders, parseErrorResponse, getAuthToken } from './api/config';
+
+// Re-export shared interfaces
+export type { PaginationParams, PaginatedResponse } from './api/config';
+
+// ✅ Re-export all API modules
+export { artistsApi } from './api/artistApi';
+export { songsApi, type Song } from './api/songApi';
+export { albumsApi } from './api/albumApi';
+export {
+  playlistsApi,
+  playlistCollabInvitesApi,
+  playlistCollaboratorsApi,
+} from './api/playlistApi';
+export { friendsApi, inviteLinksApi } from './api/friendsApi';
+export { listeningHistoryApi } from './api/listeningHistoryApi';
+export { lyricsApi } from './api/lyricsApi';
+export { moodsApi } from './api/moodApi';
+
+
+// Import mock data for fallback
+import { mockUsers, mockGenres } from "@/data/mockData";
+import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse } from "./api/config";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Auth helpers for API requests
-const getAuthToken = (): string | null => {
-  try {
-    if (typeof window === 'undefined') return null;
-    const ls = localStorage.getItem('token') || localStorage.getItem('adminToken');
-    if (ls) return ls;
-    try { return sessionStorage.getItem('token'); } catch { /* ignore */ }
-    return null;
-  } catch {
-    return null;
-  }
-};
-
-
-export const buildJsonHeaders = (): Record<string, string> => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = getAuthToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
-
-export const parseErrorResponse = async (response: Response): Promise<string> => {
-  try {
-    const data = await response.json();
-    return (data && (data.message || data.error || data.details)) || JSON.stringify(data);
-  } catch {
-    try {
-      const text = await response.text();
-      return text || `${response.status} ${response.statusText}`;
-    } catch {
-      return `${response.status} ${response.statusText}`;
-    }
-  }
-};
-
-interface PaginationParams {
-  page?: number;
-  size?: number;
-  sort?: string;
-  search?: string;
-  name?: string;
-  country?: string;
-  debutYear?: string;
-  releaseYear?: number;
-}
-
-interface PaginatedResponse<T> {
-  content: T[];
-  pageable: {
-    pageNumber: number;
-    pageSize: number;
-    sort: {
-      empty: boolean;
-      sorted: boolean;
-      unsorted: boolean;
-    };
-    offset: number;
-    paged: boolean;
-    unpaged: boolean;
-  };
-  last: boolean;
-  totalElements: number;
-  totalPages: number;
-  size: number;
-  number: number;
-  sort: {
-    empty: boolean;
-    sorted: boolean;
-    unsorted: boolean;
-  };
-  first: boolean;
-  numberOfElements: number;
-  empty: boolean;
-}
 
 // Users API
 export const usersApi = {
@@ -189,182 +138,6 @@ export const usersApi = {
   },
 };
 
-// Songs API đã được di chuyển sang songApi.ts
-// Import songsApi từ file mới
-export { songsApi } from './api/songApi';
-
-// Playlists API moved to src/services/api/playlistApi.ts
-
-// Albums API
-export const albumsApi = {
-  getAll: async () => {
-    await delay(300);
-    return mockAlbums;
-  },
-
-  getById: async (id: string) => {
-    await delay(200);
-    return mockAlbums.find(a => a.id === id);
-  },
-
-  create: async (data: any) => {
-    await delay(500);
-    return { id: Date.now().toString(), ...data };
-  },
-
-  update: async (id: string, data: any) => {
-    await delay(500);
-    return { id, ...data };
-  },
-
-  delete: async (id: string) => {
-    await delay(500);
-    return { success: true };
-  },
-};
-
-// Artists API
-export const artistsApi = {
-  getAll: async (params?: PaginationParams) => {
-    try {
-      const queryParams = new URLSearchParams();
-      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
-      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
-      if (params?.sort) queryParams.append('sort', params.sort);
-      if (params?.name) queryParams.append('name', params.name);
-      if (params?.country) queryParams.append('country', params.country);
-      if (params?.debutYear) queryParams.append('debutYear', params.debutYear);
-
-      const response = await fetch(`${API_BASE_URL}/artists?${queryParams.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch artists");
-      }
-      const data: PaginatedResponse<any> = await response.json();
-      return data;
-    } catch (error) {
-      console.error("Error fetching artists:", error);
-      await delay(500);
-      return {
-        content: mockArtists,
-        totalElements: mockArtists.length,
-        totalPages: 1,
-        size: 10,
-        number: 0,
-        first: true,
-        last: true,
-        empty: false
-      } as PaginatedResponse<any>;
-    }
-  },
-
-  getById: async (id: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/artists/${id}`);
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching artist:", error);
-      return mockArtists.find(a => a.id === id);
-    }
-  },
-
-  create: async (data: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/artists`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      return await response.json();
-    } catch (error) {
-      console.error("Error creating artist:", error);
-      throw error;
-    }
-  },
-
-  update: async (id: number, data: any) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/artists/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-      return await response.json();
-    } catch (error) {
-      console.error("Error updating artist:", error);
-      throw error;
-    }
-  },
-
-  delete: async (id: number) => {
-    try {
-      await fetch(`${API_BASE_URL}/artists/${id}`, {
-        method: 'DELETE'
-      });
-      return { success: true };
-    } catch (error) {
-      console.error("Error deleting artist:", error);
-      throw error;
-    }
-  },
-
-  getCount: async (search?: string) => {
-    try {
-      const queryParams = search ? `?search=${encodeURIComponent(search)}` : '';
-      const response = await fetch(`${API_BASE_URL}/artists/count${queryParams}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch artist count");
-      }
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching artist count:", error);
-      return mockArtists.length;
-    }
-  },
-
-  exportExcel: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/artists/export`);
-      if (!response.ok) {
-        throw new Error("Failed to export artists");
-      }
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'artists.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Error exporting artists:", error);
-      throw error;
-    }
-  },
-
-  importExcel: async (file: File) => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(`${API_BASE_URL}/artists/import`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to import artists");
-      }
-
-      return await response.text();
-    } catch (error) {
-      console.error("Error importing artists:", error);
-      throw error;
-    }
-  },
-};
-
 // Genres API
 export const genresApi = {
   getAll: async (params?: PaginationParams) => {
@@ -407,7 +180,7 @@ export const genresApi = {
     }
   },
 
-  create: async (data: any) => {
+  create: async (data: { name: string; description?: string; iconUrl?: string }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres`, {
         method: 'POST',
@@ -421,7 +194,7 @@ export const genresApi = {
     }
   },
 
-  update: async (id: number, data: any) => {
+  update: async (id: number, data: { name: string; description?: string; iconUrl?: string }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/${id}`, {
         method: 'PUT',
@@ -600,15 +373,16 @@ export const statsApi = {
     await delay(300);
     return {
       totalUsers: mockUsers.length,
-      totalSongs: mockSongs.length,
-      totalPlaylists: mockPlaylists.length,
-      totalAlbums: mockAlbums.length,
-      totalArtists: mockArtists.length,
+      totalSongs: 0, // Will be updated when songsApi is used
+      totalPlaylists: 0, // Will be updated when playlistsApi is used
+      totalAlbums: 0, // Will be updated when albumsApi is used
+      totalArtists: 0, // Will be updated when artistsApi is used
       totalGenres: mockGenres.length,
-      totalPlays: mockSongs.reduce((acc, song) => acc + parseInt(song.plays.replace(/[^\d]/g, '')), 0),
+      totalPlays: 0, // Will be updated when songsApi is used
     };
   },
 };
+
 export const searchApi = {
   getAll: async (keyword: string) => {
     try {
@@ -623,12 +397,13 @@ export const searchApi = {
     }
   },
 };
+
 // AUDD Music Recognition API
 export const auddApi = {
   recognizeMusic: async (audioBlob: Blob) => {
     try {
       const formData = new FormData();
-      formData.append("api_token", "66d916cc0aca58ac85faa0f3794f3b63"); // 🔹 thay bằng token thật của bạn
+      formData.append("api_token", "f912ca8d28d9812f5f6fb1970c813655"); // 🔹 thay bằng token thật của bạn
       formData.append("file", audioBlob, "recorded.wav");
       formData.append("return", "apple_music,spotify");
 
@@ -838,4 +613,3 @@ export const quizAttemptsApi = {
     }
   },
 };
-

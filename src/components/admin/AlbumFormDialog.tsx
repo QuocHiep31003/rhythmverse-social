@@ -156,12 +156,15 @@ export const AlbumFormDialog = ({
         .getByArtist(artistId)
         .then((res) => {
           // FE filter logic: mark which songs already have album
-          const processed = res.map((song: Song) => ({
-            ...song,
+          const processed = res.map((song: any) => ({
+            id: typeof song.id === 'string' ? parseInt(song.id) : song.id,
+            name: song.name,
+            releaseYear: song.releaseYear,
+            albumId: song.albumId,
             isInOtherAlbum:
               !!song.albumId &&
               song.albumId !== (defaultValues as any)?.id, // ignore current album
-          }));
+          })) as Song[];
 
           setSongs(processed);
           setFilteredSongs(processed);
