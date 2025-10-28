@@ -33,7 +33,7 @@ export const moodsApi = {
         }
     },
 
-    create: async (data: { name: string; iconUrl?: string }) => {
+    create: async (data: { name: string; iconUrl?: string; gradient?: string }) => {
         try {
             const response = await fetch(`${API_BASE_URL}/moods`, {
                 method: 'POST',
@@ -51,7 +51,7 @@ export const moodsApi = {
         }
     },
 
-    update: async (id: number, data: { name: string; iconUrl?: string }) => {
+    update: async (id: number, data: { name: string; iconUrl?: string; gradient?: string }) => {
         try {
             const response = await fetch(`${API_BASE_URL}/moods/${id}`, {
                 method: 'PUT',

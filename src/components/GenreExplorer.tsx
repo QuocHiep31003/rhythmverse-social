@@ -8,7 +8,7 @@ interface GenreItem {
   name: string;
   icon: LucideIcon;
   color: string;
-  count: string;
+  count?: string;
   iconUrl?: string;
 }
 
@@ -17,6 +17,7 @@ interface MoodItem {
   icon: LucideIcon;
   gradient: string;
   iconUrl?: string;
+  gradientFromBackend?: string;
 }
 
 // Default icons as fallback
@@ -49,7 +50,6 @@ const GenreExplorer = () => {
             name: genre.name,
             icon: defaultGenres[index % defaultGenres.length]?.icon || Music2,
             color: defaultGenres[index % defaultGenres.length]?.color || "bg-primary",
-            count: `${Math.floor(Math.random() * 2)}.${Math.floor(Math.random() * 10)}M songs`,
             iconUrl: genre.iconUrl,
           })));
         }
@@ -60,11 +60,12 @@ const GenreExplorer = () => {
     moodsApi.getAll({ page: 0, size: 4, sort: "name,asc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
-          setMoods(data.content.map((mood: { name: string; iconUrl?: string }, index: number) => ({
+          setMoods(data.content.map((mood: { name: string; iconUrl?: string; gradient?: string }, index: number) => ({
             name: mood.name,
             icon: defaultMoods[index % defaultMoods.length]?.icon || Sun,
-            gradient: defaultMoods[index % defaultMoods.length]?.gradient || "from-neon-pink to-primary",
+            gradient: mood.gradient || defaultMoods[index % defaultMoods.length]?.gradient || "from-neon-pink to-primary",
             iconUrl: mood.iconUrl,
+            gradientFromBackend: mood.gradient,
           })));
         }
       })
@@ -106,7 +107,6 @@ const GenreExplorer = () => {
                       )}
                     </div>
                     <h4 className="font-semibold text-foreground mb-1">{genre.name}</h4>
-                    <p className="text-xs text-muted-foreground">{genre.count}</p>
                   </CardContent>
                 </Card>
               );

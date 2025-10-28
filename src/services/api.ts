@@ -9,7 +9,7 @@ export type { PaginationParams, PaginatedResponse } from './api/config';
 
 // Re-export all API modules
 export { artistsApi } from './api/artistApi';
-export { songsApi, type Song } from './api/songApi';
+export { songsApi } from './api/songApi';
 export { albumsApi } from './api/albumApi';
 export { playlistsApi, playlistCollabInvitesApi, playlistCollaboratorsApi } from './api/playlistApi';
 export { friendsApi, inviteLinksApi } from './api/friendsApi';
@@ -388,7 +388,7 @@ export const auddApi = {
   recognizeMusic: async (audioBlob: Blob) => {
     try {
       const formData = new FormData();
-      formData.append("api_token", "f912ca8d28d9812f5f6fb1970c813655"); // 🔹 thay bằng token thật của bạn
+      formData.append("api_token", "66d916cc0aca58ac85faa0f3794f3b63"); // 🔹 thay bằng token thật của bạn
       formData.append("file", audioBlob, "recorded.wav");
       formData.append("return", "apple_music,spotify");
 
