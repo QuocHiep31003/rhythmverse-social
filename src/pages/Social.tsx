@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { authApi } from "@/services/api";
@@ -106,14 +106,7 @@ const Social = () => {
     }
   }, [inviteCode]);
 
-  // Auto-accept once when returning with a valid token
-  const inviteAutoTried = useRef(false);
-  useEffect(() => {
-    if (!inviteCode || !hasToken || inviteAutoTried.current) return;
-    inviteAutoTried.current = true;
-    // try accept silently
-    handleAcceptInviteFromQuery();
-  }, [inviteCode, hasToken]);
+  // Do not auto-accept on link open; user must click Accept/Decline.
   const [pending, setPending] = useState<ApiPendingDTO[]>([]);
   const [loadingPending, setLoadingPending] = useState<boolean>(false);
   const [profileName, setProfileName] = useState<string>("");
@@ -136,7 +129,7 @@ const Social = () => {
   const [chatByFriend, setChatByFriend] = useState<Record<string, Message[]>>({});
 
   // WebSocket send and onMessage handler
-  const { sendMessage } = useChatSocket(meId || 0, (rawMsg: any) => {
+  const { sendMessage, isConnected } = useChatSocket(meId || 0, (rawMsg: any) => {
     try {
       const friendId = String(rawMsg.senderId === meId ? rawMsg.receiverId : rawMsg.senderId);
       const parsed = parseIncomingContent(rawMsg as ChatMessageDTO, friends);
@@ -315,23 +308,59 @@ const Social = () => {
     } catch {}
   };
 
-  const handleSendPlaylistCollabInvite = async () => {
-    if (!selectedChat || !meId) return;
-    try {
-      const pid = window.prompt('Enter your playlist ID to invite collaborator:');
-      if (!pid) return;
-      const role = (window.prompt('Role? VIEWER or EDITOR (default VIEWER):') || 'VIEWER').toUpperCase();
-      const receiverId = Number(selectedChat);
-      await playlistCollabInvitesApi.send(Number(pid), receiverId, role as any);
-      toast.success('Collaboration invite sent');
-      // Inform via chat
-      sendMessage({ senderId: meId, receiverId, content: `COLLAB_INVITE:${JSON.stringify({ playlistId: Number(pid), role })}` });
-    } catch (e: any) {
-      toast.error(e?.message || 'Failed to send invite');
-    }
-  };
+  // Removed: inline invite/share from composer â€” sharing is done from detail pages
 
   const messages = chatByFriend;
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    try {
+      const el = messagesEndRef?.current as HTMLDivElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } catch {}
+  }, [selectedChat, JSON.stringify(messages[selectedChat || ''] || [])]);
+
+  // Poll messages regularly to reflect new messages even if WS is flaky
+  useEffect(() => {
+    if (!meId || !selectedChat) return;
+    let active = true;
+    const tick = async () => {
+      try {
+        const raw = await chatApi.getHistory(meId, Number(selectedChat));
+        const mapped = raw.map(h => parseIncomingContent(h as any, friends));
+        if (!active) return;
+        setChatByFriend(prev => ({ ...prev, [selectedChat]: mapped }));
+      } catch {}
+    };
+    const iv = setInterval(tick, 3000);
+    tick();
+    return () => { active = false; clearInterval(iv); };
+  }, [selectedChat, meId, friends]);
+
+  // Poll friends list so new friendship reflects without manual reload
+  useEffect(() => {
+    if (!meId) return;
+    let active = true;
+    const tick = async () => {
+      try {
+        const apiFriends: ApiFriendDTO[] = await friendsApi.getFriends(meId);
+        const mapped: Friend[] = apiFriends.map((f) => ({
+          id: String(f.friendId || f.id),
+          name: f.friendName || `User ${f.friendId}`,
+          username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
+          avatar: f.friendAvatar || undefined,
+          isOnline: false,
+          streak: 0,
+        }));
+        if (!active) return;
+        setFriends(mapped);
+      } catch {}
+    };
+    const iv = setInterval(tick, 10000);
+    tick();
+    return () => { active = false; clearInterval(iv); };
+  }, [meId]);
 
   const handleCreateInviteLink = async () => {
     try {
@@ -452,7 +481,7 @@ const Social = () => {
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Headphones className="w-3 h-3" />
                   <span className="truncate">
-                    {friend.currentlyListening.title} Ã¢â‚¬Â¢ {friend.currentlyListening.artist}
+                    {friend.currentlyListening.title} â€” {friend.currentlyListening.artist}
                   </span>
                 </div>
               ) : (
@@ -469,7 +498,7 @@ const Social = () => {
     const currentMessages = selectedChat ? messages[selectedChat] || [] : [];
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 scrollbar-hide scroll-smooth" ref={messagesEndRef}>
         {currentMessages.map((message) => (
           <div
             key={message.id}
@@ -498,7 +527,17 @@ const Social = () => {
                   </div>
                 </div>
               ) : (
-                <p className="text-sm">{message.content}</p>
+                (() => {
+                  const txt = String(message.content || "");
+                  const isUrl = /^https?:\/\//i.test(txt);
+                  return isUrl ? (
+                    <a href={txt} target="_blank" rel="noreferrer" className="text-sm underline text-primary break-all">
+                      {txt}
+                    </a>
+                  ) : (
+                    <p className="text-sm break-words whitespace-pre-wrap">{txt}</p>
+                  );
+                })()
               )}
               <p className="text-xs opacity-70 mt-1">{message.timestamp}</p>
             </div>
@@ -512,15 +551,7 @@ const Social = () => {
     <div className="min-h-screen bg-gradient-dark">
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
-              Social Hub
-            </h1>
-            <p className="text-muted-foreground">
-              Connect with friends, share music, and discover new sounds together
-            </p>
-          </div>
+          {/* Header removed to keep chat frame stable */}
 
           {inviteCode && (
             <div className="mb-6">
@@ -603,7 +634,7 @@ const Social = () => {
                         </div>
                       </CardHeader>
 
-                      <CardContent className="flex-1 p-4 overflow-y-auto">
+                      <CardContent className="flex-1 p-4 overflow-y-auto scrollbar-custom scroll-smooth">
                         {renderMessages()}
                       </CardContent>
 
@@ -624,12 +655,7 @@ const Social = () => {
                               <Music className="w-4 h-4 mr-2" /> Share current song
                             </Button>
                           )}
-                          <Button variant="outline" size="sm" className="ml-2" onClick={handleSharePlaylistLink}>
-                            Share playlist link
-                          </Button>
-                          <Button variant="outline" size="sm" className="ml-2" onClick={handleSendPlaylistCollabInvite}>
-                            Invite to collaborate
-                          </Button>
+                          {/* Sharing links/invites from detail pages; no extra composer buttons */}
                         </div>
                       </div>
                     </>
@@ -720,7 +746,7 @@ const Social = () => {
                         <div key={inv.id} className="flex items-center gap-3 p-3 bg-muted/10 rounded-lg">
                           <div className="flex-1">
                             <h4 className="font-medium">Playlist: {inv.playlistName || inv.playlistId}</h4>
-                            <p className="text-xs text-muted-foreground">From: {inv.senderName || inv.senderId} â€¢ Role: {inv.role}</p>
+                            <p className="text-xs text-muted-foreground">From: {inv.senderName || inv.senderId} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ Role: {inv.role}</p>
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" variant="hero" onClick={() => handleAcceptCollabInvite(inv.id)}>Accept</Button>

@@ -12,7 +12,7 @@ import { ArrowLeft, Upload, Music, Lock, Globe, AlertCircle, X, Users } from "lu
 import { uploadImage } from "@/config/cloudinary";
 import { toast } from "@/hooks/use-toast";
 import Footer from "@/components/Footer";
-import { buildJsonHeaders } from "@/services/api";
+import { buildJsonHeaders, authApi } from "@/services/api";
 
 interface PlaylistForm {
   name: string;
@@ -116,7 +116,22 @@ const CreatePlaylist = () => {
       if (formData.coverImage) {
         uploadedCoverUrl = await uploadCoverIfNeeded(formData.coverImage);
       }
-      const body = {
+      // Try to resolve current userId for ownership
+      let ownerId: number | undefined;
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+        ownerId = raw ? Number(raw) : undefined;
+        if (!ownerId || !Number.isFinite(ownerId)) {
+          const me = await authApi.me().catch(() => undefined);
+          const uid = me && (me.id || me.userId);
+          if (uid) {
+            ownerId = Number(uid);
+            try { localStorage.setItem('userId', String(uid)); } catch {}
+          }
+        }
+      } catch {}
+
+      const body: any = {
         name: formData.name,
         description: (formData.description || "").slice(0, 500),
         visibility: formData.isPublic ? "PUBLIC" : "PRIVATE",
@@ -125,11 +140,8 @@ const CreatePlaylist = () => {
         dateUpdate: today,
         coverUrl: /^https?:\/\//.test(coverUrlText) ? coverUrlText : (uploadedCoverUrl || formData.coverUrl || null),
       };
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      try {
-        const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        if (t) headers["Authorization"] = `Bearer ${t}`;
-      } catch {}
+      if (ownerId) body.ownerId = ownerId;
+      const headers = buildJsonHeaders();
       const res = await fetch("http://localhost:8080/api/playlists", { method: "POST", headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error("Failed to create playlist");
       const data = await res.json();

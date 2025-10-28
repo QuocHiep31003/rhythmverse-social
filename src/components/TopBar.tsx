@@ -170,13 +170,18 @@ const TopBar = () => {
     const loadMe = async () => {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
       if (!token) return;
+    try {
+      const me = await authApi.me();
+      setProfileName(me?.name || me?.username || "");
+      setProfileEmail(me?.email || "");
+      // Cache userId for invite/share flows that check it
       try {
-        const me = await authApi.me();
-        setProfileName(me?.name || me?.username || "");
-        setProfileEmail(me?.email || "");
-      } catch {
-        // ignore
-      }
+        const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
+        if (uid) localStorage.setItem('userId', uid);
+      } catch {}
+    } catch {
+      // ignore
+    }
     };
     loadMe();
   }, []);

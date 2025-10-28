@@ -23,6 +23,7 @@ import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { authApi } from "@/services/api";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
@@ -34,6 +35,7 @@ const PlaylistLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [likedPlaylists, setLikedPlaylists] = useState<string[]>([]);
+  const [durations, setDurations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [selected, setSelected] = useState<any | null>(null);
@@ -54,12 +56,25 @@ const PlaylistLibrary = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
-        const me = rawUserId ? Number(rawUserId) : NaN;
+        let me: number | undefined;
+        try {
+          const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+          me = rawUserId ? Number(rawUserId) : undefined;
+          if (!Number.isFinite(me as number)) me = undefined;
+          if (!me) {
+            // Fallback: try to fetch current user and cache id
+            const meResp: any = await authApi.me().catch(() => undefined);
+            const uid = meResp && (meResp.id || meResp.userId);
+            if (uid) {
+              me = Number(uid);
+              try { localStorage.setItem('userId', String(uid)); } catch {}
+            }
+          }
+        } catch { me = undefined; }
         let sortParam = "dateUpdate,desc";
         if (sortBy === 'name') sortParam = 'name,asc';
-        const page = Number.isFinite(me)
-          ? await playlistsApi.getByUser(me, { page: 0, size: 24, sort: sortParam, search: searchQuery || undefined })
+        const page = Number.isFinite(me as number)
+          ? await playlistsApi.getByUser(me as number, { page: 0, size: 24, sort: sortParam, search: searchQuery || undefined })
           : await playlistsApi.getAll({ page: 0, size: 24, sort: sortParam, search: searchQuery || undefined });
         const mapped = (page.content || []).map((p: PlaylistDTO) => ({
           id: String(p.id),
@@ -82,6 +97,54 @@ const PlaylistLibrary = () => {
     };
     load();
   }, [searchQuery, sortBy]);
+
+  // Duration helpers
+  const toSeconds = (input: any): number => {
+    try {
+      if (typeof input === 'number' && Number.isFinite(input)) return input > 10000 ? Math.round(input/1000) : Math.round(input);
+      if (typeof input === 'string') {
+        const t = input.trim(); if (!t) return 0;
+        if (t.includes(':')) {
+          const parts = t.split(':').map(Number);
+          if (parts.every(Number.isFinite)) {
+            if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+            if (parts.length === 2) return parts[0]*60 + parts[1];
+          }
+        }
+        const n = Number(t); if (Number.isFinite(n)) return n > 10000 ? Math.round(n/1000) : Math.round(n);
+      }
+    } catch {}
+    return 0;
+  };
+  const formatTotal = (sec: number) => {
+    const s = Math.max(0, Math.floor(sec));
+    const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60);
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  // Fetch durations for listed playlists
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const ids = playlists.map(p => p.id);
+        const res = await Promise.all(ids.map(async (id) => {
+          try {
+            const detail = await playlistsApi.getById(id);
+            const secs = Array.isArray(detail.songs) ? detail.songs.reduce((acc: number, s: any) => acc + toSeconds((s as any).duration), 0) : 0;
+            return [id, formatTotal(secs)] as [string, string];
+          } catch { return [id, '--'] as [string, string]; }
+        }));
+        if (!cancelled) {
+          const map: Record<string, string> = {};
+          res.forEach(([id, d]) => { map[id] = d; });
+          setDurations(map);
+        }
+      } catch {}
+    };
+    if (playlists.length) run();
+    return () => { cancelled = true; };
+  }, [playlists]);
 
   useEffect(() => {
     const fetchFriends = async () => {
@@ -379,7 +442,7 @@ const PlaylistLibrary = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           <Clock className="w-4 h-4" />
-                          {playlist.totalDuration}
+                          {durations[playlist.id] || playlist.totalDuration}
                         </div>
                         {playlist.isPublic && (
                           <div className="flex items-center gap-1">
@@ -407,14 +470,11 @@ const PlaylistLibrary = () => {
                           <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openEdit(playlist)}>Edit</DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openCollaborate(playlist)}>Collaborate</DropdownMenuItem>
-                              <DropdownMenuSeparator />
                               <DropdownMenuItem className="text-destructive" onClick={() => openDelete(playlist)}>Delete</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>

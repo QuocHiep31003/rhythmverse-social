@@ -8,7 +8,10 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const getAuthToken = (): string | null => {
   try {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('token') || localStorage.getItem('adminToken');
+    const ls = localStorage.getItem('token') || localStorage.getItem('adminToken');
+    if (ls) return ls;
+    try { return sessionStorage.getItem('token'); } catch { /* ignore */ }
+    return null;
   } catch {
     return null;
   }
@@ -564,6 +567,16 @@ export const authApi = {
       throw new Error(error.message || 'Login failed');
     }
 
+    return await response.json();
+  },
+  me: async () => {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'GET',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
     return await response.json();
   },
   loginAdmin: async (data: { email: string; password: string }) => {

@@ -57,6 +57,38 @@ function msToMMSS(sec: number) {
   return `${mm}:${ss}`;
 }
 
+// Convert various duration representations to seconds
+function toSeconds(input: any): number {
+  try {
+    if (typeof input === 'number' && Number.isFinite(input)) {
+      // Heuristic: treat large values as milliseconds
+      return input > 10000 ? Math.round(input / 1000) : Math.round(input);
+    }
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (!trimmed) return 0;
+      if (trimmed.includes(':')) {
+        const parts = trimmed.split(':').map((p) => Number(p));
+        if (parts.every((n) => Number.isFinite(n))) {
+          if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+          if (parts.length === 2) return parts[0] * 60 + parts[1];
+        }
+      }
+      const n = Number(trimmed);
+      if (Number.isFinite(n)) return n > 10000 ? Math.round(n / 1000) : Math.round(n);
+    }
+  } catch {}
+  return 0;
+}
+
+function formatTotalDuration(seconds: number) {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 /* ========== Component chính ========== */
 const AlbumDetail = () => {
   const { id } = useParams();
@@ -73,6 +105,10 @@ const AlbumDetail = () => {
     surfaceTop: "rgb(28,28,34)",
     surfaceBottom: "rgb(12,12,16)",
   });
+
+  const totalDuration = useMemo(() => {
+    return songs.reduce((acc, cur) => acc + toSeconds(cur.duration), 0);
+  }, [songs]);
 
   /* ========== Fetch album ========== */
   useEffect(() => {
@@ -97,7 +133,7 @@ const AlbumDetail = () => {
           index: i + 1,
           title: s.name,
           artist: (s.artists && s.artists[0]?.name) || norm.artist,
-          duration: s.duration ?? 0,
+          duration: toSeconds((s as any).duration),
           audioUrl: s.audioUrl ?? "",
           cover: norm.cover,
         }));
@@ -167,7 +203,7 @@ const AlbumDetail = () => {
             <h1 className="text-4xl md:text-5xl font-extrabold">
               {album?.title}
             </h1>
-            <div className="mt-2 text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2">
+            <div className="mt-2 text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2 items-center">
               <span>{album?.artist}</span>
               <span>•</span>
               <span>
@@ -176,6 +212,12 @@ const AlbumDetail = () => {
                   : "-"}
               </span>
               <span>• {songs.length} songs</span>
+              {songs.length > 0 && (
+                <>
+                  <span>•</span>
+                  <span>{formatTotalDuration(totalDuration)}</span>
+                </>
+              )}
             </div>
 
             <div className="mt-6 flex justify-center md:justify-start gap-3">
@@ -265,7 +307,7 @@ const AlbumDetail = () => {
                         : "—"}
                     </div>
                     <div className="flex justify-center text-sm">
-                      {song.duration ? msToMMSS(song.duration) : "—"}
+                      {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : "-"}
                     </div>
                     <div className="flex justify-center gap-2">
                       <Button
