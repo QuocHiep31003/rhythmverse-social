@@ -6,9 +6,15 @@ export const API_BASE_URL = "http://localhost:8080/api";
 // Auth helpers for API requests
 export const getAuthToken = (): string | null => {
   try {
-    return typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : null;
+    return typeof window !== 'undefined'
+      ? (localStorage.getItem('token') || localStorage.getItem('adminToken'))
+      : null;
   } catch {
-    return null;
+    try {
+      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+    } catch {
+      return null;
+    }
   }
 };
 
@@ -20,6 +26,7 @@ export const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
 
 // Request interceptor để thêm token vào headers
 apiClient.interceptors.request.use(

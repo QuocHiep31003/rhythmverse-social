@@ -7,15 +7,20 @@ export { buildJsonHeaders, parseErrorResponse, getAuthToken } from './api/config
 // Re-export shared interfaces
 export type { PaginationParams, PaginatedResponse } from './api/config';
 
-// Re-export all API modules
+// ✅ Re-export all API modules
 export { artistsApi } from './api/artistApi';
 export { songsApi, type Song } from './api/songApi';
 export { albumsApi } from './api/albumApi';
-export { playlistsApi, playlistCollabInvitesApi, playlistCollaboratorsApi } from './api/playlistApi';
+export {
+  playlistsApi,
+  playlistCollabInvitesApi,
+  playlistCollaboratorsApi,
+} from './api/playlistApi';
 export { friendsApi, inviteLinksApi } from './api/friendsApi';
 export { listeningHistoryApi } from './api/listeningHistoryApi';
 export { lyricsApi } from './api/lyricsApi';
 export { moodsApi } from './api/moodApi';
+
 
 // Import mock data for fallback
 import { mockUsers, mockGenres } from "@/data/mockData";
@@ -335,6 +340,16 @@ export const authApi = {
       throw new Error(error.message || 'Login failed');
     }
 
+    return await response.json();
+  },
+  me: async () => {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: 'GET',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
     return await response.json();
   },
   loginAdmin: async (data: { email: string; password: string }) => {

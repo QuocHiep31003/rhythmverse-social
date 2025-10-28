@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -96,6 +97,10 @@ const ShareButton = ({ title, type, url, playlistId }: ShareButtonProps) => {
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto scrollbar-custom">
         <DialogHeader>
           <DialogTitle>Share {type}</DialogTitle>
+          {/* Accessibility: provide description to avoid aria warning */}
+          <DialogDescription className="sr-only">
+            Select friends to share this {type} with. Optional message field is available.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {/* Share preview */}

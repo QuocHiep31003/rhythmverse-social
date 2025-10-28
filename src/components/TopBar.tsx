@@ -166,22 +166,29 @@ const TopBar = () => {
       fileInputRef.current.value = "";
     }
   };
-  useEffect(() => {
-    const loadMe = async () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      if (!token) return;
-      try {
-        // Get user info from localStorage
-        const userName = localStorage.getItem('userName') || '';
-        const userEmail = localStorage.getItem('userEmail') || '';
-        setProfileName(userName);
-        setProfileEmail(userEmail);
-      } catch {
-        // ignore
+useEffect(() => {
+  const loadMe = async () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) return;
+
+    try {
+      const me = await authApi.me();
+      if (me) {
+        setProfileName(me?.name || me?.username || "");
+        setProfileEmail(me?.email || "");
+
+        const uid = me.id || me.userId;
+        if (uid) localStorage.setItem("userId", String(uid));
+        localStorage.setItem("userName", me?.name || me?.username || "");
+        localStorage.setItem("userEmail", me?.email || "");
       }
-    };
-    loadMe();
-  }, []);
+    } catch (error) {
+      console.error("❌ Failed to load profile:", error);
+    }
+  };
+
+  loadMe();
+}, []);
 
   const handleLogout = () => {
     try {

@@ -41,36 +41,46 @@ const Login = () => {
     setSuccess("");
 
     try {
-      console.log('🔐 Attempting login...');
+      console.log('ðŸ” Attempting login...');
       const response = await authApi.login({
         email: loginData.email,
         password: loginData.password,
         rememberMe,
       });
 
-      console.log('✅ Login response:', response);
+      console.log('âœ… Login response:', response);
 
       if (!response.token) {
         throw new Error('No token received from server');
       }
 
       setSuccess("Login successful!");
-      if (rememberMe) {
-        localStorage.setItem("token", response.token); // Giữ lại sau khi tắt trình duyệt
-      } else {
-        sessionStorage.setItem("token", response.token); // Mất khi tắt trình duyệt
-      }
+      // Persist token in both storages to avoid losing auth across tabs/windows
+      try {
+        localStorage.setItem("token", response.token);
+      } catch {}
+      try {
+        sessionStorage.setItem("token", response.token);
+      } catch {}
 
-      // ⭐ Use AuthContext to save token and fetch user
+      // Fetch current user and persist userId for flows that rely on it
+      try {
+        const me = await authApi.me();
+        const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
+        if (uid) {
+          try { localStorage.setItem('userId', uid); } catch {}
+          try { sessionStorage.setItem('userId', uid); } catch {}
+        }
+      } catch { /* ignore */ }
 
-      console.log('✅ User authenticated, redirecting...');
+      console.log('âœ… User authenticated, redirecting...');
 
       // Navigate to home page after successful login
       setTimeout(() => {
         navigate('/');
       }, 1000);
     } catch (err) {
-      console.error('❌ Login error:', err);
+      console.error('âŒ Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
@@ -479,7 +489,7 @@ const Login = () => {
         {/* Premium Upsell */}
         <Card className="mt-4 bg-gradient-primary/10 border-primary/20">
           <CardContent className="p-4 text-center">
-            <p className="text-sm mb-2">🎵 Unlock Premium Features!</p>
+            <p className="text-sm mb-2">ðŸŽµ Unlock Premium Features!</p>
             <p className="text-xs text-muted-foreground mb-3">
               High-quality streaming, offline downloads, and exclusive content
             </p>
@@ -512,10 +522,10 @@ const OtpModal = ({ open, email, onClose, onVerify }: OTPDialogProps) => {
 
     try {
       await onVerify(otp);
-      setSuccess("✅ Verification successful!");
+      setSuccess("âœ… Verification successful!");
       setTimeout(() => onClose(), 1500);
     } catch (err: any) {
-      setError(err.message || "❌ Invalid or expired OTP");
+      setError(err.message || "âŒ Invalid or expired OTP");
     } finally {
       setLoading(false);
     }
@@ -551,7 +561,7 @@ const OtpModal = ({ open, email, onClose, onVerify }: OTPDialogProps) => {
           </Button>
 
           <p className="text-center text-xs text-muted-foreground mt-2">
-            Didn’t receive the code? <Button variant="link" className="p-0 text-xs">Resend</Button>
+            Didnâ€™t receive the code? <Button variant="link" className="p-0 text-xs">Resend</Button>
           </p>
         </form>
       </DialogContent>

@@ -105,6 +105,16 @@ export const playlistsApi = {
     return (await res.json()) as PlaylistDTO;
   },
 
+  // Remove a song from a playlist (dedicated endpoint)
+  removeSong: async (playlistId: number | string, songId: number | string) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}/songs/${songId}`, {
+      method: "DELETE",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    try { return await res.text(); } catch { return "Removed"; }
+  },
+
   delete: async (id: number | string) => {
     const res = await fetch(`${API_BASE_URL}/playlists/${id}`, {
       method: "DELETE",

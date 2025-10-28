@@ -1,23 +1,29 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Play, Heart, MoreHorizontal, Users, Plus, Search, ArrowLeft, Edit, UserPlus } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, UserPlus, Trash2, Share2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi } from "@/services/api/playlistApi";
 import { buildJsonHeaders } from "@/services/api";
 import { friendsApi } from "@/services/api/friendsApi";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { uploadImage } from "@/config/cloudinary";
 
 const PlaylistDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { playSong, setQueue } = useMusic();
+  const { playSong, setQueue, isPlaying, currentSong } = useMusic();
 
   const [isLiked, setIsLiked] = useState(false);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
@@ -29,11 +35,15 @@ const PlaylistDetail = () => {
     description: string;
     cover: string | null;
     ownerName?: string;
+    ownerId?: number;
     isPublic: boolean;
     updatedAt?: string | null;
     songs: (Song & { addedBy?: string; addedAt?: string })[];
   } | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [pendingDeleteSongId, setPendingDeleteSongId] = useState<string | null>(null);
   const [addSearch, setAddSearch] = useState("");
   const [addResults, setAddResults] = useState<any[]>([]);
   const [adding, setAdding] = useState(false);
@@ -44,6 +54,47 @@ const PlaylistDetail = () => {
   const [inviteRole, setInviteRole] = useState<"VIEWER" | "EDITOR">("VIEWER");
   const [sendingInvites, setSendingInvites] = useState(false);
   const [collaborators, setCollaborators] = useState<Array<{ userId: number; name: string; email?: string; role?: string }>>([]);
+  const [hiddenSongIds, setHiddenSongIds] = useState<string[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const [editedDescription, setEditedDescription] = useState("");
+  const [editedCoverUrl, setEditedCoverUrl] = useState("");
+  const [editedIsPublic, setEditedIsPublic] = useState<boolean>(true);
+  const [editedSongLimit, setEditedSongLimit] = useState<number>(500);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const meId = useMemo(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const n = raw ? Number(raw) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    } catch { return undefined; }
+  }, [typeof window !== 'undefined' ? localStorage.getItem('userId') : undefined]);
+
+  function toSeconds(input: any): number {
+    try {
+      if (typeof input === 'number' && Number.isFinite(input)) return input > 10000 ? Math.round(input/1000) : Math.round(input);
+      if (typeof input === 'string') {
+        const t = input.trim(); if (!t) return 0;
+        if (t.includes(':')) {
+          const parts = t.split(':').map(Number);
+          if (parts.every(Number.isFinite)) {
+            if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+            if (parts.length === 2) return parts[0]*60 + parts[1];
+          }
+        }
+        const n = Number(t); if (Number.isFinite(n)) return n > 10000 ? Math.round(n/1000) : Math.round(n);
+      }
+    } catch {}
+    return 0;
+  }
+
+  const msToMMSS = (sec: number) => {
+    const s = Math.max(0, Math.floor(sec));
+    const mm = Math.floor(s/60).toString().padStart(2,'0');
+    const ss = Math.floor(s%60).toString().padStart(2,'0');
+    return `${mm}:${ss}`;
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -59,7 +110,7 @@ const PlaylistDetail = () => {
               album: s.album?.name || '',
               cover: s.urlImageAlbum || '',
               audioUrl: s.audioUrl || '',
-              duration: 0,
+              duration: toSeconds((s as any).duration),
             }))
           : [];
         setPlaylist({
@@ -68,10 +119,17 @@ const PlaylistDetail = () => {
           description: data.description || '',
           cover: data.coverUrl || (data as any).urlImagePlaylist || null,
           ownerName: (data as any)?.owner?.name,
+          // carry ownerId from backend DTO to enable owner-only actions
+          ...(typeof (data as any)?.ownerId === 'number' ? { ownerId: (data as any).ownerId } : {}),
           isPublic: (data.visibility || 'PUBLIC') === 'PUBLIC',
           updatedAt: (data as any)?.dateUpdate || null,
           songs: mappedSongs,
         });
+        setEditedTitle(data.name || '');
+        setEditedDescription(data.description || '');
+        setEditedCoverUrl(data.coverUrl || (data as any).urlImagePlaylist || '');
+        setEditedIsPublic((data.visibility || 'PUBLIC') === 'PUBLIC');
+        setEditedSongLimit((data as any)?.songLimit ?? 500);
       } catch (e) {
         toast({ title: 'Failed to load playlist', variant: 'destructive' });
       } finally {
@@ -185,7 +243,7 @@ const PlaylistDetail = () => {
 
   const totalDuration = useMemo(() => {
     if (!playlist) return 0;
-    return playlist.songs.reduce((acc, song) => acc + (song.duration || 0), 0);
+    return playlist.songs.reduce((acc, song) => acc + toSeconds(song.duration), 0);
   }, [playlist]);
 
   const togglePlaylistLike = () => {
@@ -221,34 +279,121 @@ const PlaylistDetail = () => {
     playSong(song);
   };
 
+  const confirmRemoveSong = (songId: string) => {
+    setPendingDeleteSongId(songId);
+    setDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!playlist || !pendingDeleteSongId) return;
+    try {
+      setDeleting(true);
+      const sid = Number(pendingDeleteSongId);
+      await playlistsApi.removeSong(playlist.id, sid);
+      setPlaylist({ ...playlist, songs: playlist.songs.filter(s => Number(s.id) !== sid) });
+      // no success toast per request
+      setDeleteOpen(false);
+      setPendingDeleteSongId(null);
+    } catch (e: any) {
+      toast({ title: 'Lỗi', description: e?.message || 'Xóa thất bại', variant: 'destructive' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-dark text-foreground">
       <div className="container mx-auto px-4 py-8">
-        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
+        {/* Back button removed to align with Album detail layout */}
 
         <div className="flex flex-col lg:flex-row gap-8 mb-8">
           <div className="flex-shrink-0">
-            <div className="w-64 h-64 lg:w-80 lg:h-80 rounded-lg overflow-hidden bg-gradient-to-br from-primary to-primary-glow shadow-2xl">
-              {playlist?.cover ? (
-                <img src={playlist.cover} alt={playlist?.title} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-muted" />
+            <div
+              className={`relative w-64 h-64 lg:w-80 lg:h-80 rounded-lg overflow-hidden bg-gradient-to-br from-primary to-primary-glow shadow-2xl ${isEditing ? 'cursor-pointer hover:opacity-95' : ''}`}
+              onClick={() => { if (isEditing) fileInputRef.current?.click(); }}
+              title={isEditing ? 'Click to change cover' : undefined}
+            >
+              {(() => {
+                const src = isEditing ? (editedCoverUrl || playlist?.cover || '') : (playlist?.cover || '');
+                return src ? (
+                  <img src={src} alt={playlist?.title} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-muted" />
+                );
+              })()}
+              {isEditing && (
+                <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition flex items-center justify-center text-xs font-medium">
+                  Change cover
+                </div>
               )}
             </div>
+            {/* hidden file input for cover upload */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const result = await uploadImage(file);
+                  if (result?.secure_url) setEditedCoverUrl(result.secure_url);
+                } catch {}
+              }}
+            />
           </div>
 
           <div className="flex-1">
             <div className="mb-2">
-              <span className="inline-flex items-center gap-2 rounded-full bg-background/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium border ${ (isEditing ? editedIsPublic : (playlist?.isPublic ?? true)) ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30' }`}>
                 <Users className="w-3 h-3" />
-                {playlist?.isPublic ? "Public Playlist" : "Private Playlist"}
+                {(isEditing ? editedIsPublic : (playlist?.isPublic ?? true)) ? "Public Playlist" : "Private Playlist"}
               </span>
             </div>
-            <h1 className="text-3xl font-bold mb-2">{playlist?.title || 'Playlist'}</h1>
-            <p className="text-sm text-muted-foreground">{playlist?.description}</p>
+            {isEditing ? (
+              <div className="space-y-3 mb-2">
+                <Input className="text-3xl md:text-4xl font-bold" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} placeholder="Playlist title" />
+                <Textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} placeholder="Description" rows={3} />
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <Switch checked={editedIsPublic} onCheckedChange={setEditedIsPublic} id="vis" />
+                    <Label htmlFor="vis">Public</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="limit">Song limit</Label>
+                    <Input id="limit" type="number" min={1} max={1000} value={editedSongLimit} onChange={(e) => setEditedSongLimit(parseInt(e.target.value) || 500)} className="w-24" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={async () => {
+                    if (!playlist) return;
+                    try {
+                      await playlistsApi.update(playlist.id, {
+                        name: editedTitle.trim() || playlist.title,
+                        description: editedDescription,
+                        coverUrl: editedCoverUrl || undefined,
+                        visibility: editedIsPublic ? 'PUBLIC' : 'PRIVATE',
+                        songLimit: editedSongLimit,
+                        dateUpdate: new Date().toISOString().split('T')[0],
+                        songIds: playlist.songs.map(s => Number(s.id)),
+                      });
+                      setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, isPublic: editedIsPublic });
+                      setIsEditing(false);
+                      toast({ title: 'Playlist updated' });
+                    } catch (e: any) {
+                      toast({ title: 'Error', description: e?.message || 'Failed to update playlist', variant: 'destructive' });
+                    }
+                  }}>Save</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setIsEditing(false); setEditedTitle(playlist?.title || ''); setEditedDescription(playlist?.description || ''); }}>Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h1 className="text-4xl md:text-5xl font-extrabold mb-2">{playlist?.title || 'Playlist'}</h1>
+                <p className="text-sm text-muted-foreground">{playlist?.description}</p>
+              </>
+            )}
 
             <div className="flex items-center gap-4 mb-6 mt-4">
               <Avatar className="w-8 h-8">
@@ -258,6 +403,12 @@ const PlaylistDetail = () => {
               <span className="font-medium">{playlist?.ownerName || 'Unknown'}</span>
               <span className="text-muted-foreground">•</span>
               <span className="text-muted-foreground">{playlist?.songs.length || 0} songs</span>
+              {playlist && playlist.songs.length > 0 && (
+                <>
+                  <span className="text-muted-foreground">•</span>
+                  <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
+                </>
+              )}
               <span className="text-muted-foreground">•</span>
               <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
               {playlist?.updatedAt && (
@@ -377,7 +528,7 @@ const PlaylistDetail = () => {
                 </DialogContent>
               </Dialog>
 
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
                 <Edit className="w-4 h-4 mr-2" />
                 Edit
               </Button>
@@ -398,13 +549,28 @@ const PlaylistDetail = () => {
             </div>
 
             <div className="space-y-2">
-              {(playlist?.songs || []).map((song, index) => (
-                <div key={song.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group">
-                  <div className="w-8 text-center">
-                    <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
-                    <Button size="icon" variant="ghost" className="hidden group-hover:flex w-8 h-8" onClick={() => handlePlaySong(song)}>
-                      <Play className="w-4 h-4" />
-                    </Button>
+              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => {
+                const active = currentSong?.id === song.id;
+                return (
+                <div
+                  key={song.id}
+                  onClick={() => handlePlaySong(song)}
+                  className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group cursor-pointer"
+                >
+                  <div className="w-8 text-center flex justify-center">
+                    {active ? (
+                      isPlaying ? (
+                        <span className="flex gap-0.5 h-4 items-end">
+                          <i className="bar" />
+                          <i className="bar delay-100" />
+                          <i className="bar delay-200" />
+                        </span>
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )
+                    ) : (
+                      <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
+                    )}
                   </div>
 
                   <Avatar className="w-12 h-12">
@@ -436,20 +602,76 @@ const PlaylistDetail = () => {
                     </Button>
 
                     <span className="text-sm text-muted-foreground w-12 text-right">
-                      {song.duration ? `${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, '0')}` : '--:--'}
+                      {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : '--:--'}
                     </span>
 
-                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          aria-label="Tùy chọn bài hát"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
+                        {meId && collaborators && collaborators.some(c => c.userId === meId) && (
+                          <DropdownMenuItem onClick={() => setHiddenSongIds(prev => prev.includes(song.id) ? prev : [...prev, song.id])}>
+                            Ẩn bài hát này
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => setCollabOpen(true)}>
+                          <Users className="w-4 h-4 mr-2" />Cộng tác
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { try { navigator.clipboard.writeText(window.location.href); } catch {} }}>
+                          <Share2 className="w-4 h-4 mr-2" />Chia sẻ
+                        </DropdownMenuItem>
+                        {/* Owner/Editor can remove from playlist */}
+                        {(() => {
+                          const ownerFromPlaylist = playlist?.ownerId;
+                          const isOwner = !!(ownerFromPlaylist && meId && ownerFromPlaylist === meId);
+                          const isEditor = !!(meId && collaborators.some(c => c.userId === meId && ((c as any).role === 'EDITOR' || (c as any).role === 'OWNER')));
+                          const canRemove = isOwner || isEditor;
+                          return canRemove ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive" onClick={() => confirmRemoveSong(song.id)}>
+                                <Trash2 className="w-4 h-4 mr-2" />Xóa khỏi playlist
+                              </DropdownMenuItem>
+                            </>
+                          ) : null;
+                        })()}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </CardContent>
         </Card>
-      </div>
-      <Footer />
+    </div>
+    <DeleteConfirmDialog
+      open={deleteOpen}
+      onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); if (!o) setPendingDeleteSongId(null); }}
+      onConfirm={handleConfirmDelete}
+      isLoading={deleting}
+      title="Xóa bài hát khỏi playlist?"
+      description={(() => {
+        const t = playlist?.songs.find(s => String(s.id) === String(pendingDeleteSongId))?.title;
+        return t ? `Bạn có chắc muốn xóa "${t}" khỏi playlist này?` : 'Bạn có chắc muốn xóa bài hát này khỏi playlist?';
+      })()}
+    />
+    <Footer />
+    {/* equalizer animation */}
+    <style>{`
+      .bar { display:inline-block; width:2px; height:8px; background:${isPlaying ? 'hsl(var(--primary))' : 'transparent'}; animation:${isPlaying ? 'ev 1s ease-in-out infinite' : 'none'}; }
+      .bar.delay-100{animation-delay:.12s}
+      .bar.delay-200{animation-delay:.24s}
+      @keyframes ev{0%{height:4px}50%{height:14px}100%{height:4px}}
+    `}</style>
     </div>
   );
 };

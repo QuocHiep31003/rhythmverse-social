@@ -195,6 +195,17 @@ All colors MUST be HSL.
   background: hsl(var(--primary) / 0.8);
 }
 
+/* Hide Scrollbar (but keep scrollable) */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar { /* Chrome, Safari, Opera */
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* Admin Scrollbar Styles */
 .scrollbar-admin {
   scrollbar-width: thin;

@@ -53,6 +53,18 @@ export const friendsApi = {
     }
     return await response.json();
   },
+
+  remove: async (userId: number, friendId: number) => {
+    const qs = new URLSearchParams({ userId: String(userId), friendId: String(friendId) }).toString();
+    const response = await fetch(`${API_BASE_URL}/friends?${qs}`, {
+      method: 'DELETE',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+    try { return await response.text(); } catch { return 'Unfriended'; }
+  },
 };
 
 export const inviteLinksApi = {
