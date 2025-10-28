@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { authApi } from "@/services/api";
 import { friendsApi, inviteLinksApi } from "@/services/api/friendsApi";
+import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Footer from "@/components/Footer";
+import useChatSocket from "@/hooks/useChatSocket";
+import { chatApi, ChatMessageDTO } from "@/services/api/chatApi";
+import { useMusic } from "@/contexts/MusicContext";
+
 import {
   MessageCircle,
   Users,
@@ -78,11 +83,44 @@ const Social = () => {
   const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
   const [searchParams] = useSearchParams();
   const inviteCode = (searchParams.get('inviteCode') || '').trim();
+
+  // Token presence helper
+  const hasToken = useMemo(() => {
+    try {
+      return !!(
+        localStorage.getItem('token') ||
+        localStorage.getItem('adminToken') ||
+        ((): string | null => { try { return sessionStorage.getItem('token'); } catch { return null; } })()
+      );
+    } catch {
+      try { return !!(localStorage.getItem('token') || localStorage.getItem('adminToken')); } catch { return false; }
+    }
+  }, []);
+
+  // Preserve invite URL so after login we can return
+  useEffect(() => {
+    if (inviteCode) {
+      try {
+        localStorage.setItem('pendingInviteUrl', window.location.pathname + window.location.search);
+      } catch {}
+    }
+  }, [inviteCode]);
+
+  // Auto-accept once when returning with a valid token
+  const inviteAutoTried = useRef(false);
+  useEffect(() => {
+    if (!inviteCode || !hasToken || inviteAutoTried.current) return;
+    inviteAutoTried.current = true;
+    // try accept silently
+    handleAcceptInviteFromQuery();
+  }, [inviteCode, hasToken]);
   const [pending, setPending] = useState<ApiPendingDTO[]>([]);
   const [loadingPending, setLoadingPending] = useState<boolean>(false);
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const [shareUrl, setShareUrl] = useState<string>("");
+  const [collabInvites, setCollabInvites] = useState<any[]>([]);
+  const [loadingCollabInvites, setLoadingCollabInvites] = useState<boolean>(false);
 
   // Note: do not memoize userId; always read latest from localStorage
   const meId = useMemo(() => {
@@ -90,6 +128,23 @@ const Social = () => {
     const n = raw ? Number(raw) : NaN;
     return Number.isFinite(n) ? n : undefined;
   }, [localStorage.getItem('userId')]);
+
+  // Music context (for sharing current song)
+  const { currentSong, playSong } = useMusic();
+
+  // Chat state: messages per friend id
+  const [chatByFriend, setChatByFriend] = useState<Record<string, Message[]>>({});
+
+  // WebSocket send and onMessage handler
+  const { sendMessage } = useChatSocket(meId || 0, (rawMsg: any) => {
+    try {
+      const friendId = String(rawMsg.senderId === meId ? rawMsg.receiverId : rawMsg.senderId);
+      const parsed = parseIncomingContent(rawMsg as ChatMessageDTO, friends);
+      setChatByFriend(prev => ({ ...prev, [friendId]: [...(prev[friendId] || []), parsed] }));
+    } catch (e) {
+      console.error('WS message parse error', e);
+    }
+  });
 
   const loadFriends = async () => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
@@ -133,7 +188,7 @@ const Social = () => {
 
   useEffect(() => {
     (async () => {
-      await Promise.all([loadFriends(), loadPending()]);
+      await Promise.all([loadFriends(), loadPending(), loadCollabInvites()]);
       // Load current profile for "My Profile" section
       try {
         const me = await authApi.me();
@@ -144,44 +199,38 @@ const Social = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const messages: Record<string, Message[]> = {
-    "1": [
-      {
-        id: "1",
-        sender: "Sarah Chen",
-        content: "Hey! Have you listened to this new track?",
-        timestamp: "10:30 AM",
-        type: "text"
-      },
-      {
-        id: "2",
-        sender: "Sarah Chen",
-        content: "Check this out!",
-        timestamp: "10:31 AM",
-        type: "song",
-        songData: {
-          title: "Midnight City",
-          artist: "M83"
-        }
-      },
-      {
-        id: "3",
-        sender: "You",
-        content: "This is amazing! Adding to my playlist right now 🎵",
-        timestamp: "10:35 AM",
-        type: "text"
-      }
-    ],
-    "2": [
-      {
-        id: "4",
-        sender: "Mike Rodriguez",
-        content: "Rock night at my place tonight! You in?",
-        timestamp: "2:15 PM",
-        type: "text"
-      }
-    ]
+  const loadCollabInvites = async () => {
+    setLoadingCollabInvites(true);
+    try {
+      const list = await playlistCollabInvitesApi.pending();
+      setCollabInvites(Array.isArray(list) ? list : []);
+    } catch { setCollabInvites([]); }
+    finally { setLoadingCollabInvites(false); }
   };
+
+  const handleAcceptCollabInvite = async (inviteId: number) => {
+    try { await playlistCollabInvitesApi.accept(inviteId); toast.success('Invite accepted'); await loadCollabInvites(); }
+    catch (e: any) { toast.error(e?.message || 'Failed to accept'); }
+  };
+
+  const handleRejectCollabInvite = async (inviteId: number) => {
+    try { await playlistCollabInvitesApi.reject(inviteId); toast.success('Invite rejected'); await loadCollabInvites(); }
+    catch (e: any) { toast.error(e?.message || 'Failed to reject'); }
+  };
+
+/* messages moved to state */
+
+  // Load chat history for selected friend
+  useEffect(() => {
+    (async () => {
+      if (!meId || !selectedChat) return;
+      try {
+        const history = await chatApi.getHistory(meId, Number(selectedChat));
+        const mapped = history.map(h => parseIncomingContent(h, friends));
+        setChatByFriend(prev => ({ ...prev, [selectedChat]: mapped }));
+      } catch {}
+    })();
+  }, [meId, selectedChat]);
 
   const suggestedFriends = [
     { id: "5", name: "Jordan Kim", username: "@jordank", mutualFriends: 3 },
@@ -235,11 +284,54 @@ const Social = () => {
   };
 
   const handleSendMessage = () => {
-    if (newMessage.trim() && selectedChat) {
-      // Add message to chat
-      setNewMessage("");
+    if (!newMessage.trim() || !selectedChat || !meId) return;
+    const receiverId = Number(selectedChat);
+    const payload = { senderId: meId, receiverId, content: newMessage.trim() };
+    sendMessage(payload);
+    const msg: Message = { id: `${Date.now()}`, sender: 'You', content: newMessage.trim(), timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'text' };
+    setChatByFriend(prev => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), msg] }));
+    setNewMessage('');
+  };
+
+  const handleShareCurrentSong = () => {
+    if (!currentSong || !selectedChat || !meId) return;
+    const receiverId = Number(selectedChat);
+    const content = `SONG:${JSON.stringify({ id: currentSong.id, title: currentSong.title || currentSong.name, artist: currentSong.artist || '' })}`;
+    sendMessage({ senderId: meId, receiverId, content });
+    const msg: Message = { id: `${Date.now()}`, sender: 'You', content: 'Shared a song', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'song', songData: { title: currentSong.title || currentSong.name, artist: currentSong.artist || '' } };
+    setChatByFriend(prev => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), msg] }));
+  };
+
+  const handleSharePlaylistLink = async () => {
+    if (!selectedChat || !meId) return;
+    try {
+      const input = window.prompt('Enter playlist URL (or ID):');
+      if (!input) return;
+      const url = /^(http|https):/i.test(input) ? input : `${window.location.origin}/playlist/${String(input).trim()}`;
+      const receiverId = Number(selectedChat);
+      sendMessage({ senderId: meId, receiverId, content: `PLAYLIST_LINK:${url}` });
+      const msg: Message = { id: `${Date.now()}`, sender: 'You', content: url, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'text' };
+      setChatByFriend(prev => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), msg] }));
+    } catch {}
+  };
+
+  const handleSendPlaylistCollabInvite = async () => {
+    if (!selectedChat || !meId) return;
+    try {
+      const pid = window.prompt('Enter your playlist ID to invite collaborator:');
+      if (!pid) return;
+      const role = (window.prompt('Role? VIEWER or EDITOR (default VIEWER):') || 'VIEWER').toUpperCase();
+      const receiverId = Number(selectedChat);
+      await playlistCollabInvitesApi.send(Number(pid), receiverId, role as any);
+      toast.success('Collaboration invite sent');
+      // Inform via chat
+      sendMessage({ senderId: meId, receiverId, content: `COLLAB_INVITE:${JSON.stringify({ playlistId: Number(pid), role })}` });
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to send invite');
     }
   };
+
+  const messages = chatByFriend;
 
   const handleCreateInviteLink = async () => {
     try {
@@ -266,12 +358,6 @@ const Social = () => {
   const handleAcceptInviteFromQuery = async () => {
     if (!inviteCode) return;
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        toast.error('Please login to accept the invite');
-        navigate('/login');
-        return;
-      }
       const prevCount = friends.length;
       const res = await inviteLinksApi.accept(inviteCode);
       // After accepting, try to refresh friends immediately
@@ -302,6 +388,15 @@ const Social = () => {
       navigate('/social');
     } catch (e: any) {
       const raw = String(e?.message || 'Failed to accept invite');
+      if (/401|unauthorized/i.test(raw)) {
+        toast.error('Please login to accept the invite');
+        try {
+          const ret = window.location.pathname + window.location.search;
+          localStorage.setItem('pendingInviteUrl', ret);
+          navigate(`/login?redirect=${encodeURIComponent(ret)}`);
+        } catch {}
+        return;
+      }
       // Surface clearer messages for common domain errors
       if (/already\s*friend/i.test(raw)) {
         toast.error('Already friends');
@@ -357,7 +452,7 @@ const Social = () => {
                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Headphones className="w-3 h-3" />
                   <span className="truncate">
-                    {friend.currentlyListening.title} • {friend.currentlyListening.artist}
+                    {friend.currentlyListening.title} Ã¢â‚¬Â¢ {friend.currentlyListening.artist}
                   </span>
                 </div>
               ) : (
@@ -524,6 +619,17 @@ const Social = () => {
                           <Button variant="hero" size="icon" onClick={handleSendMessage}>
                             <Send className="w-4 h-4" />
                           </Button>
+                          {currentSong && (
+                            <Button variant="outline" size="sm" className="ml-2" onClick={handleShareCurrentSong}>
+                              <Music className="w-4 h-4 mr-2" /> Share current song
+                            </Button>
+                          )}
+                          <Button variant="outline" size="sm" className="ml-2" onClick={handleSharePlaylistLink}>
+                            Share playlist link
+                          </Button>
+                          <Button variant="outline" size="sm" className="ml-2" onClick={handleSendPlaylistCollabInvite}>
+                            Invite to collaborate
+                          </Button>
                         </div>
                       </div>
                     </>
@@ -595,6 +701,37 @@ const Social = () => {
                 </Card>
               </div>
 
+              {/* Pending Collaboration Invites */}
+              <div className="mb-6">
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="w-5 h-5" />
+                      Collaboration Invites
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {loadingCollabInvites ? (
+                      <p className="text-sm text-muted-foreground">Loading...</p>
+                    ) : collabInvites.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No pending collaboration invites</p>
+                    ) : (
+                      collabInvites.map((inv: any) => (
+                        <div key={inv.id} className="flex items-center gap-3 p-3 bg-muted/10 rounded-lg">
+                          <div className="flex-1">
+                            <h4 className="font-medium">Playlist: {inv.playlistName || inv.playlistId}</h4>
+                            <p className="text-xs text-muted-foreground">From: {inv.senderName || inv.senderId} â€¢ Role: {inv.role}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="hero" onClick={() => handleAcceptCollabInvite(inv.id)}>Accept</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleRejectCollabInvite(inv.id)}>Reject</Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
               {/* My Profile */}
               <div className="mb-6">
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
@@ -725,15 +862,26 @@ const Social = () => {
                         </div>
                       )}
 
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <MessageCircle className="w-4 h-4 mr-2" />
-                          Message
-                        </Button>
-                        <Button variant="outline" size="sm">
-                          <Heart className="w-4 h-4" />
-                        </Button>
-                      </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="flex-1" onClick={() => setSelectedChat(friend.id)}>
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Message
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={async () => {
+                            try {
+                              const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+                              if (!me) throw new Error('Missing user id');
+                              const ok = window.confirm(`Unfriend ${friend.name}?`);
+                              if (!ok) return;
+                              await friendsApi.remove(Number(me), Number(friend.id));
+                              await loadFriends();
+                              if (selectedChat === friend.id) setSelectedChat(null);
+                              toast.success('Unfriended');
+                            } catch (e: any) { toast.error(e?.message || 'Failed to unfriend'); }
+                          }}>
+                            Unfriend
+                          </Button>
+                        </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -748,3 +896,24 @@ const Social = () => {
 };
 
 export default Social;
+
+
+function parseIncomingContent(m: ChatMessageDTO, friends: any[]): Message {
+  let type: "text" | "song" = "text";
+  let songData: any = undefined;
+  let content = m.content || "";
+  if (content.startsWith("SONG:")) {
+    type = "song";
+    try { const data = JSON.parse(content.slice(5)); songData = { title: data.title, artist: data.artist }; } catch {}
+  }
+  const sender = ((): string => {
+    try {
+      const me = typeof window !== 'undefined' ? Number(localStorage.getItem('userId')) : NaN;
+      if (Number.isFinite(me) && m.senderId === me) return 'You';
+    } catch {}
+    const f = friends?.find((x: any) => Number(x.id) === m.senderId);
+    return f?.name || `User ${m.senderId}`;
+  })();
+  const timestamp = new Date(m.sentAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (content.startsWith("PLAYLIST_LINK:")) { content = content.slice(14); } else if (content.startsWith("COLLAB_INVITE:")) { try { const data = JSON.parse(content.slice(14)); content = `Collab invite for playlist #${data.playlistId} (role: ${data.role})`; } catch {} } return { id: String(m.id), sender, content, timestamp, type, songData };
+}

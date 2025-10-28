@@ -6,9 +6,14 @@ export const API_BASE_URL = "http://localhost:8080/api";
 // Auth helpers for API requests
 const getAuthToken = (): string | null => {
   try {
-    return typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (typeof window === 'undefined') return null;
+    return (
+      localStorage.getItem('token') ||
+      localStorage.getItem('adminToken') ||
+      ((): string | null => { try { return sessionStorage.getItem('token'); } catch { return null; } })()
+    );
   } catch {
-    return null;
+    try { return localStorage.getItem('token') || localStorage.getItem('adminToken'); } catch { return null; }
   }
 };
 
