@@ -129,7 +129,8 @@ const AdminMoods = () => {
                       <thead>
                         <tr>
                           <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                          <th className="w-full text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
+                          <th className="w-1/3 text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
+                          <th className="w-1/3 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                         </tr>
                       </thead>
@@ -145,6 +146,9 @@ const AdminMoods = () => {
                             <td className="w-16 p-3 text-center">{currentPage * pageSize + index + 1}</td>
                             <td className="p-3">
                               <span className="font-medium">{mood.name}</span>
+                            </td>
+                            <td className="p-3">
+                              <span className="text-sm text-muted-foreground font-mono">{mood.gradient || "N/A"}</span>
                             </td>
                             <td className="w-32 text-right p-3">
                               <div className="flex items-center justify-end gap-2">

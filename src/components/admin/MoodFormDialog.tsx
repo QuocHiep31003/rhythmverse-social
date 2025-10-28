@@ -26,6 +26,7 @@ import { uploadImage } from "@/config/cloudinary";
 const moodFormSchema = z.object({
   name: z.string().min(1, "Tên mood không được để trống").max(100),
   iconUrl: z.string().optional(),
+  gradient: z.string().optional(),
 });
 
 type MoodFormValues = z.infer<typeof moodFormSchema>;
@@ -55,6 +56,7 @@ export const MoodFormDialog = ({
     defaultValues: {
       name: "",
       iconUrl: "",
+      gradient: "",
       ...defaultValues,
     },
   });
@@ -67,6 +69,7 @@ export const MoodFormDialog = ({
       form.reset({
         name: "",
         iconUrl: "",
+        gradient: "",
       });
       setPreviewUrl("");
     }
@@ -123,6 +126,23 @@ export const MoodFormDialog = ({
                     <Input placeholder="Happy, Sad, Relaxed..." {...field} />
                   </FormControl>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="gradient"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Gradient (Tailwind CSS)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="from-neon-pink to-primary" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                  <p className="text-xs text-muted-foreground">
+                    Ví dụ: from-neon-pink to-primary, from-neon-blue to-accent
+                  </p>
                 </FormItem>
               )}
             />
