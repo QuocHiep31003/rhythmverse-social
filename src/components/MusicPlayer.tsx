@@ -31,6 +31,7 @@ import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
+import { songsApi } from "@/services/api/songApi";
 
 interface LyricLine {
   time: number;
@@ -63,7 +64,8 @@ const MusicPlayer = () => {
   const [currentLyricIndex, setCurrentLyricIndex] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasReportedListen, setHasReportedListen] = useState(false);
-  const [listenTime, setListenTime] = useState(0);
+  const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   
   const formatTime = (seconds: number) => {
@@ -153,7 +155,8 @@ const MusicPlayer = () => {
     
     // Reset all tracking states for new song
     setHasReportedListen(false);
-    setListenTime(0);
+    setHasIncrementedPlayCount(false);
+    setCurrentTime(0);
     setProgress([0]);
     setCurrentLyricIndex(0);
     setDuration(0);
@@ -232,16 +235,18 @@ const MusicPlayer = () => {
       audio.pause();
     }
   }, [isPlaying, isLoading]);
-  // Track listen time
+  // Track current playback time
   useEffect(() => {
-    if (!audioRef.current || !isPlaying || hasReportedListen) return;
+    if (!audioRef.current || !isPlaying) return;
 
     const interval = setInterval(() => {
-      setListenTime(prev => prev + 1);
-    }, 1000);
+      if (audioRef.current) {
+        setCurrentTime(audioRef.current.currentTime);
+      }
+    }, 500); // Update every 500ms for better accuracy
 
     return () => clearInterval(interval);
-  }, [isPlaying, hasReportedListen]);
+  }, [isPlaying]);
 
   // Update progress and handle song end
   useEffect(() => {
@@ -252,6 +257,7 @@ const MusicPlayer = () => {
       if (audio.duration && !isNaN(audio.duration)) {
         const progressPercent = (audio.currentTime / audio.duration) * 100;
         setProgress([progressPercent]);
+        setCurrentTime(audio.currentTime); // Also update currentTime here for consistency
       }
     };
 
@@ -317,21 +323,45 @@ const MusicPlayer = () => {
     }
   };
 
-  // Record listening history when 50% of song is played
+  // Record listening history and increment play count when 30 seconds have been played
   useEffect(() => {
     if (!currentSong || hasReportedListen || !audioRef.current) return;
 
     const duration = audioRef.current.duration;
-    if (duration && listenTime >= duration / 2) {
+    
+    // Only record if we have valid duration and currentTime has reached 30 seconds
+    if (duration && !isNaN(duration) && currentTime >= 30 && currentTime > 0) {
+      console.log(`🎵 Recording listen: ${currentSong.title} (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
+      
+      // Record listening history
       listeningHistoryApi
         .recordListen({
           userId: 1, // TODO: Get from auth context
           songId: currentSong.id,
         })
-        .then(() => setHasReportedListen(true))
-        .catch(err => console.error("Failed to record listen:", err));
+        .then(() => {
+          console.log("✅ Listening history recorded successfully");
+          setHasReportedListen(true);
+        })
+        .catch(err => {
+          console.error("❌ Failed to record listen:", err);
+        });
+
+      // Increment play count
+      if (!hasIncrementedPlayCount) {
+        songsApi
+          .incrementPlayCount(currentSong.id)
+          .then(() => {
+            console.log("✅ Play count incremented successfully");
+            setHasIncrementedPlayCount(true);
+          })
+          .catch(err => {
+            console.error("❌ Failed to increment play count:", err);
+            // Không throw error, chỉ log để không ảnh hưởng đến listening history
+          });
+      }
     }
-  }, [listenTime, currentSong, hasReportedListen]);
+  }, [currentTime, currentSong, hasReportedListen, hasIncrementedPlayCount]);
 
   const toggleMute = () => setIsMuted(!isMuted);
   
