@@ -1,7 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, TrendingUp, Heart } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, TrendingUp, Heart, Tag } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
@@ -43,6 +43,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { icon: Music, label: "Bài hát", path: "/admin/songs" },
     { icon: Disc3, label: "Albums", path: "/admin/albums" },
     { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
+    { icon: Tag, label: "Promotions", path: "/admin/promotions" },
     { icon: Users, label: "Nghệ sĩ", path: "/admin/artists" },
     { icon: Music, label: "Thể loại", path: "/admin/genres" },
     { icon: Heart, label: "Mood", path: "/admin/moods" },
