@@ -105,7 +105,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <PromotionCarousel />
+      <PromotionCarousel /> 
       <main className="pt-4">
         {/* Quick Features */}
         <section className="py-8">
