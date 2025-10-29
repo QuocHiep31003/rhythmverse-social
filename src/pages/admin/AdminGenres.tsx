@@ -131,8 +131,7 @@ const AdminGenres = () => {
                       <thead>
                         <tr>
                           <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                          <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
-                          <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">Mô tả</th>
+                          <th className="text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                         </tr>
                       </thead>
@@ -146,11 +145,8 @@ const AdminGenres = () => {
                         {genres.map((genre, index) => (
                           <tr key={genre.id} className="border-b border-border hover:bg-muted/50">
                             <td className="w-16 p-3 text-center">{currentPage * pageSize + index + 1}</td>
-                            <td className="w-96 p-3">
+                            <td className="p-3 text-left">
                               <span className="font-medium">{genre.name}</span>
-                            </td>
-                            <td className="w-96 p-3">
-                              <span className="text-muted-foreground truncate">{genre.description || '—'}</span>
                             </td>
                             <td className="w-32 text-right p-3">
                               <div className="flex items-center justify-end gap-2">

@@ -261,15 +261,15 @@ const SearchResults = () => {
             {(activeFilter === "all" || activeFilter === "artists") && (detailedResults.artists.length > 0 ? detailedResults.artists : searchResults.artists).length > 0 && (
               <div className="mb-8">
                 <h3 className="text-xl font-bold mb-4 text-foreground">Artists</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  {(detailedResults.artists.length > 0 ? detailedResults.artists : searchResults.artists).slice(0, activeFilter === "all" ? 3 : 20).map((artist) => (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {(detailedResults.artists.length > 0 ? detailedResults.artists : searchResults.artists).slice(0, activeFilter === "all" ? 4 : 20).map((artist) => (
                     <Card 
                       key={artist.id} 
-                      className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer group w-fit"
+                      className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer group"
                       onClick={() => navigate(`/artist/${artist.id}`)}
                     >
-                      <CardContent className="p-4 text-center min-w-[150px] max-w-[200px]">
-                        <div className="w-16 h-16 bg-muted rounded-full mx-auto mb-3 flex items-center justify-center overflow-hidden">
+                      <CardContent className="p-6 text-center">
+                        <div className="w-32 h-32 bg-muted rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
                           {artist.avatar ? (
                             <img 
                               src={artist.avatar} 
@@ -277,13 +277,13 @@ const SearchResults = () => {
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <User className="w-8 h-8 text-muted-foreground" />
+                            <User className="w-16 h-16 text-muted-foreground" />
                           )}
                         </div>
-                        <h3 className="font-semibold text-base mb-1 text-foreground">
+                        <h3 className="font-bold text-lg mb-1 text-foreground truncate px-2">
                           {artist.name}
                         </h3>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground truncate px-2">
                           {artist.country || "Unknown"}
                         </p>
                       </CardContent>

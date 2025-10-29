@@ -25,66 +25,66 @@ const Premium = () => {
 
   const features = {
     free: [
-      { icon: Music, text: "Basic music streaming", included: true },
-      { icon: Volume2, text: "Standard audio quality", included: true },
-      { icon: Heart, text: "Create playlists", included: true },
-      { icon: Users, text: "Basic social features", included: true },
-      { icon: Download, text: "Offline downloads", included: false },
-      { icon: BarChart3, text: "Advanced analytics", included: false },
-      { icon: MessageCircle, text: "Priority support", included: false },
-      { icon: Trophy, text: "Exclusive events", included: false },
-      { icon: Zap, text: "AI-powered search", included: false },
-      { icon: Sparkles, text: "Custom themes", included: false }
+      { icon: Music, text: "Nghe nhạc cơ bản", included: true },
+      { icon: Volume2, text: "Chất lượng âm thanh tiêu chuẩn", included: true },
+      { icon: Heart, text: "Tạo danh sách phát", included: true },
+      { icon: Users, text: "Tính năng xã hội cơ bản", included: true },
+      { icon: Download, text: "Tải xuống ngoại tuyến", included: false },
+      { icon: BarChart3, text: "Phân tích nâng cao", included: false },
+      { icon: MessageCircle, text: "Hỗ trợ ưu tiên", included: false },
+      { icon: Trophy, text: "Sự kiện độc quyền", included: false },
+      { icon: Zap, text: "Tìm kiếm bằng AI", included: false },
+      { icon: Sparkles, text: "Chủ đề tuỳ chỉnh", included: false }
     ],
     premium: [
-      { icon: Music, text: "Unlimited music streaming", included: true },
-      { icon: Volume2, text: "High-quality audio (320kbps)", included: true },
-      { icon: Heart, text: "Unlimited playlists & albums", included: true },
-      { icon: Users, text: "Full social features", included: true },
-      { icon: Download, text: "Unlimited offline downloads", included: true },
-      { icon: BarChart3, text: "Advanced listening analytics", included: true },
-      { icon: MessageCircle, text: "24/7 priority support", included: true },
-      { icon: Trophy, text: "Exclusive events & content", included: true },
-      { icon: Zap, text: "AI melody & lyrics search", included: true },
-      { icon: Sparkles, text: "Custom themes & profiles", included: true }
+      { icon: Music, text: "Nghe nhạc không giới hạn", included: true },
+      { icon: Volume2, text: "Âm thanh chất lượng cao (320kbps)", included: true },
+      { icon: Heart, text: "Không giới hạn playlist & album", included: true },
+      { icon: Users, text: "Đầy đủ tính năng xã hội", included: true },
+      { icon: Download, text: "Tải xuống ngoại tuyến không giới hạn", included: true },
+      { icon: BarChart3, text: "Phân tích thói quen nghe nhạc", included: true },
+      { icon: MessageCircle, text: "Hỗ trợ 24/7", included: true },
+      { icon: Trophy, text: "Nội dung & sự kiện độc quyền", included: true },
+      { icon: Zap, text: "Tìm kiếm giai điệu & lời bằng AI", included: true },
+      { icon: Sparkles, text: "Chủ đề & hồ sơ tuỳ chỉnh", included: true }
     ]
   };
 
   const pricing = {
-    monthly: { price: 9.99, originalPrice: null },
-    yearly: { price: 99.99, originalPrice: 119.88 }
+    monthly: { price: 4.0, originalPrice: null },
+    yearly: { price: 42.0, originalPrice: 48.0 }
   };
 
   const benefits = [
     {
       icon: Download,
-      title: "Unlimited Downloads",
-      description: "Download any track for offline listening, perfect for commutes and travel"
+      title: "Tải xuống không giới hạn",
+      description: "Tải bất kỳ bài hát nào để nghe ngoại tuyến, lý tưởng khi di chuyển"
     },
     {
       icon: Volume2,
-      title: "High-Quality Audio",
-      description: "Stream in crystal clear 320kbps quality for the best listening experience"
+      title: "Âm thanh chất lượng cao",
+      description: "Phát nhạc 320kbps trong trẻo cho trải nghiệm tốt nhất"
     },
     {
       icon: Zap,
-      title: "AI-Powered Search",
-      description: "Find songs by humming melodies or typing partial lyrics with our AI technology"
+      title: "Tìm kiếm bằng AI",
+      description: "Tìm bài hát bằng giai điệu hoặc một phần lời với AI"
     },
     {
       icon: BarChart3,
-      title: "Listening Analytics",
-      description: "Get detailed insights into your music taste and discover new patterns"
+      title: "Phân tích thói quen nghe",
+      description: "Hiểu sâu sở thích âm nhạc và khám phá xu hướng mới"
     },
     {
       icon: Users,
-      title: "Social Features",
-      description: "Share music with friends, create collaborative playlists, and join music communities"
+      title: "Tính năng xã hội",
+      description: "Chia sẻ nhạc, tạo playlist chung và tham gia cộng đồng"
     },
     {
       icon: Trophy,
-      title: "Exclusive Content",
-      description: "Access premium events, early releases, and exclusive artist content"
+      title: "Nội dung độc quyền",
+      description: "Tham gia sự kiện, nghe phát hành sớm và nội dung nghệ sĩ"
     }
   ];
 
@@ -104,13 +104,14 @@ const Premium = () => {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 bg-gradient-primary bg-clip-text text-transparent mb-4">
             <Crown className="w-8 h-8 text-primary" />
-            <h1 className="text-5xl font-bold">EchoVerse Premium</h1>
+            <h1 className="text-5xl font-bold">Khám phá Premium</h1>
           </div>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Unlock the full potential of your music experience with premium features, 
-            high-quality streaming, and exclusive content.
+            Trải nghiệm âm nhạc trọn vẹn với tính năng nâng cao, chất lượng cao và nội dung độc quyền.
           </p>
         </div>
+
+        
 
         {/* Pricing Toggle */}
         <div className="flex justify-center mb-8">
@@ -120,15 +121,15 @@ const Premium = () => {
               onClick={() => setSelectedPlan("monthly")}
               className="rounded-md"
             >
-              Monthly
+              Theo tháng
             </Button>
             <Button
               variant={selectedPlan === "yearly" ? "default" : "ghost"}
               onClick={() => setSelectedPlan("yearly")}
               className="rounded-md"
             >
-              Yearly
-              <Badge variant="secondary" className="ml-2">Save 17%</Badge>
+              Theo năm
+              <Badge variant="secondary" className="ml-2">Tiết kiệm ~12%</Badge>
             </Button>
           </div>
         </div>
@@ -138,9 +139,9 @@ const Premium = () => {
           {/* Free Plan */}
           <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
             <CardHeader className="text-center pb-8">
-              <CardTitle className="text-2xl">Free</CardTitle>
+              <CardTitle className="text-2xl">Gói Free</CardTitle>
               <div className="text-4xl font-bold">$0</div>
-              <p className="text-muted-foreground">Perfect for casual listeners</p>
+              <p className="text-muted-foreground">Phù hợp với người nghe cơ bản</p>
             </CardHeader>
             <CardContent className="space-y-4">
               {features.free.map((feature, index) => (
@@ -157,7 +158,7 @@ const Premium = () => {
                 </div>
               ))}
               <Button variant="outline" className="w-full mt-6">
-                Current Plan
+                Gói hiện tại
               </Button>
             </CardContent>
           </Card>
@@ -165,27 +166,27 @@ const Premium = () => {
           {/* Premium Plan */}
           <Card className="bg-gradient-primary/10 border-primary/20 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-gradient-primary text-white px-4 py-1 rounded-bl-lg">
-              <span className="text-sm font-medium">Most Popular</span>
+              <span className="text-sm font-medium">Phổ biến nhất</span>
             </div>
             <CardHeader className="text-center pb-8">
               <CardTitle className="text-2xl flex items-center justify-center gap-2">
                 <Crown className="w-6 h-6 text-primary" />
-                Premium
+                Gói Premium
               </CardTitle>
               <div className="space-y-2">
                 <div className="text-4xl font-bold">
                   ${pricing[selectedPlan].price}
                   <span className="text-lg font-normal text-muted-foreground">
-                    /{selectedPlan === "monthly" ? "month" : "year"}
+                    /{selectedPlan === "monthly" ? "tháng" : "năm"}
                   </span>
                 </div>
                 {pricing[selectedPlan].originalPrice && (
                   <div className="text-sm text-muted-foreground line-through">
-                    Originally ${pricing[selectedPlan].originalPrice}/year
+                    Gốc ${pricing[selectedPlan].originalPrice}/năm
                   </div>
                 )}
               </div>
-              <p className="text-muted-foreground">Everything you need for the ultimate music experience</p>
+              <p className="text-muted-foreground">Tất cả những gì bạn cần cho trải nghiệm âm nhạc tối ưu</p>
             </CardHeader>
             <CardContent className="space-y-4">
               {features.premium.map((feature, index) => (
@@ -201,7 +202,7 @@ const Premium = () => {
                 onClick={handleUpgrade}
                 disabled={isUpgrading}
               >
-                {isUpgrading ? "Processing..." : "Upgrade to Premium"}
+                {isUpgrading ? "Đang xử lý..." : "Nâng cấp lên Premium"}
               </Button>
             </CardContent>
           </Card>
@@ -209,7 +210,7 @@ const Premium = () => {
 
         {/* Benefits Section */}
         <div className="mb-12">
-          <h2 className="text-3xl font-bold text-center mb-8">Why Choose Premium?</h2>
+          <h2 className="text-3xl font-bold text-center mb-8">Vì sao nên chọn Premium?</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {benefits.map((benefit, index) => (
               <Card key={index} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300">
@@ -229,24 +230,24 @@ const Premium = () => {
 
         {/* FAQ Section */}
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-8">Frequently Asked Questions</h2>
+          <h2 className="text-3xl font-bold text-center mb-8">Câu hỏi thường gặp</h2>
           <div className="space-y-4">
             {[
               {
-                question: "Can I cancel anytime?",
-                answer: "Yes, you can cancel your premium subscription at any time. Your premium features will remain active until the end of your billing period."
+                question: "Tôi có thể hủy bất cứ lúc nào không?",
+                answer: "Có. Bạn có thể hủy gói Premium bất cứ lúc nào và vẫn giữ quyền lợi đến hết chu kỳ thanh toán."
               },
               {
-                question: "Do you offer a free trial?",
-                answer: "Yes! New users get a 30-day free trial of Premium. No credit card required to start."
+                question: "Có dùng thử miễn phí không?",
+                answer: "Có! Người dùng mới được dùng thử Premium 30 ngày. Không cần thẻ để bắt đầu."
               },
               {
-                question: "What audio quality do I get with Premium?",
-                answer: "Premium subscribers enjoy high-quality 320kbps audio streaming, compared to 128kbps for free users."
+                question: "Chất lượng âm thanh của Premium là gì?",
+                answer: "Premium phát nhạc chất lượng 320kbps, so với 128kbps ở gói Free."
               },
               {
-                question: "Can I use Premium on multiple devices?",
-                answer: "Yes, you can use your Premium account on up to 5 devices simultaneously."
+                question: "Tôi có thể dùng Premium trên nhiều thiết bị không?",
+                answer: "Có, bạn có thể sử dụng trên tối đa 5 thiết bị cùng lúc."
               }
             ].map((faq, index) => (
               <Card key={index} className="bg-gradient-glass backdrop-blur-sm border-white/10">
@@ -261,10 +262,10 @@ const Premium = () => {
 
         {/* CTA Section */}
         <div className="text-center mt-12 p-8 bg-gradient-primary/10 rounded-lg border border-primary/20">
-          <h2 className="text-2xl font-bold mb-4">Ready to upgrade your music experience?</h2>
-          <p className="text-muted-foreground mb-6">Join millions of music lovers who've already made the switch to Premium.</p>
+          <h2 className="text-2xl font-bold mb-4">Sẵn sàng nâng cấp trải nghiệm nghe nhạc?</h2>
+          <p className="text-muted-foreground mb-6">Tham gia cùng hàng triệu người dùng đã chọn Premium.</p>
           <Button variant="hero" size="lg" onClick={handleUpgrade} disabled={isUpgrading}>
-            {isUpgrading ? "Processing..." : "Start Your Premium Journey"}
+            {isUpgrading ? "Đang xử lý..." : "Bắt đầu hành trình Premium"}
           </Button>
         </div>
       </div>

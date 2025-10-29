@@ -54,7 +54,6 @@ const Login = () => {
         throw new Error('No token received from server');
       }
 
-      setSuccess("Login successful!");
       // Persist token in both storages to avoid losing auth across tabs/windows
       try {
         localStorage.setItem("token", response.token);
@@ -75,10 +74,8 @@ const Login = () => {
 
       console.log('âœ… User authenticated, redirecting...');
 
-      // Navigate to home page after successful login
-      setTimeout(() => {
-        navigate('/');
-      }, 1000);
+      // Navigate to home page immediately after successful login
+      navigate('/');
     } catch (err) {
       console.error('âŒ Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -201,7 +198,12 @@ const Login = () => {
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-3 mb-4">
+          <div
+            className="inline-flex items-center gap-3 mb-4 cursor-pointer select-none"
+            onClick={() => navigate('/')}
+            role="button"
+            aria-label="Go to Home"
+          >
             <div className="w-12 h-12 bg-gradient-primary rounded-lg flex items-center justify-center">
               <Music className="w-7 h-7 text-white" />
             </div>
@@ -222,6 +224,8 @@ const Login = () => {
                 <TabsTrigger value="register">Sign Up</TabsTrigger>
               </TabsList>
 
+              {/* Fixed-height container to keep layout stable and center content */}
+              <div className="min-h-[520px] flex flex-col justify-center">
               <TabsContent value="login" className="space-y-4">
                 <CardHeader className="p-0 mb-4">
                   <CardTitle className="text-center">Welcome Back!</CardTitle>
@@ -236,11 +240,7 @@ const Login = () => {
                   </div>
                 )}
 
-                {success && (
-                  <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
-                    {success}
-                  </div>
-                )}
+                {/* Success message intentionally omitted for login success to avoid extra notification */}
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
@@ -428,6 +428,7 @@ const Login = () => {
                   </Button>
                 </form>
               </TabsContent>
+              </div>
             </Tabs>
 
             <div className="mt-6">
@@ -479,25 +480,11 @@ const Login = () => {
           </CardContent>
         </Card>
         <OtpModal
-  open={showOtpModal}
-  email={pendingEmail}
-  onClose={() => setShowOtpModal(false)}
-  onVerify={handleVerifyOtp}
-/>
-
-
-        {/* Premium Upsell */}
-        <Card className="mt-4 bg-gradient-primary/10 border-primary/20">
-          <CardContent className="p-4 text-center">
-            <p className="text-sm mb-2">ðŸŽµ Unlock Premium Features!</p>
-            <p className="text-xs text-muted-foreground mb-3">
-              High-quality streaming, offline downloads, and exclusive content
-            </p>
-            <Button variant="hero" size="sm" onClick={() => navigate('/premium')}>
-              Learn More
-            </Button>
-          </CardContent>
-        </Card>
+          open={showOtpModal}
+          email={pendingEmail}
+          onClose={() => setShowOtpModal(false)}
+          onVerify={handleVerifyOtp}
+        />
       </div>
     </div>
   );

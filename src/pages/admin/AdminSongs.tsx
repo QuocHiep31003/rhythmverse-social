@@ -29,10 +29,11 @@ import {
 } from "lucide-react";
 import { SongFormDialog } from "@/components/admin/SongFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
-import { songsApi } from "@/services/api";
+import { songsApi, artistsApi, genresApi, moodsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { debounce, formatPlayCount } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const DEFAULT_AVATAR_URL =
   "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
@@ -40,7 +41,7 @@ const DEFAULT_AVATAR_URL =
 const AdminSongs = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [songs, setSongs] = useState<any[]>([]);
+  const [songsList, setSongsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -52,30 +53,43 @@ const AdminSongs = () => {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
-  const [showWithoutAlbum, setShowWithoutAlbum] = useState(false);
+  const [selectedArtistId, setSelectedArtistId] = useState<number | undefined>();
+  const [selectedGenreId, setSelectedGenreId] = useState<number | undefined>();
+  const [selectedMoodId, setSelectedMoodId] = useState<number | undefined>();
+  const [artists, setArtists] = useState<any[]>([]);
+  const [genres, setGenres] = useState<any[]>([]);
+  const [moods, setMoods] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadSongs();
-  }, [currentPage, pageSize, searchQuery, showWithoutAlbum]);
+  const loadFilterData = async () => {
+    try {
+      const [artistsData, genresData, moodsData] = await Promise.all([
+        artistsApi.getAll({ page: 0, size: 1000 }),
+        genresApi.getAll({ page: 0, size: 1000 }),
+        moodsApi.getAll({ page: 0, size: 1000 }),
+      ]);
+      
+      setArtists(artistsData.content || []);
+      setGenres(genresData.content || []);
+      setMoods(moodsData.content || []);
+    } catch (error) {
+      console.error("Error loading filter data:", error);
+    }
+  };
 
-  const loadSongs = async () => {
+  const loadSongs = useCallback(async () => {
     try {
       setLoading(true);
-      const data = showWithoutAlbum 
-        ? await songsApi.getWithoutAlbum({
-            page: currentPage,
-            size: pageSize,
-            sort: "name,asc",
-            search: searchQuery || undefined,
-          })
-        : await songsApi.getAll({
-            page: currentPage,
-            size: pageSize,
-            sort: "name,asc",
-            search: searchQuery || undefined,
-          });
-      setSongs(data.content || []);
+      const data = await songsApi.getAll({
+        page: currentPage,
+        size: pageSize,
+        sort: "name,asc",
+        search: searchQuery || undefined,
+        artistId: selectedArtistId,
+        genreId: selectedGenreId,
+        moodId: selectedMoodId,
+      });
+      setSongsList(data.content || []);
       setTotalPages(data.totalPages || 0);
       setTotalElements(data.totalElements || 0);
     } catch (error) {
@@ -87,7 +101,15 @@ const AdminSongs = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, pageSize, searchQuery, selectedArtistId, selectedGenreId, selectedMoodId]);
+
+  useEffect(() => {
+    loadSongs();
+  }, [loadSongs]);
+
+  useEffect(() => {
+    loadFilterData();
+  }, []);
 
   const handleCreate = () => {
     setFormMode("create");
@@ -196,7 +218,7 @@ const AdminSongs = () => {
   };
 
   const handlePlayClick = (song: any) => {
-    const playableSongs = songs.map(s => ({
+    const playableSongs = songsList.map(s => ({
       ...s,
       audio: s.audioUrl,
       artist: s.artists?.map((a: any) => a.name).join(", ") || "Unknown",
@@ -229,7 +251,7 @@ const AdminSongs = () => {
     const pages = [];
     const maxVisiblePages = 5;
     let startPage = Math.max(0, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
+    const endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 1);
     if (endPage - startPage + 1 < maxVisiblePages)
       startPage = Math.max(0, endPage - maxVisiblePages + 1);
     for (let i = startPage; i <= endPage; i++) pages.push(i);
@@ -320,22 +342,93 @@ const AdminSongs = () => {
                   />
                 </div>
               </div>
-              {/* Filter Toggle */}
-              <div className="flex items-center gap-2">
+              {/* Filter Dropdowns */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-muted-foreground">Artist:</label>
+                  <Select
+                    value={selectedArtistId?.toString() || "all"}
+                    onValueChange={(value) => {
+                      setSelectedArtistId(value === "all" ? undefined : Number(value));
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="All artists" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All artists</SelectItem>
+                      {artists.map((artist) => (
+                        <SelectItem key={artist.id} value={artist.id.toString()}>
+                          {artist.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-muted-foreground">Genre:</label>
+                  <Select
+                    value={selectedGenreId?.toString() || "all"}
+                    onValueChange={(value) => {
+                      setSelectedGenreId(value === "all" ? undefined : Number(value));
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="All genres" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All genres</SelectItem>
+                      {genres.map((genre) => (
+                        <SelectItem key={genre.id} value={genre.id.toString()}>
+                          {genre.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-muted-foreground">Mood:</label>
+                  <Select
+                    value={selectedMoodId?.toString() || "all"}
+                    onValueChange={(value) => {
+                      setSelectedMoodId(value === "all" ? undefined : Number(value));
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="All moods" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All moods</SelectItem>
+                      {moods.map((mood) => (
+                        <SelectItem key={mood.id} value={mood.id.toString()}>
+                          {mood.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <Button
-                  variant={showWithoutAlbum ? "default" : "outline"}
+                  variant="outline"
                   size="sm"
                   onClick={() => {
-                    setShowWithoutAlbum(!showWithoutAlbum);
+                    setSelectedArtistId(undefined);
+                    setSelectedGenreId(undefined);
+                    setSelectedMoodId(undefined);
                     setCurrentPage(0);
                   }}
                   className="gap-2"
                 >
-                  <Music className="w-4 h-4" />
-                  {showWithoutAlbum ? "Hide songs without album" : "Show songs without album"}
+                  Clear Filters
                 </Button>
+
                 <Badge variant="secondary">
-                  {showWithoutAlbum ? `${totalElements} songs without album` : `${totalElements} total songs`}
+                  {totalElements} songs
                 </Badge>
               </div>
             </div>
@@ -343,7 +436,7 @@ const AdminSongs = () => {
           <CardContent className="flex-1 flex flex-col min-h-0">
             {loading ? (
               <div className="text-center py-8">Đang tải...</div>
-            ) : songs.length === 0 ? (
+            ) : songsList.length === 0 ? (
               <div className="text-center py-8">
                 {searchQuery
                   ? "Không tìm thấy bài hát phù hợp"
@@ -373,7 +466,7 @@ const AdminSongs = () => {
                 <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
                   <table className="w-full table-fixed">
                     <tbody>
-                      {songs.map((song, index) => (
+                      {songsList.map((song, index) => (
                         <tr key={song.id} className="border-b border-border hover:bg-muted/50">
                           <td className="w-16 text-center p-3">
                             {currentPage * pageSize + index + 1}
@@ -453,7 +546,7 @@ const AdminSongs = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 flex-shrink-0">
             <div className="text-sm text-muted-foreground">
-              Hiển thị {songs.length} trên tổng số {totalElements} bài hát
+              Hiển thị {songsList.length} trên tổng số {totalElements} bài hát
             </div>
             <div className="flex items-center gap-1">
               <Button

@@ -41,8 +41,27 @@ const TopBar = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
-  const [profileName, setProfileName] = useState<string>("");
-  const [profileEmail, setProfileEmail] = useState<string>("");
+  const [profileName, setProfileName] = useState<string>(() => {
+    try {
+      return typeof window !== "undefined" ? (localStorage.getItem("userName") || "") : "";
+    } catch {
+      return "";
+    }
+  });
+  const [profileEmail, setProfileEmail] = useState<string>(() => {
+    try {
+      return typeof window !== "undefined" ? (localStorage.getItem("userEmail") || "") : "";
+    } catch {
+      return "";
+    }
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    try {
+      return typeof window !== "undefined" ? !!localStorage.getItem("token") : false;
+    } catch {
+      return false;
+    }
+  });
   const navigate = useNavigate();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -169,11 +188,15 @@ const TopBar = () => {
 useEffect(() => {
   const loadMe = async () => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    if (!token) return;
+    if (!token) {
+      setIsAuthenticated(false);
+      return;
+    }
 
     try {
       const me = await authApi.me();
       if (me) {
+        setIsAuthenticated(true);
         setProfileName(me?.name || me?.username || "");
         setProfileEmail(me?.email || "");
 
@@ -184,6 +207,7 @@ useEffect(() => {
       }
     } catch (error) {
       console.error("❌ Failed to load profile:", error);
+      setIsAuthenticated(false);
     }
   };
 
@@ -192,9 +216,23 @@ useEffect(() => {
 
   const handleLogout = () => {
     try {
+      // Clear localStorage
       localStorage.removeItem('token');
       localStorage.removeItem('userId');
-    } catch { }
+      localStorage.removeItem('userName');
+      localStorage.removeItem('userEmail');
+      
+      // Clear sessionStorage
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('userId');
+    } catch (e) { /* ignore */ }
+    
+    // Reset state
+    setIsAuthenticated(false);
+    setProfileName("");
+    setProfileEmail("");
+    
+    // Navigate to login page
     navigate('/login');
   }
 
@@ -387,73 +425,78 @@ useEffect(() => {
             </Badge>
           </Button>
 
-          {/* Get Premium */}
+          {/* Khám phá Premium */}
           <Button
-            variant="hero"
+            variant="outline"
             size="sm"
-            className="bg-gradient-primary hover:shadow-[0_0_30px_hsl(var(--primary)/0.5)] transition-all duration-300 hover:scale-105 font-semibold"
+            className="border-primary/30 text-primary hover:bg-primary/10 transition-all duration-300 font-semibold"
+            onClick={() => navigate('/premium')}
           >
-            Get Premium
+            Khám phá Premium
           </Button>
 
-          {/* Profile Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-110 transition-all duration-300">
-                <Avatar className="h-8 w-8 ring-2 ring-[hsl(var(--primary)/0.5)] hover:ring-[hsl(var(--primary))] transition-all">
-                  <AvatarImage src="/placeholder.svg" alt="User" />
-                  <AvatarFallback className="bg-gradient-primary text-white font-semibold shadow-[0_0_15px_hsl(var(--primary)/0.4)]">
-                    {(() => {
-                      const base = (profileName && profileName.trim().length > 0)
-                        ? profileName
-                        : (profileEmail ? profileEmail.split('@')[0] : 'U');
-                      const parts = base.trim().split(' ').filter(Boolean);
-                      const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]) : base[0];
-                      return (initials || 'U').toUpperCase();
-                    })()}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-56 bg-background/95 backdrop-blur-xl border-[hsl(var(--primary)/0.3)] shadow-[0_8px_30px_hsl(var(--primary)/0.2)]"
-              align="end"
-            >
-              <div className="flex items-center justify-start gap-2 p-2">
-                <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'User')}</p>
-                  {profileEmail && (
-                    <p className="w-[200px] truncate text-sm text-muted-foreground">
-                      {profileEmail}
-                    </p>
-                  )}
+          {/* Auth area */}
+          {isAuthenticated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-110 transition-all duration-300">
+                  <Avatar className="h-8 w-8 ring-2 ring-[hsl(var(--primary)/0.5)] hover:ring-[hsl(var(--primary))] transition-all">
+                    <AvatarImage src="/placeholder.svg" alt="User" />
+                    <AvatarFallback className="bg-gradient-primary text-white font-semibold shadow-[0_0_15px_hsl(var(--primary)/0.4)]">
+                      {(() => {
+                        const base = (profileName && profileName.trim().length > 0)
+                          ? profileName
+                          : (profileEmail ? profileEmail.split('@')[0] : 'U');
+                        const parts = base.trim().split(' ').filter(Boolean);
+                        const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]) : base[0];
+                        return (initials || 'U').toUpperCase();
+                      })()}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-56 bg-background/95 backdrop-blur-xl border-[hsl(var(--primary)/0.3)] shadow-[0_8px_30px_hsl(var(--primary)/0.2)]"
+                align="end"
+              >
+                <div className="flex items-center justify-start gap-2 p-2">
+                  <div className="flex flex-col space-y-1 leading-none">
+                    <p className="font-medium">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'User')}</p>
+                    {profileEmail && (
+                      <p className="w-[200px] truncate text-sm text-muted-foreground">
+                        {profileEmail}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/profile" className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/settings" className="flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="flex items-center gap-2" onClick={handleLogout}>
-
-
-
-
-
-                <LogOut className="h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/profile" className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/settings" className="flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="flex items-center gap-2" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              className="bg-primary hover:bg-primary/90 text-primary-foreground ml-auto"
+              onClick={() => navigate('/login')}
+            >
+              Login
+            </Button>
+          )}
         </div>
       </div>
     </header>

@@ -20,6 +20,7 @@ export { friendsApi, inviteLinksApi } from './api/friendsApi';
 export { listeningHistoryApi } from './api/listeningHistoryApi';
 export { lyricsApi } from './api/lyricsApi';
 export { moodsApi } from './api/moodApi';
+export { authApi } from './api/authApi';
 
 
 // Import mock data for fallback
@@ -279,93 +280,7 @@ export const genresApi = {
   },
 };
 
-// Auth API
-export const authApi = {
-  /**
-   * Register
-   * @param data { name: string; email: string; password: string }
-   * @returns { token: string }
-   * @throws { Error }
-   * @description Register a new user
-   */
-  register: async (data: { name: string; email: string; password: string }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Registration failed');
-    }
-
-    return await response.json();
-  },
-  /**
-   * Verify OTP
-   * @param data { email: string; otp: string }
-   * @returns { token: string }
-   * @throws { Error }
-   * @description Verify OTP for registration
-   */
-  verifyOtp: async (data: { email: string; otp: string }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'OTP verification failed');
-    }
-    return await response.json();
-  },
-
-  login: async (data: { email: string; password: string, rememberMe }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Login failed');
-    }
-
-    return await response.json();
-  },
-  me: async () => {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
-    return await response.json();
-  },
-  loginAdmin: async (data: { email: string; password: string }) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login/admin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Admin login failed");
-    }
-    return await response.json();
-  },
-};
+// moved to ./api/authApi
 
 // Stats API
 export const statsApi = {

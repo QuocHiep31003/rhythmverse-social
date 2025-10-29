@@ -123,31 +123,24 @@ const AdminMoods = () => {
                 <div className="text-center py-8">{searchQuery ? "Không tìm thấy mood" : "Chưa có mood nào"}</div>
               ) : (
                 <>
-                  {/* Fixed Header */}
-                  <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-                    <table className="w-full table-fixed">
-                      <thead>
+                  <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
+                    <table className="w-full table-fixed border-collapse">
+                      <thead className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b-2 border-[hsl(var(--admin-border))]">
                         <tr>
-                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
+                          <th className="w-12 text-left text-sm font-medium text-muted-foreground pl-3 pr-0 py-2">STT</th>
                           <th className="w-1/3 text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
                           <th className="w-1/3 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                         </tr>
                       </thead>
-                    </table>
-                  </div>
-                  
-                  {/* Scrollable Body */}
-                  <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
-                    <table className="w-full table-fixed">
                       <tbody>
                         {moods.map((mood, index) => (
                           <tr key={mood.id} className="border-b border-border hover:bg-muted/50">
-                            <td className="w-16 p-3 text-center">{currentPage * pageSize + index + 1}</td>
-                            <td className="p-3">
+                            <td className="w-12 pl-3 pr-0 py-3 text-left">{currentPage * pageSize + index + 1}</td>
+                            <td className="p-3 text-left">
                               <span className="font-medium">{mood.name}</span>
                             </td>
-                            <td className="p-3">
+                            <td className="p-3 text-left">
                               <span className="text-sm text-muted-foreground font-mono">{mood.gradient || "N/A"}</span>
                             </td>
                             <td className="w-32 text-right p-3">
