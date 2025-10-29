@@ -4,16 +4,67 @@ import { TrendingUp, Clock, Heart, Headphones } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { getTrendingSongs, mockSongs } from "@/data/mockData";
 import { handleImageError, DEFAULT_AVATAR_URL, formatPlayCount } from "@/lib/utils";
+import { songsApi } from "@/services/api/songApi";
+import { useState, useEffect } from "react";
 
 const TrendingSection = () => {
   const { playSong, setQueue } = useMusic();
-  const allSongs = getTrendingSongs();
-  const trendingSongs = [...allSongs].sort((a, b) => {
-    const playsA = typeof a.plays === 'string' ? parseInt(a.plays.replace(/[^0-9]/g, '')) || 0 : a.plays || 0;
-    const playsB = typeof b.plays === 'string' ? parseInt(b.plays.replace(/[^0-9]/g, '')) || 0 : b.plays || 0;
-    return playsB - playsA;
-  });
+  const [trendingSongs, setTrendingSongs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const recentlyPlayed = mockSongs.slice(5, 9);
+
+  // Fetch trending songs from API
+  useEffect(() => {
+    const fetchTrending = async () => {
+      try {
+        setIsLoading(true);
+        const top10 = await songsApi.getTop10();
+        
+        if (top10 && top10.length > 0) {
+          console.log('✅ Loaded top 10 trending:', top10.length, 'songs');
+          
+          // Format the data for the component
+          const formattedSongs = top10.map(song => ({
+            id: song.id,
+            title: song.songName || song.title || 'Unknown',
+            artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
+            album: typeof song.album === 'string' ? song.album : song.album?.name || "Unknown",
+            duration: typeof song.duration === 'string' ? parseInt(song.duration) : song.duration ,
+            cover: song.cover || "",
+            genre: song.genreNames?.[0] || song.genres?.[0]?.name || "Unknown",
+            plays: formatPlayCount(song.playCount || 0),
+            audio: song.audioUrl,
+            audioUrl: song.audioUrl,
+          }));
+          
+          setTrendingSongs(formattedSongs);
+        } else {
+          console.log('⚠️ No trending data, falling back to mock data...');
+          const allSongs = getTrendingSongs();
+          const sortedSongs = [...allSongs].sort((a, b) => {
+            const playsA = typeof a.plays === 'string' ? parseInt(a.plays.replace(/[^0-9]/g, '')) || 0 : a.plays || 0;
+            const playsB = typeof b.plays === 'string' ? parseInt(b.plays.replace(/[^0-9]/g, '')) || 0 : b.plays || 0;
+            return playsB - playsA;
+          });
+          setTrendingSongs(sortedSongs);
+        }
+      } catch (err) {
+        console.error("❌ Error loading trending songs:", err);
+        // Fallback to mock data on error
+        const allSongs = getTrendingSongs();
+        const sortedSongs = [...allSongs].sort((a, b) => {
+          const playsA = typeof a.plays === 'string' ? parseInt(a.plays.replace(/[^0-9]/g, '')) || 0 : a.plays || 0;
+          const playsB = typeof b.plays === 'string' ? parseInt(b.plays.replace(/[^0-9]/g, '')) || 0 : b.plays || 0;
+          return playsB - playsA;
+        });
+        setTrendingSongs(sortedSongs);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchTrending();
+  }, []);
 
   return (
     <section className="py-20 bg-gradient-to-br from-music-dark to-background">
@@ -29,15 +80,24 @@ const TrendingSection = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {trendingSongs.map((song, index) => (
-                  <div 
-                    key={song.id} 
-                    className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/20 transition-colors group cursor-pointer"
-                    onClick={() => {
-                      setQueue(trendingSongs);
-                      playSong(song);
-                    }}
-                  >
+                {isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : trendingSongs.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No trending songs available
+                  </div>
+                ) : (
+                  trendingSongs.map((song, index) => (
+                    <div 
+                      key={song.id} 
+                      className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/20 transition-colors group cursor-pointer"
+                      onClick={() => {
+                        setQueue(trendingSongs);
+                        playSong(song);
+                      }}
+                    >
                     <div className="text-2xl font-bold text-primary w-8">
                       {index + 1}
                     </div>
@@ -55,17 +115,14 @@ const TrendingSection = () => {
                       <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                     </div>
                     <div className="flex flex-col items-end space-y-1">
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Headphones className="h-3 w-3" />
-                        <span>{formatPlayCount(typeof song.plays === 'string' ? parseInt(song.plays.replace(/[^0-9]/g, '')) || 0 : song.plays || 0)}</span>
-                      </div>
+                   
                       <div className="flex items-center space-x-1">
-                        <Heart className="h-4 w-4 text-muted-foreground hover:text-neon-pink cursor-pointer transition-colors" />
                         <span className="text-sm text-muted-foreground">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
                       </div>
                     </div>
-                  </div>
-                ))}
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>

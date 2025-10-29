@@ -327,7 +327,7 @@ export const songsApi = {
    */
   getTop10: async (): Promise<Song[]> => {
     try {
-      const response = await apiClient.get('/trending/top10');
+      const response = await apiClient.get('trending/top-10');
       return response.data;
     } catch (error) {
       console.error("Error fetching top 10:", error);
@@ -471,6 +471,40 @@ export const songsApi = {
     } catch (error) {
       console.error("Error fetching monthly top 100:", error);
       return [];
+    }
+  },
+
+  /**
+   * Tăng playCount của bài hát khi người dùng nghe
+   * POST /api/songs/{songId}/play
+   */
+  incrementPlayCount: async (songId: string | number): Promise<void> => {
+    console.log(`🎵 Attempting to increment play count for song: ${songId}`);
+    
+    try {
+      const response = await apiClient.post(`/songs/${songId}/play`);
+      console.log("✅ Play count incremented successfully:", response.data);
+    } catch (error: any) {
+      console.error("❌ Error incrementing play count:");
+      console.error("  - Status:", error.response?.status);
+      console.error("  - Status Text:", error.response?.statusText);
+      console.error("  - Data:", error.response?.data);
+      console.error("  - Song ID:", songId);
+      
+      // Log thêm thông tin để debug
+      if (error.response?.status === 500) {
+        console.error("  - Backend có lỗi server (500). Có thể:");
+        console.error("    * SongId không tồn tại:", songId);
+        console.error("    * Backend chưa implement đúng endpoint");
+        console.error("    * Thiếu authentication/authorization");
+      } else if (error.response?.status === 404) {
+        console.error("  - Endpoint không tồn tại (404)");
+      } else if (error.response?.status === 401) {
+        console.error("  - Cần authentication (401)");
+      }
+      
+      // Không throw error để không ảnh hưởng listening history
+      console.warn("⚠️ Play count increment failed, but listening history will still be recorded");
     }
   },
 };

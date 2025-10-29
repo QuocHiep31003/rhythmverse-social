@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,9 +26,59 @@ import {
   Palette,
   Volume2
 } from "lucide-react";
+import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
+import { toast } from "@/hooks/use-toast";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
+  const [listeningHistory, setListeningHistory] = useState<ListeningHistoryDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const userId = 1; // TODO: Get from auth context
+  
+  useEffect(() => {
+    fetchListeningHistory();
+  }, []);
+
+  const fetchListeningHistory = async () => {
+    try {
+      setLoading(true);
+      const data = await listeningHistoryApi.getByUser(userId);
+      
+      // Sort by listenedAt date (newest first)
+      const sortedData = data.sort((a, b) => {
+        const dateA = new Date(a.listenedAt || 0).getTime();
+        const dateB = new Date(b.listenedAt || 0).getTime();
+        return dateB - dateA; // Newest first
+      });
+      
+      setListeningHistory(sortedData);
+    } catch (error) {
+      console.error("Failed to fetch listening history:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load listening history",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "Unknown";
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
   
   const [profileData, setProfileData] = useState({
     name: "Alex Johnson",
@@ -52,20 +102,12 @@ const Profile = () => {
 
   const stats = {
     totalListeningTime: "1,247 hours",
-    songsPlayed: "342",
+    songsPlayed: listeningHistory.length.toString(),
     playlistsCreated: 24,
     followersCount: 156,
     followingCount: 89,
     streakDays: 47
   };
-
-  const recentActivity = [
-    { song: "Midnight Dreams", artist: "Luna Bay", time: "2h ago", action: "played" },
-    { song: "Electric Nights", artist: "Nova Sound", time: "5h ago", action: "liked" },
-    { song: "Summer Waves", artist: "Coast Line", time: "1d ago", action: "added to playlist" },
-    { song: "Urban Stories", artist: "City Lights", time: "2d ago", action: "played" },
-    { song: "Neon Skies", artist: "Digital Dreams", time: "3d ago", action: "played" }
-  ];
 
   const topGenres = [
     { name: "Electronic", percentage: 35 },
@@ -246,23 +288,45 @@ const Profile = () => {
             <TabsContent value="activity" className="space-y-6">
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Listening History & Activity
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {recentActivity.map((activity, index) => (
-                      <div key={index} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
-                        <Music className="w-10 h-10 text-primary" />
-                        <div className="flex-1">
-                          <p className="font-medium">{activity.song}</p>
-                          <p className="text-sm text-muted-foreground">{activity.artist}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-muted-foreground">{activity.time}</p>
-                          <p className="text-xs text-muted-foreground">{activity.action}</p>
-                        </div>
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {loading ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        Loading listening history...
                       </div>
-                    ))}
+                    ) : listeningHistory.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Music className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No listening history yet</p>
+                        <p className="text-sm">Start playing songs to see your history here</p>
+                      </div>
+                    ) : (
+                      listeningHistory.map((item, index) => (
+                        <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
+                          <Music className="w-10 h-10 text-primary" />
+                          <div className="flex-1">
+                            <p className="font-medium">
+                              {item.song?.name || item.song?.title || item.songName || "Unknown Song"}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {item.song?.artistNames?.join(", ") ||
+                                item.song?.artists?.map((a: any) => a.name).join(", ") ||
+                                item.artistNames?.join(", ") ||
+                                "Unknown Artist"}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-muted-foreground">{formatDate(item.listenedAt)}</p>
+                            <p className="text-xs text-muted-foreground">played</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
