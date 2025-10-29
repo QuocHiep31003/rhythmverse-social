@@ -61,55 +61,27 @@ export const songsApi = {
   },
 
   // Lấy tất cả songs với pagination
-  getAll: async (params?: PaginationParams): Promise<PaginatedResponse<Song>> => {
+  getAll: async (params?: PaginationParams & { artistId?: number; genreId?: number; moodId?: number }): Promise<PaginatedResponse<Song>> => {
     try {
       const queryParams = new URLSearchParams();
       if (params?.page !== undefined) queryParams.append('page', params.page.toString());
       if (params?.size !== undefined) queryParams.append('size', params.size.toString());
       if (params?.sort) queryParams.append('sort', params.sort);
       if (params?.search) queryParams.append('search', params.search);
+      if (params?.artistId !== undefined) queryParams.append('artistId', String(params.artistId));
+      if (params?.genreId !== undefined) queryParams.append('genreId', String(params.genreId));
+      if (params?.moodId !== undefined) queryParams.append('moodId', String(params.moodId));
 
-      const response = await apiClient.get(`/songs?${queryParams.toString()}`);
+      const url = `/songs?${queryParams.toString()}`;
+      console.log("🌐 API Call:", url);
+      console.log("📋 Params:", params);
+
+      const response = await apiClient.get(url);
+      console.log("✅ API Response:", response.data);
       return response.data;
     } catch (error) {
-      console.error("Error fetching songs:", error);
+      console.error("❌ Error fetching songs:", error);
       // Return empty paginated response instead of mock
-      return {
-        content: [],
-        totalElements: 0,
-        totalPages: 0,
-        size: params?.size ?? 0,
-        number: params?.page ?? 0,
-        first: true,
-        last: true,
-        empty: true,
-        pageable: {
-          pageNumber: params?.page ?? 0,
-          pageSize: params?.size ?? 0,
-          sort: { empty: true, sorted: false, unsorted: true },
-          offset: 0,
-          paged: true,
-          unpaged: false
-        },
-        sort: { empty: true, sorted: false, unsorted: true },
-        numberOfElements: 0
-      } as PaginatedResponse<Song>;
-    }
-  },
-
-  // Lấy songs không có album với pagination
-  getWithoutAlbum: async (params?: PaginationParams): Promise<PaginatedResponse<Song>> => {
-    try {
-      const queryParams = new URLSearchParams();
-      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
-      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
-      if (params?.sort) queryParams.append('sort', params.sort);
-      if (params?.search) queryParams.append('search', params.search);
-
-      const response = await apiClient.get(`/songs/without-album?${queryParams.toString()}`);
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching songs without album:", error);
       return {
         content: [],
         totalElements: 0,

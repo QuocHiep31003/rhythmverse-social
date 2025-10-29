@@ -128,8 +128,8 @@ const GenreExplorer = () => {
                   <div className={`absolute inset-0 bg-gradient-to-br ${mood.gradient} opacity-20 group-hover:opacity-30 transition-opacity`} />
                   <CardContent className="relative p-8 text-center">
                     {mood.iconUrl ? (
-                      <div className="w-12 h-12 mx-auto mb-4 group-hover:scale-110 transition-transform">
-                        <img src={mood.iconUrl} alt={mood.name} className="w-full h-full object-cover rounded-full" />
+                      <div className="w-12 h-12 mx-auto mb-4 group-hover:scale-110 transition-transform rounded-full overflow-hidden ring-2 ring-white/10">
+                        <img src={mood.iconUrl} alt={mood.name} className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <Icon className="h-12 w-12 text-primary mx-auto mb-4 group-hover:scale-110 transition-transform" />
