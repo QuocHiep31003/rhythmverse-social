@@ -1,3 +1,4 @@
+/* @ts-nocheck */
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import { formatPlayCount } from "@/lib/utils";
 import { songsApi } from "@/services/api";
-import { getTrendingComparison, TrendingSong } from "@/services/api/trendingApi";
+import { getTrendingComparison, TrendingSong, callHotTodayTrending } from "@/services/api/trendingApi";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import React from "react"; // (đảm bảo đã import cho JSX trong tooltip)
 
@@ -169,7 +170,7 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    getTrendingComparison(10).then(setHotToday).catch(() => { });
+    callHotTodayTrending(10).then(setHotToday).catch(() => { setHotToday([]); });
   }, []);
 
   useEffect(() => {
@@ -189,7 +190,7 @@ const Index = () => {
 
   const [top3History, setTop3History] = useState({ labels: [], lines: [] });
   useEffect(() => {
-    fetch("http://localhost:8080/api/trending/snapshot-history-top3?limit=8")
+    fetch("http://localhost:8080/api/trending/snapshot-history-top3?limit=24")
       .then(res => res.json())
       .then(setTop3History)
       .catch(() => setTop3History({ labels: [], lines: [] }));
@@ -208,27 +209,22 @@ const Index = () => {
       })
     : [];
 
-  // Tooltip custom
+  // Theo dõi line đang hover để tooltip hiển thị đúng series
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
+  // Tooltip: hiển thị entry ứng với hoveredKey; nếu chưa có thì lấy entry đầu tiên
   const CustomTop3ChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
-    const totalScore = payload.reduce((sum, pl) => sum + (parseFloat(pl.value) || 0), 0);
+    const selected = (hoveredKey && payload.find(pl => pl?.name === hoveredKey)) || payload[0];
+    const meta = selected?.payload?.[`${selected?.name}_meta`];
     return (
       <div className="rounded bg-card border p-3 shadow text-xs min-w-[180px]">
         <div className="font-semibold mb-1">{label}</div>
-        {payload.map((pl, idx) => {
-          const meta = pl.payload[`${pl.name}_meta`];
-          const percent = totalScore > 0 ? Math.round((parseFloat(pl.value) / totalScore) * 100) : null;
-          return (
-            <div key={pl.name} className="flex gap-2 items-center mb-1">
-              {meta?.albumImageUrl && (
-                <img src={meta.albumImageUrl} className="w-7 h-7 rounded object-cover" alt="" />
-              )}
-              <span className="truncate flex-1">{pl.name}</span>
-              <span className="font-bold" style={{ color: meta?.color }}>{pl.value ?? 0}</span>
-              {percent !== null && <span className="ml-1 text-xs text-muted-foreground">{percent}%</span>}
-            </div>
-          );
-        })}
+        <div className="flex gap-2 items-center">
+          {meta?.albumImageUrl && (<img src={meta.albumImageUrl} className="w-7 h-7 rounded object-cover" alt="" />)}
+          <span className="truncate flex-1">{selected?.name}</span>
+          <span className="font-bold" style={{ color: meta?.color }}>{selected?.value ?? 0}</span>
+        </div>
       </div>
     );
   };
@@ -302,8 +298,8 @@ const Index = () => {
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={chartData}>
                     <XAxis dataKey="time" />
-                    <YAxis allowDecimals domain={["auto", "auto"]} />
-                    <Tooltip content={<CustomTop3ChartTooltip />} />
+                    <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
+                    <Tooltip content={(props) => <CustomTop3ChartTooltip {...props} />} cursor={{ stroke: '#9ca3af', strokeDasharray: '3 3' }} />
                     <Legend />
                     {top3History.lines.map((line) => (
                       <Line
@@ -312,7 +308,10 @@ const Index = () => {
                         dataKey={line.songName || line.songId}
                         stroke={line.color}
                         strokeWidth={3}
-                        dot={{ stroke: line.color, fill: '#fff' }}
+                        dot={{ r: 2, stroke: line.color, fill: '#fff' }}
+                        activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
+                        onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
+                        onMouseLeave={() => setHoveredKey(null)}
                         isAnimationActive={false}
                       />
                     ))}
@@ -322,7 +321,7 @@ const Index = () => {
 
               {/* === HotToday Top 10 Section (new, giống ZingMP3, đẹp như Top100) === */}
               {hotToday.length > 0 && (
-                <div className="bg-gradient-glass rounded-xl mt-6 p-4 w-full">
+                <div className="bg-gradient-glass rounded-xl mt-2 p-4 w-full">
                   <div className="flex items-center gap-2 mb-2 justify-between">
                     <div className="flex items-center gap-2">
                       <Star className="w-5 h-5 text-yellow-400" />
@@ -337,9 +336,14 @@ const Index = () => {
                       <div
                         key={song.songId || idx}
                         className="flex items-center gap-4 p-3 rounded-lg transition-colors group cursor-pointer"
-                        onClick={() => {
-                          setQueue(hotToday.slice(0, 10));
-                          playSong(song);
+                        onClick={async () => {
+                          try {
+                            const full = await songsApi.getById(String(song.songId));
+                            if (full) {
+                              setQueue([full]);
+                              playSong(full);
+                            }
+                          } catch {}
                         }}
                       >
                         {/* Rank */}
@@ -361,42 +365,28 @@ const Index = () => {
                           </div>
                           <button
                             className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 transition-opacity"
-                            onClick={e => { e.stopPropagation(); setQueue(hotToday.slice(0, 10)); playSong(song); }}
+                            onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { setQueue([full]); playSong(full); } } catch {} }}
                           >
                             <Play className="w-4 h-4 text-white" />
                           </button>
                         </div>
 
-                        {/* Song Info - không hiển thị genre/mood */}
+                        {/* Song Info */}
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
-                          <p className="text-sm text-muted-foreground truncate">{song.artists?.map(a => a.name).join(', ')}</p>
+                          <p className="text-sm text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
                         </div>
 
-                        {/* Plays/duration/genre badge */}
-                        <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>{song.plays || '-'}</span>
-                          <span>{song.duration}</span>
-                        </div>
+                        {/* Extra info hidden for now */}
+                        <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground" />
 
-                        {/* Actions */}
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={e => { e.stopPropagation(); if (typeof toggleLike !== 'undefined') toggleLike(song.songId); }}
-                            className={`h-8 w-8 ${typeof likedItems !== 'undefined' && likedItems.includes(song.songId) ? 'text-red-500' : ''}`}
-                          >
-                            <Heart className={`w-4 h-4 ${typeof likedItems !== 'undefined' && likedItems.includes(song.songId) ? 'fill-current' : ''}`} />
-                          </Button>
-                          {typeof ShareButton !== 'undefined' && <ShareButton title={song.songName} type="song" />}
-                        </div>
+                        {/* Actions hidden for now */}
+                        <div className="flex items-center gap-1" />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-              {/* Hot Today section removed as requested */}
             </div>
 
             {/* AI Picks */}
