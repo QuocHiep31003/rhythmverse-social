@@ -331,13 +331,14 @@ const MusicPlayer = () => {
     
     // Only record if we have valid duration and currentTime has reached 30 seconds
     if (duration && !isNaN(duration) && currentTime >= 30 && currentTime > 0) {
-      console.log(`🎵 Recording listen: ${currentSong.title} (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
+      const songIdForApi = isNaN(Number(currentSong.id)) ? currentSong.id : Number(currentSong.id);
+      console.log(`🎵 Recording listen: ${currentSong.title} (ID: ${currentSong.id}, Coerced: ${songIdForApi}, Type: ${typeof songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
       
       // Record listening history
       listeningHistoryApi
         .recordListen({
           userId: 1, // TODO: Get from auth context
-          songId: currentSong.id,
+          songId: songIdForApi,
         })
         .then(() => {
           console.log("✅ Listening history recorded successfully");
@@ -349,8 +350,9 @@ const MusicPlayer = () => {
 
       // Increment play count
       if (!hasIncrementedPlayCount) {
+        console.log(`🎵 Incrementing play count for song ID: ${currentSong.id} (Coerced: ${songIdForApi}, Type: ${typeof songIdForApi})`);
         songsApi
-          .incrementPlayCount(currentSong.id)
+          .incrementPlayCount(songIdForApi as any)
           .then(() => {
             console.log("✅ Play count incremented successfully");
             setHasIncrementedPlayCount(true);

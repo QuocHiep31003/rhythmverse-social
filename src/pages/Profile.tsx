@@ -26,8 +26,10 @@ import {
   Palette,
   Volume2
 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
 import { toast } from "@/hooks/use-toast";
+import { songsApi } from "@/services/api/songApi";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
@@ -50,17 +52,76 @@ const Profile = () => {
         const dateB = new Date(b.listenedAt || 0).getTime();
         return dateB - dateA; // Newest first
       });
-      
-      setListeningHistory(sortedData);
-    } catch (error) {
+      // Enrich EVERY entry with canonical song details to avoid stale/incorrect names from backend DTO
+      const enriched = await Promise.all(
+        sortedData.map(async (item) => {
+          try {
+            const songDetail = await songsApi.getById(String(item.songId));
+            if (songDetail) {
+              return { ...item, song: {
+                id: Number((songDetail as any).id ?? item.songId),
+                name: (songDetail as any).name || (songDetail as any).title,
+                title: (songDetail as any).title || (songDetail as any).name,
+                duration: typeof (songDetail as any).duration === 'number' ? (songDetail as any).duration : undefined,
+                cover: (songDetail as any).cover,
+                audioUrl: (songDetail as any).audioUrl,
+                audio: (songDetail as any).audio,
+                playCount: (songDetail as any).playCount,
+                artistNames: (songDetail as any).artistNames,
+                artists: (songDetail as any).artists,
+                album: typeof (songDetail as any).album === 'string' ? { name: (songDetail as any).album } : (songDetail as any).album,
+              } } as any;
+            }
+          } catch {}
+          return item;
+        })
+      );
+
+      setListeningHistory(enriched);
+      // Debug: show song IDs from history to verify with player logs
+      try {
+        // eslint-disable-next-line no-console
+        console.log(
+          "🧾 History songIds:",
+          enriched.map((i) => (i as any).songId ?? (i as any).song?.id)
+        );
+      } catch {}
+    } catch (error: any) {
       console.error("Failed to fetch listening history:", error);
       toast({
         title: "Error",
-        description: "Failed to load listening history",
+        description: error?.message || "Failed to load listening history",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteHistory = async (id: number) => {
+    try {
+      await listeningHistoryApi.delete(id);
+      setListeningHistory((prev) => prev.filter((h) => h.id !== id));
+      toast({ title: "Deleted", description: "Removed from listening history" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to delete item", variant: "destructive" });
+    }
+  };
+
+  const handleClearAllHistory = async () => {
+    if (!listeningHistory.length) return;
+    try {
+      // Delete sequentially to avoid server overload
+      for (const item of listeningHistory) {
+        if (item.id) {
+          // best-effort; ignore single failures
+          try { await listeningHistoryApi.delete(item.id); } catch {}
+        }
+      }
+      setListeningHistory([]);
+      toast({ title: "Cleared", description: "All listening history removed" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to clear history", variant: "destructive" });
     }
   };
 
@@ -288,10 +349,15 @@ const Profile = () => {
             <TabsContent value="activity" className="space-y-6">
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" />
-                    Listening History & Activity
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="w-5 h-5" />
+                      Listening History
+                    </CardTitle>
+                    <Button variant="outline" size="sm" onClick={handleClearAllHistory} disabled={!listeningHistory.length}>
+                      Clear Alloo
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -306,11 +372,14 @@ const Profile = () => {
                         <p className="text-sm">Start playing songs to see your history here</p>
                       </div>
                     ) : (
-                      listeningHistory.map((item, index) => (
+                      listeningHistory.map((item) => (
                         <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
                           <Music className="w-10 h-10 text-primary" />
                           <div className="flex-1">
-                            <p className="font-medium">
+                            <p
+                              className="font-medium"
+                              title={`songId: ${(item as any).songId ?? (item as any).song?.id ?? 'unknown'}`}
+                            >
                               {item.song?.name || item.song?.title || item.songName || "Unknown Song"}
                             </p>
                             <p className="text-sm text-muted-foreground">
@@ -320,9 +389,16 @@ const Profile = () => {
                                 "Unknown Artist"}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">{formatDate(item.listenedAt)}</p>
-                            <p className="text-xs text-muted-foreground">played</p>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <p className="text-sm text-muted-foreground">{formatDate(item.listenedAt)}</p>
+                              <p className="text-xs text-muted-foreground">played</p>
+                            </div>
+                            {item.id && (
+                              <Button variant="outline" size="icon" onClick={() => handleDeleteHistory(item.id!)} aria-label="Delete entry">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))
