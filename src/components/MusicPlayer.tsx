@@ -32,6 +32,8 @@ import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
+import { streamApi } from "@/services/api/streamApi";
+import Hls from "hls.js";
 
 interface LyricLine {
   time: number;
@@ -161,13 +163,46 @@ const MusicPlayer = () => {
     setCurrentLyricIndex(0);
     setDuration(0);
     
-    // Set new audio source
-    const audioUrl = currentSong.audioUrl || currentSong.audio || "";
-    
-    // Only update src if it's different to avoid unnecessary reloads
-    if (audio.src !== audioUrl) {
-      audio.src = audioUrl;
-    }
+    // Set new audio source via secure HLS session
+    let hls: Hls | null = null;
+    (async () => {
+      try {
+        const { playbackUrl } = await streamApi.createSession(currentSong.id);
+        if (Hls.isSupported()) {
+          hls = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 90 });
+          hls.loadSource(playbackUrl);
+          hls.attachMedia(audio);
+          // End loading when manifest is parsed
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            setIsLoading(false);
+            if (isPlaying) {
+              audio.play().catch(() => {});
+            }
+          });
+          // Handle HLS errors to avoid infinite spinner
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            console.error("HLS error:", data);
+            if (data.fatal) {
+              setIsLoading(false);
+              toast({
+                title: "Playback error",
+                description: `${data.type || 'HLS'}: ${data.details || 'fatal error'}`,
+                variant: "destructive",
+              });
+            }
+          });
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+          audio.src = playbackUrl; // Safari
+          audio.load();
+        } else {
+          audio.src = playbackUrl; // Fallback
+          audio.load();
+        }
+      } catch (e) {
+        console.error('Failed to init HLS session', e);
+        setIsLoading(false);
+      }
+    })();
     
     // Handler for when audio is ready to play
     const handleCanPlay = () => {
@@ -205,13 +240,16 @@ const MusicPlayer = () => {
     audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("error", handleLoadError);
     
-    // Start loading the audio
-    audio.load();
+    // Note: audio.load() will be called after source is set (Safari/fallback). For Hls.js, attachMedia triggers load.
     
     // Cleanup
     return () => {
       audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("error", handleLoadError);
+      if (hls) {
+        hls.destroy();
+        hls = null;
+      }
     };
   }, [currentSong]); // Only depend on currentSong change - eslint-disable-line react-hooks/exhaustive-deps
 

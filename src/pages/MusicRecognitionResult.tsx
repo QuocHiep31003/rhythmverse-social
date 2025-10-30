@@ -18,6 +18,7 @@ import {
   Headphones
 } from "lucide-react";
 import { songsApi } from "@/services/api";
+import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
 
 interface AuddResult {
@@ -29,15 +30,22 @@ interface AuddResult {
   timecode?: string;
   song_link?: string;
   albumart?: string;
-  spotify?: { 
+  spotify?: {
     url?: string;
     external_urls?: { spotify?: string };
-    album?: Record<string, unknown>;
+    album?: {
+      images?: Array<{ url?: string; width?: number; height?: number }>;
+    };
   };
   deezer?: string;
   apple_music?: {
     url?: string;
     previews?: Array<{ url?: string }>;
+    artwork?: {
+      url?: string;
+      width?: number;
+      height?: number;
+    };
   };
 }
 
@@ -55,11 +63,17 @@ const MusicRecognitionResult = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [echoverseSong, setEchoverseSong] = useState<unknown>(null);
   const [isSearchingEchoverse, setIsSearchingEchoverse] = useState(false);
+  const [audioError, setAudioError] = useState(false);
+  const [isNavigatingAlbum, setIsNavigatingAlbum] = useState(false);
 
   useEffect(() => {
     if (location.state?.result) {
       setResult(location.state.result);
       setAudioUrl(location.state.audioUrl);
+      // Reset Echoverse search state for new results
+      setEchoverseSong(null);
+      setIsSearchingEchoverse(false);
+      setAudioError(false);
     }
     setIsLoading(false);
   }, [location.state]);
@@ -71,6 +85,8 @@ const MusicRecognitionResult = () => {
       console.log("Recognition result for echoverse search:", recognitionResult);
       
       if (recognitionResult && recognitionResult.title && recognitionResult.artist) {
+        // Clear previous match before searching
+        setEchoverseSong(null);
         setIsSearchingEchoverse(true);
         try {
           console.log("Searching echoverse for:", recognitionResult.title, "by", recognitionResult.artist);
@@ -133,6 +149,55 @@ const MusicRecognitionResult = () => {
     playSong(formattedSong);
   };
 
+  const handleGoToAlbumDetail = async () => {
+    if (!recognitionResult?.album || isNavigatingAlbum) return;
+    try {
+      setIsNavigatingAlbum(true);
+      const albumName = recognitionResult.album;
+      const artistName = recognitionResult.artist || "";
+
+      // 1) Try combined search: "album artist"
+      let targetId: string | number | undefined;
+      try {
+        const combined = `${albumName} ${artistName}`.trim();
+        if (combined) {
+          const combinedRes = await albumsApi.search(combined, { size: 1 });
+          targetId = combinedRes?.content?.[0]?.id;
+        }
+      } catch (err) {
+        console.debug("Album combined search failed", err);
+      }
+
+      // 2) Try search by exact album name
+      if (!targetId) {
+        try {
+          const byName = await albumsApi.searchByName(albumName);
+          targetId = Array.isArray(byName) ? byName?.[0]?.id : undefined;
+        } catch (err) {
+          console.debug("Album searchByName failed", err);
+        }
+      }
+
+      // 3) Fallback: broader search by album only
+      if (!targetId) {
+        try {
+          const searchRes = await albumsApi.search(albumName, { size: 1 });
+          targetId = searchRes?.content?.[0]?.id;
+        } catch (err) {
+          console.debug("Album fallback search failed", err);
+        }
+      }
+
+      if (targetId !== undefined) {
+        navigate(`/album/${targetId}`);
+      }
+    } catch (e) {
+      console.error("Failed to navigate to album detail:", e);
+    } finally {
+      setIsNavigatingAlbum(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
@@ -167,6 +232,24 @@ const MusicRecognitionResult = () => {
 
   const recognitionResult = result.result; // AUDD trả về object, không phải array
   const hasResult = recognitionResult && Object.keys(recognitionResult).length > 0;
+  
+  // Prefer provided albumart, then Apple Music artwork, then Spotify album images
+  const artworkUrl = (() => {
+    if (!hasResult) return "";
+    if (recognitionResult.albumart) return recognitionResult.albumart;
+    const appleArtworkTemplate = recognitionResult.apple_music?.artwork?.url;
+    if (appleArtworkTemplate) {
+      // Replace {w}x{h} placeholders with a reasonable size
+      return appleArtworkTemplate.replace("{w}", "512").replace("{h}", "512");
+    }
+    const spotifyImages = recognitionResult.spotify?.album?.images;
+    if (spotifyImages && spotifyImages.length > 0) {
+      // Pick the closest to 300px or fallback to the first
+      const preferred = spotifyImages.find(img => img?.width === 300) || spotifyImages[0];
+      return preferred?.url || "";
+    }
+    return "";
+  })();
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -174,14 +257,6 @@ const MusicRecognitionResult = () => {
         <div className="max-w-4xl mx-auto">
           {/* Header */}
           <div className="flex items-center gap-4 mb-8">
-            <Button
-              onClick={handleBackToRecognition}
-              variant="outline"
-              className="bg-muted border-border hover:bg-muted/80"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
-            </Button>
             <h1 className="text-3xl font-bold text-foreground">
               Recognition Results
             </h1>
@@ -220,12 +295,17 @@ const MusicRecognitionResult = () => {
                 <CardContent className="space-y-6">
                   {/* Song Details */}
                   <div className="flex gap-6">
-                    {/* Album Art */}
+                    {/* Album Art */
+                    }
                     <div className="flex-shrink-0">
-                      <div className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
-                        {recognitionResult.albumart ? (
+                      <div
+                        className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center cursor-pointer"
+                        onClick={handleGoToAlbumDetail}
+                        title={recognitionResult.album ? `Go to album: ${recognitionResult.album}` : undefined}
+                      >
+                        {artworkUrl ? (
                           <img
-                            src={recognitionResult.albumart}
+                            src={artworkUrl}
                             alt="Album Cover"
                             className="w-full h-full object-cover"
                           />
@@ -249,7 +329,11 @@ const MusicRecognitionResult = () => {
 
                       {recognitionResult.album && (
                         <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                          <Badge
+                            onClick={handleGoToAlbumDetail}
+                            variant="secondary"
+                            className="bg-muted text-muted-foreground cursor-pointer hover:bg-muted/80"
+                          >
                             Album: {recognitionResult.album}
                           </Badge>
                         </div>
@@ -375,32 +459,31 @@ const MusicRecognitionResult = () => {
 </div>
 
                   {/* Audio Preview */}
-                  {audioUrl && (
+                  {audioUrl && !audioError && (
                     <div className="space-y-2">
                       <h3 className="text-lg font-semibold text-foreground">Original Audio:</h3>
-                      <audio controls className="w-full">
-                        <source src={audioUrl} type="audio/mpeg" />
+                      <audio
+                        controls
+                        className="w-full"
+                        src={audioUrl}
+                        onError={() => setAudioError(true)}
+                      >
                         Your browser does not support the audio element.
                       </audio>
                     </div>
                   )}
+                  {audioUrl && audioError && (
+                    <Alert className="bg-muted border-border">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="text-muted-foreground">
+                        Không phát được "Original Audio" từ file bạn tải lên. Vui lòng thử lại.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* Try Again */}
-              <Card className="bg-card border-border">
-                <CardContent className="pt-6">
-                  <div className="text-center space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground">
-                      Want to identify another song?
-                    </h3>
-                    <Button onClick={handleBackToRecognition} className="bg-primary hover:bg-primary/90">
-                      <Play className="w-4 h-4 mr-2" />
-                      Recognize Another Song
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+              
             </div>
           ) : (
             <Card className="bg-card border-border">

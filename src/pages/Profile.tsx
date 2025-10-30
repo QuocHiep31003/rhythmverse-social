@@ -27,22 +27,60 @@ import {
   Volume2
 } from "lucide-react";
 import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
+import { userApi, UserDTO } from "@/services/api/userApi";
 import { toast } from "@/hooks/use-toast";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [listeningHistory, setListeningHistory] = useState<ListeningHistoryDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const userId = 1; // TODO: Get from auth context
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [userId, setUserId] = useState<number | null>(null);
   
   useEffect(() => {
+    fetchProfile();
     fetchListeningHistory();
   }, []);
 
-  const fetchListeningHistory = async () => {
+  const fetchProfile = async () => {
+    try {
+      setProfileLoading(true);
+      const user = await userApi.getCurrentProfile();
+      setUserId(user.id || null);
+      setProfileData({
+        name: user.name || "",
+        username: user.email ? `@${user.email.split('@')[0]}` : "",
+        email: user.email || "",
+        bio: "", // Bio không có trong User entity, giữ nguyên để hiển thị
+        joinDate: "January 2023", // Có thể lấy từ createdAt nếu có
+        phone: user.phone || "",
+        address: user.address || ""
+      });
+      
+      // Update listening history with correct userId
+      if (user.id) {
+        await fetchListeningHistory(user.id);
+      }
+    } catch (error) {
+      console.error("Failed to fetch profile:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to load profile",
+        variant: "destructive",
+      });
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const fetchListeningHistory = async (currentUserId?: number) => {
+    const idToUse = currentUserId || userId;
+    if (!idToUse) return;
+    
     try {
       setLoading(true);
-      const data = await listeningHistoryApi.getByUser(userId);
+      const data = await listeningHistoryApi.getByUser(idToUse);
       
       // Sort by listenedAt date (newest first)
       const sortedData = data.sort((a, b) => {
@@ -86,7 +124,8 @@ const Profile = () => {
     email: "alex@example.com",
     bio: "Music enthusiast | Always discovering new sounds | Premium member since 2023",
     joinDate: "January 2023",
-    location: "New York, NY"
+    phone: "",
+    address: ""
   });
 
   const [preferences, setPreferences] = useState({
@@ -124,9 +163,53 @@ const Profile = () => {
     { month: "Jan", hours: 112 }
   ];
 
-  const handleSaveProfile = () => {
-    setIsEditing(false);
-    // Save profile logic here
+  const handleSaveProfile = async () => {
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "User ID not found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      // Prepare update payload based on User entity fields
+      const updatePayload = {
+        name: profileData.name,
+        // email is immutable on BE; do not send it
+        phone: profileData.phone,
+        address: profileData.address,
+      } as const;
+
+      const updatedUser = await userApi.updateProfile(updatePayload);
+      
+      // Update local state with response
+      setProfileData({
+        ...profileData,
+        name: updatedUser.name || profileData.name,
+        email: updatedUser.email || profileData.email,
+        phone: updatedUser.phone || profileData.phone,
+        address: updatedUser.address || profileData.address,
+      });
+
+      setIsEditing(false);
+      toast({
+        title: "Success",
+        description: "Profile updated successfully",
+      });
+    } catch (error) {
+      console.error("Failed to update profile:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update profile",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -157,19 +240,60 @@ const Profile = () => {
                 <div className="flex-1 text-center md:text-left">
                   {isEditing ? (
                     <div className="space-y-4">
-                      <Input
-                        value={profileData.name}
-                        onChange={(e) => setProfileData({...profileData, name: e.target.value})}
-                        className="text-xl font-bold"
-                      />
-                      <Textarea
-                        value={profileData.bio}
-                        onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
-                        rows={3}
-                      />
+                      <div>
+                        <Label htmlFor="edit-name">Name</Label>
+                        <Input
+                          id="edit-name"
+                          value={profileData.name}
+                          onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                          className="text-xl font-bold"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-email">Email</Label>
+                        <Input
+                          id="edit-email"
+                          type="email"
+                          value={profileData.email}
+                                disabled
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Email cannot be changed.</p>
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-phone">Phone</Label>
+                        <Input
+                          id="edit-phone"
+                          type="tel"
+                          value={profileData.phone}
+                          onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                          placeholder="Phone number"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-address">Address</Label>
+                        <Textarea
+                          id="edit-address"
+                          value={profileData.address}
+                          onChange={(e) => setProfileData({...profileData, address: e.target.value})}
+                          rows={2}
+                          placeholder="Address"
+                        />
+                      </div>
                       <div className="flex gap-2">
-                        <Button variant="hero" onClick={handleSaveProfile}>Save</Button>
-                        <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                        <Button 
+                          variant="hero" 
+                          onClick={handleSaveProfile}
+                          disabled={saving}
+                        >
+                          {saving ? "Saving..." : "Save"}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setIsEditing(false)}
+                          disabled={saving}
+                        >
+                          Cancel
+                        </Button>
                       </div>
                     </div>
                   ) : (

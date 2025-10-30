@@ -282,7 +282,7 @@ export const SongFormDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
             {mode === "create" ? "Thêm bài hát mới" : "Chỉnh sửa bài hát"}
@@ -295,7 +295,8 @@ export const SongFormDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
             <FormField
               control={form.control}
               name="name"
@@ -313,6 +314,7 @@ export const SongFormDialog = ({
                 </FormItem>
               )}
             />
+            </div>
 
             <FormField
               control={form.control}
@@ -324,6 +326,24 @@ export const SongFormDialog = ({
                     <Input 
                       type="number" 
                       placeholder="2024" 
+                      {...field} 
+                      className="admin-input transition-all duration-200"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="duration"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Thời lượng (mm:ss)</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="3:45" 
                       {...field} 
                       className="admin-input transition-all duration-200"
                     />
@@ -625,6 +645,7 @@ export const SongFormDialog = ({
               )}
             />
 
+            <div className="md:col-span-2">
             <FormField
               control={form.control}
               name="moodIds"
@@ -764,7 +785,9 @@ export const SongFormDialog = ({
                 </FormItem>
               )}
             />
+            </div>
 
+            <div className="md:col-span-2">
             <FormField
               control={form.control}
               name="audioUrl"
@@ -870,26 +893,9 @@ export const SongFormDialog = ({
                 </FormItem>
               )}
             />
+            </div>
 
-            <FormField
-              control={form.control}
-              name="duration"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Thời lượng (mm:ss)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="3:45" 
-                      {...field} 
-                      className="admin-input transition-all duration-200"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <DialogFooter>
+            <DialogFooter className="md:col-span-2">
               <Button
                 type="button"
                 variant="outline"
