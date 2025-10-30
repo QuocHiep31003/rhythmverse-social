@@ -18,8 +18,12 @@ import {
   Sparkles,
   Music,
   Heart,
+  ArrowUp,
+  ArrowDown,
+  Minus,
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
+import type { Song as PlayerSong } from "@/contexts/MusicContext";
 import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
@@ -28,6 +32,7 @@ import { songsApi } from "@/services/api";
 import { getTrendingComparison, TrendingSong, callHotTodayTrending } from "@/services/api/trendingApi";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import React from "react"; // (đảm bảo đã import cho JSX trong tooltip)
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper tạo 8 mốc giờ (3 tiếng 1 mốc) dạng "HH:00"
 function generateRecentHours() {
@@ -75,9 +80,9 @@ const CustomChartTooltip = ({ active, payload, label, songs }) => {
         <div className="truncate max-w-[130px] font-semibold text-base" style={{color}}>{thisSong?.songName}</div>
         <div className="text-xs text-muted-foreground truncate max-w-[130px]">{thisSong?.artists?.map(a => a.name).join(", ")}</div>
         <div className="flex gap-1 mt-1 text-xs whitespace-nowrap select-none">
-          {scores.map((s, i) =>
+          {scores.map((s, i) => (
             <span key={i} style={i===chartIndex ? { color, fontWeight: 700 } : {}}>{s}</span>
-          ).reduce((prev, curr) => [prev, <span key={'sep-'+Math.random()}>|</span>, curr])}
+          ))}
         </div>
       </div>
       <div className="text-right ml-2 font-bold text-lg select-none" style={{color}}>
@@ -118,6 +123,7 @@ const Index = () => {
 
   const [hotToday, setHotToday] = useState<TrendingSong[]>([]);
   const [rankHistoryData, setRankHistoryData] = useState([]);
+  const [isLoadingHotToday, setIsLoadingHotToday] = useState(true);
 
   useEffect(() => {
     // Hot Week: Sử dụng API /api/trending/top-5
@@ -170,7 +176,11 @@ const Index = () => {
   }, []);
 
   useEffect(() => {
-    callHotTodayTrending(10).then(setHotToday).catch(() => { setHotToday([]); });
+    setIsLoadingHotToday(true);
+    callHotTodayTrending(10)
+      .then(setHotToday)
+      .catch(() => { setHotToday([]); })
+      .finally(() => setIsLoadingHotToday(false));
   }, []);
 
   useEffect(() => {
@@ -189,43 +199,111 @@ const Index = () => {
   }, [hotToday]);
 
   const [top3History, setTop3History] = useState({ labels: [], lines: [] });
+  const [isLoadingTop3Chart, setIsLoadingTop3Chart] = useState(true);
   useEffect(() => {
+    setIsLoadingTop3Chart(true);
     fetch("http://localhost:8080/api/trending/snapshot-history-top3?limit=24")
       .then(res => res.json())
       .then(setTop3History)
-      .catch(() => setTop3History({ labels: [], lines: [] }));
+      .catch(() => setTop3History({ labels: [], lines: [] }))
+      .finally(() => setIsLoadingTop3Chart(false));
   }, []);
 
-  // Chuẩn bị dữ liệu chart (Recharts)
-  const chartData = Array.isArray(top3History.labels)
-    ? top3History.labels.map((label, idx) => {
-        const entry = { time: label };
-        (top3History.lines ?? []).forEach(line => {
-          const scoreArr = Array.isArray(line.scoreHistory) ? line.scoreHistory : [];
-          entry[line.songName || line.songId] = scoreArr[idx] ?? 0;
-          entry[`${line.songName || line.songId}_meta`] = line; // cho tooltip
-        });
-        return entry;
-      })
-    : [];
-
-  // Theo dõi line đang hover để tooltip hiển thị đúng series
+  // Tạo 24 mốc giờ tính từ giờ hiện tại (lùi 23 giờ) dạng HH:00
+  // Theo dõi line đang hover để tooltip chỉ hiển thị đúng series
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+
+  // Chuẩn bị dữ liệu chart (Recharts) – căn dữ liệu scoreHistory về bên phải cho khớp 24 mốc
+  // Tự build 24 mốc giờ đều nhau (giờ chẵn) kết thúc tại giờ chẵn gần nhất hiện tại
+  const generateLast24Hours = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    const labels: string[] = [];
+    for (let i = 23; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 60 * 60 * 1000);
+      labels.push(`${d.getHours().toString().padStart(2, '0')}:00`);
+    }
+    return labels;
+  };
+  const chartLabels = generateLast24Hours();
+  // Map 24 điểm từ BE vào 24 mốc giờ theo index, căn phải nếu BE ít hơn 24 điểm
+  const chartData = chartLabels.map((label: string, idx: number) => {
+    const entry: any = { time: label };
+    (top3History.lines ?? []).forEach((line: any) => {
+      const scores = Array.isArray(line?.scoreHistory) ? line.scoreHistory : [];
+      const offset = chartLabels.length - scores.length;
+      const localIdx = idx - Math.max(0, offset);
+      const value = localIdx >= 0 && localIdx < scores.length ? (scores[localIdx] ?? 0) : 0;
+      entry[line.songName || line.songId] = value;
+      entry[`${line.songName || line.songId}_meta`] = line;
+    });
+    return entry;
+  });
 
   // Tooltip: hiển thị entry ứng với hoveredKey; nếu chưa có thì lấy entry đầu tiên
   const CustomTop3ChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
-    const selected = (hoveredKey && payload.find(pl => pl?.name === hoveredKey)) || payload[0];
-    const meta = selected?.payload?.[`${selected?.name}_meta`];
+    // Hiển thị cả 3 series, sắp xếp theo giá trị giảm dần tại thời điểm đang hover
+    const sorted = [...payload].sort((a: any, b: any) => (b?.value ?? 0) - (a?.value ?? 0));
     return (
-      <div className="rounded bg-card border p-3 shadow text-xs min-w-[180px]">
-        <div className="font-semibold mb-1">{label}</div>
-        <div className="flex gap-2 items-center">
-          {meta?.albumImageUrl && (<img src={meta.albumImageUrl} className="w-7 h-7 rounded object-cover" alt="" />)}
-          <span className="truncate flex-1">{selected?.name}</span>
-          <span className="font-bold" style={{ color: meta?.color }}>{selected?.value ?? 0}</span>
+      <div className="rounded bg-card border p-3 shadow text-xs min-w-[200px]">
+        <div className="font-semibold mb-2">{label}</div>
+        <div className="flex flex-col gap-1">
+          {sorted.map((pl: any, i: number) => {
+            const meta = pl?.payload?.[`${pl?.name}_meta`];
+            return (
+              <div key={i} className="flex items-center gap-2">
+                {meta?.albumImageUrl && (
+                  <img src={meta.albumImageUrl} className="w-5 h-5 rounded object-cover" alt="" />
+                )}
+                <span className="truncate flex-1" style={{ color: meta?.color }}>{pl?.name}</span>
+                <span className="font-bold" style={{ color: meta?.color }}>{pl?.value ?? 0}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
+    );
+  };
+
+  // Hiển thị biến động hạng cho Hot Today (bên trái avatar)
+  type Rankable = { oldRank?: number; newRank?: number; rank?: number };
+  const renderHotTodayChange = (s: Rankable) => {
+    const previousRank = s.oldRank;
+    const currentRank = s.newRank ?? s.rank;
+    if (!previousRank || previousRank > 100) {
+      return (
+        <span className="flex items-center">
+          <Sparkles className="w-3 h-3 text-yellow-400" />
+        </span>
+      );
+    }
+    if (!currentRank || currentRank <= 0) {
+      return null;
+    }
+    const diff = previousRank - currentRank;
+    if (diff > 0) {
+      return (
+        <span className="flex items-center gap-1 text-green-500">
+          <ArrowUp className="w-3 h-3" />
+          <span className="text-xs font-medium">{diff}</span>
+        </span>
+      );
+    }
+    if (diff < 0) {
+      return (
+        <span className="flex items-center gap-1 text-red-500">
+          <ArrowDown className="w-3 h-3" />
+          <span className="text-xs font-medium">{Math.abs(diff)}</span>
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 text-muted-foreground">
+        <Minus className="w-3 h-3" />
+        {/* giữ chỗ cho số để căn thẳng với các case có số */}
+        <span className="text-xs font-medium opacity-0">0</span>
+      </span>
     );
   };
 
@@ -295,32 +373,47 @@ const Index = () => {
                 <h3 className="font-semibold mb-2 flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-primary" /> Top 3 Rank Changes
                 </h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={chartData}>
-                    <XAxis dataKey="time" />
-                    <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
-                    <Tooltip content={(props) => <CustomTop3ChartTooltip {...props} />} cursor={{ stroke: '#9ca3af', strokeDasharray: '3 3' }} />
-                    <Legend />
-                    {top3History.lines.map((line) => (
-                      <Line
-                        key={line.songId}
-                        type="monotone"
-                        dataKey={line.songName || line.songId}
-                        stroke={line.color}
-                        strokeWidth={3}
-                        dot={{ r: 2, stroke: line.color, fill: '#fff' }}
-                        activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
-                        onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
-                        onMouseLeave={() => setHoveredKey(null)}
-                        isAnimationActive={false}
+                {isLoadingTop3Chart ? (
+                  <div className="w-full">
+                    <Skeleton className="w-full h-[220px] rounded-lg" />
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={chartData}>
+                      <XAxis
+                        dataKey="time"
+                        interval={0}
+                        minTickGap={0}
+                        allowDuplicatedCategory={false}
+                        tick={{ fontSize: 10 }}
+                        padding={{ left: 0, right: 0 }}
                       />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
+                      <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
+                      <Tooltip content={({ active, payload, label }) => (
+                        <CustomTop3ChartTooltip active={active} payload={payload} label={label} />
+                      )} cursor={{ stroke: '#9ca3af', strokeDasharray: '3 3' }} />
+                      <Legend />
+                      {top3History.lines.map((line) => (
+                        <Line
+                          key={line.songId}
+                          type="monotone"
+                          dataKey={line.songName || line.songId}
+                          stroke={line.color}
+                          strokeWidth={3}
+                          dot={{ r: 2, stroke: line.color, fill: '#fff' }}
+                          activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
+                          onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
+                          onMouseLeave={() => setHoveredKey(null)}
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
 
               {/* === HotToday Top 10 Section (new, giống ZingMP3, đẹp như Top100) === */}
-              {hotToday.length > 0 && (
+              {(isLoadingHotToday || hotToday.length > 0) && (
                 <div className="bg-gradient-glass rounded-xl mt-2 p-4 w-full">
                   <div className="flex items-center gap-2 mb-2 justify-between">
                     <div className="flex items-center gap-2">
@@ -332,58 +425,83 @@ const Index = () => {
                     </Button>
                   </div>
                   <div className="flex flex-col gap-2">
-                    {hotToday.slice(0, 10).map((song, idx) => (
-                      <div
-                        key={song.songId || idx}
-                        className="flex items-center gap-4 p-3 rounded-lg transition-colors group cursor-pointer"
-                        onClick={async () => {
-                          try {
-                            const full = await songsApi.getById(String(song.songId));
-                            if (full) {
-                              setQueue([full]);
-                              playSong(full);
-                            }
-                          } catch {}
-                        }}
-                      >
-                        {/* Rank */}
-                        <div className="flex items-center gap-2 w-12">
-                          <span className={`text-lg font-bold 
-                            ${idx === 0 ? 'text-yellow-500' :
-                              idx === 1 ? 'text-sky-400' :
-                                idx === 2 ? 'text-pink-400' :
-                                  'text-muted-foreground'
-                            }`}>
-                            #{idx + 1}
-                          </span>
-                        </div>
-
-                        {/* Cover & Play */}
-                        <div className="relative group">
-                          <div className="w-12 h-12 rounded-lg overflow-hidden shadow border bg-muted flex items-center justify-center">
-                            <img src={song.albumImageUrl} alt={song.songName} className="w-full h-full object-cover" />
+                    {isLoadingHotToday ? (
+                      Array.from({ length: 10 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-4 p-3">
+                          <Skeleton className="w-12 h-6" />
+                          <Skeleton className="w-12 h-12 rounded-lg" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-1/2" />
+                            <Skeleton className="h-3 w-1/3" />
                           </div>
-                          <button
-                            className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 transition-opacity"
-                            onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { setQueue([full]); playSong(full); } } catch {} }}
-                          >
-                            <Play className="w-4 h-4 text-white" />
-                          </button>
                         </div>
+                      ))
+                    ) : (
+                      hotToday.slice(0, 10).map((song, idx) => (
+                        <div
+                          key={song.songId || idx}
+                          className="flex items-center gap-4 p-3 rounded-lg transition-colors group cursor-pointer"
+                          onClick={async () => {
+                            try {
+                              const full = await songsApi.getById(String(song.songId));
+                              if (full) {
+                                const mapped: PlayerSong = {
+                                  id: String(full.id ?? song.songId),
+                                  title: full.title ?? full.songName ?? "Unknown",
+                                  artist: full.artist ?? (full.artists?.map((a:any)=>a.name).join(", ") || "Unknown"),
+                                  album: full.album ?? full.albumName ?? "Unknown",
+                                  duration: typeof full.duration === 'number' ? full.duration : 0,
+                                  cover: full.cover ?? full.albumImageUrl ?? "",
+                                  audioUrl: full.audioUrl ?? full.audio ?? full.url ?? "",
+                                };
+                                setQueue([mapped]);
+                                playSong(mapped);
+                              }
+                            } catch (_e) { void 0; }
+                          }}
+                        >
+                          {/* Rank number + change indicator (fixed widths for perfect alignment) */}
+                          <div className="flex items-center w-20">
+                            <span className={`w-10 text-right text-sm font-semibold 
+                              ${idx === 0 ? 'text-yellow-500' :
+                                idx === 1 ? 'text-sky-400' :
+                                  idx === 2 ? 'text-pink-400' :
+                                    'text-muted-foreground'
+                              }`}>
+                              #{idx + 1}
+                            </span>
+                            <span className="w-10 flex items-center justify-center">
+                              {renderHotTodayChange(song as unknown as Rankable)}
+                            </span>
+                          </div>
 
-                        {/* Song Info */}
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
-                          <p className="text-sm text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
+                          {/* Cover & Play */}
+                          <div className="relative group">
+                            <div className="w-12 h-12 rounded-lg overflow-hidden shadow border bg-muted flex items-center justify-center">
+                              <img src={song.albumImageUrl} alt={song.songName} className="w-full h-full object-cover" />
+                            </div>
+                            <button
+                              className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 transition-opacity"
+                              onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped: PlayerSong = { id: String(full.id ?? song.songId), title: full.title ?? full.songName ?? "Unknown", artist: full.artist ?? (full.artists?.map((a:any)=>a.name).join(", ") || "Unknown"), album: full.album ?? full.albumName ?? "Unknown", duration: typeof full.duration === 'number' ? full.duration : 0, cover: full.cover ?? full.albumImageUrl ?? "", audioUrl: full.audioUrl ?? full.audio ?? full.url ?? "", }; setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
+                            >
+                              <Play className="w-4 h-4 text-white" />
+                            </button>
+                          </div>
+
+                          {/* Song Info */}
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
+                            <p className="text-sm text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
+                          </div>
+
+                          {/* Extra info hidden for now */}
+                          <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground" />
+
+                          {/* Actions hidden for now */}
+                          <div className="flex items-center gap-1" />
                         </div>
-
-                        {/* Extra info hidden for now */}
-                        <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground" />
-
-                        {/* Actions hidden for now */}
-                        <div className="flex items-center gap-1" />
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -411,7 +529,7 @@ const Index = () => {
                       {song.cover ? (
                         <img
                           src={song.cover}
-                          alt={(song as any).name || song.title}
+                          alt={song.title}
                           className="w-full h-full object-cover"
                         />
                       ) : (

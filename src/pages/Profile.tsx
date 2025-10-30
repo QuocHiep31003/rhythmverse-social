@@ -748,6 +748,7 @@ const Profile = () => {
                           try {
                             await userApi.changePassword(oldPassword, newPassword);
                             setChangePassSuccess("Đổi mật khẩu thành công!");
+                            toast({ title: "Thành công", description: "Đổi mật khẩu thành công!" });
                             setOldPassword("");
                             setNewPassword("");
                             setConfirmNewPassword("");
