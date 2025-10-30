@@ -299,6 +299,7 @@ const SearchResults = () => {
                   {(detailedResults.albums.length > 0 ? detailedResults.albums : searchResults.albums).slice(0, activeFilter === "all" ? 4 : 20).map((album) => (
                     <Card
                       key={album.id}
+                      onClick={() => navigate(`/album/${album.id}`)}
                       className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer"
                     >
                       <CardContent className="p-6 text-center">
