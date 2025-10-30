@@ -4,85 +4,48 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Heart, Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Play, Heart, Trophy, TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { songsApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
+import { callHotTodayTrending } from "@/services/api/trendingApi";
 
 const Top100 = () => {
   const [likedItems, setLikedItems] = useState<string[]>([]);
   const [topSongs, setTopSongs] = useState<any[]>([]);
   const { playSong, setQueue } = useMusic();
 
-  // Fetch monthly top 100 trending songs
+  // Fetch top 100 trending songs (dùng API hot-today chuẩn hóa với top=100)
   useEffect(() => {
-    const fetchMonthlyTop100 = async () => {
+    const fetchTop100 = async () => {
       try {
-        console.log('🔍 Fetching monthly top 100...');
-
-        const monthlyTop100 = await songsApi.getMonthlyTop100();
-
-        if (monthlyTop100 && monthlyTop100.length > 0) {
-          console.log('✅ Loaded monthly top 100:', monthlyTop100.length, 'songs');
-
-          // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
-          const sortedSongs = monthlyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
-
-          // Format songs for display
-          const formattedSongs = sortedSongs.map((song, index) => ({
-            id: song.id,
-            title: song.name || song.title,
-            artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
-            album: typeof song.album === 'string' ? song.album : song.album?.name || "Unknown",
-            duration: typeof song.duration === 'number' ? `${Math.floor(song.duration / 60)}:${(song.duration % 60).toString().padStart(2, "0")}` : song.duration || "0:00",
-            rank: index + 1,
-            previousRank: index + Math.floor(Math.random() * 10) - 5,
-            plays: `${((song.playCount || 0) / 1000000).toFixed(1)}M`,
-            cover: song.cover || "/placeholder.svg",
-            audioUrl: song.audioUrl || song.audio || ""
+        const top100 = await callHotTodayTrending(100);
+        if (top100 && top100.length > 0) {
+          // Map fields về đúng UI cần (ResultDetailDTO)
+          const formattedSongs = top100.slice(0, 100).map((song: any, index: number) => ({
+            id: song.songId,
+            title: song.songName || song.title,
+            artist: song.artist || song.artists?.map((a:any) => a.name).join(", ") || "Unknown",
+            album: song.albumName || song.album || "Unknown",
+            duration: song.duration,
+            rank: song.rank || index + 1,
+            previousRank: song.oldRank,
+            plays: (song.playCount ? `${(song.playCount/1000000).toFixed(1)}M` : ""),
+            cover: song.albumImageUrl || "/placeholder.svg",
+            audioUrl: song.audioUrl || "",
           }));
-
           setTopSongs(formattedSongs);
-          return;
+        } else {
+          setTopSongs([]);
         }
-
-        // Fallback nếu API không có data
-        console.log('⚠️ No monthly data, falling back to mock data...');
-        // const mockSongs = Array.from({ length: 100 }, (_, i) => ({
-        //   id: `song-${i + 1}`,
-        //   title: `Song Title ${i + 1}`,
-        //   artist: `Artist ${i + 1}`,
-        //   album: `Album ${i + 1}`,
-        //   duration: "3:45",
-        //   rank: i + 1,
-        //   previousRank: i + Math.floor(Math.random() * 10) - 5,
-        //   plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
-        //   cover: "/placeholder.svg",
-        //   audioUrl: ""
-        // }));
-        // setTopSongs(mockSongs);
       } catch (err) {
-        console.error("❌ Lỗi tải monthly top 100:", err);
-        // Fallback to mock data
-        const mockSongs = Array.from({ length: 100 }, (_, i) => ({
-          id: `song-${i + 1}`,
-          title: `Song Title ${i + 1}`,
-          artist: `Artist ${i + 1}`,
-          album: `Album ${i + 1}`,
-          duration: "3:45",
-          rank: i + 1,
-          previousRank: i + Math.floor(Math.random() * 10) - 5,
-          plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
-          cover: "/placeholder.svg",
-          audioUrl: ""
-        }));
-        setTopSongs(mockSongs);
+        console.error("❌ Lỗi tải hot-today trending:", err);
+        setTopSongs([]);
       }
     };
-
-    fetchMonthlyTop100();
+    fetchTop100();
   }, []);
 
   const topArtists = Array.from({ length: 50 }, (_, i) => ({
@@ -133,13 +96,20 @@ const Top100 = () => {
   };
 
   const getRankIcon = (currentRank: number, previousRank: number) => {
+    // Nếu vị trí cũ > 100 thì đây là NEW
+    if (previousRank > 100 || previousRank <= 0 || previousRank === undefined || previousRank === null) {
+      return <Sparkles className="w-4 h-4 text-yellow-400" title="New" />;
+    }
     const change = previousRank - currentRank;
     if (change > 0) return <TrendingUp className="w-4 h-4 text-green-500" />;
     if (change < 0) return <TrendingDown className="w-4 h-4 text-red-500" />;
     return <Minus className="w-4 h-4 text-muted-foreground" />;
   };
-
   const getRankChange = (currentRank: number, previousRank: number) => {
+    // Nếu hạng cũ ngoài top 100, coi là NEW
+    if (previousRank > 100 || previousRank <= 0 || previousRank === undefined || previousRank === null) {
+      return "NEW";
+    }
     const change = previousRank - currentRank;
     if (change === 0) return "—";
     return change > 0 ? `+${change}` : `${change}`;

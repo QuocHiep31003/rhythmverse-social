@@ -45,3 +45,21 @@ export const getLatestTrending = async (limit = 10): Promise<TrendingSong[]> => 
     return response.data;
 };
 
+// Call Top 100 trending for admin page
+export const fetchTop100Trending = async () => {
+    const response = await api.get<TrendingSong[]>("/trending/top-100", {
+        params: { size: 100, page: 0 },
+    });
+    return response.data;
+};
+
+// Call hot-today BXH, truyền tham số top (số lượng bài mong muốn)
+export const callHotTodayTrending = async (top: number = 100) => {
+    const response = await api.get<ResultDetailDTO[]>(`/trending/hot-today`, {
+        params: { top },
+    });
+    return response.data;
+};
+
+
+

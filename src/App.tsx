@@ -47,6 +47,7 @@ import AdminTrending from "./pages/admin/AdminTrending";
 import AdminPromotions from "./pages/admin/AdminPromotions";
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
+import AdminSnapshots from "./pages/admin/AdminSnapshots";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ const App = () => (
                     <Route path="promotions" element={<AdminPromotions />} />
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
+                    <Route path="snapshots" element={<AdminSnapshots />} />
                   </Routes>
                 </AdminLayout>
               } />

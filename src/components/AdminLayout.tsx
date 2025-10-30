@@ -26,8 +26,9 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   const handleLogout = () => {
     localStorage.removeItem("adminAuth");
-
-
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminRole");
+    localStorage.removeItem("adminEmail");
     toast.success("Đã đăng xuất");
     navigate("/admin/login");
   };
