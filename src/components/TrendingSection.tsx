@@ -3,7 +3,7 @@ import MusicCard from "./MusicCard";
 import { TrendingUp, Clock, Heart, Headphones } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { getTrendingSongs, mockSongs } from "@/data/mockData";
-import { handleImageError, DEFAULT_AVATAR_URL, formatPlayCount } from "@/lib/utils";
+import { handleImageError, DEFAULT_AVATAR_URL, formatPlayCount, toSeconds, formatDuration } from "@/lib/utils";
 import { songsApi } from "@/services/api/songApi";
 import { useState, useEffect } from "react";
 
@@ -24,12 +24,14 @@ const TrendingSection = () => {
           console.log('✅ Loaded top 10 trending:', top10.length, 'songs');
           
           // Format the data for the component
-          const formattedSongs = top10.map(song => ({
-            id: song.id,
-            title: song.songName || song.title || 'Unknown',
+          const formattedSongs = top10.map((song: any) => ({
+            // Prefer backend canonical id; fallback to songId if provided by DTO; do not coerce type
+            id: (song as any).id ?? (song as any).songId,
+            // Align title naming with search normalization
+            title: (song as any).name || (song as any).songName || (song as any).title || 'Unknown',
             artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || "Unknown",
             album: typeof song.album === 'string' ? song.album : song.album?.name || "Unknown",
-            duration: typeof song.duration === 'string' ? parseInt(song.duration) : song.duration ,
+            duration: toSeconds(song.duration as any),
             cover: song.cover || "",
             genre: song.genreNames?.[0] || song.genres?.[0]?.name || "Unknown",
             plays: formatPlayCount(song.playCount || 0),
@@ -94,6 +96,12 @@ const TrendingSection = () => {
                       key={song.id} 
                       className="flex items-center space-x-4 p-3 rounded-lg hover:bg-muted/20 transition-colors group cursor-pointer"
                       onClick={() => {
+                        console.log('🎵 Playing trending song:', {
+                          id: song.id,
+                          title: song.title,
+                          artist: song.artist,
+                          audioUrl: song.audioUrl
+                        });
                         setQueue(trendingSongs);
                         playSong(song);
                       }}
@@ -117,7 +125,7 @@ const TrendingSection = () => {
                     <div className="flex flex-col items-end space-y-1">
                    
                       <div className="flex items-center space-x-1">
-                        <span className="text-sm text-muted-foreground">{Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}</span>
+                        <span className="text-sm text-muted-foreground">{formatDuration(song.duration)}</span>
                       </div>
                     </div>
                     </div>

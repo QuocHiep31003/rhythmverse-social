@@ -1,42 +1,10 @@
-import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Users, Music, ListMusic, TrendingUp, RefreshCw, Loader2 } from "lucide-react";
+import { Users, Music, ListMusic, TrendingUp } from "lucide-react";
 import { mockSongs, mockUsers, mockPlaylists } from "@/data/mockData";
-import { toast } from "sonner";
 
 const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
 
 const AdminHome = () => {
-  const [isRecalculating, setIsRecalculating] = useState(false);
-
-  const handleRecalculate = async () => {
-    setIsRecalculating(true);
-    try {
-      const adminToken = localStorage.getItem("adminAuth") || "mock-admin-token";
-      
-      const res = await fetch('http://localhost:8080/api/trending/test/recalculate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${adminToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        toast.success(data.message || "Trending scores recalculated successfully!");
-      } else {
-        toast.error(data.message || "Failed to recalculate trending scores");
-      }
-    } catch (error) {
-      console.error("Error recalculating trending:", error);
-      toast.error("Failed to recalculate trending scores");
-    } finally {
-      setIsRecalculating(false);
-    }
-  };
   const stats = [
     {
       title: "Tổng người dùng",
@@ -75,24 +43,6 @@ const AdminHome = () => {
           <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Dashboard</h1>
           <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
         </div>
-        <Button 
-          onClick={handleRecalculate}
-          disabled={isRecalculating}
-          variant="outline"
-          className="gap-2"
-        >
-          {isRecalculating ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Đang tính lại...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="w-4 h-4" />
-              Tính lại Trending
-            </>
-          )}
-        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

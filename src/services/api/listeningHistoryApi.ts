@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8080/api";
+import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from './config';
 
 export interface ListeningHistoryPayload {
   userId: number;
@@ -35,14 +35,13 @@ export const listeningHistoryApi = {
     try {
       const response = await fetch(`${API_BASE_URL}/listening-history`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: buildJsonHeaders(),
         body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to record listen: ${response.statusText}`);
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage);
       }
 
       console.log("✅ Listening history recorded successfully");
@@ -59,18 +58,23 @@ export const listeningHistoryApi = {
     try {
       const response = await fetch(`${API_BASE_URL}/listening-history/user/${userId}`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: buildJsonHeaders(),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch listening history: ${response.statusText}`);
+        // Gracefully handle not found as empty history
+        if (response.status === 404) {
+          console.warn(`⚠️ Listening history not found for user ${userId}. Returning empty list.`);
+          return [];
+        }
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
-      console.log("✅ Listening history fetched successfully:", data);
-      return data;
+      const list = Array.isArray(data) ? data : (data?.content ?? []);
+      console.log("✅ Listening history fetched successfully:", list);
+      return list;
     } catch (error) {
       console.error("❌ Error fetching listening history:", error);
       throw error;
@@ -84,13 +88,12 @@ export const listeningHistoryApi = {
     try {
       const response = await fetch(`${API_BASE_URL}/listening-history/${id}`, {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: buildJsonHeaders(),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to delete listening history: ${response.statusText}`);
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage);
       }
 
       console.log("✅ Listening history deleted successfully");
@@ -116,13 +119,12 @@ export const listeningHistoryApi = {
     try {
       const response = await fetch(`${API_BASE_URL}/listening-history?page=${page}&size=${size}`, {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: buildJsonHeaders(),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch listening history: ${response.statusText}`);
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

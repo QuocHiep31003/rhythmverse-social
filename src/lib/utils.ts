@@ -30,3 +30,36 @@ export function formatPlayCount(count: number): string {
   }
   return count.toString();
 }
+
+// Normalize duration value that may come as seconds, milliseconds, or string
+export function toSeconds(value: unknown): number {
+  if (value == null) return 0;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    // Handle mm:ss format
+    if (trimmed.includes(":")) {
+      const [mStr, sStr] = trimmed.split(":");
+      const m = parseInt(mStr || "0", 10);
+      const s = parseInt(sStr || "0", 10);
+      if (Number.isFinite(m) && Number.isFinite(s)) {
+        return Math.max(0, m * 60 + s);
+      }
+    }
+    const n = parseInt(trimmed, 10);
+    if (Number.isFinite(n)) {
+      return n > 10000 ? Math.round(n / 1000) : Math.max(0, Math.round(n));
+    }
+    return 0;
+  }
+  const n = Number(value);
+  if (!isFinite(n) || isNaN(n)) return 0;
+  // Heuristic: if value looks like milliseconds (> 10,000 ≈ 10s) convert to seconds
+  return n > 10000 ? Math.round(n / 1000) : Math.max(0, Math.round(n));
+}
+
+export function formatDuration(raw: unknown): string {
+  const total = toSeconds(raw);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}

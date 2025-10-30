@@ -6,7 +6,7 @@ import { TrendingUp, Headphones } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
-import { formatPlayCount } from "@/lib/utils";
+import { formatDuration } from "@/lib/utils";
 import { songsApi } from "@/services/api";
 
 const TrendingMusic = () => {
@@ -80,7 +80,7 @@ const TrendingMusic = () => {
   // Play nhạc
   const handlePlaySong = (song: any, index: number) => {
     const formattedSong = {
-      id: song.id,
+      id: String(song.id), // Ensure ID is string
       title: song.songName || song.title,
       artist: song.artistNames?.join(", ") || song.artists?.map((a: any) => a.name).join(", ") || song.artist || "Unknown",
       album: song.album?.name || song.album || "",
@@ -90,7 +90,7 @@ const TrendingMusic = () => {
     };
 
     const formattedQueue = allSongs.map((s) => ({
-      id: s.id,
+      id: String(s.id), // Ensure ID is string
       title: s.songName || s.title,
       artist: s.artistNames?.join(", ") || s.artists?.map((a: any) => a.name).join(", ") || s.artist || "Unknown",
       album: s.album?.name || s.album || "",
@@ -155,7 +155,15 @@ const TrendingMusic = () => {
                         group cursor-pointer transition-all duration-300
                         hover:bg-white/5 hover:scale-[1.02] hover:shadow-inner
                       "
-                      onClick={() => handlePlaySong(song, index)}
+                      onClick={() => {
+                        console.log('🎵 Playing trending song from page:', {
+                          id: song.id,
+                          title: song.songName || song.title,
+                          artist: song.artistNames?.join(", ") || song.artists?.map((a) => a.name).join(", ") || song.artist || "Unknown",
+                          audioUrl: song.audioUrl || song.audio
+                        });
+                        handlePlaySong(song, index);
+                      }}
                     >
                       <span className="w-6 text-sm text-muted-foreground text-center">
                         {(currentPage - 1) * itemsPerPage + index + 1}
@@ -189,9 +197,8 @@ const TrendingMusic = () => {
                       </div>
 
                       <div className="text-right">
-                        <p className="text-xs text-muted-foreground flex items-center justify-end gap-1">
-                          <Headphones className="w-3 h-3" />
-                          {formatPlayCount(song.duration || 0)}
+                        <p className="text-xs text-muted-foreground">
+                          {formatDuration(song.duration)}
                         </p>
                       </div>
                     </div>
