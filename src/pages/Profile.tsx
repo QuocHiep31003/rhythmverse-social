@@ -25,7 +25,8 @@ import {
   Bell,
   Palette,
   Volume2,
-  Loader2
+  Loader2,
+  Phone
 } from "lucide-react";
 import { Trash2 } from "lucide-react";
 import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
@@ -58,7 +59,6 @@ const Profile = () => {
         username: user.email ? `@${user.email.split('@')[0]}` : "",
         email: user.email || "",
         bio: "", // Bio không có trong User entity, giữ nguyên để hiển thị
-        joinDate: "January 2023", // Có thể lấy từ createdAt nếu có
         phone: user.phone || "",
         address: user.address || "",
         avatar: user.avatar || ""
@@ -189,7 +189,6 @@ const Profile = () => {
     username: "@alexjohnson",
     email: "alex@example.com",
     bio: "Music enthusiast | Always discovering new sounds | Premium member since 2023",
-    joinDate: "January 2023",
     phone: "",
     address: "",
     avatar: ""
@@ -418,8 +417,8 @@ const Profile = () => {
                       
                       <div className="flex flex-wrap gap-4 text-sm text-muted-foreground justify-center md:justify-start">
                         <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          Joined {profileData.joinDate}
+                          <Phone className="w-4 h-4" />
+                          {profileData.phone ? profileData.phone : "No phone"}
                         </span>
                         <span className="flex items-center gap-1">
                           <Mail className="w-4 h-4" />

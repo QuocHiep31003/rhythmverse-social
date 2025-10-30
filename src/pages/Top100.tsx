@@ -21,15 +21,15 @@ const Top100 = () => {
     const fetchMonthlyTop100 = async () => {
       try {
         console.log('🔍 Fetching monthly top 100...');
-        
+
         const monthlyTop100 = await songsApi.getMonthlyTop100();
-        
+
         if (monthlyTop100 && monthlyTop100.length > 0) {
           console.log('✅ Loaded monthly top 100:', monthlyTop100.length, 'songs');
-          
+
           // Sort by trendingScore từ cao xuống thấp (backend đã sort sẵn nhưng đảm bảo)
           const sortedSongs = monthlyTop100.sort((a, b) => (b.trendingScore || 0) - (a.trendingScore || 0));
-          
+
           // Format songs for display
           const formattedSongs = sortedSongs.map((song, index) => ({
             id: song.id,
@@ -43,26 +43,26 @@ const Top100 = () => {
             cover: song.cover || "/placeholder.svg",
             audioUrl: song.audioUrl || song.audio || ""
           }));
-          
+
           setTopSongs(formattedSongs);
           return;
         }
-        
+
         // Fallback nếu API không có data
         console.log('⚠️ No monthly data, falling back to mock data...');
-        const mockSongs = Array.from({ length: 100 }, (_, i) => ({
-          id: `song-${i + 1}`,
-          title: `Song Title ${i + 1}`,
-          artist: `Artist ${i + 1}`,
-          album: `Album ${i + 1}`,
-          duration: "3:45",
-          rank: i + 1,
-          previousRank: i + Math.floor(Math.random() * 10) - 5,
-          plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
-          cover: "/placeholder.svg",
-          audioUrl: ""
-        }));
-        setTopSongs(mockSongs);
+        // const mockSongs = Array.from({ length: 100 }, (_, i) => ({
+        //   id: `song-${i + 1}`,
+        //   title: `Song Title ${i + 1}`,
+        //   artist: `Artist ${i + 1}`,
+        //   album: `Album ${i + 1}`,
+        //   duration: "3:45",
+        //   rank: i + 1,
+        //   previousRank: i + Math.floor(Math.random() * 10) - 5,
+        //   plays: `${(Math.random() * 5 + 0.5).toFixed(1)}M`,
+        //   cover: "/placeholder.svg",
+        //   audioUrl: ""
+        // }));
+        // setTopSongs(mockSongs);
       } catch (err) {
         console.error("❌ Lỗi tải monthly top 100:", err);
         // Fallback to mock data
@@ -81,7 +81,7 @@ const Top100 = () => {
         setTopSongs(mockSongs);
       }
     };
-    
+
     fetchMonthlyTop100();
   }, []);
 
@@ -194,10 +194,9 @@ const Top100 = () => {
                   <div key={song.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-card/30 transition-colors">
                     {/* Rank */}
                     <div className="flex items-center gap-2 w-16">
-                      <span className={`text-lg font-bold ${
-                        song.rank <= 3 ? 'text-yellow-500' : 
-                        song.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
-                      }`}>
+                      <span className={`text-lg font-bold ${song.rank <= 3 ? 'text-yellow-500' :
+                          song.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
+                        }`}>
                         #{song.rank}
                       </span>
                       {getRankIcon(song.rank, song.previousRank)}
@@ -247,7 +246,7 @@ const Top100 = () => {
                     </div>
                   </div>
                 ))}
-                
+
                 <Button variant="outline" className="w-full mt-4">
                   View All 100 Songs
                 </Button>
@@ -269,10 +268,9 @@ const Top100 = () => {
                   <div key={artist.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-card/30 transition-colors">
                     {/* Rank */}
                     <div className="flex items-center gap-2 w-16">
-                      <span className={`text-lg font-bold ${
-                        artist.rank <= 3 ? 'text-yellow-500' : 
-                        artist.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
-                      }`}>
+                      <span className={`text-lg font-bold ${artist.rank <= 3 ? 'text-yellow-500' :
+                          artist.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
+                        }`}>
                         #{artist.rank}
                       </span>
                       {getRankIcon(artist.rank, artist.previousRank)}
@@ -312,7 +310,7 @@ const Top100 = () => {
                     </div>
                   </div>
                 ))}
-                
+
                 <Button variant="outline" className="w-full mt-4">
                   View All 50 Artists
                 </Button>
@@ -334,10 +332,9 @@ const Top100 = () => {
                   <div key={album.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-card/30 transition-colors">
                     {/* Rank */}
                     <div className="flex items-center gap-2 w-16">
-                      <span className={`text-lg font-bold ${
-                        album.rank <= 3 ? 'text-yellow-500' : 
-                        album.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
-                      }`}>
+                      <span className={`text-lg font-bold ${album.rank <= 3 ? 'text-yellow-500' :
+                          album.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
+                        }`}>
                         #{album.rank}
                       </span>
                       {getRankIcon(album.rank, album.previousRank)}
@@ -377,7 +374,7 @@ const Top100 = () => {
                     </div>
                   </div>
                 ))}
-                
+
                 <Button variant="outline" className="w-full mt-4">
                   View All 50 Albums
                 </Button>

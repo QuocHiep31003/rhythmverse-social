@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ import {
   Lock,
   Users
 } from "lucide-react";
+import { getTrendingComparison, TrendingSong } from "@/services/api/trendingApi";
+import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const Discover = () => {
   const navigate = useNavigate();
@@ -31,6 +33,34 @@ const Discover = () => {
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [userType, setUserType] = useState<"guest" | "free" | "premium">("guest");
+  const [hotToday, setHotToday] = useState<TrendingSong[]>([]);
+  const [rankHistoryData, setRankHistoryData] = useState([]);
+
+  useEffect(() => {
+    getTrendingComparison(10).then(setHotToday).catch(() => {});
+  }, []);
+
+  // FE mock dữ liệu 8 điểm rank (fake dev, BE cần bổ sung API lấy chuỗi điểm history thật)
+  useEffect(() => {
+    if (hotToday.length < 3) return;
+    // Giả sử 8 mốc giờ
+    const mockTimes = [
+      "9h", "10h", "11h", "12h", "13h", "14h", "15h", "16h"
+    ];
+    // Top 3 bài, mỗi bài mảng 8 điểm rank (1 là top nhất)
+    const mockRanks = [
+      [3,2,3,2,1,1,1,1], // top 1: lên xuống
+      [2,1,1,1,2,3,2,2], // top 2
+      [1,3,2,3,3,2,3,3], // top 3
+    ];
+    const data = mockTimes.map((time, idx) => ({
+      time,
+      song1: mockRanks[0][idx],
+      song2: mockRanks[1][idx],
+      song3: mockRanks[2][idx],
+    }));
+    setRankHistoryData(data);
+  }, [hotToday]);
 
   // AI Features for different user types
   const aiFeatures = {
@@ -508,6 +538,65 @@ const Discover = () => {
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* --- Block Hot Today + Biểu đồ biến động bên phải --- */}
+          <div className="mb-10 grid md:grid-cols-3 gap-6 items-start">
+            {/* Hot Today Left */}
+            <div className="md:col-span-2">
+              <h2 className="text-3xl font-bold mb-4 flex items-center gap-2">
+                <TrendingUp className="w-6 h-6 text-primary" />
+                Hot Today
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-4">
+                {hotToday.length === 0 ? (
+                  <span className="text-muted-foreground">No trending songs available.</span>
+                ) : (
+                  hotToday.map((song, i) => (
+                    <Card 
+                      key={song.songId}
+                      className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                      onClick={() => navigate(`/song/${song.songId}`)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="aspect-square bg-gradient-primary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
+                          {song.albumImageUrl
+                            ? <img src={song.albumImageUrl} alt={song.songName} className="w-12 h-12 object-cover rounded" />
+                            : <Music className="w-8 h-8 text-white" />}
+                        </div>
+                        <h3 className="font-medium truncate">
+                          {i + 1}. {song.songName}
+                        </h3>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {song.artists?.map(a => a.name).join(", ")}
+                        </p>
+                        <div className="flex justify-between items-center mt-2">
+                          <Badge variant="secondary" className="text-xs">Hot Today</Badge>
+                          <span className="text-xs text-muted-foreground">{song.score?.toFixed(2) ?? ""}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+            {/* Right: Chart Top 3 trend biến động */}
+            <div className="bg-gradient-glass rounded-xl p-4">
+              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" /> Top 3 Rank Changes
+              </h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={rankHistoryData}>
+                  <XAxis dataKey="time" />
+                  <YAxis reversed allowDecimals={false} domain={[1, 'auto']} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="song1" stroke="#8884d8" name={hotToday[0]?.songName || "#1"}/>
+                  <Line type="monotone" dataKey="song2" stroke="#82ca9d" name={hotToday[1]?.songName || "#2"}/>
+                  <Line type="monotone" dataKey="song3" stroke="#ffc658" name={hotToday[2]?.songName || "#3"}/>
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       </div>
       <Footer />

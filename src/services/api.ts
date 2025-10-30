@@ -26,6 +26,11 @@ export { authApi } from './api/authApi';
 // Import mock data for fallback
 import { mockUsers, mockGenres } from "@/data/mockData";
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse } from "./api/config";
+import axios from "axios";
+
+export const api = axios.create({
+  baseURL: API_BASE_URL,
+});
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
