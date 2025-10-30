@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 // Mock notification data - in real app, this would come from context/state
 const getNotificationCount = (url: string) => {
@@ -61,21 +62,23 @@ export function AppSidebar() {
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
+
+  // Không hiển thị section user info nào ở sidebar nữa, chỉ giữ lại SidebarMenu/menuItems nav
+
   return (
     <Sidebar 
       variant="sidebar" 
       collapsible="none"
       className="w-64 fixed left-0 top-0 h-screen border-r"
     >
-      <SidebarHeader className="p-6 border-b border-border/40">
-        <div className="flex items-center justify-between">
+      <SidebarHeader className="p-6 border-b border-border/40 flex flex-col items-center justify-center">
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center space-x-3">
             <Music className="h-8 w-8 text-primary flex-shrink-0" />
             <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               EchoVerse
             </span>
           </div>
-          
           {/* Mobile close button - only show on mobile */}
           {isMobile && (
             <Button
@@ -88,6 +91,7 @@ export function AppSidebar() {
             </Button>
           )}
         </div>
+        {/* Xoá toàn bộ state sidebarAvatar, sidebarName, UI/avatar... và đoạn JSX avatar/user */}
       </SidebarHeader>
 
       <SidebarContent className="bg-background/95 backdrop-blur-sm">

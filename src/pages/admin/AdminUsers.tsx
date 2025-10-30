@@ -92,7 +92,8 @@ const AdminUsers = () => {
         email: data.email,
         phone: data.phone || "",
         address: data.address || "",
-        roleId: data.role === "admin" ? 1 : 2,
+        // Đúng: 1 là USER, 2 là ADMIN
+        roleId: data.role === "admin" ? 2 : 1,
       };
 
       if (formMode === "create") {
@@ -154,7 +155,7 @@ const AdminUsers = () => {
         Email: user.email,
         Phone: user.phone || '',
         Address: user.address || '',
-        Roles: (user.roles?.includes('ADMIN') || user.roleId === 1) ? 'ADMIN' : 'USER',
+        Roles: (user.roles?.includes('ADMIN') || user.roleId === 2) ? 'ADMIN' : 'USER',
       }));
 
       // Create worksheet
@@ -417,11 +418,11 @@ const AdminUsers = () => {
                       <td className="w-32 p-3">
                         <div className="flex items-center gap-2">
                           <Badge 
-                            variant={(user.roles?.includes("ADMIN") || user.roleId === 1) ? "default" : "secondary"}
+                            variant={(user.roles?.includes("ADMIN") || user.roleId === 2) ? "default" : "secondary"}
                             className="gap-1"
                           >
-                            {(user.roles?.includes("ADMIN") || user.roleId === 1) && <Shield className="w-3 h-3" />}
-                            {(user.roles?.includes("ADMIN") || user.roleId === 1) ? 'ADMIN' : 'USER'}
+                            {(user.roles?.includes("ADMIN") || user.roleId === 2) && <Shield className="w-3 h-3" />}
+                            {(user.roles?.includes("ADMIN") || user.roleId === 2) ? 'ADMIN' : 'USER'}
                           </Badge>
                         </div>
                       </td>
@@ -523,7 +524,8 @@ const AdminUsers = () => {
         defaultValues={selectedUser ? {
           name: selectedUser.name,
           email: selectedUser.email,
-          role: (selectedUser.roleId === 1 || selectedUser.roles?.includes('ADMIN')) ? 'admin' : 'user',
+          // Đúng: 1 là user, 2 là admin
+          role: (selectedUser.roleId === 2 || selectedUser.roles?.includes('ADMIN')) ? 'admin' : 'user',
           avatar: selectedUser.avatar || '',
           phone: selectedUser.phone || '',
           address: selectedUser.address || '',

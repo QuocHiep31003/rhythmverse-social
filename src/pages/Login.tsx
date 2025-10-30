@@ -20,7 +20,7 @@ const Login = () => {
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-
+  const [showResetPassword, setShowResetPassword] = useState(false);
 
 
   const [loginData, setLoginData] = useState({
@@ -186,6 +186,47 @@ const Login = () => {
     }, 1000);
   };
 
+  const [resetStep, setResetStep] = useState<1 | 2>(1);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetResetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
+
+  // Logic gửi OTP
+  const handleSendOtpReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError("");
+    setResetSuccess("");
+    setResetLoading(true);
+    try {
+      await authApi.sendResetPasswordOtp(resetEmail);
+      setResetSuccess("OTP đã gửi thành công! Kiểm tra email của bạn.");
+      setResetStep(2);
+    } catch (err: any) {
+      setResetError(err.message || "Gửi OTP thất bại.");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+  // Logic nhập OTP + password mới
+  const handleResetWithOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError("");
+    setResetSuccess("");
+    setResetLoading(true);
+    try {
+      await authApi.resetPasswordWithOtp(resetEmail, resetOtp, resetNewPassword);
+      setResetSuccess("Đặt lại mật khẩu thành công! Bạn có thể đăng nhập.");
+      setTimeout(() => { setActiveTab("login"); }, 1500);
+    } catch (err: any) {
+      setResetError(err.message || "Đặt lại mật khẩu lỗi");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-dark flex items-center justify-center p-4">
       {/* Background effects */}
@@ -218,216 +259,247 @@ const Login = () => {
 
         <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 shadow-2xl">
           <CardContent className="p-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="login">Sign In</TabsTrigger>
-                <TabsTrigger value="register">Sign Up</TabsTrigger>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => {
+                setActiveTab(value);
+                setShowResetPassword(false); // khi đổi tab thì ẩn form lấy lại mật khẩu
+              }}
+              className="w-full"
+            >
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="login">Đăng nhập</TabsTrigger>
+                <TabsTrigger value="register">Đăng ký</TabsTrigger>
               </TabsList>
 
               {/* Fixed-height container to keep layout stable and center content */}
               <div className="min-h-[520px] flex flex-col justify-center">
-              <TabsContent value="login" className="space-y-4">
-                <CardHeader className="p-0 mb-4">
-                  <CardTitle className="text-center">Welcome Back!</CardTitle>
-                  <p className="text-center text-muted-foreground text-sm">
-                    Sign in to continue your musical journey
-                  </p>
-                </CardHeader>
-
-                {error && (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm">
-                    {error}
+                {showResetPassword && (
+                  <div className="mt-8">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Quên mật khẩu</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {resetStep === 1 && (
+                          <form onSubmit={handleSendOtpReset} className="space-y-4">
+                            <Label>Email</Label>
+                            <Input
+                              type="email"
+                              value={resetEmail}
+                              onChange={e => setResetEmail(e.target.value)}
+                              placeholder="Nhập email đăng ký"
+                              required
+                            />
+                            {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
+                            {resetSuccess && <div className="text-green-600 text-sm">{resetSuccess}</div>}
+                            <Button type="submit" disabled={resetResetLoading} className="w-full">Gửi mã OTP</Button>
+                          </form>
+                        )}
+                        {resetStep === 2 && (
+                          <form onSubmit={handleResetWithOtp} className="space-y-4">
+                            <Label>Mã OTP đã gửi về email</Label>
+                            <Input
+                              type="text"
+                              value={resetOtp}
+                              onChange={e => setResetOtp(e.target.value)}
+                              placeholder="Nhập mã OTP"
+                              required
+                            />
+                            <Label>Mật khẩu mới</Label>
+                            <Input
+                              type="password"
+                              value={resetNewPassword}
+                              onChange={e => setResetNewPassword(e.target.value)}
+                              placeholder="Nhập mật khẩu mới (>=6 ký tự)"
+                              required
+                            />
+                            {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
+                            {resetSuccess && <div className="text-green-600 text-sm">{resetSuccess}</div>}
+                            <Button type="submit" disabled={resetResetLoading} className="w-full">Đặt lại mật khẩu</Button>
+                            <Button variant="ghost" type="button" className="w-full" onClick={() => { setResetStep(1); setResetOtp(""); setResetNewPassword(""); }}>Nhập lại email</Button>
+                          </form>
+                        )}
+                        <Button variant="outline" className="w-full mt-4" type="button" onClick={() => { setShowResetPassword(false); setResetError(""); setResetSuccess(""); setResetEmail(""); setResetOtp(""); setResetNewPassword(""); setResetStep(1); }}>Quay lại đăng nhập</Button>
+                      </CardContent>
+                    </Card>
                   </div>
                 )}
+                <TabsContent value="login">
+                  {!showResetPassword && (
+                    <>
+                      <CardHeader className="p-0 mb-4">
+                        <CardTitle className="text-center">Welcome Back!</CardTitle>
+                        <p className="text-center text-muted-foreground text-sm">
+                          Sign in to continue your musical journey
+                        </p>
+                      </CardHeader>
 
-                {/* Success message intentionally omitted for login success to avoid extra notification */}
+                      {error && (
+                        <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm">
+                          {error}
+                        </div>
+                      )}
 
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="Enter your email"
-                        className="pl-10"
-                        value={loginData.email}
-                        onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                        required
-                      />
+                      {/* Success message intentionally omitted for login success to avoid extra notification */}
+
+                      <form onSubmit={handleLogin} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="email">Email</Label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="Enter your email"
+                              className="pl-10"
+                              value={loginData.email}
+                              onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="password">Password</Label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="password"
+                              type={showPassword ? "text" : "password"}
+                              placeholder="Enter your password"
+                              className="pl-10 pr-10"
+                              value={loginData.password}
+                              onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                              required
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 h-full w-10 hover:bg-transparent"
+                              onClick={() => setShowPassword(!showPassword)}
+                            >
+                              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <input 
+                              type="checkbox" 
+                              id="remember" 
+                              className="rounded border-gray-300"
+                              checked={rememberMe}
+                              onChange={(e) => setRememberMe(e.target.checked)} />
+                            <Label htmlFor="remember" className="text-sm">Remember me</Label>
+                          </div>
+                          <Button variant="link" className="p-0 h-auto text-sm" onClick={() => setShowResetPassword(true)}>
+                            Forgot password?
+                          </Button>
+                        </div>
+
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          variant="hero"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? "Signing In..." : "Sign In"}
+                        </Button>
+                      </form>
+                    </>
+                  )}
+                </TabsContent>
+                <TabsContent value="register">
+                  <CardHeader className="p-0 mb-4">
+                    <CardTitle className="text-center">Create an Account</CardTitle>
+                    <p className="text-center text-muted-foreground text-sm">
+                      Join EchoVerse and start your musical journey
+                    </p>
+                  </CardHeader>
+
+                  {error && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm">
+                      {error}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Enter your password"
-                        className="pl-10 pr-10"
-                        value={loginData.password}
-                        onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full w-10 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
+                  {success && (
+                    <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
+                      {success}
                     </div>
-                  </div>
+                  )}
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="remember" 
-                        className="rounded border-gray-300"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)} />
-                      <Label htmlFor="remember" className="text-sm">Remember me</Label>
-                    </div>
-                    <Button variant="link" className="p-0 h-auto text-sm">
-                      Forgot password?
-                    </Button>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    variant="hero"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Signing In..." : "Sign In"}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="register" className="space-y-4">
-                <CardHeader className="p-0 mb-4">
-                  <CardTitle className="text-center">Join EchoVerse</CardTitle>
-                  <p className="text-center text-muted-foreground text-sm">
-                    Create your account and discover amazing music
-                  </p>
-                </CardHeader>
-
-                {error && (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-lg text-sm">
-                    {error}
-                  </div>
-                )}
-
-                {success && (
-                  <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-lg text-sm">
-                    {success}
-                  </div>
-                )}
-
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Full Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <form onSubmit={handleRegister} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="name">Name</Label>
                       <Input
                         id="name"
                         type="text"
-                        placeholder="Enter your full name"
+                        placeholder="Enter your name"
                         className="pl-10"
                         value={registerData.name}
                         onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
                         required
                       />
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="register-email">Email</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="register-email"
-                        type="email"
-                        placeholder="Enter your email"
-                        className="pl-10"
-                        value={registerData.email}
-                        onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                        required
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor="register-email">Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="register-email"
+                          type="email"
+                          placeholder="Enter your email"
+                          className="pl-10"
+                          value={registerData.email}
+                          onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
+                          required
+                        />
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="register-password">Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="register-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Create a password"
-                        className="pl-10 pr-10"
-                        value={registerData.password}
-                        onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                        required
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full w-10 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="register-password">Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="register-password"
+                          type="password"
+                          placeholder="Enter your password"
+                          className="pl-10 pr-10"
+                          value={registerData.password}
+                          onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
+                          required
+                        />
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="confirm-password">Confirm Password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="confirm-password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Confirm your password"
-                        className="pl-10"
-                        value={registerData.confirmPassword}
-                        onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
-                        required
-                      />
+                    <div className="space-y-2">
+                      <Label htmlFor="register-confirm-password">Confirm Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="register-confirm-password"
+                          type="password"
+                          placeholder="Confirm your password"
+                          className="pl-10 pr-10"
+                          value={registerData.confirmPassword}
+                          onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
+                          required
+                        />
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <input type="checkbox" id="terms" className="rounded border-gray-300" required />
-                    <Label htmlFor="terms" className="text-sm">
-                      I agree to the{" "}
-                      <Button variant="link" className="p-0 h-auto text-sm">
-                        Terms of Service
-                      </Button>{" "}
-                      and{" "}
-                      <Button variant="link" className="p-0 h-auto text-sm">
-                        Privacy Policy
-                      </Button>
-                    </Label>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    variant="hero"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Creating Account..." : "Create Account"}
-                  </Button>
-                </form>
-              </TabsContent>
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      variant="hero"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? "Signing Up..." : "Sign Up"}
+                    </Button>
+                  </form>
+                </TabsContent>
               </div>
             </Tabs>
 

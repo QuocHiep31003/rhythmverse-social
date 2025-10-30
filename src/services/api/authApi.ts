@@ -80,6 +80,37 @@ export const authApi = {
         }
         return await response.json();
     },
+
+    /**
+     * Gửi OTP reset password
+     */
+    sendResetPasswordOtp: async (email: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/forgot-password/send-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Không gửi được OTP reset password');
+        }
+        return await response.json();
+    },
+    /**
+     * Đổi mật khẩu qua OTP
+     */
+    resetPasswordWithOtp: async (email: string, otp: string, newPassword: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/forgot-password/reset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp, newPassword })
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Đặt lại mật khẩu thất bại');
+        }
+        return await response.json();
+    },
 };
 
 export default authApi;

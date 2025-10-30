@@ -41,20 +41,9 @@ const TopBar = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
-  const [profileName, setProfileName] = useState<string>(() => {
-    try {
-      return typeof window !== "undefined" ? (localStorage.getItem("userName") || "") : "";
-    } catch {
-      return "";
-    }
-  });
-  const [profileEmail, setProfileEmail] = useState<string>(() => {
-    try {
-      return typeof window !== "undefined" ? (localStorage.getItem("userEmail") || "") : "";
-    } catch {
-      return "";
-    }
-  });
+  const [profileName, setProfileName] = useState<string>("");
+  const [profileEmail, setProfileEmail] = useState<string>("");
+  const [profileAvatar, setProfileAvatar] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       return typeof window !== "undefined" ? !!localStorage.getItem("token") : false;
@@ -192,25 +181,19 @@ useEffect(() => {
       setIsAuthenticated(false);
       return;
     }
-
     try {
       const me = await authApi.me();
       if (me) {
         setIsAuthenticated(true);
         setProfileName(me?.name || me?.username || "");
         setProfileEmail(me?.email || "");
-
-        const uid = me.id || me.userId;
-        if (uid) localStorage.setItem("userId", String(uid));
-        localStorage.setItem("userName", me?.name || me?.username || "");
-        localStorage.setItem("userEmail", me?.email || "");
+        setProfileAvatar(me?.avatar || "");
       }
     } catch (error) {
       console.error("❌ Failed to load profile:", error);
       setIsAuthenticated(false);
     }
   };
-
   loadMe();
 }, []);
 
@@ -221,6 +204,7 @@ useEffect(() => {
       localStorage.removeItem('userId');
       localStorage.removeItem('userName');
       localStorage.removeItem('userEmail');
+      localStorage.removeItem('userAvatar'); // Clear user avatar
       
       // Clear sessionStorage
       sessionStorage.removeItem('token');
@@ -231,6 +215,7 @@ useEffect(() => {
     setIsAuthenticated(false);
     setProfileName("");
     setProfileEmail("");
+    setProfileAvatar(""); // Reset avatar
     
     // Navigate to login page
     navigate('/login');
@@ -441,7 +426,7 @@ useEffect(() => {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-110 transition-all duration-300">
                   <Avatar className="h-8 w-8 ring-2 ring-[hsl(var(--primary)/0.5)] hover:ring-[hsl(var(--primary))] transition-all">
-                    <AvatarImage src="/placeholder.svg" alt="User" />
+                    <AvatarImage src={profileAvatar || "/placeholder.svg"} alt="User" />
                     <AvatarFallback className="bg-gradient-primary text-white font-semibold shadow-[0_0_15px_hsl(var(--primary)/0.4)]">
                       {(() => {
                         const base = (profileName && profileName.trim().length > 0)

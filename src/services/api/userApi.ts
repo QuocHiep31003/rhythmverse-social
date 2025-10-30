@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from './config';
+import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, createFormDataHeaders } from './config';
 import { authApi } from './authApi';
 
 export interface UserDTO {
@@ -10,6 +10,7 @@ export interface UserDTO {
     roleId?: number;
     roleName?: string;
     password?: string;
+    avatar?: string; // <-- add avatar field
 }
 
 export interface UpdateProfilePayload {
@@ -17,36 +18,30 @@ export interface UpdateProfilePayload {
     phone?: string;
     address?: string;
     password?: string; // Optional - only if user wants to change password
+    avatarImg?: File | null;
+    avatar?: string | null; // add URL string
 }
 
 export const userApi = {
     /**
      * Update current user's profile based on token
-     * Uses PUT /api/user/profile endpoint which automatically identifies user from token
+     * Always sends multipart/form-data regardless of avatar to match BE contract
      */
     updateProfile: async (payload: UpdateProfilePayload): Promise<UserDTO> => {
         try {
-            // Prepare the request body - only include fields that are provided
-            const requestBody: any = {};
-            if (payload.name !== undefined) requestBody.name = payload.name;
-            if (payload.phone !== undefined) requestBody.phone = payload.phone;
-            if (payload.address !== undefined) requestBody.address = payload.address;
-            if (payload.password !== undefined && payload.password.trim() !== '') {
-                requestBody.password = payload.password;
-            }
-
-            // Call PUT /api/user/profile - user is identified from token
+            const headers = buildJsonHeaders();
+            const { name, phone, address, avatar } = payload;
+            const body: Record<string, any> = { name, phone, address };
+            if (avatar) body.avatar = avatar;
             const response = await fetch(`${API_BASE_URL}/user/profile`, {
                 method: 'PUT',
-                headers: buildJsonHeaders(),
-                body: JSON.stringify(requestBody),
+                headers,
+                body: JSON.stringify(body)
             });
-
             if (!response.ok) {
                 const errorMessage = await parseErrorResponse(response);
                 throw new Error(errorMessage);
             }
-
             const updatedUser = await response.json();
             return updatedUser;
         } catch (error) {
@@ -87,6 +82,27 @@ export const userApi = {
         } catch (error) {
             console.error('Error getting user:', error);
             throw error instanceof Error ? error : new Error('Failed to get user');
+        }
+    },
+
+    /**
+     * Change user password via /api/user/change-password (POST). Body: {oldPassword, newPassword}
+     */
+    changePassword: async (oldPassword: string, newPassword: string): Promise<string> => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/user/change-password`, {
+                method: 'POST',
+                headers: buildJsonHeaders(),
+                body: JSON.stringify({ oldPassword, newPassword })
+            });
+            const text = await response.text();
+            if (!response.ok) {
+                throw new Error(text || 'Failed to change password');
+            }
+            return text;
+        } catch (error) {
+            console.error('Error changing password:', error);
+            throw error instanceof Error ? error : new Error('Failed to change password');
         }
     },
 };

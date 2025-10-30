@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,13 +24,15 @@ import {
   Shield,
   Bell,
   Palette,
-  Volume2
+  Volume2,
+  Loader2
 } from "lucide-react";
 import { Trash2 } from "lucide-react";
 import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
 import { userApi, UserDTO } from "@/services/api/userApi";
 import { toast } from "@/hooks/use-toast";
 import { songsApi } from "@/services/api/songApi";
+import { uploadImage } from "@/config/cloudinary";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
@@ -39,6 +41,7 @@ const Profile = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string>(""); // lưu tạm url sau upload Cloudinary
   
   useEffect(() => {
     fetchProfile();
@@ -57,9 +60,11 @@ const Profile = () => {
         bio: "", // Bio không có trong User entity, giữ nguyên để hiển thị
         joinDate: "January 2023", // Có thể lấy từ createdAt nếu có
         phone: user.phone || "",
-        address: user.address || ""
+        address: user.address || "",
+        avatar: user.avatar || ""
       });
-      
+      setAvatarPreview(user.avatar || "");
+      setAvatarFile(null);
       // Update listening history with correct userId
       if (user.id) {
         await fetchListeningHistory(user.id);
@@ -186,8 +191,11 @@ const Profile = () => {
     bio: "Music enthusiast | Always discovering new sounds | Premium member since 2023",
     joinDate: "January 2023",
     phone: "",
-    address: ""
+    address: "",
+    avatar: ""
   });
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   const [preferences, setPreferences] = useState({
     emailNotifications: true,
@@ -224,54 +232,69 @@ const Profile = () => {
     { month: "Jan", hours: 112 }
   ];
 
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+      // --- Upload cloudinary ở đây ---
+      try {
+        const result = await uploadImage(file);
+        setUploadedAvatarUrl(result.secure_url); // lưu url lại để gửi lên BE khi save
+        toast({ title: "Thành công", description: "Đã upload ảnh lên Cloudinary!" });
+      } catch (err: any) {
+        toast({ title: "Thất bại", description: "Không upload được ảnh lên Cloudinary!" });
+        setUploadedAvatarUrl("");
+      }
+    }
+  };
+
   const handleSaveProfile = async () => {
     if (!userId) {
-      toast({
-        title: "Error",
-        description: "User ID not found",
-        variant: "destructive",
-      });
-      return;
+      toast({ title: "Error", description: "User ID not found", variant: "destructive" }); return;
     }
-
     try {
       setSaving(true);
-      
-      // Prepare update payload based on User entity fields
-      const updatePayload = {
+      // Chỉ gửi avatar là url (nếu vừa upload Cloudinary thành công);
+      const updatePayload: any = {
         name: profileData.name,
-        // email is immutable on BE; do not send it
         phone: profileData.phone,
         address: profileData.address,
-      } as const;
-
-      const updatedUser = await userApi.updateProfile(updatePayload);
-      
-      // Update local state with response
-      setProfileData({
-        ...profileData,
-        name: updatedUser.name || profileData.name,
-        email: updatedUser.email || profileData.email,
-        phone: updatedUser.phone || profileData.phone,
-        address: updatedUser.address || profileData.address,
-      });
-
+        avatar: uploadedAvatarUrl || profileData.avatar || "",
+      };
+      await userApi.updateProfile(updatePayload);
+      await fetchProfile();
+      setAvatarFile(null);
+      setUploadedAvatarUrl("");
       setIsEditing(false);
-      toast({
-        title: "Success",
-        description: "Profile updated successfully",
-      });
+      toast({ title: "Success", description: "Profile updated successfully" });
     } catch (error) {
       console.error("Failed to update profile:", error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update profile",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to update profile", variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Password change form state
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [changePassLoading, setChangePassLoading] = useState(false);
+  const [changePassError, setChangePassError] = useState("");
+  const [changePassSuccess, setChangePassSuccess] = useState("");
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center">
+        <Loader2 className="h-8 w-8 text-primary animate-spin mb-2" />
+        <div className="text-lg text-muted-foreground">Loading profile...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-dark">
@@ -281,21 +304,45 @@ const Profile = () => {
           <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 mb-8">
             <CardContent className="p-8">
               <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-                <div className="relative">
-                  <Avatar className="w-32 h-32">
-                    <AvatarImage src="/placeholder-avatar.jpg" />
-                    <AvatarFallback className="text-2xl bg-gradient-primary text-white">
-                      {profileData.name.split(' ').map(n => n[0]).join('')}
-                    </AvatarFallback>
+                <div className="relative group">
+                  <Avatar className="w-32 h-32 cursor-pointer group/avatar relative">
+                    <AvatarImage src={avatarPreview || profileData.avatar || "/placeholder-avatar.jpg"} />
+                    {!(avatarPreview || profileData.avatar) && (
+                      <AvatarFallback className="text-4xl tracking-tighter bg-gradient-primary text-white uppercase">
+                        {profileData.name.split(' ').map(n => n[0]).join('')}
+                      </AvatarFallback>
+                    )}
+                    {isEditing && (
+                      <div
+                        className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-full opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer z-10 select-none hover:bg-black/50"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Đổi ảnh đại diện"
+                      >
+                        <span className="text-white text-md font-semibold select-none">Đổi ảnh đại diện</span>
+                      </div>
+                    )}
                   </Avatar>
-                  <Button 
-                    variant="hero" 
-                    size="icon" 
-                    className="absolute -bottom-2 -right-2 h-8 w-8"
-                    onClick={() => setIsEditing(!isEditing)}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </Button>
+                  {/* ẩn input file, click avatar sẽ trigger thay vì input thô */}
+                  {isEditing && (
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                      tabIndex={-1}/>
+                  )}
+                  {/* Button edit chỉ hiện khi chưa bấm edit */}
+                  {!isEditing && (
+                    <Button
+                      variant="hero"
+                      size="icon"
+                      className="absolute -bottom-2 -right-2 h-8 w-8"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex-1 text-center md:text-left">
@@ -686,15 +733,48 @@ const Profile = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <Button variant="outline" className="w-full justify-start">
-                      Export My Data
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start">
-                      Change Password
-                    </Button>
-                    <Button variant="outline" className="w-full justify-start">
-                      Deactivate Account
-                    </Button>
+                    {/* Chỉ giữ lại nút đổi mật khẩu */}
+                    <Button onClick={() => setShowChangePassword(v => !v)} variant="outline" className="mb-2">Đổi mật khẩu</Button>
+                    {showChangePassword && (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          setChangePassError("");
+                          setChangePassSuccess("");
+                          if (newPassword !== confirmNewPassword) {
+                            setChangePassError("Mật khẩu mới và xác nhận không khớp!");
+                            return;
+                          }
+                          setChangePassLoading(true);
+                          try {
+                            await userApi.changePassword(oldPassword, newPassword);
+                            setChangePassSuccess("Đổi mật khẩu thành công!");
+                            setOldPassword("");
+                            setNewPassword("");
+                            setConfirmNewPassword("");
+                            setTimeout(() => setShowChangePassword(false), 1000);
+                          } catch (err: any) {
+                            setChangePassError(err.message || "Đổi mật khẩu thất bại");
+                          } finally {
+                            setChangePassLoading(false);
+                          }
+                        }}
+                        className="space-y-4 mt-2"
+                      >
+                        <Label>Mật khẩu hiện tại</Label>
+                        <Input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} required autoFocus />
+                        <Label>Mật khẩu mới</Label>
+                        <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                        <Label>Xác nhận mật khẩu mới</Label>
+                        <Input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} required />
+                        {changePassError && <div className="text-red-600 text-sm">{changePassError}</div>}
+                        {changePassSuccess && <div className="text-green-600 text-sm">{changePassSuccess}</div>}
+                        <div className="flex gap-2">
+                          <Button type="submit" disabled={changePassLoading}>{changePassLoading ? "Đang đổi..." : "Đổi mật khẩu"}</Button>
+                          <Button type="button" variant="ghost" onClick={() => { setShowChangePassword(false); setChangePassError(""); setChangePassSuccess(""); setOldPassword(""); setNewPassword(""); setConfirmNewPassword(""); }}>Huỷ</Button>
+                        </div>
+                      </form>
+                    )}
                   </CardContent>
                 </Card>
               </div>
