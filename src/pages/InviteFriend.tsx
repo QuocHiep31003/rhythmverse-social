@@ -10,6 +10,7 @@ const InviteFriend = () => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [inviter, setInviter] = useState<{ name: string; avatar?: string | null } | null>(null);
   const inviteCode = useMemo(() => (code || "").trim(), [code]);
 
   const userIdRaw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
@@ -18,7 +19,16 @@ const InviteFriend = () => {
   useEffect(() => {
     if (!inviteCode) {
       toast.error("Invalid invite link");
+      return;
     }
+    (async () => {
+      try {
+        const data = await inviteLinksApi.preview(inviteCode);
+        if (data) setInviter({ name: data.inviterName || data.name || 'Unknown', avatar: data.inviterAvatar || data.avatar || null });
+      } catch {
+        // ignore preview failure
+      }
+    })();
   }, [inviteCode]);
 
   const handleAccept = async () => {
@@ -68,7 +78,25 @@ const InviteFriend = () => {
           ) : (
             <>
               <p className="text-center text-muted-foreground">
-                Someone invited you to connect as friends. Accept to send a friend request back to the inviter.
+                {inviter ? (
+                  <span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="inline-flex h-6 w-6 rounded-full overflow-hidden align-middle">
+                        {/* simple avatar preview */}
+                        {inviter.avatar ? (
+                          <img src={inviter.avatar} alt={inviter.name} className="h-6 w-6 object-cover" />
+                        ) : (
+                          <span className="h-6 w-6 flex items-center justify-center bg-muted rounded-full text-[10px]">
+                            {inviter.name.charAt(0)}
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-medium">{inviter.name}</span>
+                    </span>{' '}invited you to be friends.
+                  </span>
+                ) : (
+                  'Someone invited you to connect as friends. Accept to send a friend request back to the inviter.'
+                )}
               </p>
               {!userId && (
                 <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-500 px-4 py-3 rounded-md text-sm text-center">

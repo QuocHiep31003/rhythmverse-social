@@ -1,4 +1,4 @@
-// Basic polyfills for libraries expecting Node globals in the browser (e.g., sockjs-client)
+// Basic polyfills for libraries expecting Node globals in the browser
 (function initPolyfills() {
   try {
     const g: any = (globalThis as any);

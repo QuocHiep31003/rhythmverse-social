@@ -241,7 +241,7 @@ const AlbumDetail = () => {
               >
                 <Heart className="w-5 h-5" />
               </Button>
-              <ShareButton title={album?.title || "Album"} type="album" />
+              <ShareButton title={album?.title || "Album"} type="album" url={`${window.location.origin}/album/${album?.id ?? id}`} albumId={Number(album?.id ?? id)} />
             </div>
           </div>
         </div>
@@ -332,7 +332,7 @@ const AlbumDetail = () => {
                         />
                       </Button>
                       <div onClick={(e) => e.stopPropagation()}>
-                        <ShareButton title={song.title} type="song" />
+                        <ShareButton title={song.title} type="song" url={`${window.location.origin}/song/${song.id}`} />
                       </div>
                     </div>
                   </div>
