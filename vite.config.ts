@@ -9,13 +9,6 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 3000,
     proxy: {
-      // Proxy SockJS/STOMP endpoint to backend to avoid CORS in dev
-      "/ws-chat": {
-        target: "http://localhost:8080",
-        changeOrigin: true,
-        ws: true,
-        secure: false,
-      },
       // You can add API proxy as needed
       // "/api": {
       //   target: "http://localhost:8080",

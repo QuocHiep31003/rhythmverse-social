@@ -79,6 +79,19 @@ export const inviteLinksApi = {
     return await response.json();
   },
 
+  preview: async (inviteCode: string) => {
+    if (!inviteCode) throw new Error('Missing inviteCode');
+    const qs = new URLSearchParams({ inviteCode }).toString();
+    const response = await fetch(`${API_BASE_URL}/friends/invite/preview?${qs}`, {
+      method: 'GET',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+    return await response.json();
+  },
+
   accept: async (inviteCode: string) => {
     if (!inviteCode) {
       throw new Error('Missing inviteCode');

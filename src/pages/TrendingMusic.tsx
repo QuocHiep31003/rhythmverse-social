@@ -38,11 +38,10 @@ const TrendingMusic = () => {
       try {
         setIsLoading(true);
         const top10 = await getTrendingComparison(10); // chỉ lấy 10 bài
-        if (top10) {
-          setAllSongs(top10);
-          setFilteredSongs(top10);
-          setTotalPages(1);
-        }
+        const safe = Array.isArray(top10) ? top10 : [];
+        setAllSongs(safe);
+        setFilteredSongs(safe);
+        setTotalPages(1);
       } catch (err) {
         console.error("❌ Error loading top 10 trending:", err);
       } finally {
@@ -138,7 +137,7 @@ const TrendingMusic = () => {
                   {searchQuery ? `No songs found for "${searchQuery}"` : "No trending songs available."}
                 </p>
               ) : (
-                allSongs.map((song, index) => (
+                (Array.isArray(allSongs) ? allSongs : []).map((song, index) => (
                   <div
                     key={song.songId}
                     className="flex items-center gap-4 p-3 rounded-lg group transition-colors hover:bg-card/30"

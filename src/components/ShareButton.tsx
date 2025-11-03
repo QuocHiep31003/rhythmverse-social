@@ -13,20 +13,27 @@ import { Badge } from "@/components/ui/badge";
 import { Share2, Send, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { friendsApi } from "@/services/api/friendsApi";
+import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
+import { sendMessage } from "@/services/firebase/chat";
+import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { CollaboratorRole } from "@/types/playlist";
 
 interface ShareButtonProps {
   title: string;
   type: "song" | "album" | "playlist" | "quiz";
   url?: string;
   playlistId?: number; // when type === 'playlist'
+  albumId?: number; // when type === 'album'
 }
 
-const ShareButton = ({ title, type, url, playlistId }: ShareButtonProps) => {
+const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [friends, setFriends] = useState<{ id: string; name: string; avatar?: string | null }[]>([]);
+  const [inviteRole, setInviteRole] = useState<CollaboratorRole>(CollaboratorRole.EDITOR);
   const meId = useMemo(() => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
     const n = raw ? Number(raw) : NaN;
@@ -63,34 +70,137 @@ const ShareButton = ({ title, type, url, playlistId }: ShareButtonProps) => {
 
   const handleShare = async () => {
     try {
-      if (type === 'playlist' && playlistId && selectedFriends.length) {
-        // Send collaborator invites via backend
-        for (const fid of selectedFriends) {
-          await playlistCollabInvitesApi.send(playlistId, Number(fid), 'VIEWER');
-        }
-        // reset
-        setSelectedFriends([]);
-        setMessage("");
-        setSearchQuery("");
+      if (!meId) {
+        toast.error("Unable to share", { description: "Missing sender information." });
         return;
       }
-      // Fallback: just copy URL if provided
-      if (url) {
-        try { await navigator.clipboard.writeText(url); } catch {}
+      if (!selectedFriends.length) {
+        if (url) {
+          try { await navigator.clipboard.writeText(url); } catch { void 0; }
+        }
+        return;
       }
+
+      const extractIdFromUrl = (segment: "playlist" | "album" | "song"): number | undefined => {
+        if (!url) return undefined;
+        const match = url.match(new RegExp(`/${segment}/(\\d+)`, "i"));
+        if (match && match[1]) {
+          const parsed = Number(match[1]);
+          return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
+      };
+
+      const resolveResourceId = (): number | undefined => {
+        if (type === "playlist") {
+          return playlistId ?? extractIdFromUrl("playlist");
+        }
+        if (type === "album") {
+          return albumId ?? extractIdFromUrl("album");
+        }
+        if (type === "song") {
+          return extractIdFromUrl("song");
+        }
+        return undefined;
+      };
+
+      const resourceId = resolveResourceId();
+      if (!resourceId) {
+        toast.error("Unable to share", { description: "Missing content identifier for this item." });
+        return;
+      }
+
+      const buildShareUrl = (receiverId: number): string => {
+        const baseParams = new URLSearchParams({
+          senderId: String(meId),
+          receiverId: String(receiverId),
+        });
+        if (type === "playlist") {
+          baseParams.append("playlistId", String(resourceId));
+          return `${API_BASE_URL}/chat/share/playlist?${baseParams.toString()}`;
+        }
+        if (type === "album") {
+          baseParams.append("albumId", String(resourceId));
+          return `${API_BASE_URL}/chat/share/album?${baseParams.toString()}`;
+        }
+        baseParams.append("songId", String(resourceId));
+        return `${API_BASE_URL}/chat/share/song?${baseParams.toString()}`;
+      };
+
+      // If sharing a playlist, allow collaboration invites via backend controller
+      if (type === "playlist") {
+        const success: number[] = [];
+        const failed: Array<{ id: number; error: string }> = [];
+        for (const fid of selectedFriends) {
+          const receiverId = Number(fid);
+          try {
+            // 1) Send backend collaboration invite
+            await playlistCollabInvitesApi.send(Number(resourceId), receiverId, inviteRole);
+            success.push(receiverId);
+            // 2) Also share to Social chat for visibility
+            const shareEndpoint = buildShareUrl(receiverId);
+            const resp = await fetch(shareEndpoint, { method: "POST", headers: buildJsonHeaders() });
+            if (resp.ok) {
+              const payload = await resp.json();
+              window.dispatchEvent(new CustomEvent("app:chat-share-sent", { detail: { receiverId, message: payload } }));
+            }
+            // 3) Optional: send a small text note
+            try { await sendMessage(meId, receiverId, `đã mời bạn cộng tác vào playlist #${resourceId}`); } catch { /* ignore */ }
+          } catch (err: any) {
+            const msg = err?.message || 'Invite failed';
+            failed.push({ id: receiverId, error: msg });
+          }
+        }
+        if (success.length) {
+          toast.success(`Đã gửi lời mời cho ${success.length} người`);
+        }
+        if (failed.length) {
+          toast.error(`Không gửi được cho ${failed.length} người`, { description: failed[0]?.error });
+        }
+      } else {
+        // Default: share via chat endpoints for songs/albums
+        for (const fid of selectedFriends) {
+          const receiverId = Number(fid);
+          const endpoint = buildShareUrl(receiverId);
+          const response = await fetch(endpoint, { method: "POST", headers: buildJsonHeaders() });
+          if (!response.ok) {
+            throw new Error(await parseErrorResponse(response));
+          }
+          const payload = await response.json();
+          window.dispatchEvent(
+            new CustomEvent("app:chat-share-sent", {
+              detail: { receiverId, message: payload },
+            })
+          );
+        }
+      }
+
+      const note = message.trim();
+      if (note) {
+        for (const fid of selectedFriends) {
+          const receiverId = Number(fid);
+          try {
+            await sendMessage(meId, receiverId, note);
+          } catch (err) {
+            console.error("Failed to send follow-up message", err);
+          }
+        }
+      }
+
       setSelectedFriends([]);
       setMessage("");
       setSearchQuery("");
     } catch (e: any) {
-      // show error toast through console to avoid circular deps
-      console.error('Share failed', e?.message || e);
+      const messageText = e?.message || e;
+      console.error("Share failed", messageText);
+      toast.error("Share failed", { description: typeof messageText === "string" ? messageText : undefined });
     }
   };
 
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); }}>
           <Share2 className="w-4 h-4" />
         </Button>
       </DialogTrigger>
@@ -108,6 +218,22 @@ const ShareButton = ({ title, type, url, playlistId }: ShareButtonProps) => {
             <p className="font-medium text-sm">{title}</p>
             <p className="text-xs text-muted-foreground capitalize">{type}</p>
           </div>
+
+          {/* Collaboration role for playlists */}
+          {type === 'playlist' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Role</span>
+              <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as CollaboratorRole)}>
+                <SelectTrigger className="w-[160px] h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={CollaboratorRole.VIEWER}>VIEWER</SelectItem>
+                  <SelectItem value={CollaboratorRole.EDITOR}>EDITOR</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Search friends */}
           <div className="relative">
@@ -160,7 +286,7 @@ const ShareButton = ({ title, type, url, playlistId }: ShareButtonProps) => {
             disabled={selectedFriends.length === 0}
           >
             <Send className="w-4 h-4 mr-2" />
-            Share with {selectedFriends.length} friend{selectedFriends.length !== 1 ? 's' : ''}
+            {type === 'playlist' ? 'Invite' : 'Share'} with {selectedFriends.length} friend{selectedFriends.length !== 1 ? 's' : ''}
           </Button>
         </div>
       </DialogContent>

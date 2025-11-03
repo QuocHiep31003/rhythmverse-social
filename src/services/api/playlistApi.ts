@@ -1,16 +1,41 @@
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
+import { PlaylistVisibility, CollaboratorRole, PlaylistCollaborator } from "@/types/playlist";
+
+/**
+ * Custom error class for permission-related errors
+ */
+export class PlaylistPermissionError extends Error {
+  constructor(
+    message: string,
+    public status: number = 403,
+    public originalMessage?: string
+  ) {
+    super(message);
+    this.name = "PlaylistPermissionError";
+  }
+}
 
 export interface PlaylistDTO {
   id: number;
   name: string;
   description?: string | null;
   coverUrl?: string | null;
-  visibility?: "PUBLIC" | "PRIVATE";
+  visibility?: PlaylistVisibility | "PUBLIC" | "PRIVATE" | "FRIENDS_ONLY";
   songLimit?: number;
   dateUpdate?: string | null; // YYYY-MM-DD
   songIds?: number[];
-  songs?: any[];
+  songs?: Array<{
+    id?: number;
+    name?: string;
+    artists?: Array<{ id?: number; name: string }>;
+    album?: { id?: number; name: string } | null;
+    urlImageAlbum?: string;
+    audioUrl?: string;
+    duration?: number | string;
+  }>;
   owner?: { id: number; name: string } | null;
+  ownerId?: number; // Owner ID for permission checks
+  collaborators?: PlaylistCollaborator[]; // List of collaborators
 }
 
 export interface PageResponse<T> {
@@ -63,12 +88,23 @@ export const playlistsApi = {
       method: "GET",
       headers: buildJsonHeaders(),
     });
+    
+    // Handle 403 Forbidden - permission to view denied
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to view this playlist",
+        403,
+        errorText
+      );
+    }
+    
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return (await res.json()) as PlaylistDTO;
   },
 
   create: async (data: Partial<PlaylistDTO>) => {
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name: data.name,
       description: data.description ?? "",
       coverUrl: data.coverUrl ?? null,
@@ -87,7 +123,7 @@ export const playlistsApi = {
   },
 
   update: async (id: number | string, data: Partial<PlaylistDTO>) => {
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       name: data.name,
       description: data.description ?? "",
       coverUrl: data.coverUrl ?? null,
@@ -101,6 +137,27 @@ export const playlistsApi = {
       headers: buildJsonHeaders(),
       body: JSON.stringify(payload),
     });
+    
+    // Handle 401 Unauthorized - missing JWT token
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
+    // Handle 403 Forbidden - only owner can update
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Only playlist owner can update playlist information",
+        403,
+        errorText
+      );
+    }
+    
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return (await res.json()) as PlaylistDTO;
   },
@@ -111,6 +168,27 @@ export const playlistsApi = {
       method: "DELETE",
       headers: buildJsonHeaders(),
     });
+    
+    // Handle 401 Unauthorized - missing JWT token
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
+    // Handle 403 Forbidden - no edit permission
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to edit this playlist",
+        403,
+        errorText
+      );
+    }
+    
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     try { return await res.text(); } catch { return "Removed"; }
   },
@@ -120,6 +198,27 @@ export const playlistsApi = {
       method: "DELETE",
       headers: buildJsonHeaders(),
     });
+    
+    // Handle 401 Unauthorized - missing JWT token
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
+    // Handle 403 Forbidden - only owner can delete
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Only playlist owner can delete this playlist",
+        403,
+        errorText
+      );
+    }
+    
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return { success: true } as const;
   },
@@ -151,7 +250,7 @@ export const playlistsApi = {
   importExcel: async (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    const headers = { ...buildJsonHeaders() } as any;
+    const headers: Record<string, string> = { ...buildJsonHeaders() };
     delete headers["Content-Type"]; // let browser set boundary
     const res = await fetch(`${API_BASE_URL}/playlists/import`, {
       method: "POST",
@@ -165,14 +264,60 @@ export const playlistsApi = {
 
 // Collaborator invites (invite by playlistId to receiver)
 export const playlistCollabInvitesApi = {
-  send: async (playlistId: number, receiverId: number, role: "VIEWER" | "EDITOR" = "VIEWER") => {
+  send: async (playlistId: number, receiverId: number, role: CollaboratorRole | "EDITOR" | "VIEWER" = "EDITOR") => {
     const qs = new URLSearchParams({ playlistId: String(playlistId), receiverId: String(receiverId), role });
     const res = await fetch(`${API_BASE_URL}/playlists/invites/send?${qs.toString()}`, {
       method: "POST",
       headers: buildJsonHeaders(),
     });
+    
+    // Handle 400 - Bad request (e.g., invite already exists, invalid parameters)
+    if (res.status === 400) {
+      const errorText = await parseErrorResponse(res);
+      // Try to parse JSON error response for better message
+      let errorMessage = errorText || "Invalid invite request";
+      try {
+        // Check if errorText is JSON
+        const jsonError = JSON.parse(errorText);
+        if (jsonError.message) {
+          errorMessage = jsonError.message;
+        } else if (typeof jsonError === 'string') {
+          errorMessage = jsonError;
+        }
+      } catch {
+        // Not JSON, use errorText as is
+        errorMessage = errorText || "Invalid invite request";
+      }
+      const error = new Error(errorMessage);
+      (error as Error & { status: number }).status = 400;
+      throw error;
+    }
+    
+    // Handle 401 - Unauthorized
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
+    // Handle 403 - Permission denied
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to invite collaborators",
+        403,
+        errorText
+      );
+    }
+    
     if (!res.ok) throw new Error(await parseErrorResponse(res));
-    try { return await res.text(); } catch { return "Invite sent"; }
+    // Backend now returns DTO; be robust to text fallback
+    try { return await res.json(); } catch {
+      try { return await res.text(); } catch { return "Invite sent"; }
+    }
   },
   accept: async (inviteId: number) => {
     const res = await fetch(`${API_BASE_URL}/playlists/invites/accept/${inviteId}`, {
@@ -196,35 +341,102 @@ export const playlistCollabInvitesApi = {
       headers: buildJsonHeaders(),
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
-    return await res.json();
+    // Support both array and paginated responses
+    const data = await res.json();
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.content)) return data.content;
+    return [];
   },
-};
-
-// Collaborators (list/remove)
-export const playlistCollaboratorsApi = {
-  list: async (playlistId: number) => {
-    const res = await fetch(`${API_BASE_URL}/playlists/collaborators/${playlistId}`, {
+  preview: async (inviteId: number) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/preview/${inviteId}`, {
       method: "GET",
       headers: buildJsonHeaders(),
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return await res.json();
   },
-  invite: async (playlistId: number, friendId: number, role: "VIEWER" | "EDITOR" = "VIEWER") => {
-    const qs = new URLSearchParams({ playlistId: String(playlistId), friendId: String(friendId), role });
-    const res = await fetch(`${API_BASE_URL}/playlists/collaborators/invite?${qs.toString()}`, {
-      method: "POST",
+  previewByCode: async (inviteCode: string) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/preview/code/${encodeURIComponent(inviteCode)}`, {
+      method: "GET",
       headers: buildJsonHeaders(),
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
-    try { return await res.text(); } catch { return "Collaborator invited"; }
+    return await res.json();
   },
-  remove: async (playlistId: number, userId: number) => {
-    const qs = new URLSearchParams({ playlistId: String(playlistId), userId: String(userId) });
-    const res = await fetch(`${API_BASE_URL}/playlists/collaborators/remove?${qs.toString()}`, {
+};
+
+// Collaborators (list/remove)
+// According to Swagger: GET /api/playlists/invites/collaborators/{playlistId}
+export const playlistCollaboratorsApi = {
+  list: async (playlistId: number) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/collaborators/${playlistId}`, {
+      method: "GET",
+      headers: buildJsonHeaders(),
+    });
+    
+    // Handle 500 errors gracefully - server might not support this endpoint yet
+    if (res.status === 500) {
+      console.warn(`Server error loading collaborators for playlist ${playlistId}`);
+      return []; // Return empty array instead of throwing
+    }
+    
+    // Handle 401 - Unauthorized
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
+    // Handle 403 - user doesn't have permission
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to view collaborators",
+        403,
+        errorText
+      );
+    }
+    
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return await res.json();
+  },
+  // Use invite API instead of separate invite endpoint
+  invite: async (playlistId: number, friendId: number, role: CollaboratorRole | "EDITOR" | "VIEWER" = "EDITOR") => {
+    // Use the invite API endpoint
+    return await playlistCollabInvitesApi.send(playlistId, friendId, role);
+  },
+  remove: async (playlistId: number, collaboratorId: number) => {
+    // According to Swagger: DELETE /api/playlists/invites/collaborators/{playlistId}
+    // Note: Need to check if this requires collaboratorId in query or body
+    const qs = new URLSearchParams({ collaboratorId: String(collaboratorId) });
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/collaborators/${playlistId}?${qs.toString()}`, {
       method: "DELETE",
       headers: buildJsonHeaders(),
     });
+    
+    // Handle 401 - Unauthorized
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
+    // Handle 403 - Permission denied
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to remove collaborators",
+        403,
+        errorText
+      );
+    }
+    
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     try { return await res.text(); } catch { return "Collaborator removed"; }
   },

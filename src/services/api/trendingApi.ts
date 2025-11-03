@@ -32,10 +32,15 @@ export interface TrendingSong {
 }
 
 export const getTrendingComparison = async (limit = 10): Promise<TrendingSong[]> => {
-    const response = await api.get<TrendingSong[]>('/trending/comparison', {
+    const response = await api.get<any>('/trending/comparison', {
         params: { limit },
     });
-    return response.data;
+    const data = response.data;
+    if (Array.isArray(data)) return data as TrendingSong[];
+    // Some backends may return an object like { labels: [], lines: [] }
+    // Normalize to an empty list to keep UI stable
+    if (Array.isArray(data?.content)) return data.content as TrendingSong[];
+    return [] as TrendingSong[];
 };
 
 export const getLatestTrending = async (limit = 10): Promise<TrendingSong[]> => {
