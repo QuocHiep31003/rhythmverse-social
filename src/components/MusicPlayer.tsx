@@ -163,7 +163,7 @@ const MusicPlayer = () => {
     setCurrentLyricIndex(0);
     setDuration(0);
     
-    // Set new audio source via secure HLS session
+    // Set new audio source via secure HLS session or fallback to direct audioUrl
     let hls: Hls | null = null;
     (async () => {
       try {
@@ -184,11 +184,19 @@ const MusicPlayer = () => {
             console.error("HLS error:", data);
             if (data.fatal) {
               setIsLoading(false);
+              // Fallback to direct audioUrl if HLS fails
+              const fallbackUrl = currentSong.audioUrl || currentSong.audio;
+              if (fallbackUrl) {
+                console.log('Falling back to direct audioUrl:', fallbackUrl);
+                audio.src = fallbackUrl;
+                audio.load();
+              } else {
               toast({
                 title: "Playback error",
                 description: `${data.type || 'HLS'}: ${data.details || 'fatal error'}`,
                 variant: "destructive",
               });
+              }
             }
           });
         } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
@@ -199,8 +207,21 @@ const MusicPlayer = () => {
           audio.load();
         }
       } catch (e) {
-        console.error('Failed to init HLS session', e);
+        console.error('Failed to init HLS session, falling back to direct audioUrl', e);
+        // Fallback to direct audioUrl
+        const fallbackUrl = currentSong.audioUrl || currentSong.audio || currentSong.url;
+        if (fallbackUrl) {
+          console.log('Using direct audioUrl fallback:', fallbackUrl);
+          audio.src = fallbackUrl;
+          audio.load();
+        } else {
         setIsLoading(false);
+          toast({
+            title: "Playback error",
+            description: "No audio source available",
+            variant: "destructive",
+          });
+        }
       }
     })();
     
@@ -251,7 +272,8 @@ const MusicPlayer = () => {
         hls = null;
       }
     };
-  }, [currentSong]); // Only depend on currentSong change - eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSong]); // Only reload when song changes, not isPlaying/playNext
 
   // Handle play/pause toggle separately
   useEffect(() => {
@@ -390,7 +412,7 @@ const MusicPlayer = () => {
       if (!hasIncrementedPlayCount) {
         console.log(`🎵 Incrementing play count for song ID: ${currentSong.id} (Coerced: ${songIdForApi}, Type: ${typeof songIdForApi})`);
         songsApi
-          .incrementPlayCount(songIdForApi as any)
+          .incrementPlayCount(String(songIdForApi))
           .then(() => {
             console.log("✅ Play count incremented successfully");
             setHasIncrementedPlayCount(true);

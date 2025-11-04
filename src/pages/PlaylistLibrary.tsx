@@ -31,15 +31,48 @@ import { friendsApi } from "@/services/api/friendsApi";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input as UiInput } from "@/components/ui/input";
 
+interface PlaylistItem {
+  id: string;
+  title: string;
+  description: string;
+  cover: string;
+  songCount: number;
+  totalDuration: string;
+  isPublic: boolean;
+  likes: number;
+  createdAt: string;
+  updatedAt: string;
+  isCollaborator?: boolean;
+}
+
+interface UserResponse {
+  id?: number;
+  userId?: number;
+}
+
+interface SongDTO {
+  duration?: number | string;
+}
+
+interface FriendDTO {
+  id?: number;
+  userId?: number;
+  friendId?: number;
+  name?: string;
+  username?: string;
+  email?: string;
+  avatar?: string | null;
+}
+
 const PlaylistLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [likedPlaylists, setLikedPlaylists] = useState<string[]>([]);
   const [durations, setDurations] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<boolean>(false);
-  const [playlists, setPlaylists] = useState<any[]>([]);
-  const [selected, setSelected] = useState<any | null>(null);
-  const [editDefaults, setEditDefaults] = useState<any | null>(null);
+  const [playlists, setPlaylists] = useState<PlaylistItem[]>([]);
+  const [selected, setSelected] = useState<PlaylistItem | null>(null);
+  const [editDefaults, setEditDefaults] = useState<PlaylistFormValues | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +80,7 @@ const PlaylistLibrary = () => {
   const [friends, setFriends] = useState<Array<{ id: number; name: string; avatar?: string | null }>>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
-  const [inviteRole, setInviteRole] = useState<"VIEWER" | "EDITOR">("VIEWER");
+  const [inviteRole, setInviteRole] = useState<"VIEWER" | "EDITOR">("EDITOR");
   const [sendingInvites, setSendingInvites] = useState(false);
 
   
@@ -63,11 +96,11 @@ const PlaylistLibrary = () => {
           if (!Number.isFinite(me as number)) me = undefined;
           if (!me) {
             // Fallback: try to fetch current user and cache id
-            const meResp: any = await authApi.me().catch(() => undefined);
+            const meResp = await authApi.me().catch(() => undefined) as UserResponse | undefined;
             const uid = meResp && (meResp.id || meResp.userId);
             if (uid) {
               me = Number(uid);
-              try { localStorage.setItem('userId', String(uid)); } catch {}
+              try { localStorage.setItem('userId', String(uid)); } catch { void 0; }
             }
           }
         } catch { me = undefined; }
@@ -80,13 +113,14 @@ const PlaylistLibrary = () => {
           id: String(p.id),
           title: p.name,
           description: p.description || '',
-          cover: p.coverUrl || (p as any).urlImagePlaylist || '',
+          cover: p.coverUrl || (p as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist || '',
           songCount: Array.isArray(p.songs) ? p.songs.length : 0,
           totalDuration: '--',
           isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
           likes: 0,
           createdAt: p.dateUpdate || '',
           updatedAt: p.dateUpdate || '',
+          isCollaborator: typeof (p as any).ownerId === 'number' && Number.isFinite(me as number) ? (p as any).ownerId !== (me as number) : false,
         }));
         setPlaylists(mapped);
       } catch (e) {
@@ -99,7 +133,7 @@ const PlaylistLibrary = () => {
   }, [searchQuery, sortBy]);
 
   // Duration helpers
-  const toSeconds = (input: any): number => {
+  const toSeconds = (input: unknown): number => {
     try {
       if (typeof input === 'number' && Number.isFinite(input)) return input > 10000 ? Math.round(input/1000) : Math.round(input);
       if (typeof input === 'string') {
@@ -113,7 +147,7 @@ const PlaylistLibrary = () => {
         }
         const n = Number(t); if (Number.isFinite(n)) return n > 10000 ? Math.round(n/1000) : Math.round(n);
       }
-    } catch {}
+    } catch { void 0; }
     return 0;
   };
   const formatTotal = (sec: number) => {
@@ -131,7 +165,7 @@ const PlaylistLibrary = () => {
         const res = await Promise.all(ids.map(async (id) => {
           try {
             const detail = await playlistsApi.getById(id);
-            const secs = Array.isArray(detail.songs) ? detail.songs.reduce((acc: number, s: any) => acc + toSeconds((s as any).duration), 0) : 0;
+            const secs = Array.isArray(detail.songs) ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0) : 0;
             return [id, formatTotal(secs)] as [string, string];
           } catch { return [id, '--'] as [string, string]; }
         }));
@@ -140,7 +174,7 @@ const PlaylistLibrary = () => {
           res.forEach(([id, d]) => { map[id] = d; });
           setDurations(map);
         }
-      } catch {}
+      } catch { void 0; }
     };
     if (playlists.length) run();
     return () => { cancelled = true; };
@@ -155,9 +189,14 @@ const PlaylistLibrary = () => {
         if (!me) { setFriends([]); return; }
         const list = await friendsApi.getFriends(me);
         const mapped = Array.isArray(list)
-          ? list.map((f: any) => ({ id: f.id ?? f.userId ?? f.friendId, name: f.name ?? f.username ?? f.email ?? `User ${f.id}`, avatar: f.avatar || null }))
+          ? list.map((f: FriendDTO) => ({ 
+              id: f.id ?? f.userId ?? f.friendId ?? 0, 
+              name: f.name ?? f.username ?? f.email ?? `User ${f.id ?? f.userId ?? f.friendId ?? 0}`, 
+              avatar: f.avatar || null 
+            }))
           : [];
-        setFriends(mapped.filter((x: any) => typeof x.id === 'number'));
+        const validFriends = mapped.filter(x => typeof x.id === 'number' && x.id > 0);
+        setFriends(validFriends.map(x => ({ id: x.id, name: x.name, avatar: x.avatar ?? null })));
       } catch { setFriends([]); }
       finally { setLoadingFriends(false); }
     };
@@ -227,7 +266,7 @@ const PlaylistLibrary = () => {
     });
   };
 
-  const playPlaylist = (playlist: any) => {
+  const playPlaylist = (playlist: PlaylistItem) => {
     toast({
       title: `Playing ${playlist.title}`,
       description: `${playlist.songCount} songs`,
@@ -241,17 +280,17 @@ const PlaylistLibrary = () => {
     return num.toString();
   };
 
-  const openEdit = async (pl: any) => {
+  const openEdit = async (pl: PlaylistItem) => {
     setSelected(pl);
     try {
       const detail = await playlistsApi.getById(pl.id);
       setEditDefaults({
         name: detail.name,
         description: detail.description || '',
-        coverUrl: detail.coverUrl || (detail as any).urlImagePlaylist || '',
+        coverUrl: detail.coverUrl || (detail as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist || '',
         isPublic: (detail.visibility || 'PUBLIC') === 'PUBLIC',
         songLimit: detail.songLimit ?? 500,
-        songIds: Array.isArray(detail.songIds) ? detail.songIds : Array.isArray(detail.songs) ? detail.songs.map((s: any) => s.id) : [],
+        songIds: Array.isArray(detail.songIds) ? detail.songIds : Array.isArray(detail.songs) ? detail.songs.map((s: { id?: number }) => s.id).filter((id): id is number => typeof id === 'number') : [],
       });
     } catch {
       setEditDefaults({
@@ -266,10 +305,19 @@ const PlaylistLibrary = () => {
       setEditOpen(true);
     }
   };
-  const openDelete = (pl: any) => { setSelected(pl); setDeleteOpen(true); };
-  const openCollaborate = (pl: any) => { setSelected(pl); setCollabOpen(true); };
+  const openDelete = (pl: PlaylistItem) => { setSelected(pl); setDeleteOpen(true); };
+  const openCollaborate = (pl: PlaylistItem) => { setSelected(pl); setCollabOpen(true); };
 
-  const handleSave = async (values: any) => {
+  interface PlaylistFormValues {
+    name: string;
+    description: string;
+    coverUrl: string;
+    isPublic: boolean;
+    songLimit?: number;
+    songIds?: number[];
+  }
+
+  const handleSave = async (values: PlaylistFormValues) => {
     if (!selected) return;
     try {
       setIsSubmitting(true);
@@ -293,7 +341,7 @@ const PlaylistLibrary = () => {
         id: String(p.id),
         title: p.name,
         description: p.description || '',
-        cover: p.coverUrl || (p as any).urlImagePlaylist || '',
+        cover: p.coverUrl || (p as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist || '',
         songCount: Array.isArray(p.songs) ? p.songs.length : 0,
         totalDuration: '--',
         isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
@@ -371,8 +419,8 @@ const PlaylistLibrary = () => {
             />
           </div>
           
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-[180px] bg-card/50 border-border/50">
+          <Select value={sortBy} onValueChange={(value: string) => setSortBy(value)}>
+            <SelectTrigger className="w-[180px] bg-card/50 border-border/50" title="Sort playlists">
               <SelectValue placeholder="Sort by..." />
             </SelectTrigger>
             <SelectContent>
@@ -413,13 +461,19 @@ const PlaylistLibrary = () => {
                         </Button>
                       </div>
                       
-                      {/* Privacy badge */}
-                      <Badge 
-                        variant={playlist.isPublic ? "default" : "secondary"}
-                        className="absolute top-3 right-3"
-                      >
-                        {playlist.isPublic ? "Public" : "Private"}
-                      </Badge>
+                      {/* Badges */}
+                      <div className="absolute top-3 right-3 flex gap-2">
+                        <Badge 
+                          variant={playlist.isPublic ? "default" : "secondary"}
+                        >
+                          {playlist.isPublic ? "Public" : "Private"}
+                        </Badge>
+                        {playlist.isCollaborator && (
+                          <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30">
+                            Collab
+                          </Badge>
+                        )}
+                      </div>
                     </div>
 
                     {/* Content */}
@@ -467,7 +521,7 @@ const PlaylistLibrary = () => {
                           >
                             <Heart className={`w-4 h-4 ${likedPlaylists.includes(playlist.id) ? 'fill-current' : ''}`} />
                           </Button>
-                          <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} />
+                          <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
@@ -598,7 +652,12 @@ const PlaylistLibrary = () => {
         <div className="space-y-3 max-h-[50vh] overflow-y-auto">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Role:</span>
-            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as any)} className="bg-background/50 border border-border rounded px-2 py-1 text-sm">
+            <select 
+              value={inviteRole} 
+              onChange={(e) => setInviteRole(e.target.value as "VIEWER" | "EDITOR")} 
+              className="bg-background/50 border border-border rounded px-2 py-1 text-sm"
+              title="Select collaboration role"
+            >
               <option value="VIEWER">VIEWER</option>
               <option value="EDITOR">EDITOR</option>
             </select>

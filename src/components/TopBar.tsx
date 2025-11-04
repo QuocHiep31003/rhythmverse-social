@@ -30,7 +30,11 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
+
 import { arcApi, authApi } from "@/services/api";
+
+import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+
 
 
 const TopBar = () => {
@@ -41,6 +45,7 @@ const TopBar = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
+  const [inviteCount, setInviteCount] = useState<number>(0);
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
@@ -174,28 +179,56 @@ const TopBar = () => {
       fileInputRef.current.value = "";
     }
   };
-useEffect(() => {
-  const loadMe = async () => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    if (!token) {
-      setIsAuthenticated(false);
-      return;
-    }
-    try {
-      const me = await authApi.me();
-      if (me) {
-        setIsAuthenticated(true);
-        setProfileName(me?.name || me?.username || "");
-        setProfileEmail(me?.email || "");
-        setProfileAvatar(me?.avatar || "");
+  useEffect(() => {
+    const loadMe = async () => {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (!token) {
+        setIsAuthenticated(false);
+        return;
       }
-    } catch (error) {
-      console.error("❌ Failed to load profile:", error);
-      setIsAuthenticated(false);
-    }
-  };
-  loadMe();
-}, []);
+      try {
+        const me = await authApi.me();
+        if (me) {
+          setIsAuthenticated(true);
+          setProfileName(me?.name || me?.username || "");
+          setProfileEmail(me?.email || "");
+          setProfileAvatar(me?.avatar || "");
+        }
+      } catch (error) {
+        console.error("❌ Failed to load profile:", error);
+        setIsAuthenticated(false);
+      }
+    };
+    loadMe();
+  }, []);
+
+  // Poll pending collaboration invites to show a badge
+  useEffect(() => {
+    let mounted = true;
+    const loadInvites = async () => {
+      // Only poll when authenticated
+      const hasToken = (() => { try { return !!localStorage.getItem('token'); } catch { return false; } })();
+      if (!hasToken) {
+        if (mounted) setInviteCount(0);
+        return;
+      }
+      try {
+        const list = await playlistCollabInvitesApi.pending();
+        if (!mounted) return;
+        const count = Array.isArray(list) ? list.length : 0;
+        setInviteCount(count);
+      } catch {
+        // ignore errors (e.g., unauthenticated)
+        if (mounted) setInviteCount(0);
+      }
+    };
+    void loadInvites();
+    const interval = setInterval(loadInvites, 30000);
+    // Re-run on storage token changes
+    const onStorage = (e: StorageEvent) => { if (e.key === 'token') void loadInvites(); };
+    window.addEventListener('storage', onStorage);
+    return () => { mounted = false; clearInterval(interval); window.removeEventListener('storage', onStorage); };
+  }, []);
 
   const handleLogout = () => {
     try {
@@ -205,18 +238,18 @@ useEffect(() => {
       localStorage.removeItem('userName');
       localStorage.removeItem('userEmail');
       localStorage.removeItem('userAvatar'); // Clear user avatar
-      
+
       // Clear sessionStorage
       sessionStorage.removeItem('token');
       sessionStorage.removeItem('userId');
     } catch (e) { /* ignore */ }
-    
+
     // Reset state
     setIsAuthenticated(false);
     setProfileName("");
     setProfileEmail("");
     setProfileAvatar(""); // Reset avatar
-    
+
     // Navigate to login page
     navigate('/login');
   }
@@ -389,14 +422,22 @@ useEffect(() => {
         {/* Right side controls */}
         <div className="flex items-center gap-3 relative z-10">
           {/* Notifications */}
-          <Button variant="ghost" size="icon" className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
+            onClick={() => navigate('/playlists/invites')}
+            title="Playlist collaboration invites"
+          >
             <Bell className="h-5 w-5" />
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
-            >
-              3
-            </Badge>
+            {inviteCount > 0 && (
+              <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
+              >
+                {inviteCount}
+              </Badge>
+            )}
           </Button>
 
           {/* Messages */}
