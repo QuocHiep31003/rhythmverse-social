@@ -7,7 +7,8 @@ export interface FirebaseMessage {
   id?: string;
   senderId: number;
   receiverId: number;
-  content: string;
+  content: string; // Encrypted content (backup)
+  contentPlain?: string; // Plaintext content (preferred for display)
   sentAt: number;
   read?: boolean;
   sharedContentType?: SharedContentType | null;
@@ -70,10 +71,16 @@ export const watchChatMessages = (
       if (snapshot.exists()) {
         snapshot.forEach((childSnapshot) => {
           const data = childSnapshot.val() as Omit<FirebaseMessage, 'id'>;
-          messages.push({
+          // Prefer plaintext payload when available; fallback to encrypted content if needed
+          const plaintext =
+            data.contentPlain ?? (typeof data.content === 'string' ? data.content : '');
+          const message: FirebaseMessage = {
             id: childSnapshot.key ?? undefined,
-            ...data
-          } as FirebaseMessage);
+            ...data,
+            content: plaintext,
+            contentPlain: plaintext,
+          };
+          messages.push(message);
         });
         // Sort by sentAt (oldest first)
         messages.sort((a, b) => {

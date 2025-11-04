@@ -57,7 +57,8 @@ export interface ChatMessageDTO {
   id: number;
   senderId: number;
   receiverId: number;
-  content: string;
+  content: string; // Encrypted content (from database)
+  contentPlain?: string; // Plaintext content (from Firebase, for display)
   sentAt: string;
   read: boolean;
   sharedContentType?: SharedContentType | null;
@@ -73,5 +74,32 @@ export const chatApi = {
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return await res.json();
+  },
+  sharePlaylist: async (senderId: number, receiverId: number, playlistId: number) => {
+    const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), playlistId: String(playlistId) });
+    const res = await fetch(`${API_BASE_URL}/chat/share/playlist?${qs.toString()}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return (await res.json()) as ChatMessageDTO;
+  },
+  shareSong: async (senderId: number, receiverId: number, songId: number) => {
+    const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), songId: String(songId) });
+    const res = await fetch(`${API_BASE_URL}/chat/share/song?${qs.toString()}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return (await res.json()) as ChatMessageDTO;
+  },
+  shareAlbum: async (senderId: number, receiverId: number, albumId: number) => {
+    const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), albumId: String(albumId) });
+    const res = await fetch(`${API_BASE_URL}/chat/share/album?${qs.toString()}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return (await res.json()) as ChatMessageDTO;
   },
 };
