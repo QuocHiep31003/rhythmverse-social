@@ -15,7 +15,7 @@ import { useMusic, Song } from "@/contexts/MusicContext";
 import { songsApi } from "@/services/api/songApi";
 import { playlistsApi, PlaylistDTO } from "@/services/api/playlistApi";
 import { albumsApi } from "@/services/api/albumApi";
-import { watchChatMessages } from "@/services/firebase/chat";
+import { watchChatMessages, type FirebaseMessage } from "@/services/firebase/chat";
 import { watchNotifications, NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
 
 import {
@@ -391,7 +391,16 @@ const Social = () => {
     
     const unsubscribe = watchChatMessages(meId, Number(selectedChat), (messages) => {
       console.log('[Social] Received messages from Firebase:', messages.length);
-      const parsed = messages.map(m => parseIncomingContent(m as unknown as ChatMessageDTO, friends));
+      const parsed = messages.map((m) => {
+        const firebaseMessage = m as FirebaseMessage;
+        const normalized = {
+          ...(firebaseMessage as unknown as ChatMessageDTO),
+          contentPlain:
+            firebaseMessage.contentPlain ??
+            (typeof firebaseMessage.content === "string" ? firebaseMessage.content : undefined),
+        };
+        return parseIncomingContent(normalized, friends);
+      });
       setChatByFriend(prev => {
         // Merge với messages hiện tại để tránh mất optimistic updates
         const existing = prev[selectedChat] || [];
@@ -430,9 +439,35 @@ const Social = () => {
   useEffect(() => {
     const onLocalShare = (ev: Event) => {
       try {
-        const detail = (ev as CustomEvent).detail as { receiverId: number; content?: string; kind?: 'SONG'; songId?: number; title?: string } | undefined;
+        const detail = (ev as CustomEvent).detail as {
+          receiverId: number;
+          message?: ChatMessageDTO;
+          content?: string;
+          kind?: "SONG";
+          songId?: number;
+          title?: string;
+        } | undefined;
         if (!detail) return;
         const friendKey = String(detail.receiverId);
+        if (detail.message) {
+          const normalizedMessage = {
+            ...detail.message,
+            contentPlain:
+              detail.message.contentPlain ??
+              (typeof detail.message.content === "string" ? detail.message.content : undefined),
+          };
+          const parsed = parseIncomingContent(normalizedMessage, friends);
+          setChatByFriend(prev => {
+            const existing = prev[friendKey] || [];
+            const incomingId = parsed.id;
+            const already = existing.find((m) => m.id === incomingId);
+            const nextList = already
+              ? existing.map((m) => (m.id === incomingId ? parsed : m))
+              : [...existing, parsed];
+            return { ...prev, [friendKey]: nextList };
+          });
+          return;
+        }
         const baseMsg = { id: `${Date.now()}`, sender: 'You', timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) } as const;
         const msg: Message = detail.kind === 'SONG' && detail.songId != null
           ? { ...baseMsg, type: 'song', content: 'Shared a song', songData: { id: detail.songId, title: detail.title || '', artist: '' } }
@@ -476,7 +511,11 @@ const Social = () => {
       if (!meId || !selectedChat) return;
       try {
         const history = await chatApi.getHistory(meId, Number(selectedChat));
-        const mapped = history.map(h => parseIncomingContent(h, friends));
+        const normalizedHistory = history.map((h) => ({
+          ...h,
+          contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
+        }));
+        const mapped = normalizedHistory.map(h => parseIncomingContent(h, friends));
         setChatByFriend(prev => ({ ...prev, [selectedChat]: mapped }));
       } catch { void 0; }
     })();
@@ -505,12 +544,18 @@ const Social = () => {
       console.log('[Social] Message sent result:', result);
       
       // Replace optimistic message with real one if needed
-      if (result?.id) {
+      if (result && typeof result === "object" && "id" in result) {
+        const normalizedResult = {
+          ...result,
+          contentPlain:
+            result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined),
+        };
+        const parsed = parseIncomingContent(normalizedResult as ChatMessageDTO, friends);
         setChatByFriend(prev => ({
           ...prev,
           [selectedChat]: prev[selectedChat]?.map(m => 
             m.id === optimisticMsg.id 
-              ? { ...m, id: String(result.id) }
+              ? { ...parsed, id: String(normalizedResult.id) }
               : m
           ) || []
         }));
@@ -702,27 +747,27 @@ const Social = () => {
       {friends.map((friend) => (
         <div
           key={friend.id}
-          className={`p-3 rounded-lg cursor-pointer transition-all duration-200 ${selectedChat === friend.id
-            ? "bg-primary/20 border border-primary/40"
-            : "bg-muted/10 hover:bg-muted/20"
+          className={`p-3 rounded-lg cursor-pointer transition-all duration-200 backdrop-blur-sm ${selectedChat === friend.id
+            ? "bg-purple-500/20 border border-purple-400/40 shadow-md shadow-purple-500/20"
+            : "bg-purple-500/5 hover:bg-purple-500/15 border border-purple-300/10"
             }`}
           onClick={() => setSelectedChat(friend.id)}
         >
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Avatar className="w-10 h-10">
-                <AvatarFallback className="bg-gradient-primary text-white text-sm">
+              <Avatar className="w-10 h-10 ring-2 ring-purple-400/30 ring-offset-0">
+                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white text-sm">
                   {friend.name.split(' ').map(n => n[0]).join('')}
                 </AvatarFallback>
               </Avatar>
               {friend.isOnline && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background" />
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-purple-500/20" />
               )}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <p className="font-medium truncate">{friend.name}</p>
+                <p className="font-medium truncate text-purple-50/90">{friend.name}</p>
                 {friend.streak >= 7 && (
                   <div className="flex items-center gap-1">
                     <Flame className="w-3 h-3 text-orange-500" />
@@ -731,14 +776,14 @@ const Social = () => {
                 )}
               </div>
               {friend.currentlyListening ? (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1 text-xs text-purple-100/70">
                   <Headphones className="w-3 h-3" />
                   <span className="truncate">
                     {friend.currentlyListening.title} — {friend.currentlyListening.artist}
                   </span>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">{friend.username}</p>
+                <p className="text-xs text-purple-100/70">{friend.username}</p>
               )}
             </div>
           </div>
@@ -766,13 +811,9 @@ const Social = () => {
   }) => {
     if (!playlist) return null;
 
-    const tracks = (playlist.songs || []).slice(0, 4);
-    const totalItems = playlist.totalSongs ?? playlist.songLimit ?? tracks.length;
+    const totalItems = playlist.totalSongs ?? playlist.songLimit ?? 0;
     const visibilityLabel = playlist.visibility ? playlist.visibility.toString().replace(/_/g, " ") : "Spotify";
-    const primaryCover =
-      playlist.coverUrl ||
-      tracks.find((track) => track.coverUrl)?.coverUrl ||
-      undefined;
+    const primaryCover = playlist.coverUrl || undefined;
 
     const go = () => { if (_link) navigate(_link); };
     return (
@@ -783,50 +824,24 @@ const Social = () => {
               {primaryCover ? (
                 <img src={primaryCover} alt={playlist.name || "Playlist cover"} className="absolute inset-0 h-full w-full object-cover" />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-[#335d2d] via-[#1a2e1a] to-[#050b05] flex items-center justify-center">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-700 via-fuchsia-700 to-indigo-800 flex items-center justify-center">
                   <Music className="w-10 h-10 text-white/40" />
                 </div>
               )}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/45 to-black/80" />
-              <div className="absolute inset-x-0 bottom-0 p-4 text-left text-white space-y-2">
-                <div className="text-[11px] uppercase tracking-[0.35em] text-white/70">Playlist · {visibilityLabel}</div>
-                <h4 className="text-lg font-semibold leading-tight truncate">
-                  {loading ? "Loading…" : playlist.name || "Shared playlist"}
-                </h4>
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4 text-left text-white space-y-1">
+                <div className="text-[11px] uppercase tracking-[0.35em] text-white/70">Playlist</div>
+                <p className="text-base font-semibold truncate">{loading ? "Loading…" : playlist.name || "Shared playlist"}</p>
                 <p className="text-xs text-white/70 truncate">
-                  {playlist.ownerName ? `Made for ${playlist.ownerName}` : playlist.description || "Spotify"}
+                  {playlist.ownerName || visibilityLabel}
                 </p>
               </div>
             </div>
-            {tracks.length ? (
-              <div className="bg-black/70 text-white/85">
-                {tracks.map((track, idx) => (
-                  <div key={`${playlist.id ?? 'p'}-${track.id ?? idx}`} className="flex items-center gap-3 px-4 py-3 border-t border-white/10">
-                    <div className="h-12 w-12 rounded-lg overflow-hidden bg-white/15 flex items-center justify-center">
-                      {track.coverUrl ? (
-                        <img src={track.coverUrl} alt={track.name || `Track ${idx + 1}`} className="h-full w-full object-cover" />
-                      ) : (
-                        <Music className="w-5 h-5 text-white/60" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium truncate text-white">{track.name || `Track ${idx + 1}`}</p>
-                      <p className="text-xs text-white/70 truncate">
-                        {track.artists.length ? track.artists.join(", ") : DEFAULT_ARTIST_NAME}
-                      </p>
-                    </div>
-                    {track.durationLabel && (
-                      <span className="text-xs text-white/60 whitespace-nowrap">{track.durationLabel}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : null}
           </div>
           <div className="rounded-2xl bg-muted/20 border border-border/20 px-3 py-2 text-left">
             <p className="text-sm font-semibold text-foreground">{playlist.name || "Playlist"}</p>
             <p className="text-[11px] text-muted-foreground">
-              Playlist · {visibilityLabel} · {totalItems ?? 0} {totalItems === 1 ? "item" : "items"}
+              {playlist.ownerName || visibilityLabel}
+              {totalItems > 0 ? ` · ${totalItems} ${totalItems === 1 ? "item" : "items"}` : ""}
             </p>
           </div>
         </div>
@@ -855,14 +870,14 @@ const Social = () => {
               {album.coverUrl ? (
                 <img src={album.coverUrl} alt={album.name || "Album cover"} className="absolute inset-0 h-full w-full object-cover" />
               ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-700 via-gray-800 to-black flex items-center justify-center">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-700 via-fuchsia-700 to-indigo-800 flex items-center justify-center">
                   <Music className="w-10 h-10 text-white/40" />
                 </div>
               )}
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-4 text-left text-white space-y-1">
                 <div className="text-[11px] uppercase tracking-[0.35em] text-white/70">Album</div>
                 <p className="text-base font-semibold truncate">{album.name || "Shared album"}</p>
-                <p className="text-xs text-white/70">
+                <p className="text-xs text-white/70 truncate">
                   {artistDisplay}
                   {releaseDisplay ? ` · ${releaseDisplay}` : ""}
                 </p>
@@ -1395,27 +1410,27 @@ const Social = () => {
             <TabsContent value="chat">
               <div className="grid lg:grid-cols-3 gap-6 min-h-[420px] max-h-[calc(100vh-220px)] overflow-hidden">
                 {/* Friends List */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 lg:col-span-1">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                <Card className="lg:col-span-1 bg-gradient-to-br from-purple-500/10 via-fuchsia-500/5 to-indigo-500/10 backdrop-blur-xl backdrop-saturate-150 border-purple-300/20 shadow-[0_8px_30px_rgba(88,28,135,0.25)]">
+                  <CardHeader className="bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 backdrop-blur-sm border-b border-purple-300/20">
+                    <CardTitle className="flex items-center gap-2 text-purple-50/90">
                       <MessageCircle className="w-5 h-5" />
                       Messages
                     </CardTitle>
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-purple-200/70" />
                       <Input
                         placeholder="Search conversations..."
-                        className="pl-10"
+                        className="pl-10 bg-purple-500/10 border-purple-300/30 text-purple-50 placeholder:text-purple-200/50 focus:border-purple-400/50 focus:ring-purple-400/20 backdrop-blur-sm"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                       />
                     </div>
                   </CardHeader>
-                  <CardContent className="p-4 overflow-y-auto">
+                  <CardContent className="p-4 overflow-y-auto bg-gradient-to-b from-purple-500/5 to-transparent">
                     {loadingFriends ? (
-                      <p className="text-sm text-muted-foreground">Loading friends...</p>
+                      <p className="text-sm text-purple-100/70">Loading friends...</p>
                     ) : friends.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
+                      <p className="text-sm text-purple-100/70">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
                     ) : (
                       renderFriendsList()
                     )}
@@ -1423,45 +1438,55 @@ const Social = () => {
                 </Card>
 
                 {/* Chat Area */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 lg:col-span-2 flex flex-col">
+                <Card className="lg:col-span-2 flex flex-col bg-gradient-to-br from-purple-500/10 via-fuchsia-500/5 to-indigo-500/10 backdrop-blur-xl backdrop-saturate-150 border-purple-300/20 shadow-[0_8px_30px_rgba(88,28,135,0.25)]">
                   {selectedChat ? (
                     <>
-                      <CardHeader className="border-b border-border/20">
+                      <CardHeader className="border-b border-purple-300/20 bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 backdrop-blur-sm">
                         <div className="flex items-center gap-3">
-                          <Avatar className="w-10 h-10">
-                            <AvatarFallback className="bg-gradient-primary text-white">
+                          <Avatar className="w-10 h-10 ring-2 ring-purple-400/30 ring-offset-0">
+                            <AvatarFallback className="bg-gradient-to-br from-purple-500 to-fuchsia-500 text-white">
                               {friends.find(f => f.id === selectedChat)?.name.split(' ').map(n => n[0]).join('')}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <CardTitle className="text-lg">
+                            <CardTitle className="text-lg text-purple-50/90">
                               {friends.find(f => f.id === selectedChat)?.name}
                             </CardTitle>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="text-sm text-purple-100/70">
                               {friends.find(f => f.id === selectedChat)?.isOnline ? "Online" : "Offline"}
                             </p>
                           </div>
                         </div>
                       </CardHeader>
 
-                      <CardContent className="flex-1 p-4 overflow-y-auto scrollbar-custom scroll-smooth">
+                      <CardContent className="flex-1 p-4 overflow-y-auto scrollbar-custom scroll-smooth bg-gradient-to-b from-purple-500/5 to-transparent">
                         {renderMessages()}
                       </CardContent>
 
-                      <div className="p-4 border-t border-border/20">
+                      <div className="p-4 border-t border-purple-300/20 bg-gradient-to-t from-purple-500/10 via-fuchsia-500/5 to-transparent backdrop-blur-sm">
                         <div className="flex gap-2">
                           <Input
                             placeholder="Type a message..."
                             value={newMessage}
                             onChange={(e) => { setNewMessage(e.target.value); }}
                             onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                            className="flex-1"
+                            className="flex-1 bg-purple-500/10 border-purple-300/30 text-purple-50 placeholder:text-purple-200/50 focus:border-purple-400/50 focus:ring-purple-400/20 backdrop-blur-sm"
                           />
-                          <Button variant="hero" size="icon" onClick={handleSendMessage}>
+                          <Button 
+                            variant="hero" 
+                            size="icon" 
+                            onClick={handleSendMessage}
+                            className="bg-gradient-to-br from-purple-500 to-fuchsia-500 hover:from-purple-600 hover:to-fuchsia-600 text-white shadow-lg shadow-purple-500/30"
+                          >
                             <Send className="w-4 h-4" />
                           </Button>
                           {currentSong && (
-                            <Button variant="outline" size="sm" className="ml-2" onClick={handleShareCurrentSong}>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="ml-2 border-purple-300/30 text-purple-100 hover:bg-purple-400/10 hover:border-purple-300/40 bg-purple-500/5 backdrop-blur-sm"
+                              onClick={handleShareCurrentSong}
+                            >
                               <Music className="w-4 h-4 mr-2" /> Share current song
                             </Button>
                           )}
@@ -1470,11 +1495,11 @@ const Social = () => {
                       </div>
                     </>
                   ) : (
-                    <div className="flex-1 flex items-center justify-center">
+                    <div className="flex-1 flex items-center justify-center bg-gradient-to-b from-purple-500/5 to-transparent">
                       <div className="text-center">
-                        <MessageCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">Select a conversation</h3>
-                        <p className="text-muted-foreground">Choose a friend to start messaging</p>
+                        <MessageCircle className="w-16 h-16 text-purple-300/50 mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2 text-purple-50/90">Select a conversation</h3>
+                        <p className="text-purple-100/70">Choose a friend to start messaging</p>
                       </div>
                     </div>
                   )}
@@ -1650,7 +1675,8 @@ function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
   let sharedPlaylist: SharedPlaylistMessageData | undefined;
   let sharedAlbum: SharedAlbumMessageData | undefined;
   let sharedSong: SharedSongMessageData | undefined;
-  let content = m.content || "";
+  const rawContent = m.contentPlain ?? m.content ?? "";
+  let content = typeof rawContent === "string" ? rawContent : "";
 
   const sharedType = m.sharedContentType ?? undefined;
   const sharedContent: SharedContentDTO | undefined = m.sharedContent ?? undefined;
