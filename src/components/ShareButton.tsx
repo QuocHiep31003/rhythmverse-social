@@ -14,7 +14,6 @@ import { Share2, Send, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { friendsApi } from "@/services/api/friendsApi";
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
-import { sendMessage } from "@/services/firebase/chat";
 import { toast } from "sonner";
 
 interface ShareButtonProps {
@@ -28,7 +27,6 @@ interface ShareButtonProps {
 const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
-  const [message, setMessage] = useState("");
   const [friends, setFriends] = useState<{ id: string; name: string; avatar?: string | null }[]>([]);
   const meId = useMemo(() => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
@@ -132,31 +130,14 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
           throw new Error(await parseErrorResponse(response));
         }
         const payload = await response.json();
-        const normalizedPayload = {
-          ...payload,
-          contentPlain: payload?.contentPlain ?? (typeof payload?.content === "string" ? payload.content : undefined),
-        };
         window.dispatchEvent(
           new CustomEvent("app:chat-share-sent", {
-            detail: { receiverId, message: normalizedPayload },
+            detail: { receiverId, message: payload },
           })
         );
       }
 
-      const note = message.trim();
-      if (note) {
-        for (const fid of selectedFriends) {
-          const receiverId = Number(fid);
-          try {
-            await sendMessage(meId, receiverId, note);
-          } catch (err) {
-            console.error("Failed to send follow-up message", err);
-          }
-        }
-      }
-
       setSelectedFriends([]);
-      setMessage("");
       setSearchQuery("");
     } catch (e: any) {
       const messageText = e?.message || e;
@@ -175,9 +156,8 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto scrollbar-custom">
         <DialogHeader>
           <DialogTitle>Share {type}</DialogTitle>
-          {/* Accessibility: provide description to avoid aria warning */}
           <DialogDescription className="sr-only">
-            Select friends to share this {type} with. Optional message field is available.
+            Select friends to share this {type} with.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -223,14 +203,6 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
           </div>
 
           {/* Message input */}
-          <div>
-            <Input
-              placeholder="Add a message (optional)"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-            />
-          </div>
-
           {/* Share button */}
           <Button 
             onClick={handleShare} 

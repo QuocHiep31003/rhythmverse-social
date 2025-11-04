@@ -38,6 +38,28 @@ export interface PlaylistDTO {
   collaborators?: PlaylistCollaborator[]; // List of collaborators
 }
 
+// Response từ GET /api/playlists/library
+export interface PlaylistLibraryItemDTO {
+  playlistId: number;
+  name: string;
+  coverUrl?: string | null;
+  ownerId: number;
+  ownerName?: string;
+  ownerAvatar?: string | null;
+  isOwner?: boolean;
+  isCollaborator?: boolean;
+  role?: "OWNER" | "EDITOR" | "VIEWER" | null; // ROLE returned by backend (OWNER when you own the playlist)
+  description?: string | null;
+  visibility?: PlaylistVisibility | "PUBLIC" | "PRIVATE" | "FRIENDS_ONLY" | null;
+  songCount?: number;
+  totalSongs?: number;
+  totalDuration?: string | null;
+  likes?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  dateUpdate?: string | null;
+}
+
 export interface PageResponse<T> {
   content: T[];
   totalElements: number;
@@ -81,6 +103,25 @@ export const playlistsApi = {
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return (await res.json()) as PageResponse<PlaylistDTO>;
+  },
+
+  // Lấy tất cả playlists của user (owned + collaborated)
+  // GET /api/playlists/library
+  library: async () => {
+    const res = await fetch(`${API_BASE_URL}/playlists/library`, {
+      method: "GET",
+      headers: buildJsonHeaders(),
+    });
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return (await res.json()) as PlaylistLibraryItemDTO[];
   },
 
   getById: async (id: number | string) => {
@@ -263,10 +304,23 @@ export const playlistsApi = {
 };
 
 // Collaborator invites (invite by playlistId to receiver)
+// According to API docs: POST /api/playlists/invites/collab?playlistId={id}&receiverId={id}
+// Role mặc định là EDITOR (không có role parameter trong URL)
 export const playlistCollabInvitesApi = {
-  send: async (playlistId: number, receiverId: number, role: CollaboratorRole | "EDITOR" | "VIEWER" = "EDITOR") => {
-    const qs = new URLSearchParams({ playlistId: String(playlistId), receiverId: String(receiverId), role });
-    const res = await fetch(`${API_BASE_URL}/playlists/invites/send?${qs.toString()}`, {
+  send: async (
+    playlistId: number,
+    receiverId: number,
+    role?: CollaboratorRole | "EDITOR" | "VIEWER" // Role parameter không dùng nữa, chỉ để backward compatibility
+  ) => {
+    // Collab chỉ dành cho EDITOR, không có VIEWER
+    // VIEWER nên dùng Share qua chat API thay vì collab invite
+    const qs = new URLSearchParams({
+      playlistId: String(playlistId),
+      receiverId: String(receiverId),
+    });
+
+    // Endpoint collab chỉ dành cho EDITOR
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/collab?${qs.toString()}`, {
       method: "POST",
       headers: buildJsonHeaders(),
     });
@@ -327,6 +381,15 @@ export const playlistCollabInvitesApi = {
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     try { return await res.text(); } catch { return "Invite accepted"; }
   },
+  acceptByCode: async (inviteCode: string) => {
+    const qs = new URLSearchParams({ code: inviteCode });
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/accept-by-code?${qs.toString()}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    try { return await res.text(); } catch { return "Invite accepted"; }
+  },
   reject: async (inviteId: number) => {
     const res = await fetch(`${API_BASE_URL}/playlists/invites/reject/${inviteId}`, {
       method: "POST",
@@ -362,6 +425,23 @@ export const playlistCollabInvitesApi = {
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return await res.json();
+  },
+  // Lấy pending invites của playlist để filter friend list
+  // GET /api/playlists/invites/playlist/{playlistId}
+  pendingForPlaylist: async (playlistId: number) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/playlist/${playlistId}`, {
+      method: "GET",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    const payload = await res.json();
+    // Response format: { playlistId, invitedUserIds: [2, 3, 5], invites: [...] }
+    if (payload && Array.isArray(payload.invitedUserIds)) {
+      return payload;
+    }
+    // Fallback for array response
+    if (Array.isArray(payload)) return { invitedUserIds: payload.map((p: any) => p.receiverId || p.id || p), invites: payload };
+    return { invitedUserIds: [], invites: [] };
   },
 };
 
@@ -409,9 +489,8 @@ export const playlistCollaboratorsApi = {
     return await playlistCollabInvitesApi.send(playlistId, friendId, role);
   },
   remove: async (playlistId: number, collaboratorId: number) => {
-    // According to Swagger: DELETE /api/playlists/invites/collaborators/{playlistId}
-    // Note: Need to check if this requires collaboratorId in query or body
-    const qs = new URLSearchParams({ collaboratorId: String(collaboratorId) });
+    // According to Swagger: DELETE /api/playlists/invites/collaborators/{playlistId}?friendId={id}
+    const qs = new URLSearchParams({ friendId: String(collaboratorId) });
     const res = await fetch(`${API_BASE_URL}/playlists/invites/collaborators/${playlistId}?${qs.toString()}`, {
       method: "DELETE",
       headers: buildJsonHeaders(),
@@ -436,8 +515,17 @@ export const playlistCollaboratorsApi = {
         errorText
       );
     }
-    
+
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     try { return await res.text(); } catch { return "Collaborator removed"; }
+  },
+  leave: async (playlistId: number) => {
+    const qs = new URLSearchParams({ playlistId: String(playlistId) });
+    const res = await fetch(`${API_BASE_URL}/playlists/invites/collaborators/leave?${qs.toString()}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    try { return await res.text(); } catch { return "Left playlist"; }
   },
 };

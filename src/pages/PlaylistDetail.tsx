@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, useRef } from "react";
+﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,20 +9,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, UserPlus, Trash2, Share2 } from "lucide-react";
+import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, UserPlus, UserMinus, Trash2, Share2, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
-import { API_BASE_URL, buildJsonHeaders } from "@/services/api";
-import { sendMessage } from "@/services/firebase/chat";
+import { buildJsonHeaders } from "@/services/api";
 import { friendsApi } from "@/services/api/friendsApi";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { uploadImage } from "@/config/cloudinary";
 import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
 import { getPlaylistPermissions, checkIfFriends } from "@/utils/playlistPermissions";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface SearchSongResult {
   id: number;
@@ -83,6 +83,7 @@ const PlaylistDetail = () => {
     description: string;
     cover: string | null;
     ownerName?: string;
+    ownerAvatar?: string | null;
     ownerId?: number;
     visibility: PlaylistVisibility;
     updatedAt?: string | null;
@@ -101,6 +102,7 @@ const PlaylistDetail = () => {
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
   const [sendingInvites, setSendingInvites] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  const [collabSearch, setCollabSearch] = useState("");
   const [collaborators, setCollaborators] = useState<Array<{ userId: number; name: string; email?: string; role?: CollaboratorRole | string }>>([]);
   const [hiddenSongIds, setHiddenSongIds] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -111,20 +113,30 @@ const PlaylistDetail = () => {
   const [editedSongLimit, setEditedSongLimit] = useState<number>(500);
   const [inviteRole, setInviteRole] = useState<CollaboratorRole>(CollaboratorRole.EDITOR);
   const [isFriend, setIsFriend] = useState<boolean>(false);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [removingCollaboratorId, setRemovingCollaboratorId] = useState<number | null>(null);
   const [permissions, setPermissions] = useState<{
     canView: boolean;
     canEdit: boolean;
     canDelete: boolean;
     canManageCollaborators: boolean;
     isOwner: boolean;
+    userRole?: CollaboratorRole;
   }>({
     canView: false,
     canEdit: false,
     canDelete: false,
     canManageCollaborators: false,
     isOwner: false,
+    userRole: undefined,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ownerDisplayName = useMemo(() => {
+    const raw = playlist?.ownerName;
+    if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
+    if (playlist?.ownerId) return `Owner #${playlist.ownerId}`;
+    return "Owner";
+  }, [playlist?.ownerName, playlist?.ownerId]);
 
   const userIdFromStorage = typeof window !== 'undefined' ? localStorage.getItem('userId') : undefined;
   const meId = useMemo(() => {
@@ -136,6 +148,175 @@ const PlaylistDetail = () => {
       return undefined;
     }
   }, [userIdFromStorage]);
+  const isCurrentCollaborator = useMemo(
+    () => typeof meId === "number" && Number.isFinite(meId) && collaborators.some((c) => c.userId === meId),
+    [collaborators, meId]
+  );
+  const filteredCollabFriends = useMemo(() => {
+    const query = collabSearch.trim().toLowerCase();
+    if (!query) return friends;
+    return friends.filter((friend) => friend.name.toLowerCase().includes(query));
+  }, [friends, collabSearch]);
+
+  const parseCollaboratorRole = useCallback((value: unknown): CollaboratorRole | undefined => {
+    if (typeof value !== "string") return undefined;
+    const normalized = value.toUpperCase();
+    if (
+      normalized === CollaboratorRole.EDITOR ||
+      normalized === "COLLABORATOR" ||
+      normalized === "EDITORIAL" ||
+      normalized === "OWNER"
+    ) {
+      return CollaboratorRole.EDITOR;
+    }
+    if (
+      normalized === CollaboratorRole.VIEWER ||
+      normalized === "VIEW" ||
+      normalized === "VIEW_ONLY" ||
+      normalized === "READONLY" ||
+      normalized === "READ_ONLY"
+    ) {
+      return CollaboratorRole.VIEWER;
+    }
+    return undefined;
+  }, []);
+
+  const normalizeCollaborators = useCallback(
+    (raw: unknown): Array<{ userId: number; name: string; email?: string; role?: CollaboratorRole }> => {
+      const sourceArray = Array.isArray(raw)
+        ? raw
+        : raw && typeof raw === "object" && Array.isArray((raw as { collaborators?: unknown[] }).collaborators)
+        ? (raw as { collaborators?: unknown[] }).collaborators
+        : [];
+
+      const dedup = new Map<number, { userId: number; name: string; email?: string; role?: CollaboratorRole }>();
+
+      for (const entry of sourceArray) {
+        if (!entry || typeof entry !== "object") continue;
+        const candidateIds = [
+          (entry as { userId?: number }).userId,
+          (entry as { id?: number }).id,
+          (entry as { collaboratorId?: number }).collaboratorId,
+          (entry as { memberId?: number }).memberId,
+          (entry as { friendId?: number }).friendId,
+          (entry as { receiverId?: number }).receiverId,
+        ];
+        const userIdValue = candidateIds.find((val) => typeof val === "number" && Number.isFinite(val));
+        if (userIdValue == null) continue;
+
+        const roleCandidate =
+          (entry as { role?: unknown }).role ??
+          (entry as { collaboratorRole?: unknown }).collaboratorRole ??
+          (entry as { permission?: unknown }).permission ??
+          (entry as { accessLevel?: unknown }).accessLevel ??
+          (entry as { userRole?: unknown }).userRole ??
+          (entry as { type?: unknown }).type;
+        const parsedRole = parseCollaboratorRole(roleCandidate);
+
+        const name =
+          (entry as { name?: string }).name ??
+          (entry as { username?: string }).username ??
+          (entry as { fullName?: string }).fullName ??
+          (entry as { displayName?: string }).displayName ??
+          (entry as { userName?: string }).userName ??
+          (entry as { email?: string }).email ??
+          `User ${userIdValue}`;
+        const email = typeof (entry as { email?: unknown }).email === "string" ? (entry as { email?: string }).email : undefined;
+
+        const existing = dedup.get(Number(userIdValue));
+        const nextRecord = {
+          userId: Number(userIdValue),
+          name,
+          email: email ?? existing?.email,
+          role: parsedRole ?? existing?.role,
+        };
+        dedup.set(Number(userIdValue), nextRecord);
+      }
+
+      return Array.from(dedup.values());
+    },
+    [parseCollaboratorRole]
+  );
+
+  const updateCollaboratorsFromRaw = useCallback(
+    (raw: unknown, fallbackRole?: CollaboratorRole, forceSelf = false) => {
+      const normalized = normalizeCollaborators(raw);
+      let next = normalized;
+
+      const resolvedSelfRole =
+        fallbackRole ?? (forceSelf ? CollaboratorRole.EDITOR : undefined);
+
+      if (typeof meId === "number" && Number.isFinite(meId) && resolvedSelfRole) {
+        const existingIndex = next.findIndex((c) => c.userId === meId);
+        if (existingIndex >= 0) {
+          if (next[existingIndex].role !== resolvedSelfRole) {
+            next = next.map((c, idx) => (idx === existingIndex ? { ...c, role: resolvedSelfRole } : c));
+          }
+        } else {
+          next = [
+            ...next,
+            {
+              userId: meId,
+              name: "You",
+              role: resolvedSelfRole,
+            },
+          ];
+        }
+      }
+
+      setCollaborators(next);
+      return next;
+    },
+    [normalizeCollaborators, meId]
+  );
+
+  const collaboratorEntries = useMemo(() => {
+    if (!playlist) return [];
+    const entries: Array<{
+      userId: number;
+      name: string;
+      avatar?: string | null;
+      role?: CollaboratorRole | "OWNER";
+      roleLabel: string;
+      isOwner: boolean;
+    }> = [];
+    const seen = new Set<number>();
+
+    if (playlist.ownerId) {
+      entries.push({
+        userId: playlist.ownerId,
+        name: playlist.ownerName || "Owner",
+        avatar: playlist.ownerAvatar || null,
+        role: "OWNER",
+        roleLabel: "Owner",
+        isOwner: true,
+      });
+      seen.add(playlist.ownerId);
+    }
+
+    collaborators.forEach((c) => {
+      const idNum = c.userId;
+      if (typeof idNum !== "number" || !Number.isFinite(idNum) || seen.has(idNum)) return;
+      const normalizedRole = typeof c.role === "string" ? parseCollaboratorRole(c.role) : c.role;
+      const roleLabel =
+        normalizedRole === CollaboratorRole.EDITOR
+          ? "Editor"
+          : normalizedRole === CollaboratorRole.VIEWER
+          ? "Viewer"
+          : "Collaborator";
+      entries.push({
+        userId: idNum,
+        name: c.name || c.email || `User ${idNum}`,
+        avatar: (c as { avatar?: string | null }).avatar ?? null,
+        role: normalizedRole,
+        roleLabel,
+        isOwner: false,
+      });
+      seen.add(idNum);
+    });
+
+    return entries;
+  }, [playlist, collaborators, parseCollaboratorRole]);
 
   // Permission flags derived from permission system
   // Using permissions state calculated from playlist data
@@ -195,6 +376,7 @@ const PlaylistDetail = () => {
           description: data.description || '',
           cover: data.coverUrl || extendedData.urlImagePlaylist || null,
           ownerName: extendedData?.owner?.name,
+          ownerAvatar: extendedData?.owner?.avatar ?? null,
           ownerId,
           visibility,
           updatedAt: extendedData?.dateUpdate || null,
@@ -205,6 +387,30 @@ const PlaylistDetail = () => {
         setEditedCoverUrl(data.coverUrl || extendedData.urlImagePlaylist || '');
         setEditedVisibility(visibility);
         setEditedSongLimit(extendedData?.songLimit ?? 500);
+        
+        const rawRoleCandidate =
+          (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.role ??
+          (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.collaboratorRole ??
+          (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.userRole ??
+          (data as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown; currentUserRole?: unknown }).role ??
+          (data as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown; currentUserRole?: unknown }).collaboratorRole ??
+          (data as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown; currentUserRole?: unknown }).userRole ??
+          (data as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown; currentUserRole?: unknown }).currentUserRole;
+        let fallbackRole = parseCollaboratorRole(rawRoleCandidate);
+        const isCollaboratorFlag =
+          Boolean((data as { isCollaborator?: boolean }).isCollaborator) ||
+          Boolean((extendedData as { isCollaborator?: boolean } | undefined)?.isCollaborator);
+        if (!fallbackRole && isCollaboratorFlag) {
+          fallbackRole = CollaboratorRole.EDITOR;
+        }
+
+        updateCollaboratorsFromRaw(
+          (extendedData as { collaborators?: unknown[] } | undefined)?.collaborators ??
+            (data as { collaborators?: unknown[] }).collaborators ??
+            [],
+          fallbackRole,
+          isCollaboratorFlag
+        );
         
         // Check if user is friend of owner (for FRIENDS_ONLY visibility)
         if (meId && ownerId && visibility === PlaylistVisibility.FRIENDS_ONLY) {
@@ -231,7 +437,7 @@ const PlaylistDetail = () => {
       }
     };
     load();
-  }, [id, meId, navigate]);
+  }, [id, meId, navigate, parseCollaboratorRole, updateCollaboratorsFromRaw]);
 
   // Calculate permissions when playlist, collaborators, or friend status changes
   useEffect(() => {
@@ -242,6 +448,7 @@ const PlaylistDetail = () => {
         canDelete: false,
         canManageCollaborators: false,
         isOwner: false,
+        userRole: undefined,
       });
       return;
     }
@@ -252,12 +459,19 @@ const PlaylistDetail = () => {
     const playlistData = {
       ownerId: playlist.ownerId,
       visibility,
-      collaborators: collaborators.map(c => ({
-        userId: c.userId,
-        name: c.name || '',
-        email: c.email,
-        role: c.role as CollaboratorRole,
-      })),
+      collaborators: collaborators
+        .map((c) => {
+          const normalizedRole =
+            typeof c.role === "string" ? parseCollaboratorRole(c.role) : c.role;
+          if (!normalizedRole) return undefined;
+          return {
+            userId: c.userId,
+            name: c.name || "",
+            email: c.email,
+            role: normalizedRole,
+          };
+        })
+        .filter(Boolean) as Array<{ userId: number; name: string; email?: string; role: CollaboratorRole }>,
     };
     
     const perms = getPlaylistPermissions({
@@ -267,11 +481,36 @@ const PlaylistDetail = () => {
     });
     
     setPermissions(perms);
-  }, [playlist, collaborators, meId, isFriend]);
+  }, [playlist, collaborators, meId, isFriend, parseCollaboratorRole]);
   
   // Track if we've already tried to load collaborators (to avoid repeated 500 errors)
   const collabsLoadAttemptedRef = useRef(false);
-  
+  const collaboratorsFetchIdRef = useRef<number | null>(null);
+
+  // Load collaborator list for both owners and collaborators to render roles/permissions
+  useEffect(() => {
+    if (!playlist?.id) return;
+    if (collaboratorsFetchIdRef.current === playlist.id && collaborators.length) return;
+    let cancelled = false;
+    const loadCollaborators = async () => {
+      try {
+        const list = await playlistCollaboratorsApi.list(Number(playlist.id));
+        if (cancelled) return;
+        updateCollaboratorsFromRaw(list);
+        collaboratorsFetchIdRef.current = Number(playlist.id);
+      } catch (e) {
+        if (!cancelled && e instanceof PlaylistPermissionError) {
+          collaboratorsFetchIdRef.current = Number(playlist.id);
+          // ignore permission errors (e.g., backend not exposing list yet)
+        }
+      }
+    };
+    loadCollaborators();
+    return () => {
+      cancelled = true;
+    };
+  }, [playlist?.id, collaborators.length, updateCollaboratorsFromRaw]);
+
   useEffect(() => {
     const loadCollabs = async () => {
       try {
@@ -288,12 +527,15 @@ const PlaylistDetail = () => {
         
         // Only load if user is owner
         if (!permissions.isOwner) {
-          setCollaborators([]);
           return;
         }
         
         const list = await playlistCollaboratorsApi.list(Number(id));
-        setCollaborators(Array.isArray(list) ? list : []);
+        updateCollaboratorsFromRaw(
+          list,
+          permissions.userRole,
+          !permissions.isOwner && (isCurrentCollaborator || Boolean(permissions.userRole))
+        );
         collabsLoadAttemptedRef.current = true; // Mark success
       } catch (e: unknown) {
         // Mark as attempted to prevent infinite retries
@@ -314,8 +556,6 @@ const PlaylistDetail = () => {
             duration: 3000,
           });
         }
-        // Set empty array to avoid infinite loops
-        setCollaborators([]);
       }
     };
     
@@ -323,7 +563,7 @@ const PlaylistDetail = () => {
     if (collabOpen && permissions.isOwner) {
       loadCollabs();
     }
-  }, [id, collabOpen, permissions.isOwner]);
+  }, [id, collabOpen, permissions.isOwner, permissions.userRole, updateCollaboratorsFromRaw, isCurrentCollaborator]);
 
   // Load pending invites to filter out already invited friends
   useEffect(() => {
@@ -446,6 +686,63 @@ const PlaylistDetail = () => {
   };
 
   const toggleSelectFriend = (fid: number) => setSelectedFriendIds((prev) => prev.includes(fid) ? prev.filter(x => x !== fid) : [...prev, fid]);
+  const handleRemoveCollaborator = async (collaboratorId: number, collaboratorName?: string) => {
+    if (!playlist || !permissions.isOwner) return;
+    const confirmed = window.confirm(`Bạn có chắc muốn gỡ ${collaboratorName || "cộng tác viên này"} khỏi playlist?`);
+    if (!confirmed) return;
+    setRemovingCollaboratorId(collaboratorId);
+    try {
+      await playlistCollaboratorsApi.remove(playlist.id, collaboratorId);
+      toast({
+        title: "Đã gỡ cộng tác viên",
+        description: `${collaboratorName || "Cộng tác viên"} sẽ không còn quyền truy cập.`,
+      });
+      setCollaborators((prev) => prev.filter((c) => c.userId !== collaboratorId));
+    } catch (e) {
+      const message =
+        e instanceof PlaylistPermissionError
+          ? e.message
+          : e instanceof Error
+          ? e.message
+          : "Failed to remove collaborator";
+      toast({
+        title: "Không thể gỡ cộng tác viên",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setRemovingCollaboratorId(null);
+    }
+  };
+
+  const handleLeaveCollaboration = async () => {
+    if (!playlist || typeof meId !== "number" || !Number.isFinite(meId)) return;
+    const confirmed = window.confirm("Bạn có chắc muốn  này?");
+    if (!confirmed) return;
+    setLeaveLoading(true);
+    try {
+      await playlistCollaboratorsApi.leave(playlist.id);
+      toast({
+        title: "Đã ",
+        description: "Bạn không còn là cộng tác viên của playlist này.",
+      });
+      setCollaborators((prev) => prev.filter((c) => c.userId !== meId));
+    } catch (e) {
+      const message =
+        e instanceof PlaylistPermissionError
+          ? e.message
+          : e instanceof Error
+          ? e.message
+          : "Không thể . Vui lòng thử lại.";
+      toast({
+        title: " thất bại",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setLeaveLoading(false);
+    }
+  };
   const sendInvites = async () => {
     if (!playlist) return;
     try {
@@ -456,14 +753,6 @@ const PlaylistDetail = () => {
       for (const fid of selectedFriendIds) {
         try {
           await playlistCollabInvitesApi.send(playlist.id, fid, inviteRole);
-          // Also share to Social chat for visibility
-          try {
-            const params = new URLSearchParams({ senderId: String(meId || ''), receiverId: String(fid), playlistId: String(playlist.id) });
-            await fetch(`${API_BASE_URL}/chat/share/playlist?${params.toString()}`, { method: 'POST', headers: buildJsonHeaders() });
-          } catch { /* ignore share errors */ }
-          try {
-            if (meId) await sendMessage(meId, fid, `đã mời bạn cộng tác vào playlist "${playlist.title}"`);
-          } catch { /* ignore text errors */ }
           successIds.push(fid);
         } catch (e) {
           failedIds.push(fid);
@@ -531,7 +820,11 @@ const PlaylistDetail = () => {
         // Reload collaborators
         try {
           const list = await playlistCollaboratorsApi.list(playlist.id);
-          setCollaborators(Array.isArray(list) ? list : []);
+          updateCollaboratorsFromRaw(
+            list,
+            permissions.userRole,
+            !permissions.isOwner && (isCurrentCollaborator || Boolean(permissions.userRole))
+          );
         } catch (e) {
           console.warn('Failed to refresh collaborators:', e);
         }
@@ -568,7 +861,11 @@ const PlaylistDetail = () => {
             : [];
           setPendingInvites(playlistPendingInvites);
           const list = await playlistCollaboratorsApi.list(playlist.id);
-          setCollaborators(Array.isArray(list) ? list : []);
+          updateCollaboratorsFromRaw(
+            list,
+            permissions.userRole,
+            !permissions.isOwner && (isCurrentCollaborator || Boolean(permissions.userRole))
+          );
         } catch (e) {
           console.warn('Failed to refresh data after error:', e);
         }
@@ -813,12 +1110,30 @@ const PlaylistDetail = () => {
               </>
             )}
 
-            <div className="flex items-center gap-4 mb-6 mt-4">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={""} alt={playlist?.ownerName || "Owner"} />
-                <AvatarFallback>{(playlist?.ownerName || "?").charAt(0)}</AvatarFallback>
+            <div className="flex items-center gap-3 mb-6 mt-4">
+              <Avatar className="w-9 h-9 border border-border/50 bg-muted">
+                {playlist?.ownerAvatar ? (
+                  <AvatarImage src={playlist.ownerAvatar} alt={playlist.ownerName || "Owner"} />
+                ) : (
+                  <UserIcon className="h-5 w-5 text-muted-foreground" />
+                )}
+                <AvatarFallback className="bg-muted">
+                  <UserIcon className="h-5 w-5 text-muted-foreground" />
+                </AvatarFallback>
               </Avatar>
-              <span className="font-medium">{playlist?.ownerName || 'Unknown'}</span>
+              {playlist?.ownerName && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger className="text-left">
+                      <span className="font-medium truncate">{playlist.ownerName}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-sm font-medium">{playlist.ownerName}</p>
+                      {playlist?.ownerId && <p className="text-xs text-muted-foreground">User ID: {playlist.ownerId}</p>}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               <span className="text-muted-foreground">•</span>
               <span className="text-muted-foreground">{playlist?.songs.length || 0} songs</span>
               {playlist && playlist.songs.length > 0 && (
@@ -835,15 +1150,59 @@ const PlaylistDetail = () => {
               )}
             </div>
 
-            {collaborators.length > 0 && (
-              <div className="flex items-center gap-2 mb-6 flex-wrap">
-                <Users className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Collaborators:</span>
-                {collaborators.map((c) => (
-                  <span key={c.userId} className="text-sm bg-muted/40 px-2 py-0.5 rounded">
-                    {c.name || c.email} {c.role ? `(${c.role})` : ''}
-                  </span>
-                ))}
+            {collaboratorEntries.length > 0 && (
+              <div className="mb-6 flex items-center gap-2">
+                <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                  <Users className="w-3 h-3" />
+                  Collaborators
+                </span>
+                <div className="flex -space-x-2">
+                  {collaboratorEntries.map((member) => {
+                    const initials = member.name
+                      .split(" ")
+                      .map((n) => n.charAt(0))
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase();
+                    const ringClass =
+                      member.isOwner
+                        ? "ring-2 ring-primary/60"
+                        : member.role === CollaboratorRole.EDITOR
+                        ? "ring-2 ring-emerald-500/60"
+                        : "ring-2 ring-border/60";
+                    const isSelf = typeof meId === "number" && member.userId === meId;
+                    return (
+                      <DropdownMenu key={member.userId}>
+                        <DropdownMenuTrigger asChild>
+                          <Avatar className={`h-8 w-8 cursor-pointer border-2 border-background ${ringClass}`}>
+                            <AvatarImage src={member.avatar || undefined} alt={member.name} />
+                            <AvatarFallback>{initials}</AvatarFallback>
+                          </Avatar>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-48">
+                          <div className="px-2 py-1.5">
+                            <p className="text-sm font-semibold truncate">{member.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {member.role === "OWNER" ? "Owner" : member.roleLabel}
+                              {isSelf ? " • You" : ""}
+                            </p>
+                          </div>
+                          {permissions.isOwner && !member.isOwner && !isSelf && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleRemoveCollaborator(member.userId, member.name)}
+                              >
+                                Remove collaborator
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -865,6 +1224,19 @@ const PlaylistDetail = () => {
 
               {playlist && (
                 <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
+              )}
+
+              {!permissions.isOwner && isCurrentCollaborator && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={handleLeaveCollaboration}
+                  disabled={leaveLoading}
+                  className="border-destructive/40 text-destructive hover:text-destructive hover:border-destructive/60"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  {leaveLoading ? "Đang rời..." : ""}
+                </Button>
               )}
 
               {permissions.canEdit && (
@@ -904,7 +1276,16 @@ const PlaylistDetail = () => {
                 </Dialog>
               )}
 
-              <Dialog open={collabOpen} onOpenChange={setCollabOpen}>
+              <Dialog
+                open={collabOpen}
+                onOpenChange={(open) => {
+                  setCollabOpen(open);
+                  if (!open) {
+                    setSelectedFriendIds([]);
+                    setCollabSearch("");
+                  }
+                }}
+              >
                 {permissions.canManageCollaborators && (
                   <DialogTrigger asChild>
                     <Button variant="outline">
@@ -913,46 +1294,145 @@ const PlaylistDetail = () => {
                     </Button>
                   </DialogTrigger>
                 )}
-                <DialogContent>
+                <DialogContent className="sm:max-w-lg" aria-describedby="collab-dialog-description">
                   <DialogHeader>
                     <DialogTitle>Add Collaborators</DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription id="collab-dialog-description">
                       Select friends to collaborate on this playlist. Choose their role.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 max-h-72 overflow-y-auto">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="collab-role">Default Role:</Label>
+                  <div className="space-y-5">
+                    {permissions.isOwner && collaboratorEntries.filter((m) => !m.isOwner).length > 0 && (
+                      <div className="rounded-xl border border-border/30 bg-background/40 p-3 space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Current collaborators
+                        </p>
+                        <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+                          {collaboratorEntries
+                            .filter((m) => !m.isOwner)
+                            .map((member) => (
+                              <div key={member.userId} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={member.avatar || undefined} alt={member.name} />
+                                    <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <p className="text-sm font-medium text-foreground">{member.name}</p>
+                                    <p className="text-xs text-muted-foreground">{member.roleLabel}</p>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleRemoveCollaborator(member.userId, member.name)}
+                                  disabled={removingCollaboratorId === member.userId}
+                                >
+                                  <UserMinus className="w-4 h-4 mr-1" />
+                                  {removingCollaboratorId === member.userId ? "Removing..." : "Remove"}
+                                </Button>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label htmlFor="collab-role" className="text-xs uppercase tracking-wider text-muted-foreground">
+                        Default role
+                      </Label>
                       <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as CollaboratorRole)}>
-                        <SelectTrigger id="collab-role" className="w-[180px]">
+                        <SelectTrigger id="collab-role" className="w-full">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value={CollaboratorRole.EDITOR}>✏️ EDITOR - Can add/remove songs</SelectItem>
-                          <SelectItem value={CollaboratorRole.VIEWER}>👁️ VIEWER - View only</SelectItem>
+                          <SelectItem value={CollaboratorRole.EDITOR}>✏️ Editor — add & remove songs</SelectItem>
+                          <SelectItem value={CollaboratorRole.VIEWER}>👁️ Viewer — view only</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-                    {loadingFriends ? (
-                      <p className="text-sm text-muted-foreground">Loading friends...</p>
-                    ) : friends.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No friends found.</p>
-                    ) : (
-                      friends.map((f) => (
-                        <label key={f.id} className="flex items-center gap-3 p-2 rounded hover:bg-background/40">
-                          <input type="checkbox" checked={selectedFriendIds.includes(f.id)} onChange={() => toggleSelectFriend(f.id)} />
-                          <div className="flex items-center gap-2">
-                            {f.avatar ? <img src={f.avatar} alt="" className="w-6 h-6 rounded-full" /> : <div className="w-6 h-6 rounded-full bg-muted" />}
-                            <span>{f.name}</span>
-                          </div>
-                        </label>
-                      ))
-                    )}
-                    <div className="flex justify-end gap-2 pt-2 border-t mt-4">
-                      <Button variant="outline" onClick={() => { setCollabOpen(false); setSelectedFriendIds([]); }} disabled={sendingInvites}>Cancel</Button>
-                      <Button onClick={sendInvites} disabled={sendingInvites || selectedFriendIds.length === 0}>
-                        {sendingInvites ? 'Sending...' : `Send invites (${selectedFriendIds.length})`}
-                      </Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="collab-search" className="text-xs uppercase tracking-wider text-muted-foreground">
+                        Invite friends
+                      </Label>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="collab-search"
+                          placeholder="Search friends..."
+                          className="pl-10"
+                          value={collabSearch}
+                          onChange={(e) => setCollabSearch(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-72 overflow-y-auto pr-1">
+                      {loadingFriends ? (
+                        <p className="text-sm text-muted-foreground">Loading friends...</p>
+                      ) : filteredCollabFriends.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          {friends.length === 0 ? "No friends found. Add friends to collaborate." : "No friends match your search."}
+                        </p>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {filteredCollabFriends.map((friend) => {
+                            const selected = selectedFriendIds.includes(friend.id);
+                            return (
+                              <button
+                                type="button"
+                                key={friend.id}
+                                onClick={() => toggleSelectFriend(friend.id)}
+                                className={`group flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                                  selected
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border/40 bg-background/40 hover:border-primary/40 hover:bg-primary/5"
+                                }`}
+                              >
+                                <Avatar className="h-9 w-9">
+                                  <AvatarImage src={friend.avatar || undefined} alt={friend.name} />
+                                  <AvatarFallback>{friend.name.charAt(0)}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold truncate">{friend.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {selected ? "Selected to invite" : "Tap to invite"}
+                                  </p>
+                                </div>
+                                {selected ? (
+                                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                    Selected
+                                  </span>
+                                ) : (
+                                  <UserPlus className="w-4 h-4 text-muted-foreground" />
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between gap-3 border-t border-border/30 pt-3">
+                      <p className="text-xs text-muted-foreground">
+                        {selectedFriendIds.length === 0
+                          ? "No collaborators selected"
+                          : `${selectedFriendIds.length} collaborator${selectedFriendIds.length > 1 ? "s" : ""} selected`}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setCollabOpen(false);
+                            setSelectedFriendIds([]);
+                            setCollabSearch("");
+                          }}
+                          disabled={sendingInvites}
+                        >
+                          Cancel
+                        </Button>
+                        <Button onClick={sendInvites} disabled={sendingInvites || selectedFriendIds.length === 0}>
+                          {sendingInvites ? "Sending..." : `Send invites (${selectedFriendIds.length})`}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </DialogContent>

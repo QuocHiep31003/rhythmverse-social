@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 
 
 import { Link } from "react-router-dom";
@@ -22,7 +22,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
-import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, PlaylistLibraryItemDTO } from "@/services/api/playlistApi";
 import { authApi } from "@/services/api";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
@@ -30,6 +30,7 @@ import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
 import { friendsApi } from "@/services/api/friendsApi";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input as UiInput } from "@/components/ui/input";
+import { CollaboratorRole, PlaylistVisibility } from "@/types/playlist";
 
 interface PlaylistItem {
   id: string;
@@ -42,7 +43,11 @@ interface PlaylistItem {
   likes: number;
   createdAt: string;
   updatedAt: string;
+  ownerId?: number;
+  ownerName?: string;
+  isOwner?: boolean;
   isCollaborator?: boolean;
+  role?: CollaboratorRole; // Collaborator role if applicable
 }
 
 interface UserResponse {
@@ -104,26 +109,174 @@ const PlaylistLibrary = () => {
             }
           }
         } catch { me = undefined; }
-        let sortParam = "dateUpdate,desc";
-        if (sortBy === 'name') sortParam = 'name,asc';
-        const page = Number.isFinite(me as number)
-          ? await playlistsApi.getByUser(me as number, { page: 0, size: 24, sort: sortParam, search: searchQuery || undefined })
-          : await playlistsApi.getAll({ page: 0, size: 24, sort: sortParam, search: searchQuery || undefined });
-        const mapped = (page.content || []).map((p: PlaylistDTO) => ({
-          id: String(p.id),
-          title: p.name,
-          description: p.description || '',
-          cover: p.coverUrl || (p as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist || '',
-          songCount: Array.isArray(p.songs) ? p.songs.length : 0,
-          totalDuration: '--',
-          isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
-          likes: 0,
-          createdAt: p.dateUpdate || '',
-          updatedAt: p.dateUpdate || '',
-          isCollaborator: typeof (p as any).ownerId === 'number' && Number.isFinite(me as number) ? (p as any).ownerId !== (me as number) : false,
-        }));
+        
+        // Dùng endpoint library mới để lấy cả owned + collaborated playlists
+        let libraryItems: PlaylistLibraryItemDTO[] = [];
+        if (Number.isFinite(me as number)) {
+          try {
+            libraryItems = await playlistsApi.library();
+          } catch (e) {
+            // Fallback về getByUser nếu library endpoint không available
+            console.warn('Library endpoint failed, falling back to getByUser:', e);
+            const page = await playlistsApi.getByUser(me as number, {
+              page: 0,
+              size: 24,
+              sort: "dateUpdate,desc",
+              search: searchQuery || undefined,
+            });
+            const currentUserId = Number(me);
+            libraryItems = (page.content || []).map((p: PlaylistDTO) => {
+              const ownerId =
+                typeof p.ownerId === "number"
+                  ? p.ownerId
+                  : typeof p.owner?.id === "number"
+                  ? p.owner.id
+                  : currentUserId;
+              const songsCount = Array.isArray(p.songs)
+                ? p.songs.length
+                : Array.isArray(p.songIds)
+                ? p.songIds.length
+                : undefined;
+              return {
+                playlistId: p.id,
+                name: p.name,
+                coverUrl: p.coverUrl || null,
+                ownerId,
+                ownerName: p.owner?.name,
+                ownerAvatar: null,
+                isOwner: ownerId === currentUserId,
+                isCollaborator: ownerId !== currentUserId,
+                role: (p as { role?: string | null }).role ?? null,
+                description: p.description ?? null,
+                visibility: p.visibility ?? null,
+                songCount: songsCount,
+                totalDuration: (p as { totalDuration?: string }).totalDuration,
+                likes: (p as { likes?: number }).likes,
+                createdAt: (p as { createdAt?: string }).createdAt ?? undefined,
+                updatedAt: p.dateUpdate ?? (p as { updatedAt?: string }).updatedAt ?? undefined,
+              };
+            });
+          }
+        } else {
+          // Nếu không có user, fallback về getAll
+          const page = await playlistsApi.getAll({ page: 0, size: 24, sort: "dateUpdate,desc", search: searchQuery || undefined });
+          libraryItems = (page.content || []).map((p: PlaylistDTO) => ({
+            playlistId: p.id,
+            name: p.name,
+            coverUrl: p.coverUrl || null,
+            ownerId: p.ownerId ?? p.owner?.id ?? 0,
+            ownerName: p.owner?.name,
+            ownerAvatar: null,
+            isOwner: false,
+            isCollaborator: false,
+            role: null,
+            description: p.description ?? null,
+            visibility: p.visibility ?? null,
+            songCount: Array.isArray(p.songs) ? p.songs.length : undefined,
+            totalDuration: (p as { totalDuration?: string }).totalDuration,
+            likes: (p as { likes?: number }).likes,
+            createdAt: (p as { createdAt?: string }).createdAt ?? undefined,
+            updatedAt: p.dateUpdate ?? (p as { updatedAt?: string }).updatedAt ?? undefined,
+          }));
+        }
+
+        // Filter và sort
+        let filtered = libraryItems;
+        if (searchQuery.trim()) {
+          const query = searchQuery.toLowerCase();
+          filtered = filtered.filter(p => p.name.toLowerCase().includes(query));
+        }
+        
+        if (sortBy === 'name') {
+          filtered.sort((a, b) => a.name.localeCompare(b.name));
+        } else {
+          // Sort by dateUpdate (mặc định recent first - cần lấy từ detail nếu cần)
+          filtered.sort((a, b) => b.playlistId - a.playlistId); // Tạm thời sort by ID
+        }
+
+        const currentUserId =
+          typeof me === 'number' && Number.isFinite(me) ? Number(me) : undefined;
+
+        // Map sang PlaylistItem
+        const mapped = filtered.map((p: PlaylistLibraryItemDTO) => {
+          const ownerIdRaw =
+            typeof p.ownerId === 'number' && Number.isFinite(p.ownerId) ? p.ownerId : undefined;
+          const rawRole = typeof p.role === 'string' ? p.role.toUpperCase() : undefined;
+          const collaboratorRole =
+            rawRole === CollaboratorRole.EDITOR || rawRole === CollaboratorRole.VIEWER
+              ? (rawRole as CollaboratorRole)
+              : undefined;
+          const visibilityRaw =
+            (p as { visibility?: PlaylistVisibility | string | null }).visibility ?? null;
+          const normalizedVisibility =
+            typeof visibilityRaw === 'string'
+              ? (visibilityRaw.toUpperCase() as PlaylistVisibility)
+              : undefined;
+
+          const isOwnerByFlag = p.isOwner === true || rawRole === 'OWNER';
+          const isOwnerById =
+            !isOwnerByFlag &&
+            currentUserId !== undefined &&
+            ownerIdRaw !== undefined &&
+            ownerIdRaw === currentUserId &&
+            collaboratorRole == null;
+          const isOwner = isOwnerByFlag || isOwnerById;
+
+          let isCollaborator =
+            p.isCollaborator === true ||
+            rawRole === 'COLLABORATOR' ||
+            collaboratorRole != null ||
+            (currentUserId !== undefined &&
+              ownerIdRaw !== undefined &&
+              ownerIdRaw !== currentUserId);
+
+          if (isOwner) {
+            isCollaborator = false;
+          }
+
+          const resolvedOwnerId =
+            ownerIdRaw ??
+            (isOwner && currentUserId !== undefined ? currentUserId : undefined);
+
+          const description =
+            (p as { description?: string | null }).description?.trim() || '';
+          const songCount = (p as { songCount?: number; totalSongs?: number }).songCount ??
+            (p as { songCount?: number; totalSongs?: number }).totalSongs ??
+            0;
+          const totalDuration =
+            (p as { totalDuration?: string }).totalDuration ?? '--';
+          const likes = (p as { likes?: number }).likes ?? 0;
+          const createdAt = (p as { createdAt?: string }).createdAt ?? '';
+          const updatedAt =
+            (p as { updatedAt?: string }).updatedAt ??
+            (p as { dateUpdate?: string }).dateUpdate ??
+            '';
+
+          return {
+            id: String(p.playlistId),
+            title: p.name,
+            description,
+            cover: p.coverUrl || '',
+            songCount,
+            totalDuration,
+            isPublic:
+              normalizedVisibility != null
+                ? normalizedVisibility === PlaylistVisibility.PUBLIC
+                : true,
+            likes,
+            createdAt,
+            updatedAt,
+            ownerId: resolvedOwnerId,
+            ownerName: p.ownerName,
+            isOwner,
+            isCollaborator,
+            role: collaboratorRole,
+          } as PlaylistItem;
+        });
+
         setPlaylists(mapped);
       } catch (e) {
+        console.error('Failed to load playlists:', e);
         setPlaylists([]);
       } finally {
         setLoading(false);
@@ -244,15 +397,39 @@ const PlaylistLibrary = () => {
   ];
 
 
-  const filteredMyPlaylists = playlists.filter(playlist =>
-    playlist.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    playlist.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  // Owned playlists: isOwner = true (không phải isCollaborator = false)
+  const ownedPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isOwner === true), [playlists]);
+  // Collaborated playlists: isCollaborator = true
+  const collabPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isCollaborator === true), [playlists]);
 
-  const filteredFavorites = favoriteSongs.filter(song =>
-    song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    song.artist.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredOwnedPlaylists = useMemo(() => {
+    if (!normalizedSearch) return ownedPlaylists;
+    return ownedPlaylists.filter((playlist) => {
+      return (
+        playlist.title.toLowerCase().includes(normalizedSearch) ||
+        (playlist.description || '').toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [ownedPlaylists, normalizedSearch]);
+
+  const filteredCollabPlaylists = useMemo(() => {
+    if (!normalizedSearch) return collabPlaylists;
+    return collabPlaylists.filter((playlist) => {
+      return (
+        playlist.title.toLowerCase().includes(normalizedSearch) ||
+        (playlist.description || '').toLowerCase().includes(normalizedSearch) ||
+        (playlist.ownerName || '').toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [collabPlaylists, normalizedSearch]);
+
+  const filteredFavorites = normalizedSearch
+    ? favoriteSongs.filter((song) =>
+        song.title.toLowerCase().includes(normalizedSearch) ||
+        song.artist.toLowerCase().includes(normalizedSearch)
+      )
+    : favoriteSongs;
 
   const toggleLike = (playlistId: string) => {
     setLikedPlaylists(prev =>
@@ -272,6 +449,12 @@ const PlaylistLibrary = () => {
       description: `${playlist.songCount} songs`,
       duration: 3000,
     });
+  };
+
+  const getCollaboratorBadgeText = (role?: CollaboratorRole) => {
+    if (role === CollaboratorRole.EDITOR) return "Collaborator (EDITOR)";
+    if (role === CollaboratorRole.VIEWER) return "Collaborator (VIEWER)";
+    return "Collaborator";
   };
 
   const formatNumber = (num: number) => {
@@ -337,19 +520,82 @@ const PlaylistLibrary = () => {
       const page = Number.isFinite(me)
         ? await playlistsApi.getByUser(me, { page: 0, size: 24 })
         : await playlistsApi.getAll({ page: 0, size: 24 });
-      const mapped = (page.content || []).map((p: PlaylistDTO) => ({
-        id: String(p.id),
-        title: p.name,
-        description: p.description || '',
-        cover: p.coverUrl || (p as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist || '',
-        songCount: Array.isArray(p.songs) ? p.songs.length : 0,
-        totalDuration: '--',
-        isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
-        likes: 0,
-        createdAt: p.dateUpdate || '',
-        updatedAt: p.dateUpdate || '',
-      }));
-      setPlaylists(mapped);
+
+      const currentUserId = Number.isFinite(me) ? Number(me) : undefined;
+      const mapped = (page.content || []).map((p: PlaylistDTO) => {
+        const ownerIdRaw =
+          typeof p.ownerId === 'number'
+            ? p.ownerId
+            : typeof p.owner?.id === 'number'
+            ? p.owner.id
+            : undefined;
+        const rawRole = (p as { role?: string | null }).role;
+        const normalizedRole = typeof rawRole === 'string' ? rawRole.toUpperCase() : undefined;
+        const collaboratorRole =
+          normalizedRole === CollaboratorRole.EDITOR || normalizedRole === CollaboratorRole.VIEWER
+            ? (normalizedRole as CollaboratorRole)
+            : undefined;
+
+        const isOwnerFlag =
+          ownerIdRaw != null && currentUserId != null ? ownerIdRaw === currentUserId : false;
+        const isOwner = isOwnerFlag || normalizedRole === 'OWNER';
+
+        let isCollaborator =
+          collaboratorRole != null ||
+          (ownerIdRaw != null && currentUserId != null ? ownerIdRaw !== currentUserId : false);
+
+        if (isOwner) {
+          isCollaborator = false;
+        }
+
+        const resolvedOwnerId =
+          ownerIdRaw ?? (isOwner && currentUserId != null ? currentUserId : undefined);
+
+        const visibilityValue =
+          p.visibility ??
+          (p as { visibility?: PlaylistVisibility | string | null }).visibility ??
+          null;
+        const normalizedVisibility =
+          typeof visibilityValue === 'string'
+            ? (visibilityValue.toUpperCase() as PlaylistVisibility)
+            : undefined;
+
+        const songCount = Array.isArray(p.songs)
+          ? p.songs.length
+          : Array.isArray(p.songIds)
+          ? p.songIds.length
+          : 0;
+
+        return {
+          id: String(p.id),
+          title: p.name,
+          description: p.description || '',
+          cover:
+            p.coverUrl ||
+            (p as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist ||
+            '',
+          songCount,
+          totalDuration: (p as { totalDuration?: string }).totalDuration ?? '--',
+          isPublic:
+            normalizedVisibility != null
+              ? normalizedVisibility === PlaylistVisibility.PUBLIC
+              : true,
+          likes: (p as { likes?: number }).likes ?? 0,
+          createdAt: p.dateUpdate || (p as { createdAt?: string }).createdAt || '',
+          updatedAt: p.dateUpdate || (p as { updatedAt?: string }).updatedAt || '',
+          ownerId: resolvedOwnerId,
+          ownerName: p.owner?.name,
+          isOwner,
+          isCollaborator,
+          role: collaboratorRole,
+        } as PlaylistItem;
+      });
+
+      const unique = new Map<string, PlaylistItem>();
+      mapped.forEach((item) => {
+        unique.set(item.id, item);
+      });
+      setPlaylists(Array.from(unique.values()));
     } catch (e) {
       toast({ title: "Error", description: "Failed to save playlist", variant: "destructive" });
     } finally { setIsSubmitting(false); }
@@ -433,15 +679,25 @@ const PlaylistLibrary = () => {
         </div>
 
         <Tabs defaultValue="my-playlists" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:grid-cols-3">
             <TabsTrigger value="my-playlists">My Playlists</TabsTrigger>
+            <TabsTrigger value="collab-playlists">Collaborations</TabsTrigger>
             <TabsTrigger value="favorites">Favorite Songs</TabsTrigger>
           </TabsList>
 
           {/* My Playlists */}
           <TabsContent value="my-playlists">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {filteredMyPlaylists.map((playlist) => (
+              {filteredOwnedPlaylists.length === 0 ? (
+                <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-border/40 bg-card/40 py-12 text-center text-muted-foreground">
+                  <Users className="h-10 w-10 mb-3 opacity-60" />
+                  <p className="font-medium text-foreground">No playlists yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    Create a playlist or collaborate with friends to see it here.
+                  </p>
+                </div>
+              ) : (
+                filteredOwnedPlaylists.map((playlist) => (
                 <Card key={playlist.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
                   <CardContent className="p-0">
                     {/* Cover Image */}
@@ -462,17 +718,22 @@ const PlaylistLibrary = () => {
                       </div>
                       
                       {/* Badges */}
-                      <div className="absolute top-3 right-3 flex gap-2">
+                      <div className="absolute top-3 right-3 flex gap-2 flex-wrap">
+                        {playlist.isOwner && (
+                          <Badge variant="default" className="bg-blue-500/20 text-blue-200 border-blue-400/30">
+                            Owner
+                          </Badge>
+                        )}
+                        {playlist.isCollaborator && (
+                          <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30">
+                            {getCollaboratorBadgeText(playlist.role)}
+                          </Badge>
+                        )}
                         <Badge 
                           variant={playlist.isPublic ? "default" : "secondary"}
                         >
                           {playlist.isPublic ? "Public" : "Private"}
                         </Badge>
-                        {playlist.isCollaborator && (
-                          <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30">
-                            Collab
-                          </Badge>
-                        )}
                       </div>
                     </div>
 
@@ -483,6 +744,14 @@ const PlaylistLibrary = () => {
                           {playlist.title}
                         </h3>
                       </Link>
+                      
+                      {/* Owner info for collaborated playlists */}
+                      {playlist.isCollaborator && playlist.ownerName && (
+                        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                          <Users className="w-3 h-3" />
+                          <span>by {playlist.ownerName}</span>
+                        </div>
+                      )}
                       
                       <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
                         {playlist.description}
@@ -522,22 +791,106 @@ const PlaylistLibrary = () => {
                             <Heart className={`w-4 h-4 ${likedPlaylists.includes(playlist.id) ? 'fill-current' : ''}`} />
                           </Button>
                           <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem className="text-destructive" onClick={() => openDelete(playlist)}>Delete</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {playlist.isOwner && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem className="text-destructive" onClick={() => openDelete(playlist)}>Delete</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+              ))
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="collab-playlists">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {filteredCollabPlaylists.length === 0 ? (
+                <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-border/40 bg-card/40 py-12 text-center text-muted-foreground">
+                  <Music className="h-10 w-10 mb-3 opacity-60" />
+                  <p className="font-medium text-foreground">No collaborations yet</p>
+                  <p className="text-sm text-muted-foreground">
+                    When someone invites you to collaborate, the playlist will appear here.
+                  </p>
+                </div>
+              ) : (
+                filteredCollabPlaylists.map((playlist) => (
+                <Card key={playlist.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
+                  <CardContent className="p-0">
+                    <div className="relative aspect-square">
+                      <img
+                        src={playlist.cover}
+                        alt={playlist.title}
+                        className="w-full h-full object-cover rounded-t-lg"
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button
+                          size="icon"
+                          className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90"
+                          onClick={() => playPlaylist(playlist)}
+                        >
+                          <Play className="w-8 h-8" />
+                        </Button>
+                      </div>
+                      <div className="absolute top-3 right-3 flex gap-2">
+                        <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30">
+                          {getCollaboratorBadgeText(playlist.role)}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-3">
+                      <Link to={`/playlist/${playlist.id}`}>
+                        <h3 className="font-semibold text-lg hover:text-primary transition-colors truncate">
+                          {playlist.title}
+                        </h3>
+                      </Link>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Owner · {playlist.ownerName || "Unknown"}
+                      </p>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {playlist.description || "No description provided."}
+                      </p>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Music className="h-4 w-4" />
+                          {playlist.songCount}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          {durations[playlist.id] || playlist.totalDuration}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-muted-foreground">
+                          Updated {new Date(playlist.updatedAt).toLocaleDateString()}
+                        </p>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => toggleLike(playlist.id)}
+                            className={`h-8 w-8 ${likedPlaylists.includes(playlist.id) ? "text-red-500" : ""}`}
+                          >
+                            <Heart className={`w-4 h-4 ${likedPlaylists.includes(playlist.id) ? "fill-current" : ""}`} />
+                          </Button>
+                          <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+              )}
             </div>
           </TabsContent>
 
@@ -689,13 +1042,5 @@ const PlaylistLibrary = () => {
 };
 
 export default PlaylistLibrary;
-
-
-
-
-
-
-
-
 
 

@@ -1438,7 +1438,7 @@ const Social = () => {
                 </Card>
 
                 {/* Chat Area */}
-                <Card className="lg:col-span-2 flex flex-col bg-gradient-to-br from-purple-500/10 via-fuchsia-500/5 to-indigo-500/10 backdrop-blur-xl backdrop-saturate-150 border-purple-300/20 shadow-[0_8px_30px_rgba(88,28,135,0.25)]">
+                <Card className="lg:col-span-2 flex flex-col relative overflow-hidden rounded-[28px] bg-white/5 backdrop-blur-2xl backdrop-saturate-150 border border-white/15 shadow-[0_30px_60px_-15px_rgba(91,33,182,0.45)] min-h-[520px] lg:h-[calc(100vh-220px)] lg:max-h-[calc(100vh-220px)]">
                   {selectedChat ? (
                     <>
                       <CardHeader className="border-b border-purple-300/20 bg-gradient-to-r from-purple-500/10 to-fuchsia-500/10 backdrop-blur-sm">
@@ -1459,11 +1459,11 @@ const Social = () => {
                         </div>
                       </CardHeader>
 
-                      <CardContent className="flex-1 p-4 overflow-y-auto scrollbar-custom scroll-smooth bg-gradient-to-b from-purple-500/5 to-transparent">
+                      <CardContent className="flex-1 min-h-0 p-4 overflow-y-auto scrollbar-custom scroll-smooth bg-gradient-to-b from-white/10 via-white/5 to-transparent">
                         {renderMessages()}
                       </CardContent>
 
-                      <div className="p-4 border-t border-purple-300/20 bg-gradient-to-t from-purple-500/10 via-fuchsia-500/5 to-transparent backdrop-blur-sm">
+                      <div className="p-4 border-t border-white/10 bg-gradient-to-t from-white/10 via-white/5 to-transparent backdrop-blur-xl sticky bottom-0 left-0 right-0 z-10">
                         <div className="flex gap-2">
                           <Input
                             placeholder="Type a message..."
@@ -1678,10 +1678,25 @@ function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
   const rawContent = m.contentPlain ?? m.content ?? "";
   let content = typeof rawContent === "string" ? rawContent : "";
 
-  const sharedType = m.sharedContentType ?? undefined;
+  const sharedTypeRaw = m.sharedContentType ?? undefined;
   const sharedContent: SharedContentDTO | undefined = m.sharedContent ?? undefined;
+  const normalizedSharedType = (() => {
+    if (typeof sharedTypeRaw === "string" && sharedTypeRaw.length > 0) {
+      return sharedTypeRaw.toUpperCase() as SharedContentType | "PLAYLIST" | "ALBUM" | "SONG";
+    }
+    const raw = (sharedContent as { type?: string | null })?.type ?? (sharedContent as { contentType?: string | null })?.contentType ?? null;
+    if (typeof raw === "string" && raw.length) {
+      return raw.toUpperCase() as SharedContentType | "PLAYLIST" | "ALBUM" | "SONG";
+    }
+    if (sharedContent && typeof sharedContent === "object") {
+      if ((sharedContent as { playlist?: unknown }).playlist) return "PLAYLIST";
+      if ((sharedContent as { album?: unknown }).album) return "ALBUM";
+      if ((sharedContent as { song?: unknown }).song) return "SONG";
+    }
+    return undefined;
+  })();
 
-  if (sharedType === "PLAYLIST") {
+  if (normalizedSharedType === "PLAYLIST") {
     type = "playlist";
     const playlistDto: SharedPlaylistDTO | null = sharedContent?.playlist ?? null;
     sharedPlaylist = playlistDto
@@ -1729,7 +1744,7 @@ function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
         songCount: sharedPlaylist?.totalSongs ?? undefined,
       };
     }
-  } else if (sharedType === "ALBUM") {
+  } else if (normalizedSharedType === "ALBUM") {
     type = "album";
     const albumDto: SharedAlbumDTO | null = sharedContent?.album ?? null;
     const releaseYear = (() => {
@@ -1761,7 +1776,7 @@ function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
         releaseYear: sharedAlbum?.releaseYear ?? undefined,
       };
     }
-  } else if (sharedType === "SONG") {
+  } else if (normalizedSharedType === "SONG") {
     type = "song";
     const songDto: SharedSongDTO | null = sharedContent?.song ?? null;
     const artists = extractArtistNames(songDto?.artists);
@@ -1787,7 +1802,7 @@ function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
     }
   }
 
-  if (sharedType == null) {
+  if (normalizedSharedType == null) {
     if (content.startsWith("SONG:")) {
       type = "song";
       try {
@@ -1873,7 +1888,7 @@ function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
     songData,
     playlistData,
     albumData,
-    sharedContentType: sharedType,
+    sharedContentType: (normalizedSharedType as SharedContentType | undefined),
     sharedPlaylist,
     sharedAlbum,
     sharedSong,
