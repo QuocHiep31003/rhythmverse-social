@@ -25,7 +25,7 @@ export { authApi } from './api/authApi';
 
 // Import mock data for fallback
 import { mockUsers, mockGenres } from "@/data/mockData";
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse } from "./api/config";
+import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse, apiClient } from "./api/config";
 import axios from "axios";
 
 export const api = axios.create({
@@ -318,29 +318,155 @@ export const searchApi = {
   },
 };
 
-// AUDD Music Recognition API
-export const auddApi = {
+// ACR Cloud Music Recognition API (via backend)
+export const arcApi = {
   recognizeMusic: async (audioBlob: Blob) => {
     try {
       const formData = new FormData();
-      formData.append("api_token", "66d916cc0aca58ac85faa0f3794f3b63"); // 🔹 thay bằng token thật của bạn
       formData.append("file", audioBlob, "recorded.wav");
-      formData.append("return", "apple_music,spotify");
 
-      const response = await fetch("https://api.audd.io/", {
-        method: "POST",
-        body: formData,
+      const response = await apiClient.post('/acr/recognize-audio', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
+      return response.data;
     } catch (error) {
       console.error("Error recognizing music:", error);
       throw error;
+    }
+  },
+
+  recognizeHumming: async (audioFile: File | Blob) => {
+    try {
+      const formData = new FormData();
+      const fileName = audioFile instanceof File ? audioFile.name : 'humming.wav';
+      formData.append("file", audioFile, fileName);
+
+      const response = await apiClient.post('/acr/recognize-humming', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error("Error recognizing humming:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Upload audio fingerprint từ URL lên ACR bucket trực tiếp từ FE
+   * Được gọi sau khi upload Cloudinary thành công
+   */
+  uploadAudioFingerprint: async (audioUrl: string, title?: string) => {
+    try {
+      // ACR Cloud API v2 credentials
+      const ACR_API_V2_BASE_URL = 'https://api-v2.acrcloud.com';
+      const ACR_BUCKET_ID = '28233';
+      // Token từ ACR Cloud (JWT token)
+      const ACR_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI3IiwianRpIjoiNTM4NzVkZjQ2M2QzMjg2ZTY4OTEyMGU5ZjM1ZWRhZTZiZjNhMTMyZGMwNTgxZjA5NDg2MGNmODcyNDVjMDJlZWFlY2NiMTcwYjg2N2RmYmEiLCJpYXQiOjE3NjIyMjcxNzEuMzI0OTEsIm5iZiI6MTc2MjIyNzE3MS4zMjQ5MTQsImV4cCI6MjA3Nzc1OTk2OS4yNTM4ODcsInN1YiI6IjI4NzY2NSIsInNjb3BlcyI6WyIqIiwid3JpdGUtYWxsIiwicmVhZC1hbGwiLCJidWNrZXRzIiwid3JpdGUtYnVja2V0cyIsInJlYWQtYnVja2V0cyIsImF1ZGlvcyIsIndyaXRlLWF1ZGlvcyIsInJlYWQtYXVkaW9zIiwiY2hhbm5lbHMiLCJ3cml0ZS1jaGFubmVscyIsInJlYWQtY2hhbm5lbHMiLCJiYXNlLXByb2plY3RzIiwid3JpdGUtYmFzZS1wcm9qZWN0cyIsInJlYWQtYmFzZS1wcm9qZWN0cyIsInVjZiIsIndyaXRlLXVjZiIsInJlYWQtdWNmIiwiZGVsZXRlLXVjZiIsImJtLXByb2plY3RzIiwiYm0tY3MtcHJvamVjdHMiLCJ3cml0ZS1ibS1jcy1wcm9qZWN0cyIsInJlYWQtYm0tY3MtcHJvamVjdHMiLCJibS1iZC1wcm9qZWN0cyIsIndyaXRlLWJtLWJkLXByb2plY3RzIiwicmVhZC1ibS1iZC1wcm9qZWN0cyIsImZpbGVzY2FubmluZyIsIndyaXRlLWZpbGVzY2FubmluZyIsInJlYWQtZmlsZXNjYW5uaW5nIiwibWV0YWRhdGEiLCJyZWFkLW1ldGFkYXRhIl19.EkFOKsKo73j6Dd9e8SCovqK8LNhz6JagrSgYbmDzVhp_f_jc_T1nCk81XC8IXaZm3R-9XZrKtxe-MtEvFQmF8nLp-ABRvHvwhu6oZkKFFFoSiPzCOQlI5ekzwk8Jo2cNODYbTHDkn4lGOAD_b32M5XXvvAKnLYhKU42U0CMtv89z0_TfUI5598jfzo2pcCn7qluP96T2owRsEgFcsKPBp08Ql5au7X6XIhwrHTyT3GmpkDO8sS-CI08WyJHP978Bu8UOGkPHdkTXefM3VLA5Gi5Z5D1vJBSjErs7MzelPn1GcyY9t0tMZ17cYuvuJwccFQRyzFmRNIL-Ii1-Ol-s16GK_2OBx4i8K35gNk6ZfKiKo6XNOlHKiCvDqMHBd8PUrM6wFR9bWSF1jw0yxoUK5BmJoa9R3ULZ38lil62a7-ygRX-emywmFTKpoL3zJD7DofpflBBF8_Socg7Gk2lyzRHVkYZ7CNAn5yI6Lsd3vgooOms0EOqIyXOX1y3xuqg_EOPxNNlgdzUDfX6mapW7subzLS2x5Q1uHAiaW8eN9l4S0DuYkF2mKYdoIXcwE9xDikV5GVBKPr3rkDc3-6fBSpuM0khoM25DZpkkDC7GteqbQcFWo_JZD7qawqlAMDLwogSXtOfURJza-mqy96ICAUMj6ou9qGwkVkVo1aKna4Q';
+
+      const endpoint = `${ACR_API_V2_BASE_URL}/api/buckets/${ACR_BUCKET_ID}/files`;
+
+      // Theo API docs, khi data_type là audio_url, cần dùng JSON body, không phải FormData
+      const requestBody: {
+        data_type: string;
+        url: string;
+        title?: string;
+        user_defined?: Record<string, unknown>;
+      } = {
+        data_type: 'audio_url',
+        url: audioUrl,
+      };
+
+      if (title) {
+        requestBody.title = title;
+      }
+
+      console.log('[ACR] Uploading audio URL to bucket:', audioUrl);
+      console.log('[ACR] Endpoint:', endpoint);
+      console.log('[ACR] Request body:', requestBody);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ACR_TOKEN}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await response.text();
+      console.log('[ACR] Response status:', response.status);
+      console.log('[ACR] Response text:', responseText);
+
+      if (!response.ok) {
+        console.error('[ACR] Upload failed:', responseText);
+        throw new Error(`ACR upload failed: ${response.status} ${response.statusText} - ${responseText}`);
+      }
+
+      const result = JSON.parse(responseText);
+      console.log('[ACR] Upload response:', result);
+
+      // Parse response để lấy acr_id
+      if (result.data && result.data.acr_id) {
+        return {
+          success: true,
+          acrid: result.data.acr_id,
+        };
+      } else {
+        return {
+          success: false,
+          error: 'No acr_id found in response',
+          rawResponse: result,
+        };
+      }
+    } catch (error) {
+      console.error("Error uploading audio fingerprint:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Tìm kiếm YouTube video dựa trên title và artists
+   * Gọi backend endpoint để search YouTube (API key được giữ ở backend)
+   */
+  searchYouTubeVideo: async (title: string, artists?: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/acr/search-youtube`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...buildJsonHeaders(),
+        },
+        body: JSON.stringify({
+          title,
+          artists: artists || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[YouTube] Search failed:', response.status, errorText);
+        return null;
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.videoId) {
+        console.log('[YouTube] Found video:', data.videoId, 'for title:', title);
+        return data.videoId;
+      }
+      
+      console.log('[YouTube] No video found for title:', title);
+      return null;
+    } catch (error) {
+      console.error('[YouTube] Error searching YouTube:', error);
+      return null;
     }
   },
 };

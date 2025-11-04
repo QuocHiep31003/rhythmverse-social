@@ -11,6 +11,7 @@ export interface Song {
   artistIds: number[];
   artistNames?: string[];
   audioUrl: string;
+  fingerId?: string;
   audio?: string;
   url?: string;
   plays?: string;
@@ -31,6 +32,7 @@ export interface SongCreateUpdateData {
   genreIds: number[];
   artistIds: number[];
   audioUrl: string;
+  fingerId?: string;
   duration?: string;
 }
 
@@ -116,6 +118,17 @@ export const songsApi = {
     }
   },
 
+  // Lấy top 1 song theo fingerId (acrid)
+  getTopByFingerId: async (fingerId: string): Promise<Song | null> => {
+    try {
+      const response = await apiClient.get(`/songs/by-finger/${encodeURIComponent(fingerId)}/top`);
+      return response.data ?? null;
+    } catch (error) {
+      console.error("Error fetching top song by fingerId:", error);
+      return null;
+    }
+  },
+
   // Tạo song mới
   create: async (data: SongCreateUpdateData): Promise<Song> => {
     try {
@@ -125,6 +138,7 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
+        fingerId: data.fingerId,
         duration: data.duration,
       };
 
@@ -145,6 +159,7 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
+        fingerId: data.fingerId,
         duration: data.duration,
       };
 

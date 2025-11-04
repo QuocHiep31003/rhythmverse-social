@@ -16,7 +16,7 @@ import {
   AlertCircle,
   Music
 } from "lucide-react";
-import { auddApi } from "@/services/api";
+import { arcApi } from "@/services/api";
 
 const MusicRecognition = () => {
   const navigate = useNavigate();
@@ -104,8 +104,8 @@ const MusicRecognition = () => {
   };
 
  const handleRecognize = async () => {
-  if (!audioBlob && !audioUrl) {
-    setError("Please record, upload an audio file, or enter a URL first.");
+  if (!audioBlob) {
+    setError("Please record or upload an audio file first.");
     return;
   }
 
@@ -113,25 +113,16 @@ const MusicRecognition = () => {
   setError("");
 
   try {
-    // If we have audioBlob, use it. Otherwise, fetch from URL
-    let blobToRecognize = audioBlob;
-    if (!audioBlob && audioUrl) {
-      // Fetch audio from URL and convert to blob
-      const response = await fetch(audioUrl);
-      blobToRecognize = await response.blob();
-    }
-
-    const result = await auddApi.recognizeMusic(blobToRecognize);
-    console.log("AUDD API Response:", result);
+    const result = await arcApi.recognizeMusic(audioBlob);
 
     // Check if result is valid and has actual data
-    if (!result || !result.result || (typeof result.result === 'object' && Object.keys(result.result).length === 0)) {
-      console.log("No recognition result found");
+    if (!result || !result.result || result.result.length === 0) {
+      // Navigate to result page with no-result flag
       navigate("/music-recognition-result", {
         state: { 
           result: { 
             status: "success", 
-            result: {} as any
+            result: [] 
           }, 
           audioUrl: audioUrlPreview 
         },
@@ -139,7 +130,6 @@ const MusicRecognition = () => {
       return;
     }
 
-    console.log("Recognized song:", result.result);
     navigate("/music-recognition-result", {
       state: { result, audioUrl: audioUrlPreview },
     });
@@ -269,7 +259,7 @@ const MusicRecognition = () => {
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
-                  disabled={isLoading || (!audioBlob && !audioUrl)}
+                  disabled={isLoading || !audioUrl}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   size="lg"
                 >

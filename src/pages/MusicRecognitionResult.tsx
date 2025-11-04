@@ -17,8 +17,7 @@ import {
   Clock,
   Headphones
 } from "lucide-react";
-import { songsApi } from "@/services/api";
-import { albumsApi } from "@/services/api/albumApi";
+import { songsApi, arcApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
 
 interface AuddResult {
@@ -54,17 +53,69 @@ interface AuddResponse {
   result: AuddResult;
 }
 
+interface HummingResult {
+  acrid: string;
+  title?: string;
+  score?: number;
+  artists?: Array<{ name?: string }>;
+  album?: string;
+  releaseDate?: string;
+  durationMs?: number;
+  playOffsetMs?: number;
+  matchedInSystem?: boolean;
+  song?: {
+    id: number;
+    name: string;
+    [key: string]: unknown;
+  };
+  youtubeVideoId?: string; // YouTube video ID để embed
+}
+
+interface AcrResponse {
+  matched: boolean;
+  song?: {
+    id: number;
+    name: string;
+    audioUrl: string;
+    artists?: Array<{ id: number; name: string }>;
+    genres?: Array<{ id: number; name: string }>;
+    duration?: string;
+    playCount?: number;
+    releaseYear?: number;
+    urlImageAlbum?: string;
+    fingerId?: string;
+  };
+  score?: number;
+  acrid?: string;
+  customFile?: Record<string, unknown>;
+  musicMetadata?: Record<string, unknown>;
+  hummingResults?: HummingResult[]; // Kết quả từ humming nếu không có custom_file
+}
+
+type RecognitionResult = AuddResponse | AcrResponse;
+
 const MusicRecognitionResult = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { playSong, setQueue } = useMusic();
-  const [result, setResult] = useState<AuddResponse | null>(null);
+  const [result, setResult] = useState<RecognitionResult | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [echoverseSong, setEchoverseSong] = useState<unknown>(null);
   const [isSearchingEchoverse, setIsSearchingEchoverse] = useState(false);
   const [audioError, setAudioError] = useState(false);
-  const [isNavigatingAlbum, setIsNavigatingAlbum] = useState(false);
+  const [hummingResultsWithYoutube, setHummingResultsWithYoutube] = useState<HummingResult[]>([]);
+  const [isSearchingYouTube, setIsSearchingYouTube] = useState(false);
+
+  // Helper to check if result is ACR response
+  const isAcrResponse = (res: RecognitionResult | null): res is AcrResponse => {
+    return res !== null && 'matched' in res;
+  };
+
+  // Helper to check if result is AUDD response
+  const isAuddResponse = (res: RecognitionResult | null): res is AuddResponse => {
+    return res !== null && 'status' in res && 'result' in res;
+  };
 
   useEffect(() => {
     if (location.state?.result) {
@@ -78,37 +129,95 @@ const MusicRecognitionResult = () => {
     setIsLoading(false);
   }, [location.state]);
 
-  // Search for song in echoverse database when recognition is successful
+  // Handle ACR response - if matched, use song from response directly
+  // Handle AUDD response - search echoverse database
   useEffect(() => {
-    const searchEchoverseDatabase = async () => {
-      const recognitionResult = result?.result; // AUDD trả về object, không phải array
-      console.log("Recognition result for echoverse search:", recognitionResult);
-      
-      if (recognitionResult && recognitionResult.title && recognitionResult.artist) {
-        // Clear previous match before searching
-        setEchoverseSong(null);
-        setIsSearchingEchoverse(true);
-        try {
-          console.log("Searching echoverse for:", recognitionResult.title, "by", recognitionResult.artist);
-          const songs = await songsApi.findByTitleAndArtist(
-            recognitionResult.title,
-            recognitionResult.artist
-          );
-          console.log("Found echoverse songs:", songs);
-          if (songs && songs.length > 0) {
-            setEchoverseSong(songs[0]);
-            console.log("Set echoverse song:", songs[0]);
+    const handleRecognitionResult = async () => {
+      if (result && !isLoading) {
+        if (isAcrResponse(result)) {
+          // ACR response - if matched, song is already in response
+          if (result.matched && result.song) {
+            setEchoverseSong(result.song);
+            setIsSearchingEchoverse(false);
+          } else {
+            // Not matched in DB, clear echoverse song
+            setEchoverseSong(null);
+            setIsSearchingEchoverse(false);
           }
-        } catch (error) {
-          console.error("Error searching echoverse database:", error);
-        } finally {
-          setIsSearchingEchoverse(false);
+        } else if (isAuddResponse(result)) {
+          // AUDD response - search echoverse database
+          const recognitionResult = result.result;
+          console.log("Recognition result for echoverse search:", recognitionResult);
+          
+          if (recognitionResult && recognitionResult.title && recognitionResult.artist) {
+            setEchoverseSong(null);
+            setIsSearchingEchoverse(true);
+            try {
+              console.log("Searching echoverse for:", recognitionResult.title, "by", recognitionResult.artist);
+              const songs = await songsApi.findByTitleAndArtist(
+                recognitionResult.title,
+                recognitionResult.artist
+              );
+              console.log("Found echoverse songs:", songs);
+              if (songs && songs.length > 0) {
+                setEchoverseSong(songs[0]);
+                console.log("Set echoverse song:", songs[0]);
+              }
+            } catch (error) {
+              console.error("Error searching echoverse database:", error);
+            } finally {
+              setIsSearchingEchoverse(false);
+            }
+          }
         }
       }
     };
 
+    handleRecognitionResult();
+  }, [result, isLoading]);
+
+  // Search YouTube videos cho humming results
+  useEffect(() => {
+    const searchYouTubeForHummingResults = async () => {
+      if (isAcrResponse(result) && result.hummingResults && result.hummingResults.length > 0) {
+        setIsSearchingYouTube(true);
+        const resultsWithYoutube = await Promise.all(
+          result.hummingResults.map(async (item) => {
+            // Nếu đã có youtubeVideoId, giữ nguyên
+            if (item.youtubeVideoId) {
+              return item;
+            }
+
+            // Tìm kiếm YouTube video
+            const title = item.title || '';
+            const artists = item.artists?.map(a => a.name).join(' ') || '';
+            
+            if (title) {
+              try {
+                const videoId = await arcApi.searchYouTubeVideo(title, artists);
+                return {
+                  ...item,
+                  youtubeVideoId: videoId || undefined,
+                };
+              } catch (error) {
+                console.error('[YouTube] Error searching for:', title, error);
+                return item;
+              }
+            }
+            
+            return item;
+          })
+        );
+        
+        setHummingResultsWithYoutube(resultsWithYoutube);
+        setIsSearchingYouTube(false);
+      } else {
+        setHummingResultsWithYoutube([]);
+      }
+    };
+
     if (result && !isLoading) {
-      searchEchoverseDatabase();
+      searchYouTubeForHummingResults();
     }
   }, [result, isLoading]);
 
@@ -149,55 +258,6 @@ const MusicRecognitionResult = () => {
     playSong(formattedSong);
   };
 
-  const handleGoToAlbumDetail = async () => {
-    if (!recognitionResult?.album || isNavigatingAlbum) return;
-    try {
-      setIsNavigatingAlbum(true);
-      const albumName = recognitionResult.album;
-      const artistName = recognitionResult.artist || "";
-
-      // 1) Try combined search: "album artist"
-      let targetId: string | number | undefined;
-      try {
-        const combined = `${albumName} ${artistName}`.trim();
-        if (combined) {
-          const combinedRes = await albumsApi.search(combined, { size: 1 });
-          targetId = combinedRes?.content?.[0]?.id;
-        }
-      } catch (err) {
-        console.debug("Album combined search failed", err);
-      }
-
-      // 2) Try search by exact album name
-      if (!targetId) {
-        try {
-          const byName = await albumsApi.searchByName(albumName);
-          targetId = Array.isArray(byName) ? byName?.[0]?.id : undefined;
-        } catch (err) {
-          console.debug("Album searchByName failed", err);
-        }
-      }
-
-      // 3) Fallback: broader search by album only
-      if (!targetId) {
-        try {
-          const searchRes = await albumsApi.search(albumName, { size: 1 });
-          targetId = searchRes?.content?.[0]?.id;
-        } catch (err) {
-          console.debug("Album fallback search failed", err);
-        }
-      }
-
-      if (targetId !== undefined) {
-        navigate(`/album/${targetId}`);
-      }
-    } catch (e) {
-      console.error("Failed to navigate to album detail:", e);
-    } finally {
-      setIsNavigatingAlbum(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-dark flex items-center justify-center">
@@ -230,21 +290,36 @@ const MusicRecognitionResult = () => {
     );
   }
 
-  const recognitionResult = result.result; // AUDD trả về object, không phải array
-  const hasResult = recognitionResult && Object.keys(recognitionResult).length > 0;
+  // Get recognition result based on response type
+  const recognitionResult = isAuddResponse(result) ? result.result : null;
+  const acrResult = isAcrResponse(result) ? result : null;
   
-  // Prefer provided albumart, then Apple Music artwork, then Spotify album images
+  const hasResult = (() => {
+    if (isAuddResponse(result)) {
+      return recognitionResult && Object.keys(recognitionResult).length > 0;
+    }
+    if (isAcrResponse(result)) {
+      // Có kết quả nếu có song match HOẶC có humming results
+      return (result.matched && result.song !== undefined) || 
+             (result.hummingResults && result.hummingResults.length > 0);
+    }
+    return false;
+  })();
+  
+  // Prefer provided albumart, then Apple Music artwork, then Spotify album images (for AUDD)
+  // For ACR, use urlImageAlbum from song
   const artworkUrl = (() => {
-    if (!hasResult) return "";
+    if (isAcrResponse(result) && result.song?.urlImageAlbum) {
+      return result.song.urlImageAlbum;
+    }
+    if (!hasResult || !recognitionResult) return "";
     if (recognitionResult.albumart) return recognitionResult.albumart;
     const appleArtworkTemplate = recognitionResult.apple_music?.artwork?.url;
     if (appleArtworkTemplate) {
-      // Replace {w}x{h} placeholders with a reasonable size
       return appleArtworkTemplate.replace("{w}", "512").replace("{h}", "512");
     }
     const spotifyImages = recognitionResult.spotify?.album?.images;
     if (spotifyImages && spotifyImages.length > 0) {
-      // Pick the closest to 300px or fallback to the first
       const preferred = spotifyImages.find(img => img?.width === 300) || spotifyImages[0];
       return preferred?.url || "";
     }
@@ -264,28 +339,77 @@ const MusicRecognitionResult = () => {
 
           {/* Status */}
           <div className="mb-6">
-            {result.status === "success" && hasResult ? (
-              <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-800 dark:text-green-200">
-                  Music successfully recognized!
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {hasResult ? `Recognition failed. Status: ${result.status}` : "No song was recognized. Please try again with a different audio file."}
-                </AlertDescription>
-              </Alert>
-            )}
+            {(() => {
+              if (isAcrResponse(result)) {
+                if (result.matched && result.song) {
+                  return (
+                    <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-800 dark:text-green-200 flex items-center justify-between">
+                        <span>Music successfully recognized!</span>
+                        {result.score !== undefined && (
+                          <Badge variant="secondary" className="ml-2">
+                            Score: {result.score}/100
+                          </Badge>
+                        )}
+                      </AlertDescription>
+                    </Alert>
+                  );
+                } else if (result.hummingResults && result.hummingResults.length > 0) {
+                  return (
+                    <Alert className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
+                      <AlertCircle className="h-4 w-4 text-yellow-600" />
+                      <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                        Không tìm thấy trong hệ thống. Hiển thị {result.hummingResults.length} gợi ý từ ACR Cloud database để tham khảo.
+                      </AlertDescription>
+                    </Alert>
+                  );
+                } else {
+                  return (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Song not found in database. {result.score !== undefined && `Match score: ${result.score}/100`}
+                      </AlertDescription>
+                    </Alert>
+                  );
+                }
+              } else if (isAuddResponse(result)) {
+                if (result.status === "success" && hasResult) {
+                  return (
+                    <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-800 dark:text-green-200">
+                        Music successfully recognized!
+                      </AlertDescription>
+                    </Alert>
+                  );
+                } else {
+                  return (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        {hasResult ? `Recognition failed. Status: ${result.status}` : "No song was recognized. Please try again with a different audio file."}
+                      </AlertDescription>
+                    </Alert>
+                  );
+                }
+              }
+              return null;
+            })()}
           </div>
 
           {/* Results */}
           {hasResult ? (
             <div className="space-y-6">
-              {/* Main Result Card */}
-              <Card className="bg-card border-border">
+              {/* Main Result Card - chỉ hiển thị nếu có song match (custom_file) hoặc AUDD result */}
+              {(() => {
+                if (isAcrResponse(result) && !result.song && result.hummingResults) {
+                  // Chỉ có humming results, không hiển thị main card
+                  return null;
+                }
+                return (
+                  <Card className="bg-card border-border">
                 <CardHeader>
                   <CardTitle className="text-2xl text-foreground flex items-center gap-2">
                     <Music className="w-6 h-6" />
@@ -298,11 +422,7 @@ const MusicRecognitionResult = () => {
                     {/* Album Art */
                     }
                     <div className="flex-shrink-0">
-                      <div
-                        className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center cursor-pointer"
-                        onClick={handleGoToAlbumDetail}
-                        title={recognitionResult.album ? `Go to album: ${recognitionResult.album}` : undefined}
-                      >
+                      <div className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
                         {artworkUrl ? (
                           <img
                             src={artworkUrl}
@@ -319,47 +439,88 @@ const MusicRecognitionResult = () => {
                     <div className="flex-1 space-y-3">
                       <div>
                         <h2 className="text-2xl font-bold text-foreground">
-                          {recognitionResult.title || "Unknown Title"}
+                          {(() => {
+                            if (isAcrResponse(result) && result.song) {
+                              return result.song.name || "Unknown Title";
+                            }
+                            return recognitionResult?.title || "Unknown Title";
+                          })()}
                         </h2>
                         <p className="text-lg text-muted-foreground flex items-center gap-2">
                           <User className="w-4 h-4" />
-                          {recognitionResult.artist || "Unknown Artist"}
+                          {(() => {
+                            if (isAcrResponse(result) && result.song?.artists) {
+                              return result.song.artists.map(a => a.name).join(", ") || "Unknown Artist";
+                            }
+                            return recognitionResult?.artist || "Unknown Artist";
+                          })()}
                         </p>
                       </div>
 
-                      {recognitionResult.album && (
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            onClick={handleGoToAlbumDetail}
-                            variant="secondary"
-                            className="bg-muted text-muted-foreground cursor-pointer hover:bg-muted/80"
-                          >
-                            Album: {recognitionResult.album}
-                          </Badge>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap gap-2">
-                        {recognitionResult.release_date && (
-                          <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                            <Calendar className="w-3 h-3 mr-1" />
-                            {recognitionResult.release_date}
-                          </Badge>
-                        )}
-                        
-                        {recognitionResult.timecode && (
-                          <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {formatTimecode(recognitionResult.timecode)}
-                          </Badge>
-                        )}
-
-                        {recognitionResult.label && (
-                          <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                            Label: {recognitionResult.label}
-                          </Badge>
-                        )}
-                      </div>
+                      {(() => {
+                        if (isAcrResponse(result) && result.song) {
+                          // ACR song info
+                          return (
+                            <>
+                              <div className="flex flex-wrap gap-2">
+                                {result.song.releaseYear && (
+                                  <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                    <Calendar className="w-3 h-3 mr-1" />
+                                    {result.song.releaseYear}
+                                  </Badge>
+                                )}
+                                {result.song.duration && (
+                                  <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    {result.song.duration}
+                                  </Badge>
+                                )}
+                                {result.song.genres && result.song.genres.length > 0 && (
+                                  <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                    {result.song.genres.map(g => g.name).join(", ")}
+                                  </Badge>
+                                )}
+                                {result.score !== undefined && (
+                                  <Badge variant="secondary" className="bg-primary/10 text-primary">
+                                    Score: {result.score}/100
+                                  </Badge>
+                                )}
+                              </div>
+                            </>
+                          );
+                        }
+                        // AUDD song info
+                        return (
+                          <>
+                            {recognitionResult?.album && (
+                              <div className="flex items-center gap-2">
+                                <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                                  Album: {recognitionResult.album}
+                                </Badge>
+                              </div>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {recognitionResult?.release_date && (
+                                <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                  <Calendar className="w-3 h-3 mr-1" />
+                                  {recognitionResult.release_date}
+                                </Badge>
+                              )}
+                              {recognitionResult?.timecode && (
+                                <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                  <Clock className="w-3 h-3 mr-1" />
+                                  {formatTimecode(recognitionResult.timecode)}
+                                </Badge>
+                              )}
+                              {recognitionResult?.label && (
+                                <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                  Label: {recognitionResult.label}
+                                </Badge>
+                              )}
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -367,60 +528,123 @@ const MusicRecognitionResult = () => {
           <div className="space-y-4">
   <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
   <div className="flex flex-wrap gap-3">
+    {(() => {
+      // Handle AUDD response
+      if (isAuddResponse(result) && recognitionResult) {
+        return (
+          <>
+            {recognitionResult.spotify?.external_urls?.spotify && (
+              <Button
+                onClick={() => openExternalLink(recognitionResult.spotify!.external_urls!.spotify!)}
+                className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 
+                  12-12C24 5.372 18.627 0 12 0zM17.59 17.74a.747.747 0 0 
+                  1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 
+                  1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 
+                  1.02z" />
+                </svg>
+                Spotify
+              </Button>
+            )}
 
-    {recognitionResult.spotify?.external_urls?.spotify && (
-      <Button
-        onClick={() => openExternalLink(recognitionResult.spotify.external_urls.spotify!)}
-        className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="w-4 h-4"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
-          <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 
-          12-12C24 5.372 18.627 0 12 0zM17.59 17.74a.747.747 0 0 
-          1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 
-          1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 
-          1.02z" />
-        </svg>
-        Spotify
-      </Button>
-    )}
+            {recognitionResult.apple_music?.url && (
+              <Button
+                onClick={() => openExternalLink(recognitionResult.apple_music!.url!)}
+                variant="outline"
+                className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
+              >
+                <Apple className="w-4 h-4" />
+                Apple Music
+              </Button>
+            )}
 
-    {recognitionResult.apple_music?.url && (
-      <Button
-        onClick={() => openExternalLink(recognitionResult.apple_music.url!)}
-        variant="outline"
-        className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
-      >
-        <Apple className="w-4 h-4" />
-        Apple Music
-      </Button>
-    )}
+            {recognitionResult.deezer && (
+              <Button
+                onClick={() => openExternalLink(recognitionResult.deezer!)}
+                variant="outline"
+                className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Deezer
+              </Button>
+            )}
 
-    {recognitionResult.deezer && (
-      <Button
-        onClick={() => openExternalLink(recognitionResult.deezer!)}
-        variant="outline"
-        className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
-      >
-        <ExternalLink className="w-4 h-4" />
-        Deezer
-      </Button>
-    )}
+            {recognitionResult.song_link && (
+              <Button
+                onClick={() => openExternalLink(recognitionResult.song_link!)}
+                variant="outline"
+                className="bg-muted border-border hover:bg-muted/80 flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                More Info
+              </Button>
+            )}
+          </>
+        );
+      }
+      
+      // Handle ACR response - extract from musicMetadata.external_metadata
+      if (isAcrResponse(result) && result.musicMetadata) {
+        const metadata = result.musicMetadata as Record<string, any>;
+        const externalMetadata = metadata.external_metadata as Record<string, any> | undefined;
+        
+        return (
+          <>
+            {externalMetadata?.spotify?.track?.id && (
+              <Button
+                onClick={() => openExternalLink(`https://open.spotify.com/track/${externalMetadata.spotify.track.id}`)}
+                className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 
+                  12-12C24 5.372 18.627 0 12 0zM17.59 17.74a.747.747 0 0 
+                  1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 
+                  1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 
+                  1.02z" />
+                </svg>
+                Spotify
+              </Button>
+            )}
 
-    {recognitionResult.song_link && (
-      <Button
-        onClick={() => openExternalLink(recognitionResult.song_link!)}
-        variant="outline"
-        className="bg-muted border-border hover:bg-muted/80 flex items-center gap-2"
-      >
-        <ExternalLink className="w-4 h-4" />
-        More Info
-      </Button>
-    )}
+            {externalMetadata?.deezer?.track?.id && (
+              <Button
+                onClick={() => openExternalLink(`https://www.deezer.com/track/${externalMetadata.deezer.track.id}`)}
+                variant="outline"
+                className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Deezer
+              </Button>
+            )}
+
+            {externalMetadata?.youtube?.vid && (
+              <Button
+                onClick={() => openExternalLink(`https://www.youtube.com/watch?v=${externalMetadata.youtube.vid}`)}
+                variant="outline"
+                className="bg-[#FF0000] hover:bg-[#ff3333] text-white border-0 flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                YouTube
+              </Button>
+            )}
+          </>
+        );
+      }
+      
+      return null;
+    })()}
 
     {/* Echoverse Play Button - Highlighted */}
     {echoverseSong && (
@@ -458,8 +682,8 @@ const MusicRecognitionResult = () => {
   )}
 </div>
 
-                  {/* Audio Preview */}
-                  {audioUrl && !audioError && (
+                  {/* Audio Preview - chỉ hiển thị nếu có song match (custom_file) */}
+                  {isAcrResponse(result) && result.song && audioUrl && !audioError && (
                     <div className="space-y-2">
                       <h3 className="text-lg font-semibold text-foreground">Original Audio:</h3>
                       <audio
@@ -482,7 +706,137 @@ const MusicRecognitionResult = () => {
                   )}
                 </CardContent>
               </Card>
+                );
+              })()}
 
+              {/* Hiển thị Humming Results nếu không có song match */}
+              {isAcrResponse(result) && !result.song && result.hummingResults && result.hummingResults.length > 0 && (
+                <Card className="bg-card border-border">
+                  <CardHeader>
+                    <CardTitle className="text-xl text-foreground flex items-center gap-2">
+                      <Headphones className="w-5 h-5" />
+                      Gợi ý từ ACR Cloud Database ({result.hummingResults.length} kết quả)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Không tìm thấy bài hát trong hệ thống. Dưới đây là các gợi ý từ ACR Cloud database để bạn tham khảo và tự tìm kiếm:
+                    </p>
+                    {isSearchingYouTube && (
+                      <Alert className="bg-muted border-border mb-4">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-muted-foreground">
+                          Đang tìm kiếm YouTube videos...
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                    <div className="space-y-4">
+                      {(hummingResultsWithYoutube.length > 0 ? hummingResultsWithYoutube : result.hummingResults).map((item, index) => {
+                        const formatDuration = (ms?: number): string => {
+                          if (!ms) return 'N/A';
+                          const seconds = Math.floor(ms / 1000);
+                          const minutes = Math.floor(seconds / 60);
+                          const remainingSeconds = seconds % 60;
+                          return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+                        };
+
+                        const formatScore = (score?: number): string => {
+                          if (score === undefined || score === null) return 'N/A';
+                          return (score * 100).toFixed(1) + '%';
+                        };
+
+                        return (
+                          <div
+                            key={item.acrid || index}
+                            className="p-4 border border-border rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                          >
+                            <div className="flex justify-between items-start mb-3">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-foreground text-lg mb-1">
+                                  {item.title || '(No title)'}
+                                </h4>
+                                {item.artists && item.artists.length > 0 && (
+                                  <p className="text-muted-foreground text-sm mb-1">
+                                    <strong>Artists:</strong> {item.artists.map(a => a.name).filter(Boolean).join(', ') || 'Unknown'}
+                                  </p>
+                                )}
+                                {item.album && (
+                                  <p className="text-muted-foreground text-sm">
+                                    <strong>Album:</strong> {item.album}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right ml-4">
+                                <div className={`text-xl font-bold ${item.score && item.score > 0.5 ? 'text-green-600' : 'text-yellow-600'}`}>
+                                  {formatScore(item.score)}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Score: {item.score?.toFixed(3) || 'N/A'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
+                              <div>
+                                <strong>ACRID:</strong>
+                                <code className="block mt-1 text-xs break-all">{item.acrid}</code>
+                              </div>
+                              {item.durationMs && (
+                                <div>
+                                  <strong>Duration:</strong> {formatDuration(item.durationMs)}
+                                </div>
+                              )}
+                              {item.playOffsetMs && (
+                                <div>
+                                  <strong>Play Offset:</strong> {formatDuration(item.playOffsetMs)}
+                                </div>
+                              )}
+                              {item.releaseDate && (
+                                <div>
+                                  <strong>Release Date:</strong> {item.releaseDate}
+                                </div>
+                              )}
+                            </div>
+                            {item.matchedInSystem && item.song && (
+                              <div className="mt-3 p-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
+                                <strong className="text-green-800 dark:text-green-200">✅ Có trong hệ thống:</strong>
+                                <div className="text-sm text-green-700 dark:text-green-300 mt-1">
+                                  Song ID: {item.song.id} - {item.song.name}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* YouTube Video Embed */}
+                            {item.youtubeVideoId && (
+                              <div className="mt-4 pt-4 border-t border-border">
+                                <h5 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="w-4 h-4 text-red-600"
+                                    viewBox="0 0 24 24"
+                                    fill="currentColor"
+                                  >
+                                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                                  </svg>
+                                  YouTube Music Video
+                                </h5>
+                                <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                                  <iframe
+                                    className="absolute top-0 left-0 w-full h-full rounded-lg"
+                                    src={`https://www.youtube.com/embed/${item.youtubeVideoId}?rel=0`}
+                                    title={`${item.title || 'Music Video'} - YouTube`}
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               
             </div>
           ) : (

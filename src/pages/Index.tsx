@@ -378,8 +378,8 @@ const Index = () => {
                     <Skeleton className="w-full h-[220px] rounded-lg" />
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <LineChart data={chartData}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={chartData}>
                       <XAxis
                         dataKey="time"
                         interval={0}
@@ -388,27 +388,27 @@ const Index = () => {
                         tick={{ fontSize: 10 }}
                         padding={{ left: 0, right: 0 }}
                       />
-                      <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
+                    <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
                       <Tooltip content={({ active, payload, label }) => (
                         <CustomTop3ChartTooltip active={active} payload={payload} label={label} />
                       )} cursor={{ stroke: '#9ca3af', strokeDasharray: '3 3' }} />
-                      <Legend />
-                      {top3History.lines.map((line) => (
-                        <Line
-                          key={line.songId}
-                          type="monotone"
-                          dataKey={line.songName || line.songId}
-                          stroke={line.color}
-                          strokeWidth={3}
-                          dot={{ r: 2, stroke: line.color, fill: '#fff' }}
-                          activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
-                          onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
-                          onMouseLeave={() => setHoveredKey(null)}
-                          isAnimationActive={false}
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
+                    <Legend />
+                    {top3History.lines.map((line) => (
+                      <Line
+                        key={line.songId}
+                        type="monotone"
+                        dataKey={line.songName || line.songId}
+                        stroke={line.color}
+                        strokeWidth={3}
+                        dot={{ r: 2, stroke: line.color, fill: '#fff' }}
+                        activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
+                        onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
+                        onMouseLeave={() => setHoveredKey(null)}
+                        isAnimationActive={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
                 )}
               </div>
 
@@ -438,13 +438,13 @@ const Index = () => {
                       ))
                     ) : (
                       hotToday.slice(0, 10).map((song, idx) => (
-                        <div
-                          key={song.songId || idx}
-                          className="flex items-center gap-4 p-3 rounded-lg transition-colors group cursor-pointer"
-                          onClick={async () => {
-                            try {
-                              const full = await songsApi.getById(String(song.songId));
-                              if (full) {
+                      <div
+                        key={song.songId || idx}
+                        className="flex items-center gap-4 p-3 rounded-lg transition-colors group cursor-pointer"
+                        onClick={async () => {
+                          try {
+                            const full = await songsApi.getById(String(song.songId));
+                            if (full) {
                                 const mapped: PlayerSong = {
                                   id: String(full.id ?? song.songId),
                                   title: full.title ?? full.songName ?? "Unknown",
@@ -456,50 +456,50 @@ const Index = () => {
                                 };
                                 setQueue([mapped]);
                                 playSong(mapped);
-                              }
+                            }
                             } catch (_e) { void 0; }
-                          }}
-                        >
+                        }}
+                      >
                           {/* Rank number + change indicator (fixed widths for perfect alignment) */}
                           <div className="flex items-center w-20">
                             <span className={`w-10 text-right text-sm font-semibold 
-                              ${idx === 0 ? 'text-yellow-500' :
-                                idx === 1 ? 'text-sky-400' :
-                                  idx === 2 ? 'text-pink-400' :
-                                    'text-muted-foreground'
-                              }`}>
-                              #{idx + 1}
-                            </span>
+                            ${idx === 0 ? 'text-yellow-500' :
+                              idx === 1 ? 'text-sky-400' :
+                                idx === 2 ? 'text-pink-400' :
+                                  'text-muted-foreground'
+                            }`}>
+                            #{idx + 1}
+                          </span>
                             <span className="w-10 flex items-center justify-center">
                               {renderHotTodayChange(song as unknown as Rankable)}
                             </span>
-                          </div>
-
-                          {/* Cover & Play */}
-                          <div className="relative group">
-                            <div className="w-12 h-12 rounded-lg overflow-hidden shadow border bg-muted flex items-center justify-center">
-                              <img src={song.albumImageUrl} alt={song.songName} className="w-full h-full object-cover" />
-                            </div>
-                            <button
-                              className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 transition-opacity"
-                              onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped: PlayerSong = { id: String(full.id ?? song.songId), title: full.title ?? full.songName ?? "Unknown", artist: full.artist ?? (full.artists?.map((a:any)=>a.name).join(", ") || "Unknown"), album: full.album ?? full.albumName ?? "Unknown", duration: typeof full.duration === 'number' ? full.duration : 0, cover: full.cover ?? full.albumImageUrl ?? "", audioUrl: full.audioUrl ?? full.audio ?? full.url ?? "", }; setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
-                            >
-                              <Play className="w-4 h-4 text-white" />
-                            </button>
-                          </div>
-
-                          {/* Song Info */}
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
-                            <p className="text-sm text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
-                          </div>
-
-                          {/* Extra info hidden for now */}
-                          <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground" />
-
-                          {/* Actions hidden for now */}
-                          <div className="flex items-center gap-1" />
                         </div>
+
+                        {/* Cover & Play */}
+                        <div className="relative group">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden shadow border bg-muted flex items-center justify-center">
+                            <img src={song.albumImageUrl} alt={song.songName} className="w-full h-full object-cover" />
+                          </div>
+                          <button
+                            className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 transition-opacity"
+                              onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped: PlayerSong = { id: String(full.id ?? song.songId), title: full.title ?? full.songName ?? "Unknown", artist: full.artist ?? (full.artists?.map((a:any)=>a.name).join(", ") || "Unknown"), album: full.album ?? full.albumName ?? "Unknown", duration: typeof full.duration === 'number' ? full.duration : 0, cover: full.cover ?? full.albumImageUrl ?? "", audioUrl: full.audioUrl ?? full.audio ?? full.url ?? "", }; setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
+                          >
+                            <Play className="w-4 h-4 text-white" />
+                          </button>
+                        </div>
+
+                        {/* Song Info */}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
+                          <p className="text-sm text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
+                        </div>
+
+                        {/* Extra info hidden for now */}
+                        <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground" />
+
+                        {/* Actions hidden for now */}
+                        <div className="flex items-center gap-1" />
+                      </div>
                       ))
                     )}
                   </div>

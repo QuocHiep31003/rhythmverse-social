@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -42,8 +42,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { genresApi, artistsApi, moodsApi } from "@/services/api";
+import { genresApi, artistsApi, moodsApi, arcApi } from "@/services/api";
 
 // Utility function to get audio duration from file or URL
 const getAudioDuration = async (file: File): Promise<string> => {
@@ -95,8 +98,32 @@ const songFormSchema = z.object({
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
   moodIds: z.array(z.number()).optional(),
-  audioUrl: z.string().optional(),
+  audioUrl: z.string().optional()
+    .refine((val) => {
+      if (!val || val.trim() === "") return true; // Optional field
+      try {
+        new URL(val);
+        const audioExtensions = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma'];
+        const lowerVal = val.toLowerCase();
+        return audioExtensions.some(ext => lowerVal.includes(ext)) || 
+               lowerVal.includes('cloudinary.com') || 
+               lowerVal.includes('res.cloudinary.com');
+      } catch {
+        return false;
+      }
+    }, {
+      message: "URL không hợp lệ hoặc không phải file audio. Vui lòng nhập URL có định dạng .mp3, .wav, .m4a hoặc từ Cloudinary"
+    }),
   duration: z.string().optional(),
+  fingerId: z.string().optional()
+    .refine((val) => {
+      if (!val || val.trim() === "") return true; // Optional field
+      // ACR ID thường là 32 ký tự hex (0-9, a-f)
+      const hexPattern = /^[a-f0-9]{32}$/i;
+      return hexPattern.test(val.trim());
+    }, {
+      message: "Finger ID phải là 32 ký tự hex (0-9, a-f). Ví dụ: c511ac2e01a12bdacb512004fd033c98"
+    }),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -130,6 +157,11 @@ export const SongFormDialog = ({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [audioInputMode, setAudioInputMode] = useState<"upload" | "url">("upload");
+  const [originalFingerId, setOriginalFingerId] = useState<string>("");
+  const [originalAudioUrl, setOriginalAudioUrl] = useState<string>("");
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
+  const uploadAcrTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -141,6 +173,7 @@ export const SongFormDialog = ({
       moodIds: [],
       audioUrl: "",
       duration: "",
+      fingerId: "",
       ...defaultValues,
     },
   });
@@ -187,7 +220,7 @@ export const SongFormDialog = ({
   useEffect(() => {
     if (open && defaultValues) {
       // Xử lý data từ API: artists, genres và moods là array of objects
-      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], moods?: {id: number}[], audioUrl?: string, duration?: string};
+      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], moods?: {id: number}[], audioUrl?: string, duration?: string, fingerId?: string};
       const formValues = {
         ...defaultValues,
         artistIds: apiData.artists?.map((a: {id: number}) => a.id) || defaultValues.artistIds || [],
@@ -195,9 +228,15 @@ export const SongFormDialog = ({
         moodIds: apiData.moods?.map((m: {id: number}) => m.id) || defaultValues.moodIds || [],
         audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
         duration: apiData.duration || defaultValues.duration || "",
+        fingerId: apiData.fingerId || defaultValues.fingerId || "",
       };
+      // Lưu giá trị gốc để so sánh khi submit
+      setOriginalFingerId(apiData.fingerId || "");
+      setOriginalAudioUrl(apiData.audioUrl || "");
       form.reset(formValues);
     } else if (open) {
+      setOriginalFingerId("");
+      setOriginalAudioUrl("");
       form.reset({
         name: "",
         releaseYear: new Date().getFullYear(),
@@ -206,8 +245,16 @@ export const SongFormDialog = ({
         moodIds: [],
         audioUrl: "",
         duration: "",
+        fingerId: "",
       });
     }
+    
+    // Cleanup timeout khi component unmount hoặc dialog đóng
+    return () => {
+      if (uploadAcrTimeoutRef.current) {
+        clearTimeout(uploadAcrTimeoutRef.current);
+      }
+    };
   }, [open, defaultValues, form]);
 
   const uploadToCloudinary = async (file: File): Promise<string> => {
@@ -263,6 +310,24 @@ export const SongFormDialog = ({
       
       form.setValue("audioUrl", url);
       
+      // Sau khi upload Cloudinary thành công, tự động upload lên ACR để lấy acrid
+      try {
+        console.log("[SongForm] Uploading audio fingerprint to ACR...");
+        const songTitle = form.getValues("name") || file.name || undefined;
+        const acrResult = await arcApi.uploadAudioFingerprint(url, songTitle);
+        
+        if (acrResult.success && acrResult.acrid) {
+          form.setValue("fingerId", acrResult.acrid);
+          console.log("[SongForm] Got acrid from ACR:", acrResult.acrid);
+        } else {
+          console.warn("[SongForm] No acrid found from ACR:", acrResult.error);
+          // Không set fingerId nếu không có acrid
+        }
+      } catch (error) {
+        console.error("[SongForm] Error uploading to ACR:", error);
+        // Không block nếu lỗi ACR, chỉ log
+      }
+      
       setTimeout(() => {
         setUploadProgress(0);
       }, 1000);
@@ -275,7 +340,26 @@ export const SongFormDialog = ({
   };
 
   const handleSubmit = (data: SongFormValues) => {
+    // Kiểm tra nếu đang edit và có thay đổi fingerId hoặc audioUrl
+    if (mode === "edit" && (data.fingerId !== originalFingerId || data.audioUrl !== originalAudioUrl)) {
+      setPendingSubmit(data);
+      setShowConfirmDialog(true);
+      return;
+    }
     onSubmit(data);
+  };
+
+  const handleConfirmSubmit = () => {
+    if (pendingSubmit) {
+      onSubmit(pendingSubmit);
+      setShowConfirmDialog(false);
+      setPendingSubmit(null);
+    }
+  };
+
+  const handleCancelConfirm = () => {
+    setShowConfirmDialog(false);
+    setPendingSubmit(null);
   };
 
   const selectedArtistIds = form.watch("artistIds") || [];
@@ -791,9 +875,18 @@ export const SongFormDialog = ({
             <FormField
               control={form.control}
               name="audioUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>File nhạc * {mode === "edit" && "(Upload file mới hoặc cập nhật URL)"}</FormLabel>
+              render={({ field }) => {
+                const hasChanged = mode === "edit" && field.value !== originalAudioUrl;
+                return (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      File nhạc * {mode === "edit" && "(Upload file mới hoặc cập nhật URL)"}
+                      {hasChanged && (
+                        <Badge variant="destructive" className="text-xs">
+                          Đã thay đổi
+                        </Badge>
+                      )}
+                    </FormLabel>
                   <div className="flex gap-2 mb-2">
                     <Button
                       type="button"
@@ -857,7 +950,58 @@ export const SongFormDialog = ({
                             placeholder="https://example.com/audio.mp3"
                             {...field}
                             onChange={(e) => {
+                              const newUrl = e.target.value;
                               field.onChange(e);
+                              
+                              // Clear timeout cũ nếu có
+                              if (uploadAcrTimeoutRef.current) {
+                                clearTimeout(uploadAcrTimeoutRef.current);
+                              }
+                              
+                              // Tự động upload audio fingerprint khi URL thay đổi (debounce 1.5s)
+                              if (newUrl && newUrl.trim() !== '' && newUrl !== originalAudioUrl) {
+                                uploadAcrTimeoutRef.current = setTimeout(async () => {
+                                  try {
+                                    console.log("[SongForm] Auto-uploading audio fingerprint for new URL...");
+                                    const songTitle = form.getValues("name") || undefined;
+                                    const acrResult = await arcApi.uploadAudioFingerprint(newUrl, songTitle);
+                                    
+                                    if (acrResult.success && acrResult.acrid) {
+                                      form.setValue("fingerId", acrResult.acrid);
+                                      console.log("[SongForm] Auto-got acrid from ACR:", acrResult.acrid);
+                                    } else {
+                                      console.warn("[SongForm] No acrid found from ACR:", acrResult.error);
+                                    }
+                                  } catch (error) {
+                                    console.error("[SongForm] Error auto-uploading to ACR:", error);
+                                    // Không hiển thị alert để tránh spam khi người dùng đang gõ
+                                  }
+                                }, 1500); // Debounce 1.5 giây
+                              }
+                            }}
+                            onBlur={async () => {
+                              // Upload ngay khi blur nếu có URL mới
+                              const currentUrl = form.getValues("audioUrl");
+                              if (uploadAcrTimeoutRef.current) {
+                                clearTimeout(uploadAcrTimeoutRef.current);
+                              }
+                              
+                              if (currentUrl && currentUrl.trim() !== '' && currentUrl !== originalAudioUrl) {
+                                try {
+                                  console.log("[SongForm] Auto-uploading audio fingerprint on blur...");
+                                  const songTitle = form.getValues("name") || undefined;
+                                  const acrResult = await arcApi.uploadAudioFingerprint(currentUrl, songTitle);
+                                  
+                                  if (acrResult.success && acrResult.acrid) {
+                                    form.setValue("fingerId", acrResult.acrid);
+                                    console.log("[SongForm] Auto-got acrid from ACR:", acrResult.acrid);
+                                  } else {
+                                    console.warn("[SongForm] No acrid found from ACR:", acrResult.error);
+                                  }
+                                } catch (error) {
+                                  console.error("[SongForm] Error auto-uploading to ACR:", error);
+                                }
+                              }
                             }}
                             className="admin-input transition-all duration-200"
                           />
@@ -880,6 +1024,9 @@ export const SongFormDialog = ({
                           >
                             Lấy thời lượng từ URL
                           </Button>
+                          <div className="text-xs text-muted-foreground">
+                            💡 URL sẽ tự động upload audio fingerprint lên ACR bucket khi bạn nhập xong
+                          </div>
                         </div>
                       )}
                       {field.value && !uploading && (
@@ -887,11 +1034,115 @@ export const SongFormDialog = ({
                           ✓ Audio URL: {field.value.substring(0, 60)}...
                         </div>
                       )}
+                      {hasChanged && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription className="text-sm">
+                            Bạn đang thay đổi Audio URL. Hãy đảm bảo URL đúng và cập nhật Finger ID từ ACRCloud nếu cần.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
-              )}
+                );
+              }}
+            />
+            </div>
+
+            <div className="md:col-span-2">
+            <FormField
+              control={form.control}
+              name="fingerId"
+              render={({ field }) => {
+                const hasChanged = mode === "edit" && field.value !== originalFingerId;
+                return (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      Finger ID (ACRCloud) (tùy chọn)
+                      {hasChanged && (
+                        <Badge variant="destructive" className="text-xs">
+                          Đã thay đổi
+                        </Badge>
+                      )}
+                    </FormLabel>
+                    <FormControl>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input 
+                            placeholder="Nhập ACR ID (32 ký tự hex, ví dụ: c511ac2e01a12bdacb512004fd033c98)" 
+                            {...field} 
+                            className={cn(
+                              "admin-input transition-all duration-200 flex-1",
+                              hasChanged && "border-orange-500 focus:border-orange-500"
+                            )}
+                            onChange={(e) => {
+                              // Trim whitespace và chuyển lowercase
+                              const value = e.target.value.trim().toLowerCase();
+                              field.onChange(value);
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              const audioUrl = form.getValues("audioUrl");
+                              if (!audioUrl || audioUrl.trim() === '') {
+                                alert("Vui lòng nhập Audio URL trước khi upload audio fingerprint!");
+                                return;
+                              }
+                              
+                              setUploading(true);
+                              try {
+                                console.log("[SongForm] Extra: Uploading audio fingerprint to ACR...");
+                                const songTitle = form.getValues("name") || undefined;
+                                const acrResult = await arcApi.uploadAudioFingerprint(audioUrl, songTitle);
+                                
+                                if (acrResult.success && acrResult.acrid) {
+                                  form.setValue("fingerId", acrResult.acrid);
+                                  console.log("[SongForm] Extra: Got acrid from ACR:", acrResult.acrid);
+                                  alert(`Đã upload audio fingerprint và lấy Finger ID: ${acrResult.acrid}`);
+                                } else {
+                                  console.warn("[SongForm] Extra: No acrid found from ACR:", acrResult.error);
+                                  alert("Không tìm thấy Finger ID từ ACR. Vui lòng kiểm tra lại URL.");
+                                }
+                              } catch (error) {
+                                console.error("[SongForm] Extra: Error uploading to ACR:", error);
+                                alert("Lỗi khi upload lên ACR. Vui lòng thử lại.");
+                              } finally {
+                                setUploading(false);
+                              }
+                            }}
+                            disabled={!form.getValues("audioUrl") || uploading}
+                            className="whitespace-nowrap"
+                          >
+                            {uploading ? "Đang xử lý..." : "Extra Audio Finger"}
+                          </Button>
+                        </div>
+                        {hasChanged && (
+                          <Alert variant="destructive" className="py-2">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription className="text-sm">
+                              Bạn đang thay đổi Finger ID. Hãy đảm bảo giá trị đúng (32 ký tự hex từ ACRCloud).
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        {field.value && field.value.length > 0 && field.value.length !== 32 && (
+                          <Alert className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
+                            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                            <AlertDescription className="text-sm text-yellow-800 dark:text-yellow-200">
+                              Finger ID phải có đúng 32 ký tự. Hiện tại: {field.value.length} ký tự.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
             />
             </div>
 
@@ -916,6 +1167,61 @@ export const SongFormDialog = ({
           </form>
         </Form>
       </DialogContent>
+
+      {/* Confirm Dialog for critical field changes */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Xác nhận thay đổi quan trọng
+            </DialogTitle>
+            <DialogDescription>
+              Bạn đang thay đổi các trường quan trọng có thể ảnh hưởng đến việc nhận diện bài hát:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            {pendingSubmit && (
+              <>
+                {pendingSubmit.fingerId !== originalFingerId && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Finger ID:</strong> {originalFingerId || "(trống)"} → {pendingSubmit.fingerId || "(trống)"}
+                      <br />
+                      <span className="text-xs">Thay đổi này sẽ ảnh hưởng đến khả năng nhận diện bài hát từ ACRCloud.</span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {pendingSubmit.audioUrl !== originalAudioUrl && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>Audio URL:</strong> Đã thay đổi
+                      <br />
+                      <span className="text-xs">Thay đổi URL audio sẽ yêu cầu cập nhật Finger ID từ ACRCloud bucket.</span>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handleCancelConfirm}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmSubmit}
+            >
+              Xác nhận thay đổi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

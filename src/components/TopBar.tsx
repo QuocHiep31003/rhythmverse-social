@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
-import { auddApi, authApi } from "@/services/api";
+import { arcApi, authApi } from "@/services/api";
 
 
 const TopBar = () => {
@@ -144,8 +144,8 @@ const TopBar = () => {
     setError("");
 
     try {
-      const result = await auddApi.recognizeMusic(audioBlob);
-      console.log("AUDD API Response:", result);
+      const result = await arcApi.recognizeMusic(audioBlob);
+      console.log("ACR API Response:", result);
 
       // Navigate to music recognition result page
       navigate("/music-recognition-result", {
