@@ -148,7 +148,7 @@ const ListeningHistory = () => {
                         {item.song?.cover ? (
                           <img
                             src={item.song.cover}
-                            alt={item.song.name || item.song.title}
+                            alt={item.song.name || item.song.songName || "Unknown Song"}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                           />
                         ) : (
@@ -159,7 +159,7 @@ const ListeningHistory = () => {
                       {/* Song Info */}
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold truncate text-sm group-hover:text-primary transition-colors">
-                          {item.song?.name || item.song?.title || item.songName || "Unknown Song"}
+                          {item.song?.name || item.song?.songName || item.songName || "Unknown Song"}
                         </p>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">
                           {item.song?.artistNames?.join(", ") ||

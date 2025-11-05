@@ -18,6 +18,45 @@ export const getAuthToken = (): string | null => {
   }
 };
 
+// Get refresh token from storage
+export const getRefreshToken = (): string | null => {
+  try {
+    return typeof window !== 'undefined'
+      ? (localStorage.getItem('refreshToken') || localStorage.getItem('adminRefreshToken'))
+      : null;
+  } catch {
+    try {
+      return localStorage.getItem('refreshToken') || localStorage.getItem('adminRefreshToken');
+    } catch {
+      return null;
+    }
+  }
+};
+
+// Set tokens in storage
+export const setTokens = (token: string, refreshToken?: string) => {
+  try {
+    localStorage.setItem('token', token);
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
+  } catch (error) {
+    console.error('Failed to save tokens:', error);
+  }
+};
+
+// Clear tokens from storage
+export const clearTokens = () => {
+  try {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminRefreshToken');
+  } catch (error) {
+    console.error('Failed to clear tokens:', error);
+  }
+};
+
 // Tạo axios instance với config cơ bản
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -42,12 +81,97 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor để xử lý lỗi
+// Response interceptor để xử lý lỗi và tự động refresh token
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Nếu lỗi 401 (Unauthorized) và chưa retry
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Nếu đang refresh, đợi kết quả
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiClient(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        isRefreshing = false;
+        clearTokens();
+        processQueue(new Error('No refresh token available'), null);
+        // Redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(new Error('No refresh token available'));
+      }
+
+      try {
+        // Import authApi dynamically to avoid circular dependency
+        const { authApi } = await import('./authApi');
+        const response = await authApi.refreshToken(refreshToken);
+
+        if (response.token && response.refreshToken) {
+          // Lưu tokens mới
+          setTokens(response.token, response.refreshToken);
+
+          // Update token trong original request
+          originalRequest.headers.Authorization = `Bearer ${response.token}`;
+
+          // Process queue với token mới
+          processQueue(null, response.token);
+          isRefreshing = false;
+
+          // Retry original request với token mới
+          return apiClient(originalRequest);
+        } else {
+          throw new Error('Invalid response from refresh token endpoint');
+        }
+      } catch (refreshError) {
+        isRefreshing = false;
+        clearTokens();
+        processQueue(refreshError, null);
+        
+        // Redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        
+        return Promise.reject(refreshError);
+      }
+    }
+
     // Xử lý lỗi chung
     if (error.response) {
       // Server trả về response với status code lỗi
@@ -94,6 +218,114 @@ export const parseErrorResponse = async (response: Response): Promise<string> =>
     } catch {
       return `${response.status} ${response.statusText}`;
     }
+  }
+};
+
+// Fetch wrapper với auto refresh token
+let isRefreshingFetch = false;
+let failedQueueFetch: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueueFetch = (error: any, token: string | null = null) => {
+  failedQueueFetch.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueueFetch = [];
+};
+
+export const fetchWithAuth = async (
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> => {
+  // Thêm token vào headers
+  const token = getAuthToken();
+  const headers = new Headers(options.headers);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const fetchOptions: RequestInit = {
+    ...options,
+    headers,
+  };
+
+  try {
+    let response = await fetch(url, fetchOptions);
+
+    // Nếu lỗi 401, thử refresh token
+    if (response.status === 401 && !(fetchOptions as any)._retry) {
+      if (isRefreshingFetch) {
+        // Nếu đang refresh, đợi kết quả
+        return new Promise((resolve, reject) => {
+          failedQueueFetch.push({ resolve, reject });
+        })
+          .then((newToken) => {
+            headers.set('Authorization', `Bearer ${newToken}`);
+            (fetchOptions as any)._retry = true;
+            return fetch(url, { ...fetchOptions, headers });
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      (fetchOptions as any)._retry = true;
+      isRefreshingFetch = true;
+
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        isRefreshingFetch = false;
+        clearTokens();
+        processQueueFetch(new Error('No refresh token available'), null);
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(new Error('No refresh token available'));
+      }
+
+      try {
+        // Import authApi dynamically to avoid circular dependency
+        const { authApi } = await import('./authApi');
+        const refreshResponse = await authApi.refreshToken(refreshToken);
+
+        if (refreshResponse.token && refreshResponse.refreshToken) {
+          // Lưu tokens mới
+          setTokens(refreshResponse.token, refreshResponse.refreshToken);
+
+          // Update headers với token mới
+          headers.set('Authorization', `Bearer ${refreshResponse.token}`);
+
+          // Process queue với token mới
+          processQueueFetch(null, refreshResponse.token);
+          isRefreshingFetch = false;
+
+          // Retry original request với token mới
+          return fetch(url, { ...fetchOptions, headers });
+        } else {
+          throw new Error('Invalid response from refresh token endpoint');
+        }
+      } catch (refreshError) {
+        isRefreshingFetch = false;
+        clearTokens();
+        processQueueFetch(refreshError, null);
+        
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+        
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return response;
+  } catch (error) {
+    return Promise.reject(error);
   }
 };
 

@@ -1,28 +1,38 @@
-import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse } from './config';
+import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse, API_BASE_URL, fetchWithAuth } from './config';
 import { mockSongs } from '@/data/mockData';
 
-// Interface cho Song data
+// Interface cho Song data - đồng bộ với BE SongDTO
 export interface Song {
   id: string | number;
-  name: string;
+  name: string; // BE trả về field "name", không phải "songName"
   title?: string;
-  releaseYear: number;
-  genreIds: number[];
-  artistIds: number[];
+  releaseYear?: number;
+  genreIds?: number[];
+  artistIds?: number[];
   artistNames?: string[];
-  audioUrl: string;
-  fingerId?: string;
+  audioUrl?: string;
   audio?: string;
   url?: string;
   plays?: string;
   playCount?: number;
-  duration?: string | number;
+  duration?: string | number; // BE trả về string format "3:45"
   cover?: string;
   album?: string | { name: string };
   albumId?: number;
-  artists?: Array<{ id: number; name: string }>;
+  albumName?: string; // Từ một số API response
+  albumCoverImg?: string; // Field chính thức cho ảnh album từ BE
+  albumImageUrl?: string; // Từ TrendingSong API
+  urlImageAlbum?: string; // Từ BE SongDTO (legacy)
+  artists?: Array<{ id: number; name: string }>; // BE trả về List<SimpleDTO>
   genres?: Array<{ id: number; name: string }>;
   trendingScore?: number;
+  // Các field từ TrendingSong có thể có
+  songId?: number;
+  songName?: string; // Một số API trả về songName thay vì name
+  rank?: number;
+  previousRank?: number;
+  trendStatus?: string;
+  score?: number;
 }
 
 // Interface cho Song creation/update
@@ -31,9 +41,10 @@ export interface SongCreateUpdateData {
   releaseYear: number;
   genreIds: number[];
   artistIds: number[];
-  audioUrl: string;
-  fingerId?: string;
+  audioUrl?: string; // Optional for update (keep existing if not provided)
   duration?: string;
+  moodIds?: number[];
+  file?: File; // Optional file for update
 }
 
 // Songs API sử dụng axios
@@ -118,17 +129,6 @@ export const songsApi = {
     }
   },
 
-  // Lấy top 1 song theo fingerId (acrid)
-  getTopByFingerId: async (fingerId: string): Promise<Song | null> => {
-    try {
-      const response = await apiClient.get(`/songs/by-finger/${encodeURIComponent(fingerId)}/top`);
-      return response.data ?? null;
-    } catch (error) {
-      console.error("Error fetching top song by fingerId:", error);
-      return null;
-    }
-  },
-
   // Tạo song mới
   create: async (data: SongCreateUpdateData): Promise<Song> => {
     try {
@@ -138,7 +138,6 @@ export const songsApi = {
         genreIds: data.genreIds,
         artistIds: data.artistIds,
         audioUrl: data.audioUrl,
-        fingerId: data.fingerId,
         duration: data.duration,
       };
 
@@ -150,23 +149,52 @@ export const songsApi = {
     }
   },
 
-  // Cập nhật song
+  // Cập nhật song (JSON body)
   update: async (id: string, data: SongCreateUpdateData): Promise<Song> => {
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         name: data.name,
         releaseYear: data.releaseYear,
-        genreIds: data.genreIds,
-        artistIds: data.artistIds,
-        audioUrl: data.audioUrl,
-        fingerId: data.fingerId,
         duration: data.duration,
       };
+      if (data.genreIds && data.genreIds.length) payload.genreIds = data.genreIds;
+      if (data.artistIds && data.artistIds.length) payload.artistIds = data.artistIds;
+      if (data.moodIds && data.moodIds.length) payload.moodIds = data.moodIds;
+      if (data.audioUrl) payload.audioUrl = data.audioUrl;
 
       const response = await apiClient.put(`/songs/${id}`, payload);
       return response.data;
     } catch (error) {
       console.error("Error updating song:", error);
+      throw error;
+    }
+  },
+
+  // Cập nhật file audio (multipart)
+  updateWithFile: async (id: string, data: SongCreateUpdateData): Promise<Song> => {
+    try {
+      const formData = new FormData();
+      if (data.name) formData.append('name', data.name);
+      if (data.releaseYear !== undefined) formData.append('releaseYear', String(data.releaseYear));
+      if (data.duration) formData.append('duration', data.duration);
+      if (data.genreIds && data.genreIds.length) data.genreIds.forEach(v => formData.append('genreIds', String(v)));
+      if (data.artistIds && data.artistIds.length) data.artistIds.forEach(v => formData.append('artistIds', String(v)));
+      if (data.moodIds && data.moodIds.length) data.moodIds.forEach(v => formData.append('moodIds', String(v)));
+      if (data.file) formData.append('file', data.file, data.file.name || 'audio');
+
+      // Use fetch to avoid axios default JSON Content-Type interfering with FormData boundary
+      const res = await fetchWithAuth(`${API_BASE_URL}/songs/${id}/file`, {
+        method: 'PUT',
+        body: formData,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json();
+      return json as Song;
+    } catch (error) {
+      console.error("Error updating song file:", error);
       throw error;
     }
   },
@@ -467,29 +495,35 @@ export const songsApi = {
    */
   incrementPlayCount: async (songId: string | number): Promise<void> => {
     console.log(`🎵 Attempting to increment play count for song: ${songId}`);
-    
+
     try {
       const response = await apiClient.post(`/songs/${songId}/play`);
       console.log("✅ Play count incremented successfully:", response.data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("❌ Error incrementing play count:");
-      console.error("  - Status:", error.response?.status);
-      console.error("  - Status Text:", error.response?.statusText);
-      console.error("  - Data:", error.response?.data);
-      console.error("  - Song ID:", songId);
-      
-      // Log thêm thông tin để debug
-      if (error.response?.status === 500) {
-        console.error("  - Backend có lỗi server (500). Có thể:");
-        console.error("    * SongId không tồn tại:", songId);
-        console.error("    * Backend chưa implement đúng endpoint");
-        console.error("    * Thiếu authentication/authorization");
-      } else if (error.response?.status === 404) {
-        console.error("  - Endpoint không tồn tại (404)");
-      } else if (error.response?.status === 401) {
-        console.error("  - Cần authentication (401)");
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; statusText?: string; data?: unknown } };
+        console.error("  - Status:", axiosError.response?.status);
+        console.error("  - Status Text:", axiosError.response?.statusText);
+        console.error("  - Data:", axiosError.response?.data);
       }
-      
+      console.error("  - Song ID:", songId);
+
+      // Log thêm thông tin để debug
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError.response?.status === 500) {
+          console.error("  - Backend có lỗi server (500). Có thể:");
+          console.error("    * SongId không tồn tại:", songId);
+          console.error("    * Backend chưa implement đúng endpoint");
+          console.error("    * Thiếu authentication/authorization");
+        } else if (axiosError.response?.status === 404) {
+          console.error("  - Endpoint không tồn tại (404)");
+        } else if (axiosError.response?.status === 401) {
+          console.error("  - Cần authentication (401)");
+        }
+      }
+
       // Không throw error để không ảnh hưởng listening history
       console.warn("⚠️ Play count increment failed, but listening history will still be recorded");
     }

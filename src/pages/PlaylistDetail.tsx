@@ -203,8 +203,22 @@ const PlaylistDetail = () => {
         
         const data: PlaylistDTO = await playlistsApi.getById(playlistId);
         const extendedData = data as ExtendedPlaylistDTO;
-        const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
+
+        const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(data.songs)
+          ? data.songs.map((s: SearchSongResult) => ({
+              id: String(s.id),
+              name: s.name,
+              songName: s.name,
+              artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
+              album: s.album?.name || '',
+              cover: s.urlImageAlbum || '',
+              audioUrl: s.audioUrl || '',
+              duration: toSeconds(s.duration),
+            }))
+          : [];
+              const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
         const mappedSongs = mapSongsFromResponse(data.songs, playlistFallbackCover);
+
         
         const ownerId = data.ownerId ?? data.owner?.id;
         const normalizeVisibility = (v: unknown): PlaylistVisibility => {

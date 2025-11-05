@@ -5,7 +5,7 @@ import { useMusic } from "@/contexts/MusicContext";
 import { TrendingSong, getTrendingComparison, TrendStatus } from "@/services/api/trendingApi";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { toSeconds, formatDuration } from "@/lib/utils";
+import { formatDuration, mapToPlayerSong } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const TrendIcon = ({ status }: { status: TrendStatus }) => {
@@ -21,9 +21,14 @@ const TrendIcon = ({ status }: { status: TrendStatus }) => {
     }
 };
 
+interface TrendingSongWithRank extends ReturnType<typeof mapToPlayerSong> {
+  rank: number;
+  trendStatus: TrendStatus;
+}
+
 const TrendingSection = () => {
   const { playSong, setQueue } = useMusic();
-  const [trendingSongs, setTrendingSongs] = useState<any[]>([]);
+  const [trendingSongs, setTrendingSongs] = useState<TrendingSongWithRank[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -33,13 +38,13 @@ const TrendingSection = () => {
         const top10 = await getTrendingComparison(10);
         
         if (top10 && top10.length > 0) {
-          const formattedSongs = top10.map((song: TrendingSong) => ({
-            id: song.songId,
-            title: song.songName,
-            artist: song.artists?.map((a) => a.name).join(", ") || "Unknown",
-            duration: toSeconds(song.duration),
-            cover: song.albumImageUrl,
-            audioUrl: song.audioUrl,
+          const formattedSongs = top10.map((song: TrendingSong): TrendingSongWithRank => ({
+            ...mapToPlayerSong({
+              ...song, // Pass toàn bộ object để không bị mất field nào
+              id: song.songId,
+              songName: song.songName,
+              albumImageUrl: song.albumImageUrl,
+            }),
             rank: song.rank,
             trendStatus: song.trendStatus,
           }));
@@ -108,7 +113,7 @@ const TrendingSection = () => {
                 <div className="relative w-14 h-14 bg-gradient-primary rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
                   <img 
                     src={song.cover} 
-                    alt={song.title} 
+                    alt={song.songName || "Unknown Song"} 
                     className="w-full h-full object-cover" 
                   />
                   <div className="absolute bottom-1 right-1 bg-black/50 p-0.5 rounded-full">
@@ -116,7 +121,7 @@ const TrendingSection = () => {
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-semibold text-foreground truncate">{song.title}</h4>
+                  <h4 className="font-semibold text-foreground truncate">{song.songName || "Unknown Song"}</h4>
                   <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                 </div>
                 <div className="hidden sm:block text-sm text-muted-foreground">

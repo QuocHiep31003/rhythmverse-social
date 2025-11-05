@@ -83,7 +83,6 @@ interface AcrResponse {
     playCount?: number;
     releaseYear?: number;
     urlImageAlbum?: string;
-    fingerId?: string;
   };
   score?: number;
   acrid?: string;
@@ -93,6 +92,16 @@ interface AcrResponse {
 }
 
 type RecognitionResult = AuddResponse | AcrResponse;
+
+type RecognizeItem = {
+  source: string;
+  acrId?: string;
+  title?: string;
+  artist?: string;
+  internal?: boolean;
+  song?: any;
+  youtubeVideoId?: string;
+};
 
 const MusicRecognitionResult = () => {
   const location = useLocation();
@@ -106,6 +115,10 @@ const MusicRecognitionResult = () => {
   const [audioError, setAudioError] = useState(false);
   const [hummingResultsWithYoutube, setHummingResultsWithYoutube] = useState<HummingResult[]>([]);
   const [isSearchingYouTube, setIsSearchingYouTube] = useState(false);
+  const [listResults, setListResults] = useState<RecognizeItem[] | null>(null);
+
+  // Detect if result is array from /songs/recognize
+  const isListResponse = (val: unknown): val is RecognizeItem[] => Array.isArray(val);
 
   // Helper to check if result is ACR response
   const isAcrResponse = (res: RecognitionResult | null): res is AcrResponse => {
@@ -119,9 +132,14 @@ const MusicRecognitionResult = () => {
 
   useEffect(() => {
     if (location.state?.result) {
-      setResult(location.state.result);
-      setAudioUrl(location.state.audioUrl);
-      // Reset Echoverse search state for new results
+      const res = location.state.result;
+      if (isListResponse(res)) {
+        setListResults(res);
+        setResult(null as any);
+      } else {
+        setResult(res);
+        setAudioUrl(location.state.audioUrl);
+      }
       setEchoverseSong(null);
       setIsSearchingEchoverse(false);
       setAudioError(false);
@@ -243,7 +261,8 @@ const MusicRecognitionResult = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const formattedSong: any = {
       id: song.id,
-      title: song.name,
+      name: song.name,
+      songName: song.name,
       artist: (song.artists as Array<{ name: string }>)?.map((a) => a.name).join(", ") || "Unknown",
       album: typeof song.album === 'object' && song.album ? (song.album as { name: string }).name : "Unknown",
       duration: song.duration || 0,
@@ -269,7 +288,7 @@ const MusicRecognitionResult = () => {
     );
   }
 
-  if (!result) {
+  if (!result && !listResults) {
     return (
       <div className="min-h-screen bg-gradient-dark">
         <div className="container mx-auto px-6 py-8">
@@ -326,6 +345,108 @@ const MusicRecognitionResult = () => {
     return "";
   })();
 
+  // Render list results (internal/external)
+  const renderListResults = () => {
+    if (!listResults || listResults.length === 0) return null;
+    return (
+      <Card className="bg-card border-border">
+        <CardHeader>
+          <CardTitle className="text-xl text-foreground flex items-center gap-2">
+            <Headphones className="w-5 h-5" />
+            Recognition Suggestions ({listResults.length} results)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {listResults.map((item, index) => {
+              const isInternal = !!item.internal && !!item.song;
+              const title = isInternal ? item.song?.name : (item.title || '(No title)');
+              const artists = isInternal
+                ? (item.song?.artists || []).map((a: any) => a.name).join(', ')
+                : (item.artist || 'Unknown Artist');
+              return (
+                <div key={item.acrId || index} className="p-4 border border-border rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-foreground text-lg">{title}</div>
+                      <div className="text-sm text-muted-foreground flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        {artists}
+                      </div>
+                      <div className="mt-2 flex gap-2 flex-wrap">
+                        <Badge variant={isInternal ? 'secondary' : 'outline'} className={isInternal ? 'bg-green-600/15 text-green-600' : ''}>
+                          {isInternal ? 'Internal' : 'External'}
+                        </Badge>
+                        {item.acrId && (
+                          <Badge variant="outline" className="text-xs">ACR: {item.acrId.slice(0, 8)}…</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isInternal ? (
+                        <Button
+                          onClick={() => {
+                            const song = item.song;
+                            const formatted: any = {
+                              id: song.id,
+                              name: song.name,
+                              songName: song.name,
+                              artist: (song.artists || []).map((a: any) => a.name).join(', '),
+                              album: typeof song.album === 'object' && song.album ? (song.album as { name: string }).name : 'Unknown',
+                              duration: song.duration || 0,
+                              cover: song.urlImageAlbum || '',
+                              genre: (song.genres || [])[0]?.name || 'Unknown',
+                              plays: song.playCount || 0,
+                              audio: song.audioUrl,
+                              audioUrl: song.audioUrl,
+                            };
+                            setQueue([formatted]);
+                            playSong(formatted);
+                          }}
+                          className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        >
+                          <Play className="w-4 h-4 mr-2" /> Play
+                        </Button>
+                      ) : item.youtubeVideoId ? (
+                        <Button
+                          onClick={() => window.open(`https://www.youtube.com/watch?v=${item.youtubeVideoId}`, '_blank', 'noopener,noreferrer')}
+                          variant="outline"
+                          className="bg-[#FF0000] hover:bg-[#ff3333] text-white border-0"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" /> YouTube
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  if (!isLoading && listResults && listResults.length > 0) {
+    return (
+      <div className="min-h-screen bg-gradient-dark">
+        <div className="container mx-auto px-6 py-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center gap-4 mb-8">
+              <h1 className="text-3xl font-bold text-foreground">Recognition Results</h1>
+            </div>
+            {renderListResults()}
+            <div className="mt-6">
+              <Button onClick={() => navigate('/music-recognition')} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <ArrowLeft className="w-4 h-4 mr-2" /> Back to Music Recognition
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-dark">
       <div className="container mx-auto px-6 py-8">
@@ -346,7 +467,7 @@ const MusicRecognitionResult = () => {
                     <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
                       <CheckCircle className="h-4 w-4 text-green-600" />
                       <AlertDescription className="text-green-800 dark:text-green-200 flex items-center justify-between">
-                        <span>Music successfully recognized!</span>
+                        <span>Kết quả từ Audio Fingerprint - Music successfully recognized!</span>
                         {result.score !== undefined && (
                           <Badge variant="secondary" className="ml-2">
                             Score: {result.score}/100
@@ -360,7 +481,7 @@ const MusicRecognitionResult = () => {
                     <Alert className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
                       <AlertCircle className="h-4 w-4 text-yellow-600" />
                       <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-                        Không tìm thấy trong hệ thống. Hiển thị {result.hummingResults.length} gợi ý từ ACR Cloud database để tham khảo.
+                        Không tìm thấy trong hệ thống. Hiển thị {result.hummingResults.length} kết quả từ Humming để tham khảo.
                       </AlertDescription>
                     </Alert>
                   );
@@ -419,8 +540,7 @@ const MusicRecognitionResult = () => {
                 <CardContent className="space-y-6">
                   {/* Song Details */}
                   <div className="flex gap-6">
-                    {/* Album Art */
-                    }
+                    {/* Album Art */}
                     <div className="flex-shrink-0">
                       <div className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
                         {artworkUrl ? (
@@ -715,12 +835,12 @@ const MusicRecognitionResult = () => {
                   <CardHeader>
                     <CardTitle className="text-xl text-foreground flex items-center gap-2">
                       <Headphones className="w-5 h-5" />
-                      Gợi ý từ ACR Cloud Database ({result.hummingResults.length} kết quả)
+                      Kết quả từ Humming ({result.hummingResults.length} kết quả)
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Không tìm thấy bài hát trong hệ thống. Dưới đây là các gợi ý từ ACR Cloud database để bạn tham khảo và tự tìm kiếm:
+                      Không tìm thấy bài hát trong hệ thống. Dưới đây là các gợi ý để bạn tham khảo và tự tìm kiếm:
                     </p>
                     {isSearchingYouTube && (
                       <Alert className="bg-muted border-border mb-4">
@@ -775,11 +895,7 @@ const MusicRecognitionResult = () => {
                                 </div>
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
-                              <div>
-                                <strong>ACRID:</strong>
-                                <code className="block mt-1 text-xs break-all">{item.acrid}</code>
-                              </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
                               {item.durationMs && (
                                 <div>
                                   <strong>Duration:</strong> {formatDuration(item.durationMs)}

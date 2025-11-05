@@ -12,6 +12,7 @@ import { songsApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
 import { callHotTodayTrending } from "@/services/api/trendingApi";
 import { Skeleton } from "@/components/ui/skeleton";
+import { mapToPlayerSong } from "@/lib/utils";
 
 const Top100 = () => {
   const [likedItems, setLikedItems] = useState<string[]>([]);
@@ -26,19 +27,16 @@ const Top100 = () => {
         setIsLoading(true);
         const top100 = await callHotTodayTrending(100);
         if (top100 && top100.length > 0) {
-          // Map fields về đúng UI cần (ResultDetailDTO)
+          // Map fields về đúng UI cần - dùng helper function để nhất quán
           const formattedSongs = top100.slice(0, 100).map((song: any, index: number) => ({
-            id: song.songId,
-            title: song.songName || song.title,
-            artist: song.artist || song.artists?.map((a:any) => a.name).join(", ") || "Unknown",
-            album: song.albumName || song.album || "Unknown",
-            duration: song.duration,
-            // Use newRank/oldRank when provided
+            ...mapToPlayerSong({
+              ...song, // Pass toàn bộ object để không bị mất field nào, đặc biệt là albumCoverImg
+              id: song.songId ?? song.id,
+            }),
+            // Thêm các field đặc biệt cho Top100 UI
             rank: song.newRank ?? song.rank ?? index + 1,
             previousRank: song.oldRank ?? song.previousRank ?? 0,
-            plays: (song.playCount ? `${(song.playCount/1000000).toFixed(1)}M` : ""),
-            cover: song.albumImageUrl || "/placeholder.svg",
-            audioUrl: song.audioUrl || "",
+            plays: (song.playCount ? `${(song.playCount / 1000000).toFixed(1)}M` : ""),
           }));
           setTopSongs(formattedSongs);
         } else {
@@ -78,7 +76,8 @@ const Top100 = () => {
   const handlePlaySong = (song: any) => {
     const formattedSong = {
       id: song.id,
-      title: song.title,
+      name: song.name || song.songName,
+      songName: song.songName,
       artist: song.artist,
       album: song.album,
       duration: song.duration,
@@ -88,7 +87,8 @@ const Top100 = () => {
 
     const formattedQueue = topSongs.map((s) => ({
       id: s.id,
-      title: s.title,
+      name: s.name || s.songName,
+      songName: s.songName,
       artist: s.artist,
       album: s.album,
       duration: s.duration,
@@ -98,7 +98,7 @@ const Top100 = () => {
 
     setQueue(formattedQueue);
     playSong(formattedSong);
-    toast({ title: `Playing ${song.title}` });
+    toast({ title: `Playing ${song.name || song.songName || "Unknown Song"}` });
   };
 
   const getRankIcon = (currentRank: number, previousRank: number) => {
@@ -217,18 +217,18 @@ const Top100 = () => {
                       {/* Rank + delta (mũi tên + số) */}
                       <div className="flex items-center gap-1 w-20">
                         <span className={`text-lg font-bold ${song.rank <= 3 ? 'text-yellow-500' :
-                            song.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
+                          song.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
                           }`}>
                           #{song.rank}
                         </span>
-                      {renderRankDelta(song.rank, song.previousRank)}
+                        {renderRankDelta(song.rank, song.previousRank)}
                       </div>
 
                       {/* Cover & Play */}
                       <div className="relative group">
                         <Avatar className="w-12 h-12">
-                          <AvatarImage src={song.cover} alt={song.title} />
-                          <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
+                          <AvatarImage src={song.cover} alt={song.name || song.songName || "Unknown Song"} />
+                          <AvatarFallback>{(song.name || song.songName || "?").charAt(0)}</AvatarFallback>
                         </Avatar>
                         <Button
                           size="icon"
@@ -241,15 +241,15 @@ const Top100 = () => {
 
                       {/* Song Info */}
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium truncate">{song.title}</h4>
+                        <h4 className="font-medium truncate">{song.name || song.songName || "Unknown Song"}</h4>
                         <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                       </div>
 
                       {/* Stats */}
-                    <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
-                      <span>{song.plays}</span>
-                      <span>{song.duration}</span>
-                    </div>
+                      <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>{song.plays}</span>
+                        <span>{song.duration}</span>
+                      </div>
 
                       {/* Actions */}
                       <div className="flex items-center gap-1">
@@ -261,7 +261,7 @@ const Top100 = () => {
                         >
                           <Heart className={`w-4 h-4 ${likedItems.includes(song.id) ? 'fill-current' : ''}`} />
                         </Button>
-                        <ShareButton title={song.title} type="song" />
+                        <ShareButton title={song.name || song.songName || "Unknown Song"} type="song" />
                       </div>
                     </div>
                   ))
@@ -286,7 +286,7 @@ const Top100 = () => {
                     {/* Rank */}
                     <div className="flex items-center gap-2 w-16">
                       <span className={`text-lg font-bold ${artist.rank <= 3 ? 'text-yellow-500' :
-                          artist.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
+                        artist.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
                         }`}>
                         #{artist.rank}
                       </span>
@@ -350,7 +350,7 @@ const Top100 = () => {
                     {/* Rank */}
                     <div className="flex items-center gap-2 w-16">
                       <span className={`text-lg font-bold ${album.rank <= 3 ? 'text-yellow-500' :
-                          album.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
+                        album.rank <= 10 ? 'text-primary' : 'text-muted-foreground'
                         }`}>
                         #{album.rank}
                       </span>

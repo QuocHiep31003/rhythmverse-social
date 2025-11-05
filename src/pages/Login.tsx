@@ -54,12 +54,18 @@ const Login = () => {
         throw new Error('No token received from server');
       }
 
-      // Persist token in both storages to avoid losing auth across tabs/windows
+      // Persist token and refresh token in both storages to avoid losing auth across tabs/windows
       try {
         localStorage.setItem("token", response.token);
+        if (response.refreshToken) {
+          localStorage.setItem("refreshToken", response.refreshToken);
+        }
       } catch {}
       try {
         sessionStorage.setItem("token", response.token);
+        if (response.refreshToken) {
+          sessionStorage.setItem("refreshToken", response.refreshToken);
+        }
       } catch {}
 
       // Fetch current user and persist userId for flows that rely on it
@@ -167,6 +173,16 @@ const Login = () => {
         email: pendingEmail,
         otp
       });
+  
+      // Lưu token và refresh token nếu có
+      if (response.token) {
+        try {
+          localStorage.setItem("token", response.token);
+          if (response.refreshToken) {
+            localStorage.setItem("refreshToken", response.refreshToken);
+          }
+        } catch {}
+      }
   
       setSuccess("Registration successful! Please log in.");
       setShowOtpModal(false);

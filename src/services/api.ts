@@ -325,7 +325,8 @@ export const arcApi = {
       const formData = new FormData();
       formData.append("file", audioBlob, "recorded.wav");
 
-      const response = await apiClient.post('/acr/recognize-audio', formData, {
+      // Use songs endpoint which returns internal list or external suggestions
+      const response = await apiClient.post('/songs/recognize', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -337,7 +338,7 @@ export const arcApi = {
       throw error;
     }
   },
-
+  
   recognizeHumming: async (audioFile: File | Blob) => {
     try {
       const formData = new FormData();
@@ -356,7 +357,7 @@ export const arcApi = {
       throw error;
     }
   },
-
+  
   /**
    * Upload audio fingerprint từ URL lên ACR bucket trực tiếp từ FE
    * Được gọi sau khi upload Cloudinary thành công
@@ -381,10 +382,7 @@ export const arcApi = {
         data_type: 'audio_url',
         url: audioUrl,
       };
-
-      if (title) {
-        requestBody.title = title;
-      }
+      if (title) requestBody.title = title;
 
       console.log('[ACR] Uploading audio URL to bucket:', audioUrl);
       console.log('[ACR] Endpoint:', endpoint);
@@ -393,7 +391,6 @@ export const arcApi = {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Accept': 'application/json',
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${ACR_TOKEN}`,
         },
@@ -417,56 +414,46 @@ export const arcApi = {
         return {
           success: true,
           acrid: result.data.acr_id,
-        };
-      } else {
-        return {
-          success: false,
-          error: 'No acr_id found in response',
-          rawResponse: result,
+          message: 'Audio URL uploaded successfully to ACR bucket',
         };
       }
+
+      return {
+        success: false,
+        error: 'No acr_id found in response',
+        raw: result,
+      };
     } catch (error) {
-      console.error("Error uploading audio fingerprint:", error);
+      console.error('[ACR] Error uploading audio fingerprint:', error);
       throw error;
     }
   },
 
-  /**
-   * Tìm kiếm YouTube video dựa trên title và artists
-   * Gọi backend endpoint để search YouTube (API key được giữ ở backend)
-   */
   searchYouTubeVideo: async (title: string, artists?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/acr/search-youtube`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...buildJsonHeaders(),
-        },
-        body: JSON.stringify({
-          title,
-          artists: artists || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[YouTube] Search failed:', response.status, errorText);
-        return null;
-      }
-
-      const data = await response.json();
-      
-      if (data.success && data.videoId) {
-        console.log('[YouTube] Found video:', data.videoId, 'for title:', title);
-        return data.videoId;
-      }
-      
-      console.log('[YouTube] No video found for title:', title);
-      return null;
+      const response = await apiClient.post('/acr/search-youtube', { title, artists });
+      return response.data?.videoId as string | undefined;
     } catch (error) {
-      console.error('[YouTube] Error searching YouTube:', error);
-      return null;
+      console.error('[YouTube] search error:', error);
+      return undefined;
+    }
+  },
+
+  searchYouTubeVideos: async (items: Array<{ title: string; artists?: string; key: string }>) => {
+    try {
+      const mapped: Record<string, { title: string; artists?: string }> = {};
+      items.forEach(i => { mapped[i.key] = { title: i.title, artists: i.artists }; });
+      // If there is a backend batch endpoint, call it here (not implemented in FE)
+      // For now, call single endpoint sequentially (unused if BE enriches already)
+      const result: Record<string, string> = {};
+      for (const it of items) {
+        const vid = await (await apiClient.post('/acr/search-youtube', { title: it.title, artists: it.artists })).data?.videoId;
+        if (vid) result[it.key] = vid;
+      }
+      return result;
+    } catch (error) {
+      console.error('[YouTube] batch search error:', error);
+      return {} as Record<string, string>;
     }
   },
 };

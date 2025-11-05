@@ -42,16 +42,16 @@ interface LyricLine {
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { 
-    currentSong, 
-    isPlaying, 
-    togglePlay, 
-    playNext, 
+  const {
+    currentSong,
+    isPlaying,
+    togglePlay,
+    playNext,
     playPrevious,
     isShuffled,
     repeatMode,
     toggleShuffle,
-    setRepeatMode 
+    setRepeatMode
   } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsRef = useRef<HTMLDivElement>(null);
@@ -69,7 +69,7 @@ const MusicPlayer = () => {
   const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -147,14 +147,14 @@ const MusicPlayer = () => {
   // Load new song - professional handling with proper state management
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
-    
+
     const audio = audioRef.current;
-    
+
     // Immediately pause and reset current playback
     audio.pause();
     audio.currentTime = 0;
     setIsLoading(true);
-    
+
     // Reset all tracking states for new song
     setHasReportedListen(false);
     setHasIncrementedPlayCount(false);
@@ -162,7 +162,7 @@ const MusicPlayer = () => {
     setProgress([0]);
     setCurrentLyricIndex(0);
     setDuration(0);
-    
+
     // Set new audio source via secure HLS session or fallback to direct audioUrl
     let hls: Hls | null = null;
     (async () => {
@@ -176,7 +176,7 @@ const MusicPlayer = () => {
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             setIsLoading(false);
             if (isPlaying) {
-              audio.play().catch(() => {});
+              audio.play().catch(() => { });
             }
           });
           // Handle HLS errors to avoid infinite spinner
@@ -191,11 +191,11 @@ const MusicPlayer = () => {
                 audio.src = fallbackUrl;
                 audio.load();
               } else {
-              toast({
-                title: "Playback error",
-                description: `${data.type || 'HLS'}: ${data.details || 'fatal error'}`,
-                variant: "destructive",
-              });
+                toast({
+                  title: "Playback error",
+                  description: `${data.type || 'HLS'}: ${data.details || 'fatal error'}`,
+                  variant: "destructive",
+                });
               }
             }
           });
@@ -215,7 +215,7 @@ const MusicPlayer = () => {
           audio.src = fallbackUrl;
           audio.load();
         } else {
-        setIsLoading(false);
+          setIsLoading(false);
           toast({
             title: "Playback error",
             description: "No audio source available",
@@ -224,11 +224,11 @@ const MusicPlayer = () => {
         }
       }
     })();
-    
+    console.log(currentSong)
     // Handler for when audio is ready to play
     const handleCanPlay = () => {
       setIsLoading(false);
-      
+
       // Only auto-play if player was in playing state
       if (isPlaying) {
         audio.play().catch(err => {
@@ -240,7 +240,7 @@ const MusicPlayer = () => {
         });
       }
     };
-    
+
     // Handler for load errors
     const handleLoadError = (e: Event) => {
       console.error("Audio load error:", e);
@@ -250,19 +250,19 @@ const MusicPlayer = () => {
         description: "Failed to load audio. Skipping to next song...",
         variant: "destructive",
       });
-      
+
       // Auto-skip to next song after 2 seconds
       setTimeout(() => {
         playNext();
       }, 2000);
     };
-    
+
     // Attach event listeners
     audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("error", handleLoadError);
-    
+
     // Note: audio.load() will be called after source is set (Safari/fallback). For Hls.js, attachMedia triggers load.
-    
+
     // Cleanup
     return () => {
       audio.removeEventListener("canplay", handleCanPlay);
@@ -278,9 +278,9 @@ const MusicPlayer = () => {
   // Handle play/pause toggle separately
   useEffect(() => {
     if (!audioRef.current || isLoading) return;
-    
+
     const audio = audioRef.current;
-    
+
     if (isPlaying && audio.paused && audio.readyState >= 2) {
       // readyState >= 2 means enough data to play
       audio.play().catch(err => {
@@ -329,7 +329,7 @@ const MusicPlayer = () => {
 
     const handleEnded = () => {
       console.log("Song ended, repeat mode:", repeatMode);
-      
+
       if (repeatMode === "one") {
         // Repeat current song
         audio.currentTime = 0;
@@ -374,10 +374,10 @@ const MusicPlayer = () => {
   // Handle progress seek
   const handleProgressChange = (value: number[]) => {
     if (!audioRef.current || isNaN(audioRef.current.duration)) return;
-    
+
     setProgress(value);
     const newTime = (value[0] / 100) * audioRef.current.duration;
-    
+
     if (!isNaN(newTime)) {
       audioRef.current.currentTime = newTime;
     }
@@ -388,12 +388,12 @@ const MusicPlayer = () => {
     if (!currentSong || hasReportedListen || !audioRef.current) return;
 
     const duration = audioRef.current.duration;
-    
+
     // Only record if we have valid duration and currentTime has reached 30 seconds
     if (duration && !isNaN(duration) && currentTime >= 30 && currentTime > 0) {
       const songIdForApi = isNaN(Number(currentSong.id)) ? currentSong.id : Number(currentSong.id);
-      console.log(`🎵 Recording listen: ${currentSong.title} (ID: ${currentSong.id}, Coerced: ${songIdForApi}, Type: ${typeof songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
-      
+      console.log(`🎵 Recording listen: ${currentSong.songName || currentSong.name || "Unknown Song"} (ID: ${currentSong.id}, Coerced: ${songIdForApi}, Type: ${typeof songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
+
       // Record listening history
       listeningHistoryApi
         .recordListen({
@@ -426,18 +426,18 @@ const MusicPlayer = () => {
   }, [currentTime, currentSong, hasReportedListen, hasIncrementedPlayCount]);
 
   const toggleMute = () => setIsMuted(!isMuted);
-  
+
   const handleShuffleToggle = () => {
     toggleShuffle();
     toast({
       title: isShuffled ? "Shuffle off" : "Shuffle on",
-      description: isShuffled 
-        ? "Playing songs in order" 
+      description: isShuffled
+        ? "Playing songs in order"
         : "Playing songs in random order",
       duration: 2000,
     });
   };
-  
+
   const toggleLike = () => {
     setIsLiked(!isLiked);
     toast({
@@ -448,18 +448,18 @@ const MusicPlayer = () => {
 
   const handleShare = (type: string) => {
     if (!currentSong) return;
-    
+
     switch (type) {
       case "friends":
         toast({
           title: "Share with friends",
-          description: `Sharing "${currentSong.title}" with your friends`,
+          description: `Sharing "${currentSong.songName || currentSong.name || "Unknown Song"}" with your friends`,
         });
         break;
       case "playlist":
         toast({
           title: "Add to playlist",
-          description: `Adding "${currentSong.title}" to your playlist`,
+          description: `Adding "${currentSong.songName || currentSong.name || "Unknown Song"}" to your playlist`,
         });
         break;
       case "copy":
@@ -478,14 +478,14 @@ const MusicPlayer = () => {
     const currentIndex = modes.indexOf(repeatMode);
     const nextMode = modes[(currentIndex + 1) % modes.length];
     const nextModeName = modeNames[(currentIndex + 1) % modes.length];
-    
+
     setRepeatMode(nextMode);
     toast({
       title: nextModeName,
-      description: 
+      description:
         nextMode === "one" ? "Current song will repeat" :
-        nextMode === "all" ? "All songs will repeat" :
-        "Songs will play once",
+          nextMode === "all" ? "All songs will repeat" :
+            "Songs will play once",
       duration: 2000,
     });
   };
@@ -499,65 +499,65 @@ const MusicPlayer = () => {
     <>
       {/* Audio Element */}
       <audio ref={audioRef} />
-      
+
       {/* Mini Player */}
       <div className="fixed bottom-0 left-0 right-0 z-[55] bg-background/95 backdrop-blur-lg border-t border-border/40">
         <div className="container mx-auto px-2 sm:px-4 py-3">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Song Info */}
-           {/* Song Info */}
-<div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
-  <div
-    className="relative group cursor-pointer"
-    onClick={() => setShowLyrics(!showLyrics)}
-  >
-    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
-      {currentSong.cover ? (
-        <img
-          src={currentSong.cover}
-          alt={currentSong.title}
-          onError={handleImageError}
-          className={cn(
-            "w-full h-full object-cover transition-transform duration-300",
-            isPlaying && "spin-reverse-slower"
-          )}
-        />
-      ) : (
-        <div
-          className={cn(
-            "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
-            isPlaying && "spin-reverse-slower"
-          )}
-        >
-          <Music className="w-5 h-5 text-white" />
-        </div>
-      )}
-    </div>
-  </div>
+            {/* Song Info */}
+            <div className="flex items-center space-x-3 flex-1 min-w-0 order-1 sm:order-none">
+              <div
+                className="relative group cursor-pointer"
+                onClick={() => setShowLyrics(!showLyrics)}
+              >
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden shadow">
+                  {currentSong.cover ? (
+                    <img
+                      src={currentSong.cover}
+                      alt={currentSong.songName || currentSong.name || "Unknown Song"}
+                      onError={handleImageError}
+                      className={cn(
+                        "w-full h-full object-cover transition-transform duration-300",
+                        isPlaying && "spin-reverse-slower"
+                      )}
+                    />
+                  ) : (
+                    <div
+                      className={cn(
+                        "w-full h-full flex items-center justify-center bg-gradient-primary transition-transform duration-300",
+                        isPlaying && "spin-reverse-slower"
+                      )}
+                    >
+                      <Music className="w-5 h-5 text-white" />
+                    </div>
+                  )}
+                </div>
+              </div>
 
-  <div className="min-w-0 flex-1">
-    <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
-      {currentSong.title}
-    </h4>
-    <p className="text-xs sm:text-sm text-muted-foreground truncate">
-      {currentSong.artist || "Unknown Artist"}
-    </p>
-  </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-sm sm:text-base font-medium text-foreground truncate">
+                  {currentSong.songName || currentSong.name || "Unknown Song"}
+                </h4>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                  {currentSong.artist || "Unknown Artist"}
+                </p>
+              </div>
 
-  <Button
-    variant="ghost"
-    size="icon"
-    className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
-    onClick={toggleLike}
-  >
-    <Heart
-      className={cn(
-        "w-4 h-4",
-        isLiked && "fill-red-500 text-red-500"
-      )}
-    />
-  </Button>
-</div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8 shrink-0"
+                onClick={toggleLike}
+              >
+                <Heart
+                  className={cn(
+                    "w-4 h-4",
+                    isLiked && "fill-red-500 text-red-500"
+                  )}
+                />
+              </Button>
+            </div>
 
 
             {/* Player Controls */}
@@ -574,9 +574,9 @@ const MusicPlayer = () => {
                   />
                 </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-8 w-8"
                   onClick={playPrevious}
                 >
@@ -599,9 +599,9 @@ const MusicPlayer = () => {
                   )}
                 </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-8 w-8"
                   onClick={playNext}
                 >
@@ -715,7 +715,7 @@ const MusicPlayer = () => {
               {currentSong.cover ? (
                 <img
                   src={currentSong.cover}
-                  alt={currentSong.title}
+                  alt={currentSong.songName || currentSong.name || "Unknown Song"}
                   onError={handleImageError}
                   className={cn(
                     "w-full h-full object-cover transition-transform duration-300",
@@ -734,8 +734,8 @@ const MusicPlayer = () => {
 
             {/* Info */}
             <div className="text-center space-y-1">
-              <h2 className="text-2xl font-bold">{currentSong.title}</h2>
-              <p className="text-muted-foreground">{currentSong.artist}</p>
+              <h2 className="text-2xl font-bold">{currentSong.songName || currentSong.name || "Unknown Song"}</h2>
+              <p className="text-muted-foreground">{currentSong.artist || "Unknown Artist"}</p>
             </div>
 
             {/* Controls */}
@@ -827,11 +827,11 @@ const MusicPlayer = () => {
       {showLyrics && (
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
-          <div 
+          <div
             className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/98 to-background backdrop-blur-md"
             onClick={() => setShowLyrics(false)}
           />
-          
+
           {/* Content panel */}
           <div className="relative h-full flex flex-col max-w-3xl mx-auto">
             {/* Header */}
@@ -839,7 +839,7 @@ const MusicPlayer = () => {
               <div>
                 <h3 className="text-lg font-semibold">Lyrics</h3>
                 <p className="text-sm text-muted-foreground">
-                  {currentSong?.title} • {currentSong?.artist}
+                  {currentSong?.songName || currentSong?.name || "Unknown Song"} • {currentSong?.artist}
                 </p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setShowLyrics(false)}>
@@ -848,7 +848,7 @@ const MusicPlayer = () => {
             </div>
 
             {/* Lyrics Content - Hidden scrollbar */}
-            <div 
+            <div
               ref={lyricsRef}
               className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 pb-24 space-y-2 sm:space-y-3 scrollbar-hide"
               style={{

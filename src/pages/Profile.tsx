@@ -33,7 +33,6 @@ import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeni
 import { userApi, UserDTO } from "@/services/api/userApi";
 import { toast } from "@/hooks/use-toast";
 import { songsApi } from "@/services/api/songApi";
-import { uploadImage } from "@/config/cloudinary";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
@@ -41,8 +40,8 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
-  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string>(""); // lưu tạm url sau upload Cloudinary
   
   useEffect(() => {
     fetchProfile();
@@ -103,8 +102,8 @@ const Profile = () => {
             if (songDetail) {
               return { ...item, song: {
                 id: Number((songDetail as any).id ?? item.songId),
-                name: (songDetail as any).name || (songDetail as any).title,
-                title: (songDetail as any).title || (songDetail as any).name,
+                name: (songDetail as any).name || (songDetail as any).songName,
+                songName: (songDetail as any).songName || (songDetail as any).name,
                 duration: typeof (songDetail as any).duration === 'number' ? (songDetail as any).duration : undefined,
                 cover: (songDetail as any).cover,
                 audioUrl: (songDetail as any).audioUrl,
@@ -234,16 +233,43 @@ const Profile = () => {
   const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files && event.target.files[0];
     if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        toast({ title: "Lỗi", description: "Vui lòng chọn file ảnh", variant: "destructive" });
+        return;
+      }
+
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "Lỗi", description: "Kích thước file không được vượt quá 5MB", variant: "destructive" });
+        return;
+      }
+
       setAvatarFile(file);
       setAvatarPreview(URL.createObjectURL(file));
-      // --- Upload cloudinary ở đây ---
+      setUploadingAvatar(true);
+
       try {
-        const result = await uploadImage(file);
-        setUploadedAvatarUrl(result.secure_url); // lưu url lại để gửi lên BE khi save
-        toast({ title: "Thành công", description: "Đã upload ảnh lên Cloudinary!" });
+        // Upload to backend - backend will handle Cloudinary upload and update avatar
+        const updatedUser = await userApi.uploadAvatar(file);
+        
+        // Update local state with new avatar URL
+        setProfileData({ ...profileData, avatar: updatedUser.avatar || "" });
+        setAvatarPreview(updatedUser.avatar || "");
+        
+        toast({ title: "Thành công", description: "Đã cập nhật ảnh đại diện thành công!" });
       } catch (err: any) {
-        toast({ title: "Thất bại", description: "Không upload được ảnh lên Cloudinary!" });
-        setUploadedAvatarUrl("");
+        console.error("Failed to upload avatar:", err);
+        toast({ 
+          title: "Lỗi", 
+          description: err.message || "Không thể upload ảnh đại diện", 
+          variant: "destructive" 
+        });
+        // Reset preview on error
+        setAvatarPreview(profileData.avatar || "");
+        setAvatarFile(null);
+      } finally {
+        setUploadingAvatar(false);
       }
     }
   };
@@ -254,17 +280,15 @@ const Profile = () => {
     }
     try {
       setSaving(true);
-      // Chỉ gửi avatar là url (nếu vừa upload Cloudinary thành công);
+      // Avatar is already updated via uploadAvatar endpoint, so we only update other fields
       const updatePayload: any = {
         name: profileData.name,
         phone: profileData.phone,
         address: profileData.address,
-        avatar: uploadedAvatarUrl || profileData.avatar || "",
       };
       await userApi.updateProfile(updatePayload);
       await fetchProfile();
       setAvatarFile(null);
-      setUploadedAvatarUrl("");
       setIsEditing(false);
       toast({ title: "Success", description: "Profile updated successfully" });
     } catch (error) {
@@ -311,13 +335,18 @@ const Profile = () => {
                         {profileData.name.split(' ').map(n => n[0]).join('')}
                       </AvatarFallback>
                     )}
-                    {isEditing && (
+                    {isEditing && !uploadingAvatar && (
                       <div
                         className="absolute inset-0 bg-black/30 flex items-center justify-center rounded-full opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer z-10 select-none hover:bg-black/50"
                         onClick={() => fileInputRef.current?.click()}
                         title="Đổi ảnh đại diện"
                       >
                         <span className="text-white text-md font-semibold select-none">Đổi ảnh đại diện</span>
+                      </div>
+                    )}
+                    {uploadingAvatar && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-full z-10">
+                        <Loader2 className="h-6 w-6 text-white animate-spin" />
                       </div>
                     )}
                   </Avatar>
@@ -550,7 +579,7 @@ const Profile = () => {
                               className="font-medium"
                               title={`songId: ${(item as any).songId ?? (item as any).song?.id ?? 'unknown'}`}
                             >
-                              {item.song?.name || item.song?.title || item.songName || "Unknown Song"}
+                              {item.song?.name || item.song?.songName || item.songName || "Unknown Song"}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {item.song?.artistNames?.join(", ") ||

@@ -165,7 +165,7 @@ const FeaturedMusic = () => {
                 <div className="relative mb-4">
                   <div className="w-full aspect-square bg-gradient-primary rounded-lg flex items-center justify-center relative overflow-hidden">
                     {song.cover ? (
-                      <img src={song.cover} alt={song.title} onError={handleImageError} className="w-full h-full object-cover" />
+                      <img src={song.cover} alt={song.name || song.songName || "Unknown Song"} onError={handleImageError} className="w-full h-full object-cover" />
                     ) : (
                       <Music className="w-8 h-8 text-white/80" />
                     )}
@@ -180,7 +180,7 @@ const FeaturedMusic = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="font-semibold truncate">{song.title}</h3>
+                  <h3 className="font-semibold truncate">{song.name || song.songName || "Unknown Song"}</h3>
                   <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                   
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
