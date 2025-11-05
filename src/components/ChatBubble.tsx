@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { X, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import { useNavigate } from "react-router-dom";
+import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
+import { type NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
 
 interface ChatMessage {
   id: string;
@@ -115,6 +117,33 @@ const ChatBubble = () => {
     return () => { isCancelled = true; clearInterval(interval); window.removeEventListener('storage', onStorage); };
   }, []);
 
+  // Realtime notifications: show bubble for MESSAGE/INVITE across the app
+  const meId = useMemo(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const n = raw ? Number(raw) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    } catch { return undefined; }
+  }, [typeof window !== 'undefined' ? localStorage.getItem('userId') : undefined]);
+
+  useFirebaseRealtime(meId, {
+    onNotification: (n: FBNotificationDTO) => {
+      try {
+        if (n?.type === 'MESSAGE') {
+          const title = n.senderName || 'New message';
+          const body = n.body || '';
+          const msg: ChatMessage = { id: `msg-${n.id || Date.now()}` , from: String(title), message: String(body), timestamp: new Date() };
+          pushAndAutohide(msg);
+        } else if (n?.type === 'INVITE') {
+          const from = n.senderName || 'New Invite';
+          const pName = (n.metadata as any)?.playlistName || 'a playlist';
+          const msg: ChatMessage = { id: `inv-${n.id || Date.now()}`, from: String(from), message: `mời bạn cộng tác trên "${pName}"`, timestamp: new Date() };
+          pushAndAutohide(msg);
+        }
+      } catch { /* ignore */ }
+    }
+  });
+
   const dismissMessage = (messageId: string) => {
     setNewMessages(prev => prev.filter(m => m.id !== messageId));
   };
@@ -184,7 +213,7 @@ const ChatBubble = () => {
                 variant="ghost"
                 size="sm"
                 className="h-5 text-[11px] px-2 text-purple-100 hover:text-purple-50 hover:bg-purple-400/10"
-                onClick={() => { navigate('/playlists/invites'); dismissMessage(message.id); }}
+                onClick={() => { navigate('/social?tab=friends'); dismissMessage(message.id); }}
               >
                 View
               </Button>

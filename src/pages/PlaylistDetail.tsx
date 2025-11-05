@@ -6,67 +6,27 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, UserPlus, UserMinus, Trash2, Share2, LogOut, User as UserIcon } from "lucide-react";
+import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
+import { songsApi } from "@/services/api/songApi";
 import { buildJsonHeaders } from "@/services/api";
 import { friendsApi } from "@/services/api/friendsApi";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { uploadImage } from "@/config/cloudinary";
 import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
 import { getPlaylistPermissions, checkIfFriends } from "@/utils/playlistPermissions";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-interface SearchSongResult {
-  id: number;
-  name: string;
-  artists?: Array<{ id?: number; name: string }>;
-  album?: { id?: number; name: string } | null;
-  urlImageAlbum?: string;
-  audioUrl?: string;
-  duration?: number | string;
-}
-
-interface PlaylistOwner {
-  id?: number;
-  name?: string;
-}
-
-interface ExtendedPlaylistDTO extends Omit<PlaylistDTO, 'owner'> {
-  urlImagePlaylist?: string;
-  ownerId?: number;
-  dateUpdate?: string | null;
-  songLimit?: number;
-  owner?: PlaylistOwner | null;
-}
-
-interface FriendResponse {
-  id?: number;
-  userId?: number;
-  friendId?: number;
-  name?: string;
-  username?: string;
-  email?: string;
-  avatar?: string | null;
-}
-
-interface PendingInvite {
-  id?: number;
-  playlistId?: number;
-  senderId?: number;
-  receiverId: number;
-  role?: string;
-  status?: string;
-  inviteCode?: string;
-  createdAt?: string;
-}
+import type { SearchSongResult, ExtendedPlaylistDTO, PendingInvite, PlaylistState } from "@/types/playlistDetail";
+import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromResponse, formatDateDisplay } from "@/utils/playlistUtils";
+import { parseCollaboratorRole, normalizeCollaborators } from "@/utils/collaboratorUtils";
+import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
+import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 
 const PlaylistDetail = () => {
   const { id } = useParams();
@@ -77,25 +37,14 @@ const PlaylistDetail = () => {
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState<boolean>(true);
-  const [playlist, setPlaylist] = useState<{
-    id: number;
-    title: string;
-    description: string;
-    cover: string | null;
-    ownerName?: string;
-    ownerAvatar?: string | null;
-    ownerId?: number;
-    visibility: PlaylistVisibility;
-    updatedAt?: string | null;
-    songs: (Song & { addedBy?: string; addedAt?: string })[];
-  } | null>(null);
+  const [playlist, setPlaylist] = useState<PlaylistState | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [pendingDeleteSongId, setPendingDeleteSongId] = useState<string | null>(null);
   const [addSearch, setAddSearch] = useState("");
   const [addResults, setAddResults] = useState<SearchSongResult[]>([]);
-  const [adding, setAdding] = useState(false);
+  const [addingSongIds, setAddingSongIds] = useState<number[]>([]);
   const [collabOpen, setCollabOpen] = useState(false);
   const [friends, setFriends] = useState<Array<{ id: number; name: string; avatar?: string | null }>>([]);
   const [loadingFriends, setLoadingFriends] = useState(false);
@@ -131,6 +80,9 @@ const PlaylistDetail = () => {
     userRole: undefined,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const collabsLoadAttemptedRef = useRef(false);
+  const collaboratorsFetchIdRef = useRef<number | null>(null);
+  const fetchedSongCoverIdsRef = useRef<Set<string>>(new Set());
   const ownerDisplayName = useMemo(() => {
     const raw = playlist?.ownerName;
     if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
@@ -151,91 +103,6 @@ const PlaylistDetail = () => {
   const isCurrentCollaborator = useMemo(
     () => typeof meId === "number" && Number.isFinite(meId) && collaborators.some((c) => c.userId === meId),
     [collaborators, meId]
-  );
-  const filteredCollabFriends = useMemo(() => {
-    const query = collabSearch.trim().toLowerCase();
-    if (!query) return friends;
-    return friends.filter((friend) => friend.name.toLowerCase().includes(query));
-  }, [friends, collabSearch]);
-
-  const parseCollaboratorRole = useCallback((value: unknown): CollaboratorRole | undefined => {
-    if (typeof value !== "string") return undefined;
-    const normalized = value.toUpperCase();
-    if (
-      normalized === CollaboratorRole.EDITOR ||
-      normalized === "COLLABORATOR" ||
-      normalized === "EDITORIAL" ||
-      normalized === "OWNER"
-    ) {
-      return CollaboratorRole.EDITOR;
-    }
-    if (
-      normalized === CollaboratorRole.VIEWER ||
-      normalized === "VIEW" ||
-      normalized === "VIEW_ONLY" ||
-      normalized === "READONLY" ||
-      normalized === "READ_ONLY"
-    ) {
-      return CollaboratorRole.VIEWER;
-    }
-    return undefined;
-  }, []);
-
-  const normalizeCollaborators = useCallback(
-    (raw: unknown): Array<{ userId: number; name: string; email?: string; role?: CollaboratorRole }> => {
-      const sourceArray = Array.isArray(raw)
-        ? raw
-        : raw && typeof raw === "object" && Array.isArray((raw as { collaborators?: unknown[] }).collaborators)
-        ? (raw as { collaborators?: unknown[] }).collaborators
-        : [];
-
-      const dedup = new Map<number, { userId: number; name: string; email?: string; role?: CollaboratorRole }>();
-
-      for (const entry of sourceArray) {
-        if (!entry || typeof entry !== "object") continue;
-        const candidateIds = [
-          (entry as { userId?: number }).userId,
-          (entry as { id?: number }).id,
-          (entry as { collaboratorId?: number }).collaboratorId,
-          (entry as { memberId?: number }).memberId,
-          (entry as { friendId?: number }).friendId,
-          (entry as { receiverId?: number }).receiverId,
-        ];
-        const userIdValue = candidateIds.find((val) => typeof val === "number" && Number.isFinite(val));
-        if (userIdValue == null) continue;
-
-        const roleCandidate =
-          (entry as { role?: unknown }).role ??
-          (entry as { collaboratorRole?: unknown }).collaboratorRole ??
-          (entry as { permission?: unknown }).permission ??
-          (entry as { accessLevel?: unknown }).accessLevel ??
-          (entry as { userRole?: unknown }).userRole ??
-          (entry as { type?: unknown }).type;
-        const parsedRole = parseCollaboratorRole(roleCandidate);
-
-        const name =
-          (entry as { name?: string }).name ??
-          (entry as { username?: string }).username ??
-          (entry as { fullName?: string }).fullName ??
-          (entry as { displayName?: string }).displayName ??
-          (entry as { userName?: string }).userName ??
-          (entry as { email?: string }).email ??
-          `User ${userIdValue}`;
-        const email = typeof (entry as { email?: unknown }).email === "string" ? (entry as { email?: string }).email : undefined;
-
-        const existing = dedup.get(Number(userIdValue));
-        const nextRecord = {
-          userId: Number(userIdValue),
-          name,
-          email: email ?? existing?.email,
-          role: parsedRole ?? existing?.role,
-        };
-        dedup.set(Number(userIdValue), nextRecord);
-      }
-
-      return Array.from(dedup.values());
-    },
-    [parseCollaboratorRole]
   );
 
   const updateCollaboratorsFromRaw = useCallback(
@@ -267,7 +134,7 @@ const PlaylistDetail = () => {
       setCollaborators(next);
       return next;
     },
-    [normalizeCollaborators, meId]
+    [meId]
   );
 
   const collaboratorEntries = useMemo(() => {
@@ -316,37 +183,7 @@ const PlaylistDetail = () => {
     });
 
     return entries;
-  }, [playlist, collaborators, parseCollaboratorRole]);
-
-  // Permission flags derived from permission system
-  // Using permissions state calculated from playlist data
-
-  function toSeconds(input: unknown): number {
-    try {
-      if (typeof input === 'number' && Number.isFinite(input)) return input > 10000 ? Math.round(input/1000) : Math.round(input);
-      if (typeof input === 'string') {
-        const t = input.trim(); if (!t) return 0;
-        if (t.includes(':')) {
-          const parts = t.split(':').map(Number);
-          if (parts.every(Number.isFinite)) {
-            if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-            if (parts.length === 2) return parts[0]*60 + parts[1];
-          }
-        }
-        const n = Number(t); if (Number.isFinite(n)) return n > 10000 ? Math.round(n/1000) : Math.round(n);
-      }
-    } catch {
-      void 0;
-    }
-    return 0;
-  }
-
-  const msToMMSS = (sec: number) => {
-    const s = Math.max(0, Math.floor(sec));
-    const mm = Math.floor(s/60).toString().padStart(2,'0');
-    const ss = Math.floor(s%60).toString().padStart(2,'0');
-    return `${mm}:${ss}`;
-  };
+  }, [playlist, collaborators]);
 
   useEffect(() => {
     const load = async () => {
@@ -355,30 +192,29 @@ const PlaylistDetail = () => {
       try {
         const data: PlaylistDTO = await playlistsApi.getById(Number(id));
         const extendedData = data as ExtendedPlaylistDTO;
-        const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(data.songs)
-          ? data.songs.map((s: SearchSongResult) => ({
-              id: String(s.id),
-              title: s.name,
-              artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
-              album: s.album?.name || '',
-              cover: s.urlImageAlbum || '',
-              audioUrl: s.audioUrl || '',
-              duration: toSeconds(s.duration),
-            }))
-          : [];
+        const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
+        const mappedSongs = mapSongsFromResponse(data.songs, playlistFallbackCover);
         
         const ownerId = data.ownerId ?? data.owner?.id;
-        const visibility = (data.visibility as PlaylistVisibility) || PlaylistVisibility.PUBLIC;
+        const normalizeVisibility = (v: unknown): PlaylistVisibility => {
+          const raw = typeof v === 'string' ? v.toUpperCase() : '';
+          if (raw === 'FRIENDS_ONLY') return PlaylistVisibility.FRIENDS_ONLY;
+          if (raw === 'PRIVATE') return PlaylistVisibility.PRIVATE;
+          if (raw === 'PUBLIC') return PlaylistVisibility.PUBLIC;
+          return PlaylistVisibility.PUBLIC;
+        };
+        const visibility = normalizeVisibility((data as PlaylistDTO).visibility);
         
         setPlaylist({
           id: data.id,
           title: data.name,
           description: data.description || '',
-          cover: data.coverUrl || extendedData.urlImagePlaylist || null,
+          cover: playlistFallbackCover,
           ownerName: extendedData?.owner?.name,
           ownerAvatar: extendedData?.owner?.avatar ?? null,
           ownerId,
           visibility,
+          totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
           updatedAt: extendedData?.dateUpdate || null,
           songs: mappedSongs,
         });
@@ -404,15 +240,16 @@ const PlaylistDetail = () => {
           fallbackRole = CollaboratorRole.EDITOR;
         }
 
+        const shouldForceSelf = Boolean(fallbackRole) || isCollaboratorFlag;
+
         updateCollaboratorsFromRaw(
           (extendedData as { collaborators?: unknown[] } | undefined)?.collaborators ??
             (data as { collaborators?: unknown[] }).collaborators ??
             [],
           fallbackRole,
-          isCollaboratorFlag
+          shouldForceSelf
         );
         
-        // Check if user is friend of owner (for FRIENDS_ONLY visibility)
         if (meId && ownerId && visibility === PlaylistVisibility.FRIENDS_ONLY) {
           const friendCheck = await checkIfFriends(meId, ownerId);
           setIsFriend(friendCheck);
@@ -420,14 +257,13 @@ const PlaylistDetail = () => {
           setIsFriend(false);
         }
       } catch (e) {
-        // Handle permission errors specifically
         if (e instanceof PlaylistPermissionError) {
           toast({ 
             title: 'Access Denied', 
             description: e.message, 
             variant: 'destructive' 
           });
-          navigate('/playlist'); // Redirect to playlist list
+          navigate('/playlist');
           return;
         }
         const msg = e instanceof Error ? e.message : 'Failed to load playlist';
@@ -437,9 +273,76 @@ const PlaylistDetail = () => {
       }
     };
     load();
-  }, [id, meId, navigate, parseCollaboratorRole, updateCollaboratorsFromRaw]);
+  }, [id, meId, navigate, updateCollaboratorsFromRaw]);
 
-  // Calculate permissions when playlist, collaborators, or friend status changes
+  useEffect(() => {
+    const songs = playlist?.songs ?? [];
+    if (!songs.length) return;
+    const playlistCover = playlist?.cover ?? null;
+    const missing = songs.filter(
+      (song) => !isValidImageValue(song.cover) && !fetchedSongCoverIdsRef.current.has(song.id),
+    );
+    if (!missing.length) return;
+
+    missing.forEach((song) => fetchedSongCoverIdsRef.current.add(song.id));
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const results = await Promise.all(
+          missing.map(async (song) => {
+            try {
+              const detail = await songsApi.getById(String(song.id));
+              if (!detail) return null;
+              const detailCover = resolveSongCover(detail as unknown as SearchSongResult & { songId?: number }, playlistCover);
+              const detailAddedAt =
+                (detail as { addedAt?: string; createdAt?: string; updatedAt?: string }).addedAt ??
+                (detail as { createdAt?: string; updatedAt?: string }).createdAt ??
+                (detail as { updatedAt?: string }).updatedAt ??
+                song.addedAt;
+              return {
+                id: song.id,
+                cover: detailCover,
+                addedAt: detailAddedAt,
+              };
+            } catch {
+              return null;
+            }
+          }),
+        );
+        if (cancelled) return;
+        const validResults = results.filter(
+          (item): item is { id: string; cover?: string; addedAt?: string } => Boolean(item),
+        );
+        if (!validResults.length) return;
+        setPlaylist((prev) => {
+          if (!prev) return prev;
+          const updates = new Map(validResults.map((item) => [item.id, item]));
+          const nextSongs = prev.songs.map((song) => {
+            const update = updates.get(song.id);
+            if (!update) return song;
+            const nextCover = isValidImageValue(update.cover) ? update.cover : song.cover;
+            const nextAddedAt = update.addedAt ?? song.addedAt;
+            if (nextCover === song.cover && nextAddedAt === song.addedAt) return song;
+            return {
+              ...song,
+              cover: nextCover,
+              addedAt: nextAddedAt,
+            };
+          });
+          return { ...prev, songs: nextSongs };
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [playlist?.songs, playlist?.cover]);
+
   useEffect(() => {
     if (!playlist || !meId) {
       setPermissions({
@@ -453,7 +356,6 @@ const PlaylistDetail = () => {
       return;
     }
     
-    // Get visibility directly from playlist
     const visibility = playlist.visibility || PlaylistVisibility.PUBLIC;
     
     const playlistData = {
@@ -481,13 +383,8 @@ const PlaylistDetail = () => {
     });
     
     setPermissions(perms);
-  }, [playlist, collaborators, meId, isFriend, parseCollaboratorRole]);
+  }, [playlist, collaborators, meId, isFriend]);
   
-  // Track if we've already tried to load collaborators (to avoid repeated 500 errors)
-  const collabsLoadAttemptedRef = useRef(false);
-  const collaboratorsFetchIdRef = useRef<number | null>(null);
-
-  // Load collaborator list for both owners and collaborators to render roles/permissions
   useEffect(() => {
     if (!playlist?.id) return;
     if (collaboratorsFetchIdRef.current === playlist.id && collaborators.length) return;
@@ -501,7 +398,6 @@ const PlaylistDetail = () => {
       } catch (e) {
         if (!cancelled && e instanceof PlaylistPermissionError) {
           collaboratorsFetchIdRef.current = Number(playlist.id);
-          // ignore permission errors (e.g., backend not exposing list yet)
         }
       }
     };
@@ -515,20 +411,9 @@ const PlaylistDetail = () => {
     const loadCollabs = async () => {
       try {
         if (!id) return;
-        
-        // CHỈ load collaborators khi user MỞ dialog Collaborate
-        // Tránh load không cần thiết để tránh 500 errors
-        if (!collabOpen) {
-          return; // Không load nếu dialog chưa mở
-        }
-        
-        // Reset flag khi mở dialog để có thể retry
+        if (!collabOpen) return;
         collabsLoadAttemptedRef.current = false;
-        
-        // Only load if user is owner
-        if (!permissions.isOwner) {
-          return;
-        }
+        if (!permissions.isOwner) return;
         
         const list = await playlistCollaboratorsApi.list(Number(id));
         updateCollaboratorsFromRaw(
@@ -536,16 +421,11 @@ const PlaylistDetail = () => {
           permissions.userRole,
           !permissions.isOwner && (isCurrentCollaborator || Boolean(permissions.userRole))
         );
-        collabsLoadAttemptedRef.current = true; // Mark success
-      } catch (e: unknown) {
-        // Mark as attempted to prevent infinite retries
         collabsLoadAttemptedRef.current = true;
-        
-        // Silently fail - collaborators list is optional
-        // Only show error if explicitly opening collaborator dialog and user is owner
+      } catch (e: unknown) {
+        collabsLoadAttemptedRef.current = true;
         if (collabOpen && permissions.isOwner) {
           const msg = e instanceof Error ? e.message : String(e);
-          // Check if it's a 500 error (server error) vs permission error
           const errorMsg = String(e).includes('500') || String(msg).includes('500')
             ? 'Server error loading collaborators. This feature may not be available yet.'
             : msg;
@@ -559,19 +439,16 @@ const PlaylistDetail = () => {
       }
     };
     
-    // Chỉ load khi dialog đang mở
     if (collabOpen && permissions.isOwner) {
       loadCollabs();
     }
   }, [id, collabOpen, permissions.isOwner, permissions.userRole, updateCollaboratorsFromRaw, isCurrentCollaborator]);
 
-  // Load pending invites to filter out already invited friends
   useEffect(() => {
     const loadPendingInvites = async () => {
       if (!collabOpen || !playlist) return;
       try {
         const pending = await playlistCollabInvitesApi.pending();
-        // Extract receiverId from pending invites for this playlist
         const playlistPendingInvites = Array.isArray(pending) 
           ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
           : [];
@@ -613,19 +490,15 @@ const PlaylistDetail = () => {
             }))
           : [];
         
-        // Filter available friends:
-        // 1. Remove owner (can't invite yourself)
-        // 2. Remove existing collaborators (already a collaborator)
-        // 3. Remove pending invites (already invited, waiting for accept/reject)
         const existingCollaboratorIds = new Set(collaborators.map(c => c.userId));
         const pendingInviteIds = new Set(pendingInvites.map(inv => inv.receiverId));
         const ownerId = playlist?.ownerId;
         
         const filtered = mapped.filter((x) => {
           if (typeof x.id !== 'number' || x.id <= 0) return false;
-          if (ownerId && x.id === ownerId) return false; // Can't invite owner
-          if (existingCollaboratorIds.has(x.id)) return false; // Already a collaborator
-          if (pendingInviteIds.has(x.id)) return false; // Already invited (pending)
+          if (ownerId && x.id === ownerId) return false;
+          if (existingCollaboratorIds.has(x.id)) return false;
+          if (pendingInviteIds.has(x.id)) return false;
           return true;
         });
         
@@ -650,42 +523,75 @@ const PlaylistDetail = () => {
     run();
   }, [addSearch]);
 
-  const addSongToPlaylist = async (songId: number) => {
+  const addSongToPlaylist = async (song: SearchSongResult) => {
     if (!playlist) return;
+    const songId =
+      typeof song.id === 'number'
+        ? song.id
+        : Number((song as { songId?: number }).songId);
+    if (!Number.isFinite(songId)) return;
+    const fallbackCover = playlist.cover ?? null;
+    const previousSnapshot = playlist ? { ...playlist, songs: [...playlist.songs] } : null;
+    const optimisticAddedAt = new Date().toISOString();
+    const optimisticSong: Song & { addedBy?: string; addedAt?: string } = {
+      id: String(songId),
+      title: song.name,
+      artist: Array.isArray(song.artists) && song.artists.length
+        ? song.artists.map((a) => a.name).filter(Boolean).join(', ')
+        : 'Unknown',
+      album: song.album?.name || '',
+      cover: resolveSongCover(song as SearchSongResult & { songId?: number }, fallbackCover),
+      audioUrl: song.audioUrl || '',
+      duration: toSeconds(song.duration),
+      addedAt: optimisticAddedAt,
+      addedBy: 'You',
+    };
+    setAddingSongIds((prev) => (prev.includes(songId) ? prev : [...prev, songId]));
+    setPlaylist((prev) => {
+      if (!prev) return prev;
+      if (prev.songs.some((existing) => existing.id === String(songId))) {
+        return { ...prev, updatedAt: optimisticAddedAt };
+      }
+      const nextSongs = [...prev.songs, optimisticSong];
+      const nextTotal = (prev.totalSongs ?? prev.songs.length) + 1;
+      return {
+        ...prev,
+        songs: nextSongs,
+        totalSongs: nextTotal,
+        updatedAt: optimisticAddedAt,
+      };
+    });
     try {
-      setAdding(true);
-      const current = await playlistsApi.getById(playlist.id);
-      const nextIds = Array.from(new Set([...(current.songIds || []), songId]));
-      await playlistsApi.update(playlist.id, {
-        name: current.name,
-        description: current.description || "",
-        coverUrl: current.coverUrl || null,
-        visibility: current.visibility || "PUBLIC",
-        songLimit: current.songLimit,
-        dateUpdate: current.dateUpdate,
-        songIds: nextIds,
-      });
+      await playlistsApi.addSong(playlist.id, songId);
       toast({ title: 'Added', description: 'Song added to playlist' });
-      // refresh
       const updated = await playlistsApi.getById(playlist.id);
-      const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(updated.songs)
-        ? updated.songs.map((s: SearchSongResult) => ({
-            id: String(s.id),
-            title: s.name,
-            artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
-            album: s.album?.name || '',
-            cover: s.urlImageAlbum || '',
-            audioUrl: s.audioUrl || '',
-            duration: 0,
-          }))
-        : [];
-      setPlaylist((prev) => prev ? { ...prev, songs: mappedSongs } : prev);
+      const extendedUpdated = updated as ExtendedPlaylistDTO;
+      const mappedSongs = mapSongsFromResponse(updated.songs, updated.coverUrl || extendedUpdated.urlImagePlaylist || fallbackCover);
+      setPlaylist((prev) => prev ? {
+        ...prev,
+        cover: updated.coverUrl || extendedUpdated.urlImagePlaylist || prev.cover,
+        songs: mappedSongs,
+        totalSongs: Array.isArray(updated.songs) ? updated.songs.length : Array.isArray(updated.songIds) ? updated.songIds.length : mappedSongs.length,
+        updatedAt: extendedUpdated?.dateUpdate ?? extendedUpdated?.updatedAt ?? prev.updatedAt ?? optimisticAddedAt,
+      } : prev);
     } catch (e) {
-      toast({ title: 'Error', description: 'Failed to add song', variant: 'destructive' });
-    } finally { setAdding(false); }
+      if (previousSnapshot) {
+        setPlaylist(previousSnapshot);
+      }
+      const message =
+        e instanceof PlaylistPermissionError
+          ? e.message
+          : e instanceof Error
+          ? e.message
+          : 'Failed to add song';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setAddingSongIds((prev) => prev.filter((value) => value !== songId));
+    }
   };
 
   const toggleSelectFriend = (fid: number) => setSelectedFriendIds((prev) => prev.includes(fid) ? prev.filter(x => x !== fid) : [...prev, fid]);
+  
   const handleRemoveCollaborator = async (collaboratorId: number, collaboratorName?: string) => {
     if (!playlist || !permissions.isOwner) return;
     const confirmed = window.confirm(`Bạn có chắc muốn gỡ ${collaboratorName || "cộng tác viên này"} khỏi playlist?`);
@@ -717,13 +623,13 @@ const PlaylistDetail = () => {
 
   const handleLeaveCollaboration = async () => {
     if (!playlist || typeof meId !== "number" || !Number.isFinite(meId)) return;
-    const confirmed = window.confirm("Bạn có chắc muốn  này?");
+    const confirmed = window.confirm("Bạn có chắc muốn rời khỏi playlist này?");
     if (!confirmed) return;
     setLeaveLoading(true);
     try {
       await playlistCollaboratorsApi.leave(playlist.id);
       toast({
-        title: "Đã ",
+        title: "Đã rời khỏi playlist",
         description: "Bạn không còn là cộng tác viên của playlist này.",
       });
       setCollaborators((prev) => prev.filter((c) => c.userId !== meId));
@@ -733,9 +639,9 @@ const PlaylistDetail = () => {
           ? e.message
           : e instanceof Error
           ? e.message
-          : "Không thể . Vui lòng thử lại.";
+          : "Không thể rời khỏi playlist. Vui lòng thử lại.";
       toast({
-        title: " thất bại",
+        title: "Rời khỏi playlist thất bại",
         description: message,
         variant: "destructive",
       });
@@ -743,6 +649,7 @@ const PlaylistDetail = () => {
       setLeaveLoading(false);
     }
   };
+  
   const sendInvites = async () => {
     if (!playlist) return;
     try {
@@ -759,7 +666,6 @@ const PlaylistDetail = () => {
           const friendName = friends.find(f => f.id === fid)?.name || `Friend ${fid}`;
           const errorMessage = e instanceof Error ? e.message : String(e);
           
-          // Handle specific error types
           if (e instanceof PlaylistPermissionError) {
             console.error(`Permission denied sending invite to ${friendName}:`, e.message);
           } else {
@@ -767,9 +673,7 @@ const PlaylistDetail = () => {
             
             if (errorStatus === 401) {
               console.error(`Unauthorized: ${friendName} - Login required`);
-              // Will show toast in final error handling
             } else if (errorStatus === 400) {
-              // Parse specific error messages from backend
               let reason = 'Invalid request';
               if (errorMessage.includes('Playlist not found')) {
                 reason = `Playlist không tồn tại`;
@@ -807,7 +711,6 @@ const PlaylistDetail = () => {
           description: successMsg,
           duration: 3000,
         });
-        // Refresh pending invites and collaborators
         try {
           const pending = await playlistCollabInvitesApi.pending();
           const playlistPendingInvites = Array.isArray(pending) 
@@ -817,7 +720,6 @@ const PlaylistDetail = () => {
         } catch (e) {
           console.warn('Failed to refresh pending invites:', e);
         }
-        // Reload collaborators
         try {
           const list = await playlistCollaboratorsApi.list(playlist.id);
           updateCollaboratorsFromRaw(
@@ -831,18 +733,15 @@ const PlaylistDetail = () => {
         setCollabOpen(false);
         setSelectedFriendIds([]);
       } else if (failedIds.length > 0) {
-        // Get detailed error messages for each failed friend
         const failedDetails = failedIds.map(id => {
           const friend = friends.find(f => f.id === id);
           return friend?.name || `Friend ${id}`;
         });
         
-        // Show specific error based on first failure
         const firstError = failedIds[0];
         const firstFriendName = failedDetails[0];
         let errorMsg = '';
         
-        // Try to get error message (will be logged in catch block above)
         errorMsg = failedIds.length === 1 
           ? `Không thể gửi lời mời cho ${firstFriendName}. Có thể đã được mời, đã là collaborator, hoặc không hợp lệ.`
           : `Không thể gửi lời mời cho ${failedIds.length} bạn bè (${failedDetails.slice(0, 2).join(', ')}${failedIds.length > 2 ? '...' : ''}).`;
@@ -853,7 +752,6 @@ const PlaylistDetail = () => {
           variant: 'destructive',
           duration: 6000,
         });
-        // Refresh to update available friends list
         try {
           const pending = await playlistCollabInvitesApi.pending();
           const playlistPendingInvites = Array.isArray(pending) 
@@ -871,7 +769,6 @@ const PlaylistDetail = () => {
         }
       }
     } catch (e) {
-      // Handle top-level errors (401, network errors, etc.)
       if (e instanceof PlaylistPermissionError) {
         if (e.status === 401) {
           toast({ 
@@ -880,7 +777,6 @@ const PlaylistDetail = () => {
             variant: 'destructive',
             duration: 5000,
           });
-          // Could redirect to login here
         } else {
           toast({ 
             title: '❌ Permission Denied', 
@@ -959,11 +855,9 @@ const PlaylistDetail = () => {
       const sid = Number(pendingDeleteSongId);
       await playlistsApi.removeSong(playlist.id, sid);
       setPlaylist({ ...playlist, songs: playlist.songs.filter(s => Number(s.id) !== sid) });
-      // no success toast per request
       setDeleteOpen(false);
       setPendingDeleteSongId(null);
     } catch (e) {
-      // Handle permission errors specifically
       if (e instanceof PlaylistPermissionError) {
         toast({ title: 'Access Denied', description: e.message, variant: 'destructive' });
       } else {
@@ -978,8 +872,6 @@ const PlaylistDetail = () => {
   return (
     <div className="min-h-screen bg-gradient-dark text-foreground">
       <div className="container mx-auto px-4 py-8">
-        {/* Back button removed to align with Album detail layout */}
-
         <div className="flex flex-col lg:flex-row gap-8 mb-8">
           <div className="flex-shrink-0">
             <div
@@ -1001,7 +893,6 @@ const PlaylistDetail = () => {
                 </div>
               )}
             </div>
-            {/* hidden file input for cover upload */}
             <input
               ref={fileInputRef}
               type="file"
@@ -1030,12 +921,10 @@ const PlaylistDetail = () => {
                   [PlaylistVisibility.PUBLIC]: { 
                     label: "Public Playlist", 
                     className: "bg-green-500/10 text-green-400 border-green-500/30",
-                   
                   },
                   [PlaylistVisibility.PRIVATE]: { 
                     label: "Private Playlist", 
                     className: "bg-red-500/10 text-red-400 border-red-500/30",
-      
                   },
                   [PlaylistVisibility.FRIENDS_ONLY]: { 
                     label: "Friends Only", 
@@ -1091,7 +980,6 @@ const PlaylistDetail = () => {
                       setIsEditing(false);
                       toast({ title: 'Playlist updated' });
                     } catch (e) {
-                      // Handle permission errors specifically
                       if (e instanceof PlaylistPermissionError) {
                         toast({ title: 'Access Denied', description: e.message, variant: 'destructive' });
                       } else {
@@ -1135,19 +1023,24 @@ const PlaylistDetail = () => {
                 </TooltipProvider>
               )}
               <span className="text-muted-foreground">•</span>
-              <span className="text-muted-foreground">{playlist?.songs.length || 0} songs</span>
+              <span className="text-muted-foreground">{(playlist?.songs.length || 0) > 0 ? playlist?.songs.length : (playlist?.totalSongs ?? 0)} songs</span>
               {playlist && playlist.songs.length > 0 && (
                 <>
                   <span className="text-muted-foreground">•</span>
                   <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
                 </>
               )}
-              {playlist?.updatedAt && (
+              {(() => {
+                const d = playlist?.updatedAt;
+                const t = d ? new Date(d) : null;
+                const valid = t && !isNaN(t.getTime());
+                return valid ? (
                 <>
                   <span className="text-muted-foreground">•</span>
-                  <span className="text-muted-foreground">Updated {new Date(playlist.updatedAt).toLocaleDateString()}</span>
+                    <span className="text-muted-foreground">Updated {t.toLocaleDateString()}</span>
                 </>
-              )}
+                ) : null;
+              })()}
             </div>
 
             {collaboratorEntries.length > 0 && (
@@ -1172,34 +1065,12 @@ const PlaylistDetail = () => {
                         : "ring-2 ring-border/60";
                     const isSelf = typeof meId === "number" && member.userId === meId;
                     return (
-                      <DropdownMenu key={member.userId}>
-                        <DropdownMenuTrigger asChild>
+                      <div key={member.userId}>
                           <Avatar className={`h-8 w-8 cursor-pointer border-2 border-background ${ringClass}`}>
                             <AvatarImage src={member.avatar || undefined} alt={member.name} />
                             <AvatarFallback>{initials}</AvatarFallback>
                           </Avatar>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-48">
-                          <div className="px-2 py-1.5">
-                            <p className="text-sm font-semibold truncate">{member.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {member.role === "OWNER" ? "Owner" : member.roleLabel}
-                              {isSelf ? " • You" : ""}
-                            </p>
                           </div>
-                          {permissions.isOwner && !member.isOwner && !isSelf && (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleRemoveCollaborator(member.userId, member.name)}
-                              >
-                                Remove collaborator
-                              </DropdownMenuItem>
-                            </>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     );
                   })}
                 </div>
@@ -1235,7 +1106,7 @@ const PlaylistDetail = () => {
                   className="border-destructive/40 text-destructive hover:text-destructive hover:border-destructive/60"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
-                  {leaveLoading ? "Đang rời..." : ""}
+                  {leaveLoading ? "Đang rời..." : "Rời khỏi"}
                 </Button>
               )}
 
@@ -1266,7 +1137,7 @@ const PlaylistDetail = () => {
                                 <p className="font-medium truncate">{s.name}</p>
                                 <p className="text-xs text-muted-foreground truncate">{Array.isArray(s.artists) ? s.artists.map((a) => a.name).join(', ') : ''}</p>
                               </div>
-                              <Button size="sm" onClick={() => addSongToPlaylist(Number(s.id))} disabled={adding}>Add</Button>
+                              <Button size="sm" onClick={() => addSongToPlaylist(s)} disabled={addingSongIds.includes(Number(s.id))}>{addingSongIds.includes(Number(s.id)) ? 'Adding...' : 'Add'}</Button>
                             </div>
                           ))
                         )}
@@ -1276,7 +1147,7 @@ const PlaylistDetail = () => {
                 </Dialog>
               )}
 
-              <Dialog
+              <CollaboratorDialog
                 open={collabOpen}
                 onOpenChange={(open) => {
                   setCollabOpen(open);
@@ -1285,158 +1156,22 @@ const PlaylistDetail = () => {
                     setCollabSearch("");
                   }
                 }}
-              >
-                {permissions.canManageCollaborators && (
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Collaborate
-                    </Button>
-                  </DialogTrigger>
-                )}
-                <DialogContent className="sm:max-w-lg" aria-describedby="collab-dialog-description">
-                  <DialogHeader>
-                    <DialogTitle>Add Collaborators</DialogTitle>
-                    <DialogDescription id="collab-dialog-description">
-                      Select friends to collaborate on this playlist. Choose their role.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-5">
-                    {permissions.isOwner && collaboratorEntries.filter((m) => !m.isOwner).length > 0 && (
-                      <div className="rounded-xl border border-border/30 bg-background/40 p-3 space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Current collaborators
-                        </p>
-                        <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
-                          {collaboratorEntries
-                            .filter((m) => !m.isOwner)
-                            .map((member) => (
-                              <div key={member.userId} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <Avatar className="h-8 w-8">
-                                    <AvatarImage src={member.avatar || undefined} alt={member.name} />
-                                    <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
-                                  </Avatar>
-                                  <div>
-                                    <p className="text-sm font-medium text-foreground">{member.name}</p>
-                                    <p className="text-xs text-muted-foreground">{member.roleLabel}</p>
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => handleRemoveCollaborator(member.userId, member.name)}
-                                  disabled={removingCollaboratorId === member.userId}
-                                >
-                                  <UserMinus className="w-4 h-4 mr-1" />
-                                  {removingCollaboratorId === member.userId ? "Removing..." : "Remove"}
-                                </Button>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                    <div className="space-y-2">
-                      <Label htmlFor="collab-role" className="text-xs uppercase tracking-wider text-muted-foreground">
-                        Default role
-                      </Label>
-                      <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as CollaboratorRole)}>
-                        <SelectTrigger id="collab-role" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={CollaboratorRole.EDITOR}>✏️ Editor — add & remove songs</SelectItem>
-                          <SelectItem value={CollaboratorRole.VIEWER}>👁️ Viewer — view only</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="collab-search" className="text-xs uppercase tracking-wider text-muted-foreground">
-                        Invite friends
-                      </Label>
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="collab-search"
-                          placeholder="Search friends..."
-                          className="pl-10"
-                          value={collabSearch}
-                          onChange={(e) => setCollabSearch(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-72 overflow-y-auto pr-1">
-                      {loadingFriends ? (
-                        <p className="text-sm text-muted-foreground">Loading friends...</p>
-                      ) : filteredCollabFriends.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          {friends.length === 0 ? "No friends found. Add friends to collaborate." : "No friends match your search."}
-                        </p>
-                      ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          {filteredCollabFriends.map((friend) => {
-                            const selected = selectedFriendIds.includes(friend.id);
-                            return (
-                              <button
-                                type="button"
-                                key={friend.id}
-                                onClick={() => toggleSelectFriend(friend.id)}
-                                className={`group flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
-                                  selected
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "border-border/40 bg-background/40 hover:border-primary/40 hover:bg-primary/5"
-                                }`}
-                              >
-                                <Avatar className="h-9 w-9">
-                                  <AvatarImage src={friend.avatar || undefined} alt={friend.name} />
-                                  <AvatarFallback>{friend.name.charAt(0)}</AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold truncate">{friend.name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {selected ? "Selected to invite" : "Tap to invite"}
-                                  </p>
-                                </div>
-                                {selected ? (
-                                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                                    Selected
-                                  </span>
-                                ) : (
-                                  <UserPlus className="w-4 h-4 text-muted-foreground" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between gap-3 border-t border-border/30 pt-3">
-                      <p className="text-xs text-muted-foreground">
-                        {selectedFriendIds.length === 0
-                          ? "No collaborators selected"
-                          : `${selectedFriendIds.length} collaborator${selectedFriendIds.length > 1 ? "s" : ""} selected`}
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setCollabOpen(false);
-                            setSelectedFriendIds([]);
-                            setCollabSearch("");
-                          }}
-                          disabled={sendingInvites}
-                        >
-                          Cancel
-                        </Button>
-                        <Button onClick={sendInvites} disabled={sendingInvites || selectedFriendIds.length === 0}>
-                          {sendingInvites ? "Sending..." : `Send invites (${selectedFriendIds.length})`}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                canManage={permissions.canManageCollaborators}
+                isOwner={permissions.isOwner}
+                collaborators={collaboratorEntries}
+                friends={friends}
+                loadingFriends={loadingFriends}
+                selectedFriendIds={selectedFriendIds}
+                onToggleFriend={toggleSelectFriend}
+                onRemoveCollaborator={handleRemoveCollaborator}
+                onSendInvites={sendInvites}
+                sendingInvites={sendingInvites}
+                removingCollaboratorId={removingCollaboratorId}
+                inviteRole={inviteRole}
+                onRoleChange={setInviteRole}
+                searchQuery={collabSearch}
+                onSearchChange={setCollabSearch}
+              />
 
               {permissions.isOwner && (
                 <Button variant="outline" onClick={() => setIsEditing(true)}>
@@ -1461,102 +1196,24 @@ const PlaylistDetail = () => {
             </div>
 
             <div className="space-y-2">
-              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => {
-                const active = currentSong?.id === song.id;
-                return (
-                <div
+              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => (
+                <PlaylistSongItem
                   key={song.id}
-                  onClick={() => handlePlaySong(song)}
-                  className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group cursor-pointer"
-                >
-                  <div className="w-8 text-center flex justify-center">
-                    {active ? (
-                      isPlaying ? (
-                        <span className="flex gap-0.5 h-4 items-end">
-                          <i className="bar" />
-                          <i className="bar delay-100" />
-                          <i className="bar delay-200" />
-                        </span>
-                      ) : (
-                        <Play className="w-4 h-4" />
-                      )
-                    ) : (
-                      <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
-                    )}
-                  </div>
-
-                  <Avatar className="w-12 h-12">
-                    <AvatarImage src={song.cover} alt={song.title} />
-                    <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
-                  </Avatar>
-
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{song.title}</h4>
-                    <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                  </div>
-
-                  <div className="hidden md:block flex-1 min-w-0">
-                    <p className="text-sm text-muted-foreground truncate">{song.album}</p>
-                  </div>
-
-                  <div className="hidden lg:block w-32">
-                    {/* Reserved for addedBy/addedAt if backend provides */}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => toggleSongLike(song.id)}
-                      className={`h-8 w-8 ${likedSongs.includes(song.id) ? 'text-red-500' : 'text-muted-foreground opacity-0 group-hover:opacity-100'}`}
-                    >
-                      <Heart className={`w-4 h-4 ${likedSongs.includes(song.id) ? 'fill-current' : ''}`} />
-                    </Button>
-
-                    <span className="text-sm text-muted-foreground w-12 text-right">
-                      {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : '--:--'}
-                    </span>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          aria-label="Tùy chọn bài hát"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
-                        {meId && collaborators && collaborators.some(c => c.userId === meId) && (
-                          <DropdownMenuItem onClick={() => setHiddenSongIds(prev => prev.includes(song.id) ? prev : [...prev, song.id])}>
-                            Ẩn bài hát này
-                          </DropdownMenuItem>
-                        )}
-                        {permissions.isOwner && (
-                          <DropdownMenuItem onClick={() => setCollabOpen(true)}>
-                            <Users className="w-4 h-4 mr-2" />Cộng tác
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem onClick={() => { try { navigator.clipboard.writeText(window.location.href); } catch { void 0; } }}>
-                          <Share2 className="w-4 h-4 mr-2" />Chia sẻ
-                        </DropdownMenuItem>
-                        {/* Owner/Editor can remove from playlist */}
-                        {permissions.canEdit && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive" onClick={() => confirmRemoveSong(song.id)}>
-                              <Trash2 className="w-4 h-4 mr-2" />Xóa khỏi playlist
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              );})}
+                  song={song}
+                  index={index}
+                  isActive={currentSong?.id === song.id}
+                  isPlaying={isPlaying}
+                  isLiked={likedSongs.includes(song.id)}
+                  onPlay={() => handlePlaySong(song)}
+                  onToggleLike={() => toggleSongLike(song.id)}
+                  onRemove={permissions.canEdit ? () => confirmRemoveSong(song.id) : undefined}
+                  onHide={meId && isCurrentCollaborator ? () => setHiddenSongIds(prev => prev.includes(song.id) ? prev : [...prev, song.id]) : undefined}
+                  onCollab={permissions.isOwner ? () => setCollabOpen(true) : undefined}
+                  canEdit={permissions.canEdit}
+                  isCollaborator={isCurrentCollaborator}
+                  meId={meId}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -1573,7 +1230,6 @@ const PlaylistDetail = () => {
       })()}
     />
     <Footer />
-    {/* equalizer animation */}
     <style>{`
       .bar { display:inline-block; width:2px; height:8px; background:${isPlaying ? 'hsl(var(--primary))' : 'transparent'}; animation:${isPlaying ? 'ev 1s ease-in-out infinite' : 'none'}; }
       .bar.delay-100{animation-delay:.12s}
