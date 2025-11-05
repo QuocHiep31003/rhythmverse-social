@@ -1,6 +1,4 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-
-
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,56 +22,22 @@ import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, PlaylistLibraryItemDTO } from "@/services/api/playlistApi";
 import { authApi } from "@/services/api";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
 import { friendsApi } from "@/services/api/friendsApi";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input as UiInput } from "@/components/ui/input";
 import { CollaboratorRole, PlaylistVisibility } from "@/types/playlist";
-
-interface PlaylistItem {
-  id: string;
-  title: string;
-  description: string;
-  cover: string;
-  songCount: number;
-  totalDuration: string;
-  isPublic: boolean;
-  likes: number;
-  createdAt: string;
-  updatedAt: string;
-  ownerId?: number;
-  ownerName?: string;
-  isOwner?: boolean;
-  isCollaborator?: boolean;
-  role?: CollaboratorRole; // Collaborator role if applicable
-}
-
-interface UserResponse {
-  id?: number;
-  userId?: number;
-}
-
-interface SongDTO {
-  duration?: number | string;
-}
-
-interface FriendDTO {
-  id?: number;
-  userId?: number;
-  friendId?: number;
-  name?: string;
-  username?: string;
-  email?: string;
-  avatar?: string | null;
-}
+import type { PlaylistItem, UserResponse, SongDTO, FriendDTO, PlaylistFormValues } from "@/types/playlistLibrary";
+import { toSeconds, formatTotal, parseDateSafe } from "@/utils/playlistUtils";
+import { PlaylistCard } from "@/components/playlist/PlaylistCard";
 
 const PlaylistLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [likedPlaylists, setLikedPlaylists] = useState<string[]>([]);
   const [durations, setDurations] = useState<Record<string, string>>({});
+  const [playlistMeta, setPlaylistMeta] = useState<Record<string, { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null }>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [playlists, setPlaylists] = useState<PlaylistItem[]>([]);
   const [selected, setSelected] = useState<PlaylistItem | null>(null);
@@ -88,8 +52,6 @@ const PlaylistLibrary = () => {
   const [inviteRole, setInviteRole] = useState<"VIEWER" | "EDITOR">("EDITOR");
   const [sendingInvites, setSendingInvites] = useState(false);
 
-  
-
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -100,7 +62,6 @@ const PlaylistLibrary = () => {
           me = rawUserId ? Number(rawUserId) : undefined;
           if (!Number.isFinite(me as number)) me = undefined;
           if (!me) {
-            // Fallback: try to fetch current user and cache id
             const meResp = await authApi.me().catch(() => undefined) as UserResponse | undefined;
             const uid = meResp && (meResp.id || meResp.userId);
             if (uid) {
@@ -110,13 +71,11 @@ const PlaylistLibrary = () => {
           }
         } catch { me = undefined; }
         
-        // Dùng endpoint library mới để lấy cả owned + collaborated playlists
         let libraryItems: PlaylistLibraryItemDTO[] = [];
         if (Number.isFinite(me as number)) {
           try {
             libraryItems = await playlistsApi.library();
           } catch (e) {
-            // Fallback về getByUser nếu library endpoint không available
             console.warn('Library endpoint failed, falling back to getByUser:', e);
             const page = await playlistsApi.getByUser(me as number, {
               page: 0,
@@ -158,7 +117,6 @@ const PlaylistLibrary = () => {
             });
           }
         } else {
-          // Nếu không có user, fallback về getAll
           const page = await playlistsApi.getAll({ page: 0, size: 24, sort: "dateUpdate,desc", search: searchQuery || undefined });
           libraryItems = (page.content || []).map((p: PlaylistDTO) => ({
             playlistId: p.id,
@@ -180,7 +138,6 @@ const PlaylistLibrary = () => {
           }));
         }
 
-        // Filter và sort
         let filtered = libraryItems;
         if (searchQuery.trim()) {
           const query = searchQuery.toLowerCase();
@@ -190,14 +147,12 @@ const PlaylistLibrary = () => {
         if (sortBy === 'name') {
           filtered.sort((a, b) => a.name.localeCompare(b.name));
         } else {
-          // Sort by dateUpdate (mặc định recent first - cần lấy từ detail nếu cần)
-          filtered.sort((a, b) => b.playlistId - a.playlistId); // Tạm thời sort by ID
+          filtered.sort((a, b) => b.playlistId - a.playlistId);
         }
 
         const currentUserId =
           typeof me === 'number' && Number.isFinite(me) ? Number(me) : undefined;
 
-        // Map sang PlaylistItem
         const mapped = filtered.map((p: PlaylistLibraryItemDTO) => {
           const ownerIdRaw =
             typeof p.ownerId === 'number' && Number.isFinite(p.ownerId) ? p.ownerId : undefined;
@@ -240,17 +195,28 @@ const PlaylistLibrary = () => {
 
           const description =
             (p as { description?: string | null }).description?.trim() || '';
-          const songCount = (p as { songCount?: number; totalSongs?: number }).songCount ??
-            (p as { songCount?: number; totalSongs?: number }).totalSongs ??
-            0;
+          const rawSongCount =
+            (p as { songCount?: number | null; totalSongs?: number | null }).songCount ??
+            (p as { songCount?: number | null; totalSongs?: number | null }).totalSongs ??
+            null;
+          const songCount =
+            typeof rawSongCount === 'number' && Number.isFinite(rawSongCount) && rawSongCount >= 0
+              ? rawSongCount
+              : 0;
           const totalDuration =
             (p as { totalDuration?: string }).totalDuration ?? '--';
           const likes = (p as { likes?: number }).likes ?? 0;
-          const createdAt = (p as { createdAt?: string }).createdAt ?? '';
+          const createdAt = (p as { createdAt?: string | null }).createdAt ?? null;
           const updatedAt =
-            (p as { updatedAt?: string }).updatedAt ??
-            (p as { dateUpdate?: string }).dateUpdate ??
-            '';
+            (p as { updatedAt?: string | null }).updatedAt ??
+            (p as { dateUpdate?: string | null }).dateUpdate ??
+            null;
+          const isPublicFlag =
+            normalizedVisibility != null
+              ? normalizedVisibility === PlaylistVisibility.PUBLIC
+              : typeof (p as { isPublic?: boolean }).isPublic === 'boolean'
+              ? (p as { isPublic?: boolean }).isPublic === true
+              : null;
 
           return {
             id: String(p.playlistId),
@@ -259,10 +225,8 @@ const PlaylistLibrary = () => {
             cover: p.coverUrl || '',
             songCount,
             totalDuration,
-            isPublic:
-              normalizedVisibility != null
-                ? normalizedVisibility === PlaylistVisibility.PUBLIC
-                : true,
+            isPublic: isPublicFlag,
+            visibility: normalizedVisibility ?? (visibilityRaw ?? null),
             likes,
             createdAt,
             updatedAt,
@@ -275,9 +239,20 @@ const PlaylistLibrary = () => {
         });
 
         setPlaylists(mapped);
+        
+        const metaMap: Record<string, { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null }> = {};
+        mapped.forEach((item) => {
+          metaMap[item.id] = {
+            songCount: item.songCount,
+            updatedAt: item.updatedAt,
+            visibility: item.visibility ?? null,
+          };
+        });
+        setPlaylistMeta(metaMap);
       } catch (e) {
         console.error('Failed to load playlists:', e);
         setPlaylists([]);
+        setPlaylistMeta({});
       } finally {
         setLoading(false);
       }
@@ -285,31 +260,6 @@ const PlaylistLibrary = () => {
     load();
   }, [searchQuery, sortBy]);
 
-  // Duration helpers
-  const toSeconds = (input: unknown): number => {
-    try {
-      if (typeof input === 'number' && Number.isFinite(input)) return input > 10000 ? Math.round(input/1000) : Math.round(input);
-      if (typeof input === 'string') {
-        const t = input.trim(); if (!t) return 0;
-        if (t.includes(':')) {
-          const parts = t.split(':').map(Number);
-          if (parts.every(Number.isFinite)) {
-            if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-            if (parts.length === 2) return parts[0]*60 + parts[1];
-          }
-        }
-        const n = Number(t); if (Number.isFinite(n)) return n > 10000 ? Math.round(n/1000) : Math.round(n);
-      }
-    } catch { void 0; }
-    return 0;
-  };
-  const formatTotal = (sec: number) => {
-    const s = Math.max(0, Math.floor(sec));
-    const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
-  };
-
-  // Fetch durations for listed playlists
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -318,14 +268,65 @@ const PlaylistLibrary = () => {
         const res = await Promise.all(ids.map(async (id) => {
           try {
             const detail = await playlistsApi.getById(id);
-            const secs = Array.isArray(detail.songs) ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0) : 0;
-            return [id, formatTotal(secs)] as [string, string];
-          } catch { return [id, '--'] as [string, string]; }
+            const secs = Array.isArray(detail.songs)
+              ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0)
+              : 0;
+            const songCount =
+              Array.isArray(detail.songs)
+                ? detail.songs.length
+                : Array.isArray(detail.songIds)
+                ? detail.songIds.length
+                : undefined;
+            const visibility =
+              (detail as { visibility?: PlaylistVisibility | string | null }).visibility ?? null;
+            const updatedAt =
+              (detail as { updatedAt?: string | null }).updatedAt ??
+              (detail as { dateUpdate?: string | null }).dateUpdate ??
+              (detail as { createdAt?: string | null }).createdAt ??
+              null;
+            return {
+              id,
+              duration: formatTotal(secs),
+              songCount,
+              visibility,
+              updatedAt,
+            };
+          } catch {
+            return { id, duration: '--' };
+          }
         }));
         if (!cancelled) {
-          const map: Record<string, string> = {};
-          res.forEach(([id, d]) => { map[id] = d; });
-          setDurations(map);
+          const durationMap: Record<string, string> = {};
+          const metaMap: Record<
+            string,
+            { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null }
+          > = {};
+          res.forEach(({ id, duration, songCount, visibility, updatedAt }) => {
+            durationMap[id] = duration;
+            const nextMeta: { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null } = {};
+            if (typeof songCount === 'number' && Number.isFinite(songCount)) {
+              nextMeta.songCount = songCount;
+            }
+            if (typeof visibility === 'string' || visibility === null) {
+              nextMeta.visibility = visibility;
+            }
+            if (typeof updatedAt === 'string' || updatedAt === null) {
+              nextMeta.updatedAt = updatedAt;
+            }
+            if (Object.keys(nextMeta).length > 0) {
+              metaMap[id] = nextMeta;
+            }
+          });
+          setDurations(prev => ({ ...prev, ...durationMap }));
+          if (Object.keys(metaMap).length > 0) {
+            setPlaylistMeta(prev => {
+              const next = { ...prev };
+              Object.entries(metaMap).forEach(([id, meta]) => {
+                next[id] = { ...(prev[id] ?? {}), ...meta };
+              });
+              return next;
+            });
+          }
         }
       } catch { void 0; }
     };
@@ -355,7 +356,6 @@ const PlaylistLibrary = () => {
     };
     if (collabOpen) fetchFriends();
   }, [collabOpen]);
-
 
   const favoriteSongs = [
     {
@@ -396,11 +396,8 @@ const PlaylistLibrary = () => {
     }
   ];
 
-
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  // Owned playlists: isOwner = true (không phải isCollaborator = false)
   const ownedPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isOwner === true), [playlists]);
-  // Collaborated playlists: isCollaborator = true
   const collabPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isCollaborator === true), [playlists]);
 
   const filteredOwnedPlaylists = useMemo(() => {
@@ -452,8 +449,6 @@ const PlaylistLibrary = () => {
   };
 
   const getCollaboratorBadgeText = (role?: CollaboratorRole) => {
-    if (role === CollaboratorRole.EDITOR) return "Collaborator (EDITOR)";
-    if (role === CollaboratorRole.VIEWER) return "Collaborator (VIEWER)";
     return "Collaborator";
   };
 
@@ -489,16 +484,6 @@ const PlaylistLibrary = () => {
     }
   };
   const openDelete = (pl: PlaylistItem) => { setSelected(pl); setDeleteOpen(true); };
-  const openCollaborate = (pl: PlaylistItem) => { setSelected(pl); setCollabOpen(true); };
-
-  interface PlaylistFormValues {
-    name: string;
-    description: string;
-    coverUrl: string;
-    isPublic: boolean;
-    songLimit?: number;
-    songIds?: number[];
-  }
 
   const handleSave = async (values: PlaylistFormValues) => {
     if (!selected) return;
@@ -514,7 +499,6 @@ const PlaylistLibrary = () => {
       });
       toast({ title: "Updated", description: "Playlist saved" });
       setEditOpen(false);
-      // reload
       const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
       const me = rawUserId ? Number(rawUserId) : NaN;
       const page = Number.isFinite(me)
@@ -580,6 +564,7 @@ const PlaylistLibrary = () => {
             normalizedVisibility != null
               ? normalizedVisibility === PlaylistVisibility.PUBLIC
               : true,
+          visibility: normalizedVisibility ?? null,
           likes: (p as { likes?: number }).likes ?? 0,
           createdAt: p.dateUpdate || (p as { createdAt?: string }).createdAt || '',
           updatedAt: p.dateUpdate || (p as { updatedAt?: string }).updatedAt || '',
@@ -634,7 +619,6 @@ const PlaylistLibrary = () => {
   return (
     <div className="min-h-screen bg-gradient-dark text-white">
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent">
@@ -653,7 +637,6 @@ const PlaylistLibrary = () => {
           </Link>
         </div>
 
-        {/* Search and Filter */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -685,7 +668,6 @@ const PlaylistLibrary = () => {
             <TabsTrigger value="favorites">Favorite Songs</TabsTrigger>
           </TabsList>
 
-          {/* My Playlists */}
           <TabsContent value="my-playlists">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {filteredOwnedPlaylists.length === 0 ? (
@@ -698,116 +680,18 @@ const PlaylistLibrary = () => {
                 </div>
               ) : (
                 filteredOwnedPlaylists.map((playlist) => (
-                <Card key={playlist.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
-                  <CardContent className="p-0">
-                    {/* Cover Image */}
-                    <div className="relative aspect-square">
-                      <img
-                        src={playlist.cover}
-                        alt={playlist.title}
-                        className="w-full h-full object-cover rounded-t-lg"
-                      />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Button
-                          size="icon"
-                          className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90"
-                          onClick={() => playPlaylist(playlist)}
-                        >
-                          <Play className="w-8 h-8" />
-                        </Button>
-                      </div>
-                      
-                      {/* Badges */}
-                      <div className="absolute top-3 right-3 flex gap-2 flex-wrap">
-                        {playlist.isOwner && (
-                          <Badge variant="default" className="bg-blue-500/20 text-blue-200 border-blue-400/30">
-                            Owner
-                          </Badge>
-                        )}
-                        {playlist.isCollaborator && (
-                          <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30">
-                            {getCollaboratorBadgeText(playlist.role)}
-                          </Badge>
-                        )}
-                        <Badge 
-                          variant={playlist.isPublic ? "default" : "secondary"}
-                        >
-                          {playlist.isPublic ? "Public" : "Private"}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* Content */}
-                    <div className="p-4">
-                      <Link to={`/playlist/${playlist.id}`}>
-                        <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors truncate">
-                          {playlist.title}
-                        </h3>
-                      </Link>
-                      
-                      {/* Owner info for collaborated playlists */}
-                      {playlist.isCollaborator && playlist.ownerName && (
-                        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-                          <Users className="w-3 h-3" />
-                          <span>by {playlist.ownerName}</span>
-                        </div>
-                      )}
-                      
-                      <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                        {playlist.description}
-                      </p>
-
-                      {/* Stats */}
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
-                        <div className="flex items-center gap-1">
-                          <Music className="w-4 h-4" />
-                          {playlist.songCount}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {durations[playlist.id] || playlist.totalDuration}
-                        </div>
-                        {playlist.isPublic && (
-                          <div className="flex items-center gap-1">
-                            <Heart className="w-4 h-4" />
-                            {formatNumber(playlist.likes)}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">
-                          Updated {new Date(playlist.updatedAt).toLocaleDateString()}
-                        </p>
-                        
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => toggleLike(playlist.id)}
-                            className={`h-8 w-8 ${likedPlaylists.includes(playlist.id) ? 'text-red-500' : ''}`}
-                          >
-                            <Heart className={`w-4 h-4 ${likedPlaylists.includes(playlist.id) ? 'fill-current' : ''}`} />
-                          </Button>
-                          <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
-                          {playlist.isOwner && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem className="text-destructive" onClick={() => openDelete(playlist)}>Delete</DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                  <PlaylistCard
+                    key={playlist.id}
+                    playlist={playlist}
+                    playlistMeta={playlistMeta[playlist.id]}
+                    duration={durations[playlist.id]}
+                    isLiked={likedPlaylists.includes(playlist.id)}
+                    onLike={() => toggleLike(playlist.id)}
+                    onPlay={() => playPlaylist(playlist)}
+                    onDelete={playlist.isOwner ? () => openDelete(playlist) : undefined}
+                    getCollaboratorBadgeText={getCollaboratorBadgeText}
+                    formatNumber={formatNumber}
+                  />
               ))
               )}
             </div>
@@ -825,83 +709,27 @@ const PlaylistLibrary = () => {
                 </div>
               ) : (
                 filteredCollabPlaylists.map((playlist) => (
-                <Card key={playlist.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
-                  <CardContent className="p-0">
-                    <div className="relative aspect-square">
-                      <img
-                        src={playlist.cover}
-                        alt={playlist.title}
-                        className="w-full h-full object-cover rounded-t-lg"
-                      />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <Button
-                          size="icon"
-                          className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90"
-                          onClick={() => playPlaylist(playlist)}
-                        >
-                          <Play className="w-8 h-8" />
-                        </Button>
-                      </div>
-                      <div className="absolute top-3 right-3 flex gap-2">
-                        <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30">
-                          {getCollaboratorBadgeText(playlist.role)}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-3">
-                      <Link to={`/playlist/${playlist.id}`}>
-                        <h3 className="font-semibold text-lg hover:text-primary transition-colors truncate">
-                          {playlist.title}
-                        </h3>
-                      </Link>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        Owner · {playlist.ownerName || "Unknown"}
-                      </p>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {playlist.description || "No description provided."}
-                      </p>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Music className="h-4 w-4" />
-                          {playlist.songCount}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          {durations[playlist.id] || playlist.totalDuration}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">
-                          Updated {new Date(playlist.updatedAt).toLocaleDateString()}
-                        </p>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => toggleLike(playlist.id)}
-                            className={`h-8 w-8 ${likedPlaylists.includes(playlist.id) ? "text-red-500" : ""}`}
-                          >
-                            <Heart className={`w-4 h-4 ${likedPlaylists.includes(playlist.id) ? "fill-current" : ""}`} />
-                          </Button>
-                          <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                  <PlaylistCard
+                    key={playlist.id}
+                    playlist={playlist}
+                    playlistMeta={playlistMeta[playlist.id]}
+                    duration={durations[playlist.id]}
+                    isLiked={likedPlaylists.includes(playlist.id)}
+                    onLike={() => toggleLike(playlist.id)}
+                    onPlay={() => playPlaylist(playlist)}
+                    getCollaboratorBadgeText={getCollaboratorBadgeText}
+                  />
               ))
               )}
             </div>
           </TabsContent>
 
-          {/* Favorite Songs */}
           <TabsContent value="favorites">
             <div className="space-y-4">
               {filteredFavorites.map((song, index) => (
                 <Card key={song.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-4">
-                      {/* Track Number / Play Button */}
                       <div className="w-8 text-center">
                         <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
                         <Button
@@ -918,31 +746,26 @@ const PlaylistLibrary = () => {
                         </Button>
                       </div>
 
-                      {/* Cover */}
                       <Avatar className="w-12 h-12">
                         <AvatarImage src={song.cover} alt={song.title} />
                         <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
                       </Avatar>
 
-                      {/* Song Info */}
                       <div className="flex-1 min-w-0">
                         <h4 className="font-medium truncate text-foreground">{song.title}</h4>
                         <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                       </div>
 
-                      {/* Album */}
                       <div className="hidden md:block flex-1 min-w-0">
                         <p className="text-sm text-muted-foreground truncate">{song.album}</p>
                       </div>
 
-                      {/* Liked date */}
                       <div className="hidden lg:block w-32">
                         <p className="text-sm text-muted-foreground">
                           Liked {new Date(song.likedAt).toLocaleDateString()}
                         </p>
                       </div>
 
-                      {/* Actions */}
                       <div className="flex items-center gap-2">
                         <Button
                           variant="ghost"
@@ -952,7 +775,6 @@ const PlaylistLibrary = () => {
                           <Heart className="w-4 h-4 fill-current" />
                         </Button>
 
-                        {/* Duration */}
                         <span className="text-sm text-muted-foreground w-12 text-right">
                           {song.duration}
                         </span>
@@ -975,7 +797,6 @@ const PlaylistLibrary = () => {
     </div>
     <Footer />
 
-    {/* Edit dialog using PlaylistFormDialog */}
     <PlaylistFormDialog
       open={editOpen}
       onOpenChange={setEditOpen}
@@ -985,7 +806,6 @@ const PlaylistLibrary = () => {
       isLoading={isSubmitting}
     />
 
-    {/* Delete confirm */}
     <DeleteConfirmDialog
       open={deleteOpen}
       onOpenChange={setDeleteOpen}
@@ -995,7 +815,6 @@ const PlaylistLibrary = () => {
       isLoading={isSubmitting}
     />
 
-    {/* Collaborate dialog */}
     <Dialog open={collabOpen} onOpenChange={(v) => { setCollabOpen(v); if (!v) setSelectedFriendIds([]); }}>
       <DialogContent className="bg-card border-border">
         <DialogHeader>
@@ -1042,5 +861,3 @@ const PlaylistLibrary = () => {
 };
 
 export default PlaylistLibrary;
-
-

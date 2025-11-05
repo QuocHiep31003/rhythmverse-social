@@ -1,0 +1,148 @@
+import { Song } from "@/contexts/MusicContext";
+import type { SearchSongResult } from "@/types/playlistDetail";
+
+export function toSeconds(input: unknown): number {
+  try {
+    if (typeof input === 'number' && Number.isFinite(input)) return input > 10000 ? Math.round(input/1000) : Math.round(input);
+    if (typeof input === 'string') {
+      const t = input.trim(); if (!t) return 0;
+      if (t.includes(':')) {
+        const parts = t.split(':').map(Number);
+        if (parts.every(Number.isFinite)) {
+          if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+          if (parts.length === 2) return parts[0]*60 + parts[1];
+        }
+      }
+      const n = Number(t); if (Number.isFinite(n)) return n > 10000 ? Math.round(n/1000) : Math.round(n);
+    }
+  } catch {
+    void 0;
+  }
+  return 0;
+}
+
+export const msToMMSS = (sec: number) => {
+  const s = Math.max(0, Math.floor(sec));
+  const mm = Math.floor(s/60).toString().padStart(2,'0');
+  const ss = Math.floor(s%60).toString().padStart(2,'0');
+  return `${mm}:${ss}`;
+};
+
+export const formatTotal = (sec: number) => {
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
+
+export const isValidImageValue = (value?: string | null): value is string => {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  if (['string', 'null', 'undefined', 'na', 'n/a', 'none', 'placeholder', '{}', '[]'].includes(lower)) {
+    return false;
+  }
+  return /^https?:\/\//.test(trimmed) || trimmed.startsWith('/') || trimmed.startsWith('data:image') || trimmed.startsWith('blob:');
+};
+
+export const resolveSongCover = (
+  song: SearchSongResult & { songId?: number; cover?: string | null; artwork?: string | null; thumbUrl?: string | null; albumArtUrl?: string | null },
+  fallback?: string | null,
+): string => {
+  const sources = [
+    song.cover,
+    song.coverUrl,
+    song.urlImageAlbum,
+    song.artworkUrl,
+    song.albumArtUrl,
+    song.thumbnailUrl,
+    song.thumbUrl,
+    song.imageUrl,
+    song.image,
+    song.posterUrl,
+    song.artwork,
+    song.album?.name && typeof song.album !== 'string' ? (song as { albumCoverUrl?: string | null }).albumCoverUrl : undefined,
+    fallback,
+  ].filter(isValidImageValue);
+  return sources.length ? sources[0] : '';
+};
+
+export const mapSongsFromResponse = (
+  songsRaw: unknown,
+  defaultCover?: string | null,
+): (Song & { addedBy?: string; addedAt?: string })[] => {
+  if (!Array.isArray(songsRaw)) return [];
+  return songsRaw
+    .map((raw) => {
+      const song = raw as SearchSongResult & { songId?: number; addedByUser?: { name?: string | null } | null; creator?: { name?: string | null } | null };
+      const rawId = typeof song.id === 'number' ? song.id : typeof song.songId === 'number' ? song.songId : undefined;
+      if (rawId == null) return undefined;
+      const artistNames = Array.isArray(song.artists) && song.artists.length
+        ? song.artists.map((a) => a?.name).filter(Boolean).join(', ')
+        : undefined;
+      const addedAt =
+        song.addedAt ??
+        song.added_at ??
+        song.addedDate ??
+        song.updatedAt ??
+        song.createdAt ??
+        song.created_at ??
+        null;
+      const addedBy =
+        song.addedBy ??
+        song.addedByName ??
+        song.addedByUserName ??
+        song.createdByName ??
+        (song.addedByUser && song.addedByUser.name) ??
+        (song as { addedByDisplayName?: string | null }).addedByDisplayName ??
+        (song as { addedByUsername?: string | null }).addedByUsername ??
+        (song as { creatorName?: string | null }).creatorName ??
+        (song as { creator?: { name?: string | null } }).creator?.name ??
+        undefined;
+      return {
+        id: String(rawId),
+        title: song.name ?? (song as { title?: string }).title ?? 'Untitled',
+        artist: artistNames ?? (song as { artist?: string }).artist ?? 'Unknown',
+        album: song.album?.name ?? (song as { albumName?: string }).albumName ?? '',
+        cover: resolveSongCover(song, defaultCover),
+        audioUrl: song.audioUrl ?? (song as { audio?: string }).audio ?? '',
+        duration: toSeconds(song.duration),
+        addedAt: addedAt ?? undefined,
+        addedBy: addedBy ?? undefined,
+      };
+    })
+    .filter((item): item is Song & { addedBy?: string; addedAt?: string } => Boolean(item));
+};
+
+export const formatDateDisplay = (value?: string) => {
+  if (!value) return undefined;
+  try {
+    const dt = new Date(value);
+    if (!Number.isNaN(dt.getTime())) {
+      return dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+  } catch {
+    void 0;
+  }
+  return value;
+};
+
+export const parseDateSafe = (value?: string | null): Date | null => {
+  try {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const direct = new Date(trimmed);
+    if (!Number.isNaN(direct.getTime())) return direct;
+    const normalized = trimmed.replace(' ', 'T');
+    const normalizedDate = new Date(normalized);
+    if (!Number.isNaN(normalizedDate.getTime())) return normalizedDate;
+    const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+    if (!hasTimezone) {
+      const withZ = new Date(`${normalized}Z`);
+      if (!Number.isNaN(withZ.getTime())) return withZ;
+    }
+  } catch { void 0; }
+  return null;
+};
+
