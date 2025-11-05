@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { setUserOnline, setUserOffline, watchUserPresence, watchMultipleUsersPresence } from '@/services/firebase/presence';
+import { setUserOnline, setUserOffline, pingPresence, watchUserPresence, watchMultipleUsersPresence } from '@/services/firebase/presence';
 import { watchChatMessages, sendMessage, type FirebaseMessage } from '@/services/firebase/chat';
 import { watchNotifications, NotificationDTO } from '@/services/firebase/notifications';
 
@@ -48,6 +48,8 @@ export default function useFirebaseRealtime(
       // Set online ngay khi userId thay đổi (lần đầu mount hoặc đổi user)
       console.log('[Firebase Realtime] UserId changed, setting user online');
       lastPingTimeRef.current = Date.now();
+      
+      // Gọi setUserOnline một lần khi login (optional, backward compatible)
       void setUserOnline(userId);
       
       // Clear interval cũ nếu có
@@ -56,12 +58,13 @@ export default function useFirebaseRealtime(
         pingIntervalRef.current = null;
       }
       
-      // Ping định kỳ để giữ online (mỗi 60s - dài hơn để tránh reset liên tục)
+      // Heartbeat ping mỗi 15s (phải < 30s heartbeat window của backend)
+      // Backend sẽ tự động tính online status dựa trên lastSeen
       pingIntervalRef.current = setInterval(() => {
-        console.log('[Firebase Realtime] Ping to keep online');
+        console.log('[Firebase Realtime] Heartbeat ping');
         lastPingTimeRef.current = Date.now();
-        void setUserOnline(userId);
-      }, 60000); // 60 giây thay vì 30 giây
+        void pingPresence(userId);
+      }, 15000); // 15 giây - Messenger-style heartbeat
     } else {
       // Nếu userId không đổi, chỉ cập nhật presence listeners nếu cần
       console.log('[Firebase Realtime] UserId unchanged, updating listeners if needed');
@@ -118,13 +121,37 @@ export default function useFirebaseRealtime(
     unsubscribePresenceRef.current.forEach(unsub => unsub());
     unsubscribePresenceRef.current = [];
 
+    // Handle pagehide/beforeunload để set offline (best effort)
+    const handlePageHide = () => {
+      if (currentUserIdRef.current) {
+        console.log('[Firebase Realtime] Page hiding, setting user offline');
+        void setUserOffline(currentUserIdRef.current);
+      }
+    };
+    
+    const handleBeforeUnload = () => {
+      if (currentUserIdRef.current) {
+        console.log('[Firebase Realtime] Before unload, setting user offline');
+        void setUserOffline(currentUserIdRef.current);
+      }
+    };
+    
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
     // Cleanup
     return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = null;
       }
-      // Không gọi setUserOffline ở đây vì sẽ gọi khi component unmount hoặc userId thay đổi
+      // Gọi setUserOffline khi cleanup (nhưng không chờ response vì có thể đang unmount)
+      if (currentUserIdRef.current) {
+        void setUserOffline(currentUserIdRef.current);
+      }
       unsubscribePresenceRef.current.forEach(unsub => unsub());
       unsubscribePresenceRef.current = [];
       unsubscribeChatRef.current.forEach(unsub => unsub());

@@ -34,6 +34,7 @@ import { useState, useRef, useEffect } from "react";
 import { arcApi, authApi } from "@/services/api";
 
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { watchNotifications, NotificationDTO } from "@/services/firebase/notifications";
 
 
 
@@ -46,6 +47,7 @@ const TopBar = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
   const [inviteCount, setInviteCount] = useState<number>(0);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
@@ -228,6 +230,37 @@ const TopBar = () => {
     const onStorage = (e: StorageEvent) => { if (e.key === 'token') void loadInvites(); };
     window.addEventListener('storage', onStorage);
     return () => { mounted = false; clearInterval(interval); window.removeEventListener('storage', onStorage); };
+  }, []);
+
+  // Watch notifications để tính số thông báo chưa đọc
+  useEffect(() => {
+    let mounted = true;
+    const userId = (() => {
+      try {
+        const raw = localStorage.getItem('userId');
+        if (!raw) return null;
+        const num = Number(raw);
+        return Number.isFinite(num) ? num : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    if (!userId) {
+      if (mounted) setUnreadNotificationsCount(0);
+      return;
+    }
+
+    const unsubscribe = watchNotifications(userId, (notifications: NotificationDTO[]) => {
+      if (!mounted) return;
+      const unread = notifications.filter(n => !n.read);
+      setUnreadNotificationsCount(unread.length);
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const handleLogout = () => {
@@ -426,29 +459,37 @@ const TopBar = () => {
             variant="ghost"
             size="icon"
             className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
-            onClick={() => navigate('/playlists/invites')}
-            title="Playlist collaboration invites"
+            onClick={() => navigate('/social?tab=friends')}
+            title="Messages & Collaboration Invites"
           >
             <Bell className="h-5 w-5" />
-            {inviteCount > 0 && (
+            {unreadNotificationsCount > 0 && (
               <Badge
                 variant="destructive"
                 className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
               >
-                {inviteCount}
+                {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
               </Badge>
             )}
           </Button>
 
           {/* Messages */}
-          <Button variant="ghost" size="icon" className="relative hover:bg-gradient-secondary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--accent)/0.4)]">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="relative hover:bg-gradient-secondary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--accent)/0.4)]"
+            onClick={() => navigate('/social?tab=friends')}
+            title="Messages & Collaboration Invites"
+          >
             <MessageCircle className="h-5 w-5" />
-            <Badge
-              variant="destructive"
-              className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-xs animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
-            >
-              5
-            </Badge>
+            {(inviteCount > 0 || unreadNotificationsCount > 0) && (
+              <Badge
+                variant="destructive"
+                className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
+              >
+                {inviteCount + unreadNotificationsCount > 99 ? '99+' : inviteCount + unreadNotificationsCount}
+              </Badge>
+            )}
           </Button>
 
           {/* Khám phá Premium */}

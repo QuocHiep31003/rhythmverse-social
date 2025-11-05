@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { Badge } from "@/components/ui/badge";
+
 import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
 
 import { chatApi, ChatMessageDTO } from "@/services/api/chatApi";
@@ -124,6 +126,10 @@ const Social = () => {
   const [loadingCollabInvites, setLoadingCollabInvites] = useState<boolean>(false);
 
   const [expandedInviteId, setExpandedInviteId] = useState<number | null>(null);
+
+  // Đếm số tin nhắn chưa đọc và số thông báo chưa đọc
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
 
 
 
@@ -245,6 +251,20 @@ const Social = () => {
 
       setCollabInvites(Array.isArray(list) ? list : []);
 
+      // Đánh dấu đã xem khi load invites (giả định rằng khi vào tab friends thì đã xem)
+      // Có thể lưu vào localStorage để track invites đã xem
+      if (Array.isArray(list) && list.length > 0 && meId) {
+        try {
+          const viewedInvitesKey = `viewedInvites_${meId}`;
+          const viewedInvites = JSON.parse(localStorage.getItem(viewedInvitesKey) || '[]');
+          const newInviteIds = list.map((inv: CollabInviteDTO) => inv.id);
+          const allViewed = [...new Set([...viewedInvites, ...newInviteIds])];
+          localStorage.setItem(viewedInvitesKey, JSON.stringify(allViewed));
+        } catch {
+          // Ignore localStorage errors
+        }
+      }
+
     } catch { setCollabInvites([]); }
 
     finally { setLoadingCollabInvites(false); }
@@ -312,11 +332,18 @@ const Social = () => {
     },
 
     onNotification: (n: FBNotificationDTO) => {
+      // Cập nhật số thông báo chưa đọc
+      if (!n.read) {
+        setUnreadNotificationsCount(prev => prev + 1);
+      }
 
       try {
 
         if (n?.type === 'MESSAGE') {
-
+          // Tăng số tin nhắn chưa đọc
+          if (!n.read) {
+            setUnreadMessagesCount(prev => prev + 1);
+          }
           toast(`${n.senderName || 'Someone'}: ${n.body || ''}`);
 
         } else if (n?.type === 'SHARE') {
@@ -429,6 +456,12 @@ const Social = () => {
 
 
   // Watch chat messages for selected friend
+  // Reset unread count khi chọn chat
+  useEffect(() => {
+    if (selectedChat) {
+      setUnreadMessagesCount(0);
+    }
+  }, [selectedChat]);
 
   useEffect(() => {
 
@@ -1267,15 +1300,20 @@ const Social = () => {
 
 
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (tab === 'friends') loadCollabInvites(); }} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
 
-              <TabsTrigger value="chat" className="gap-2">
-
+              <TabsTrigger value="chat" className="gap-2 relative">
                 <MessageCircle className="w-4 h-4" />
-
                 Chat
-
+                {unreadMessagesCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px]"
+                  >
+                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
+                  </Badge>
+                )}
               </TabsTrigger>
 
               <TabsTrigger value="friends" className="gap-2">

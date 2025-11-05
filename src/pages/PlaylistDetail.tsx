@@ -22,6 +22,7 @@ import { uploadImage } from "@/config/cloudinary";
 import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
 import { getPlaylistPermissions, checkIfFriends } from "@/utils/playlistPermissions";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SearchSongResult, ExtendedPlaylistDTO, PendingInvite, PlaylistState } from "@/types/playlistDetail";
 import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromResponse, formatDateDisplay } from "@/utils/playlistUtils";
 import { parseCollaboratorRole, normalizeCollaborators } from "@/utils/collaboratorUtils";
@@ -1065,12 +1066,39 @@ const PlaylistDetail = () => {
                         : "ring-2 ring-border/60";
                     const isSelf = typeof meId === "number" && member.userId === meId;
                     return (
-                      <div key={member.userId}>
-                          <Avatar className={`h-8 w-8 cursor-pointer border-2 border-background ${ringClass}`}>
-                            <AvatarImage src={member.avatar || undefined} alt={member.name} />
-                            <AvatarFallback>{initials}</AvatarFallback>
-                          </Avatar>
-                          </div>
+                      <div key={member.userId} className="relative group">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Avatar className={`h-8 w-8 cursor-pointer border-2 border-background ${ringClass} hover:scale-110 transition-transform`}>
+                              <AvatarImage src={member.avatar || undefined} alt={member.name} />
+                              <AvatarFallback>{initials}</AvatarFallback>
+                            </Avatar>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-3">
+                            <div className="flex items-center gap-3 mb-3">
+                              <Avatar className="h-10 w-10">
+                                <AvatarImage src={member.avatar || undefined} alt={member.name} />
+                                <AvatarFallback>{initials}</AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm truncate">{member.name}</p>
+                                <p className="text-xs text-muted-foreground">{member.roleLabel}</p>
+                              </div>
+                            </div>
+                            {permissions.isOwner && !member.isOwner && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="w-full"
+                                onClick={() => handleRemoveCollaborator(member.userId, member.name)}
+                                disabled={removingCollaboratorId === member.userId}
+                              >
+                                {removingCollaboratorId === member.userId ? "Đang xóa..." : "Gỡ khỏi playlist"}
+                              </Button>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     );
                   })}
                 </div>
