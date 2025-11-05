@@ -91,7 +91,7 @@ const App = () => (
                     <Route path="/discover" element={<Discover />} />
                     <Route path="/playlist" element={<Playlist />} />
                     <Route path="/playlists" element={<PlaylistLibrary />} />
-                    <Route path="/playlist/:id" element={<PlaylistDetail />} />
+                    <Route path="/playlist/:slug" element={<PlaylistDetail />} />
                     <Route path="/create-playlist" element={<CreatePlaylist />} />
                     <Route path="/trending" element={<TrendingMusic />} />
                     <Route path="/top100" element={<Top100 />} />
@@ -102,8 +102,8 @@ const App = () => (
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/social" element={<Social />} />
                     <Route path="/settings" element={<Settings />} />
-                    <Route path="/song/:id" element={<SongDetail />} />
-                    <Route path="/album/:id" element={<AlbumDetail />} />
+                    <Route path="/song/:slug" element={<SongDetail />} />
+                    <Route path="/album/:slug" element={<AlbumDetail />} />
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />

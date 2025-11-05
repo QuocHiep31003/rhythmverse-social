@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { createSlug } from "@/utils/playlistUtils";
 import Footer from "@/components/Footer";
 import ChatBubble from "@/components/ChatBubble";
 import ShareButton from "@/components/ShareButton";
@@ -244,7 +245,7 @@ const Playlist = () => {
               <Card 
                 key={playlist.id} 
                 className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
-                onClick={() => navigate(`/playlist/${playlist.id}`)}
+                onClick={() => navigate(`/playlist/${createSlug(playlist.name || playlist.title || 'playlist', playlist.id)}`)}
               >
                 <CardContent className="p-4">
                   <div className="aspect-square rounded-lg bg-gradient-primary mb-4 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 relative">

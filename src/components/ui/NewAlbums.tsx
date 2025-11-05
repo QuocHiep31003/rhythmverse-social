@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Music, Play } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
+import { createSlug } from "@/utils/playlistUtils";
 
 interface Album {
   id: number | string;
@@ -59,7 +60,7 @@ const NewAlbums = () => {
             <div
               key={album.id}
               className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer"
-              onClick={() => navigate(`/album/${album.id}`)} // ✅ nhấn để chuyển sang chi tiết album
+              onClick={() => navigate(`/album/${createSlug(album.name, album.id)}`)} // ✅ nhấn để chuyển sang chi tiết album
             >
               <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-subtle">
                 {album.coverUrl || album.cover ? (
@@ -89,7 +90,7 @@ const NewAlbums = () => {
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
-                  navigate(`/album/${album.id}`);
+                  navigate(`/album/${createSlug(album.name, album.id)}`);
                 }}
               >
                 <Play className="w-3 h-3" />

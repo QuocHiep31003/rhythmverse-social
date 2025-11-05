@@ -24,13 +24,13 @@ import { getPlaylistPermissions, checkIfFriends } from "@/utils/playlistPermissi
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SearchSongResult, ExtendedPlaylistDTO, PendingInvite, PlaylistState } from "@/types/playlistDetail";
-import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromResponse, formatDateDisplay } from "@/utils/playlistUtils";
+import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromResponse, formatDateDisplay, parseSlug, createSlug } from "@/utils/playlistUtils";
 import { parseCollaboratorRole, normalizeCollaborators } from "@/utils/collaboratorUtils";
 import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 
 const PlaylistDetail = () => {
-  const { id } = useParams();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { playSong, setQueue, isPlaying, currentSong } = useMusic();
 
@@ -188,10 +188,20 @@ const PlaylistDetail = () => {
 
   useEffect(() => {
     const load = async () => {
-      if (!id) return;
+      if (!slug) return;
       setLoading(true);
       try {
-        const data: PlaylistDTO = await playlistsApi.getById(Number(id));
+        // Parse slug từ URL - nếu có ID thì dùng, nếu không thì cần tìm bằng slug
+        const parsed = parseSlug(slug);
+        const playlistId = parsed.id;
+        
+        if (!playlistId || isNaN(playlistId)) {
+          toast({ title: 'Invalid playlist', description: 'Playlist not found', variant: 'destructive' });
+          navigate('/playlists');
+          return;
+        }
+        
+        const data: PlaylistDTO = await playlistsApi.getById(playlistId);
         const extendedData = data as ExtendedPlaylistDTO;
         const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
         const mappedSongs = mapSongsFromResponse(data.songs, playlistFallbackCover);
@@ -274,7 +284,7 @@ const PlaylistDetail = () => {
       }
     };
     load();
-  }, [id, meId, navigate, updateCollaboratorsFromRaw]);
+  }, [slug, meId, navigate, updateCollaboratorsFromRaw]);
 
   useEffect(() => {
     const songs = playlist?.songs ?? [];
@@ -411,12 +421,15 @@ const PlaylistDetail = () => {
   useEffect(() => {
     const loadCollabs = async () => {
       try {
-        if (!id) return;
+        if (!slug) return;
+        const parsed = parseSlug(slug);
+        const playlistId = parsed.id;
+        if (!playlistId) return;
         if (!collabOpen) return;
         collabsLoadAttemptedRef.current = false;
         if (!permissions.isOwner) return;
         
-        const list = await playlistCollaboratorsApi.list(Number(id));
+        const list = await playlistCollaboratorsApi.list(Number(playlistId));
         updateCollaboratorsFromRaw(
           list,
           permissions.userRole,
@@ -443,7 +456,7 @@ const PlaylistDetail = () => {
     if (collabOpen && permissions.isOwner) {
       loadCollabs();
     }
-  }, [id, collabOpen, permissions.isOwner, permissions.userRole, updateCollaboratorsFromRaw, isCurrentCollaborator]);
+  }, [slug, collabOpen, permissions.isOwner, permissions.userRole, updateCollaboratorsFromRaw, isCurrentCollaborator]);
 
   useEffect(() => {
     const loadPendingInvites = async () => {
@@ -1122,7 +1135,7 @@ const PlaylistDetail = () => {
               </Button>
 
               {playlist && (
-                <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
+                <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`} />
               )}
 
               {!permissions.isOwner && isCurrentCollaborator && (

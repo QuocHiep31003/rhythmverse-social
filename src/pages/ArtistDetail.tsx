@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { artistsApi, songsApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
+import { createSlug } from "@/utils/playlistUtils";
 
 interface Artist {
   id: number;
@@ -78,8 +79,8 @@ const ArtistDetail = () => {
     navigate(`/artist/${artistId}`);
   };
 
-  const handleAlbumClick = (albumId: number) => {
-    navigate(`/album/${albumId}`);
+  const handleAlbumClick = (albumId: number, albumName?: string) => {
+    navigate(`/album/${createSlug(albumName || 'album', albumId)}`);
   };
 
   const handlePlayAlbum = (e: React.MouseEvent, albumId: number) => {
@@ -345,7 +346,7 @@ const ArtistDetail = () => {
                 <Card 
                   key={album.id} 
                   className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
-                  onClick={() => handleAlbumClick(album.id as number)}
+                  onClick={() => handleAlbumClick(album.id as number, album.name || album.title)}
                 >
                   <CardContent className="p-4">
                     <div className="aspect-square rounded-lg bg-gradient-accent mb-4 flex items-center justify-center relative overflow-hidden">

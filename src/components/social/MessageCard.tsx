@@ -7,6 +7,7 @@ import { useMusic, Song } from "@/contexts/MusicContext";
 import type { Message, SharedPlaylistMessageData, SharedAlbumMessageData, SharedSongMessageData } from "@/types/social";
 import { SharedPlaylistCard, SharedAlbumCard, SharedSongCard } from "./SharedContentCards";
 import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME } from "@/utils/socialUtils";
+import { createSlug } from "@/utils/playlistUtils";
 
 export const MessageCard = ({ message, playSong }: { message: Message; playSong: (song: Song) => void }) => {
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistDTO | null>(null);
@@ -155,15 +156,29 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
       message.sharedPlaylist?.id ??
       playlistPreview?.id ??
       message.playlistData?.id;
-    return typeof id === "number" && Number.isFinite(id) ? `/playlist/${id}` : undefined;
-  }, [linkFromContent, message.sharedPlaylist?.id, playlistPreview?.id, message.playlistData?.id]);
+    const name =
+      message.sharedPlaylist?.name ??
+      playlistPreview?.name ??
+      playlistInfo?.name ??
+      message.playlistData?.name;
+    return typeof id === "number" && Number.isFinite(id) 
+      ? `/playlist/${createSlug(name || 'playlist', id)}` 
+      : undefined;
+  }, [linkFromContent, message.sharedPlaylist?.id, playlistPreview?.id, message.playlistData?.id, message.sharedPlaylist?.name, playlistPreview?.name, playlistInfo?.name, message.playlistData?.name]);
 
   const albumLink = useMemo(() => {
     if (linkFromContent) return linkFromContent;
     const id =
       message.sharedAlbum?.id ?? albumPreview?.id ?? message.albumData?.id;
-    return typeof id === "number" && Number.isFinite(id) ? `/album/${id}` : undefined;
-  }, [linkFromContent, message.sharedAlbum?.id, albumPreview?.id, message.albumData?.id]);
+    const name =
+      message.sharedAlbum?.name ??
+      albumPreview?.name ??
+      albumInfo?.name ??
+      message.albumData?.name;
+    return typeof id === "number" && Number.isFinite(id) 
+      ? `/album/${createSlug(name || 'album', id)}` 
+      : undefined;
+  }, [linkFromContent, message.sharedAlbum?.id, albumPreview?.id, message.albumData?.id, message.sharedAlbum?.name, albumPreview?.name, albumInfo?.name, message.albumData?.name]);
 
   const songLink = useMemo(() => {
     if (linkFromContent) return linkFromContent;
