@@ -7,7 +7,7 @@ import { Play, Heart, MoreHorizontal, Music, Clock, Users } from "lucide-react";
 import ShareButton from "@/components/ShareButton";
 import type { PlaylistItem } from "@/types/playlistLibrary";
 import { PlaylistVisibility } from "@/types/playlist";
-import { parseDateSafe } from "@/utils/playlistUtils";
+import { parseDateSafe, createSlug } from "@/utils/playlistUtils";
 
 interface PlaylistCardProps {
   playlist: PlaylistItem;
@@ -121,7 +121,7 @@ export const PlaylistCard = ({
         </div>
 
         <div className="p-4">
-          <Link to={`/playlist/${playlist.id}`}>
+          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`}>
             <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors truncate">
               {playlist.title}
             </h3>
@@ -173,7 +173,7 @@ export const PlaylistCard = ({
               >
                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
               </Button>
-              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${Number(playlist.id)}`} />
+              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} />
               {playlist.isOwner && onDelete && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

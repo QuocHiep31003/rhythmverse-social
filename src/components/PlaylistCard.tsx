@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { PlaylistDTO } from "@/services/api/playlistApi";
 import { PlaylistVisibility, PlaylistCollaborator } from "@/types/playlist";
 import { canViewPlaylist, checkIfFriends } from "@/utils/playlistPermissions";
+import { createSlug } from "@/utils/playlistUtils";
 import { useEffect, useState } from "react";
 
 interface PlaylistCardProps {
@@ -89,7 +90,7 @@ export const PlaylistCard = ({
   return (
     <Card className={`group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10 ${className || ''}`}>
       <CardContent className="p-0">
-        <Link to={`/playlist/${playlist.id}`}>
+        <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`}>
           {/* Cover Image */}
           <div className="aspect-square rounded-lg bg-gradient-primary mb-4 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 relative">
             {playlist.coverUrl ? (
@@ -123,7 +124,7 @@ export const PlaylistCard = ({
 
         {/* Content */}
         <div className="p-4">
-          <Link to={`/playlist/${playlist.id}`}>
+          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`}>
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-lg hover:text-primary transition-colors truncate">
                 {playlist.name}

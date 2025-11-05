@@ -13,6 +13,7 @@ import { uploadImage } from "@/config/cloudinary";
 import { toast } from "@/hooks/use-toast";
 import Footer from "@/components/Footer";
 import { buildJsonHeaders, authApi } from "@/services/api";
+import { createSlug } from "@/utils/playlistUtils";
 
 interface PlaylistForm {
   name: string;
@@ -146,7 +147,7 @@ const CreatePlaylist = () => {
       if (!res.ok) throw new Error("Failed to create playlist");
       const data = await res.json();
       toast({ title: "Playlist created successfully!", description: `"${data.name}" has been added to your library` });
-      navigate(`/playlist/${data.id}`);
+      navigate(`/playlist/${createSlug(data.name || 'playlist', data.id)}`);
     } catch (err: any) {
       toast({ title: "Error", description: err?.message || "Please try again later", variant: "destructive" });
     } finally {

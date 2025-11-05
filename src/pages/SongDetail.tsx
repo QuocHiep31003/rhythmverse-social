@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { parseSlug } from "@/utils/playlistUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,16 +48,20 @@ interface Comment {
 }
 
 const SongDetail = () => {
-  const { id } = useParams();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
   const [newComment, setNewComment] = useState("");
 
+  // Parse slug để lấy ID
+  const parsed = parseSlug(slug || '');
+  const songId = parsed.id ? String(parsed.id) : slug || "1";
+
   // Mock song data - in real app, this would be fetched based on the ID
   const song: Song = {
-    id: id || "1",
+    id: songId,
     title: "Cosmic Dreams",
     artist: "StarGazer",
     album: "Galaxy Sounds",

@@ -146,3 +146,49 @@ export const parseDateSafe = (value?: string | null): Date | null => {
   return null;
 };
 
+// Tạo slug từ tên (dùng cho URL friendly)
+export const createSlug = (name: string, id?: string | number): string => {
+  if (!name) return id ? String(id) : '';
+  
+  // Chuyển thành lowercase, replace spaces và special chars với dash
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '') // Remove special chars
+    .replace(/\s+/g, '-') // Replace spaces with dash
+    .replace(/-+/g, '-') // Replace multiple dashes with single dash
+    .replace(/^-|-$/g, ''); // Remove leading/trailing dashes
+  
+  // Nếu có ID, append vào cuối để backward compatible
+  if (id) {
+    return `${slug}-${id}`;
+  }
+  
+  return slug || 'untitled';
+};
+
+// Parse slug từ URL - trả về { slug, id } hoặc null nếu không parse được
+export const parseSlug = (slugFromUrl: string): { slug: string; id?: number } => {
+  if (!slugFromUrl) return { slug: '' };
+  
+  // Nếu là số thuần túy (backward compatible với ID cũ)
+  const numericId = Number(slugFromUrl);
+  if (!isNaN(numericId) && isFinite(numericId)) {
+    return { slug: slugFromUrl, id: numericId };
+  }
+  
+  // Format: name-slug-id hoặc chỉ name-slug
+  const parts = slugFromUrl.split('-');
+  const lastPart = parts[parts.length - 1];
+  const possibleId = Number(lastPart);
+  
+  // Nếu phần cuối là số, đó là ID
+  if (!isNaN(possibleId) && isFinite(possibleId)) {
+    const slug = parts.slice(0, -1).join('-');
+    return { slug: slug || slugFromUrl, id: possibleId };
+  }
+  
+  // Nếu không có ID trong URL, chỉ có slug
+  return { slug: slugFromUrl };
+};
+
