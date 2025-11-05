@@ -39,8 +39,11 @@ const AdminLogin = () => {
         throw new Error("Không nhận được token từ server");
       }
 
-      // Lưu token và auth flag (phục vụ AdminLayout kiểm tra)
+      // Lưu token, refresh token và auth flag (phục vụ AdminLayout kiểm tra)
       localStorage.setItem("adminToken", response.token);
+      if (response.refreshToken) {
+        localStorage.setItem("adminRefreshToken", response.refreshToken);
+      }
       localStorage.setItem("adminEmail", response.email);
       localStorage.setItem("adminRole", response.role);
       localStorage.setItem("adminAuth", "true");

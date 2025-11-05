@@ -111,6 +111,24 @@ export const authApi = {
         }
         return await response.json();
     },
+
+    /**
+     * Refresh access token using refresh token
+     */
+    refreshToken: async (refreshToken: string) => {
+        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || error.message || 'Failed to refresh token');
+        }
+
+        return await response.json();
+    },
 };
 
 export default authApi;

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
 
 /* ========== Helper: Lấy màu và định dạng thời gian ========== */
 async function getDominantColor(url: string): Promise<{ r: number; g: number; b: number }> {
@@ -129,13 +130,14 @@ const AlbumDetail = () => {
           songs: res.songs ?? [],
         };
         const songList = norm.songs.map((s: any, i: number) => ({
-          id: String(s.id),
+          ...mapToPlayerSong({
+            ...s, // Pass toàn bộ song object để không bị mất field albumCoverImg
+            artist: (s.artists && s.artists[0]?.name) || norm.artist,
+            album: norm.name,
+            albumCoverImg: s.albumCoverImg ?? s.urlImageAlbum ?? norm.cover, // Ưu tiên albumCoverImg từ song
+            urlImageAlbum: s.urlImageAlbum ?? norm.cover,
+          }),
           index: i + 1,
-          title: s.name,
-          artist: (s.artists && s.artists[0]?.name) || norm.artist,
-          duration: toSeconds((s as any).duration),
-          audioUrl: s.audioUrl ?? "",
-          cover: norm.cover,
         }));
         setAlbum(norm);
         setSongs(songList);
@@ -294,7 +296,7 @@ const AlbumDetail = () => {
                           active ? "text-primary" : ""
                         }`}
                       >
-                        {song.title}
+                        {song.name || song.songName || "Unknown Song"}
                       </div>
                       <div className="text-sm text-muted-foreground truncate">
                         {song.artist}
@@ -332,7 +334,7 @@ const AlbumDetail = () => {
                         />
                       </Button>
                       <div onClick={(e) => e.stopPropagation()}>
-                        <ShareButton title={song.title} type="song" url={`${window.location.origin}/song/${song.id}`} />
+                        <ShareButton title={song.name || song.songName || "Unknown Song"} type="song" url={`${window.location.origin}/song/${song.id}`} />
                       </div>
                     </div>
                   </div>

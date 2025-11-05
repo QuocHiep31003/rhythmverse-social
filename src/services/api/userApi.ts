@@ -105,6 +105,46 @@ export const userApi = {
             throw error instanceof Error ? error : new Error('Failed to change password');
         }
     },
+
+    /**
+     * Upload profile avatar image to backend
+     * Backend will handle Cloudinary upload with metadata and automatically update user avatar
+     */
+    uploadAvatar: async (file: File): Promise<UserDTO> => {
+        try {
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                throw new Error('Only image files are allowed');
+            }
+
+            // Validate file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                throw new Error('File size exceeds 5MB limit');
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch(`${API_BASE_URL}/user/profile/avatar`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorMessage = await parseErrorResponse(response);
+                throw new Error(errorMessage);
+            }
+
+            const updatedUser = await response.json();
+            return updatedUser;
+        } catch (error) {
+            console.error('Error uploading avatar:', error);
+            throw error instanceof Error ? error : new Error('Failed to upload avatar');
+        }
+    },
 };
 
 export default userApi;

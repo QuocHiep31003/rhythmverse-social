@@ -27,7 +27,7 @@ import type { Song as PlayerSong } from "@/contexts/MusicContext";
 import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
-import { formatPlayCount } from "@/lib/utils";
+import { formatPlayCount, mapToPlayerSong } from "@/lib/utils";
 import { songsApi } from "@/services/api";
 import { getTrendingComparison, TrendingSong, callHotTodayTrending } from "@/services/api/trendingApi";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
@@ -445,15 +445,7 @@ const Index = () => {
                           try {
                             const full = await songsApi.getById(String(song.songId));
                             if (full) {
-                                const mapped: PlayerSong = {
-                                  id: String(full.id ?? song.songId),
-                                  title: full.title ?? full.songName ?? "Unknown",
-                                  artist: full.artist ?? (full.artists?.map((a:any)=>a.name).join(", ") || "Unknown"),
-                                  album: full.album ?? full.albumName ?? "Unknown",
-                                  duration: typeof full.duration === 'number' ? full.duration : 0,
-                                  cover: full.cover ?? full.albumImageUrl ?? "",
-                                  audioUrl: full.audioUrl ?? full.audio ?? full.url ?? "",
-                                };
+                                const mapped = mapToPlayerSong(full);
                                 setQueue([mapped]);
                                 playSong(mapped);
                             }
@@ -482,7 +474,7 @@ const Index = () => {
                           </div>
                           <button
                             className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 transition-opacity"
-                              onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped: PlayerSong = { id: String(full.id ?? song.songId), title: full.title ?? full.songName ?? "Unknown", artist: full.artist ?? (full.artists?.map((a:any)=>a.name).join(", ") || "Unknown"), album: full.album ?? full.albumName ?? "Unknown", duration: typeof full.duration === 'number' ? full.duration : 0, cover: full.cover ?? full.albumImageUrl ?? "", audioUrl: full.audioUrl ?? full.audio ?? full.url ?? "", }; setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
+                              onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped = mapToPlayerSong(full); setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
                           >
                             <Play className="w-4 h-4 text-white" />
                           </button>
@@ -529,7 +521,7 @@ const Index = () => {
                       {song.cover ? (
                         <img
                           src={song.cover}
-                          alt={song.title}
+                          alt={song.name || song.songName || "Unknown Song"}
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -538,7 +530,7 @@ const Index = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate text-sm">
-                        {song.title}
+                        {song.name || song.songName || "Unknown Song"}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
                         {song.artist}

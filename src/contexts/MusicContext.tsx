@@ -2,7 +2,7 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 export interface Song {
   id: string;
-  title: string;
+  songName?: string; // Alternative field from API
   artist: string;
   album: string;
   duration: number;
@@ -50,7 +50,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
 
   const playNext = () => {
     if (queue.length === 0) return;
-    
+
     if (!currentSong) {
       // No current song, play first
       playSong(queue[0]);

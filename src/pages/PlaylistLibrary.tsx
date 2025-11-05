@@ -426,7 +426,7 @@ const PlaylistLibrary = () => {
 
   const filteredFavorites = normalizedSearch
     ? favoriteSongs.filter((song) =>
-        song.title.toLowerCase().includes(normalizedSearch) ||
+        (song.name || song.songName || "").toLowerCase().includes(normalizedSearch) ||
         song.artist.toLowerCase().includes(normalizedSearch)
       )
     : favoriteSongs;
@@ -909,7 +909,7 @@ const PlaylistLibrary = () => {
                           variant="ghost"
                           className="hidden group-hover:flex w-8 h-8"
                           onClick={() => toast({
-                            title: `Playing ${song.title}`,
+                            title: `Playing ${song.name || song.songName || "Unknown Song"}`,
                             description: `by ${song.artist}`,
                             duration: 3000,
                           })}
@@ -920,13 +920,13 @@ const PlaylistLibrary = () => {
 
                       {/* Cover */}
                       <Avatar className="w-12 h-12">
-                        <AvatarImage src={song.cover} alt={song.title} />
-                        <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
+                        <AvatarImage src={song.cover} alt={song.name || song.songName || "Unknown Song"} />
+                        <AvatarFallback>{(song.name || song.songName || "?").charAt(0)}</AvatarFallback>
                       </Avatar>
 
                       {/* Song Info */}
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium truncate text-foreground">{song.title}</h4>
+                        <h4 className="font-medium truncate text-foreground">{song.name || song.songName || "Unknown Song"}</h4>
                         <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                       </div>
 

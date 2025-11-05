@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { artistsApi, songsApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
 
 interface Artist {
   id: number;
@@ -91,14 +92,11 @@ const ArtistDetail = () => {
       if (songs && songs.length > 0) {
         // Map songs to format expected by player
         const formattedSongs = songs.map((song) => ({
-          id: String(song.id),
-          title: song.name || song.title || "",
-          artist: artist?.name || "Unknown",
-          album: albums.find(a => a.id === albumId)?.name || "Unknown",
-          duration: 0,
-          cover: song.urlImageAlbum || "",
-          audio: song.audioUrl || "",
-          audioUrl: song.audioUrl || "",
+          ...mapToPlayerSong({
+            ...song, // Pass toàn bộ song object để không bị mất field albumCoverImg
+            artist: artist?.name,
+            album: albums.find(a => a.id === albumId)?.name,
+          }),
         }));
         
         setQueue(formattedSongs);
@@ -177,14 +175,10 @@ const ArtistDetail = () => {
     
     // Map songs to format expected by player
     const formattedSongs = songs.map((s) => ({
-      id: String(s.id),
-      title: s.name || s.title || "",
-      artist: artist?.name || "Unknown",
-      album: "Unknown",
-      duration: 0,
-      cover: s.urlImageAlbum || "",
-      audio: s.audioUrl || "",
-      audioUrl: s.audioUrl || "",
+      ...mapToPlayerSong({
+        ...s, // Pass toàn bộ song object để không bị mất field albumCoverImg
+        artist: artist?.name,
+      }),
     }));
     
     setQueue(formattedSongs);
@@ -299,7 +293,7 @@ const ArtistDetail = () => {
                     
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium truncate">{song.name || song.title}</p>
+                        <p className="font-medium truncate">{song.name || song.songName || "Unknown Song"}</p>
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <span>{song.releaseYear || "Unknown year"}</span>
@@ -322,7 +316,7 @@ const ArtistDetail = () => {
                       >
                         <Heart className={`w-4 h-4 ${likedSongs.includes(String(song.id)) ? 'fill-red-500 text-red-500' : ''}`} />
                       </Button>
-                      <ShareButton title={song.name || song.title || "Unknown Song"} type="song" />
+                      <ShareButton title={song.name || song.songName || "Unknown Song"} type="song" />
                     </div>
                   </div>
                 ))

@@ -358,7 +358,8 @@ const PlaylistDetail = () => {
         const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(data.songs)
           ? data.songs.map((s: SearchSongResult) => ({
               id: String(s.id),
-              title: s.name,
+              name: s.name,
+              songName: s.name,
               artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
               album: s.album?.name || '',
               cover: s.urlImageAlbum || '',
@@ -671,7 +672,8 @@ const PlaylistDetail = () => {
       const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(updated.songs)
         ? updated.songs.map((s: SearchSongResult) => ({
             id: String(s.id),
-            title: s.name,
+            name: s.name,
+            songName: s.name,
             artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
             album: s.album?.name || '',
             cover: s.urlImageAlbum || '',
@@ -1486,12 +1488,12 @@ const PlaylistDetail = () => {
                   </div>
 
                   <Avatar className="w-12 h-12">
-                    <AvatarImage src={song.cover} alt={song.title} />
-                    <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
+                    <AvatarImage src={song.cover} alt={song.name || song.songName || "Unknown Song"} />
+                    <AvatarFallback>{(song.name || song.songName || "?").charAt(0)}</AvatarFallback>
                   </Avatar>
 
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-medium truncate">{song.title}</h4>
+                    <h4 className="font-medium truncate">{song.name || song.songName || "Unknown Song"}</h4>
                     <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                   </div>
 

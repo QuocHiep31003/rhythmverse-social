@@ -22,6 +22,7 @@ import {
 import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
@@ -154,21 +155,10 @@ const SearchResults = () => {
   };
 
   const handlePlaySong = (song) => {
-    const formattedSongs = searchResults.songs.map(s => ({
-      id: s.id,
-      title: s.name,
-      artist: s.artists?.map((a) => a.name).join(", ") || "Unknown",
-      album: s.album?.name || "Unknown",
-      duration: s.duration || 0,
-      cover: s.urlImageAlbum || "",
-      genre: s.genres?.[0]?.name || "Unknown",
-      plays: s.playCount || 0,
-      audio: s.audioUrl,
-      audioUrl: s.audioUrl,
-    }));
+    const formattedSongs = searchResults.songs.map(s => mapToPlayerSong(s));
 
     setQueue(formattedSongs);
-    const currentFormatted = formattedSongs.find(s => s.id === song.id);
+    const currentFormatted = formattedSongs.find(s => s.id === String(song.id));
     playSong(currentFormatted);
   };
 
@@ -342,7 +332,7 @@ const SearchResults = () => {
                       <Play className="w-3 h-3 text-muted-foreground" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate text-foreground">{song.title}</p>
+                      <p className="font-medium text-sm truncate text-foreground">{song.name || song.songName || "Unknown Song"}</p>
                       <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
                     </div>
                     <span className="text-xs font-medium text-primary">{song.trend}</span>

@@ -68,7 +68,7 @@ const AdminSongs = () => {
         genresApi.getAll({ page: 0, size: 1000 }),
         moodsApi.getAll({ page: 0, size: 1000 }),
       ]);
-      
+
       setArtists(artistsData.content || []);
       setGenres(genresData.content || []);
       setMoods(moodsData.content || []);
@@ -134,7 +134,12 @@ const AdminSongs = () => {
       if (formMode === "create") {
         await songsApi.create(data);
       } else {
-        await songsApi.update(selectedSong.id, data);
+        if (data.file) {
+          // console.log('cái dkmm')
+          await songsApi.updateWithFile(String(selectedSong.id), data);
+        } else {
+          await songsApi.update(String(selectedSong.id), data);
+        }
       }
 
       toast({
@@ -173,6 +178,18 @@ const AdminSongs = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Warn user before closing/reloading tab while submitting (e.g., uploading file)
+  useEffect(() => {
+    const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+      if (isSubmitting) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    return () => window.removeEventListener('beforeunload', beforeUnloadHandler);
+  }, [isSubmitting]);
 
   const handleExport = async () => {
     try {
