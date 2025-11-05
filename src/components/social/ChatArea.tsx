@@ -78,9 +78,34 @@ export const ChatArea = ({
     }
   }, [selectedChat, messages]);
 
-  const renderFriendsList = () => (
-    <div className="space-y-2">
-      {friends.map((friend) => (
+  const renderFriendsList = () => {
+    // Sắp xếp bạn bè theo tin nhắn mới nhất
+    const sortedFriends = [...friends].sort((a, b) => {
+      const messagesA = messages[a.id] || [];
+      const messagesB = messages[b.id] || [];
+      
+      // Lấy tin nhắn mới nhất của mỗi bạn
+      const lastMsgA = messagesA.length > 0 
+        ? messagesA[messagesA.length - 1] 
+        : null;
+      const lastMsgB = messagesB.length > 0 
+        ? messagesB[messagesB.length - 1] 
+        : null;
+      
+      if (!lastMsgA && !lastMsgB) return 0; // Không có tin nhắn thì giữ nguyên thứ tự
+      if (!lastMsgA) return 1; // A không có tin nhắn thì xuống cuối
+      if (!lastMsgB) return -1; // B không có tin nhắn thì xuống cuối
+      
+      // So sánh thời gian gửi tin nhắn
+      const timeA = typeof lastMsgA.sentAt === 'number' ? lastMsgA.sentAt : Number(lastMsgA.id) || 0;
+      const timeB = typeof lastMsgB.sentAt === 'number' ? lastMsgB.sentAt : Number(lastMsgB.id) || 0;
+      
+      return timeB - timeA; // Mới nhất lên đầu
+    });
+    
+    return (
+      <div className="space-y-2">
+        {sortedFriends.map((friend) => (
         <div
           key={friend.id}
           className={`p-3 rounded-lg cursor-pointer ${
@@ -107,9 +132,10 @@ export const ChatArea = ({
             </div>
           </div>
         </div>
-      ))}
-    </div>
-  );
+        ))}
+      </div>
+    );
+  };
 
   const renderMessages = () => {
     if (!selectedChat) return null;

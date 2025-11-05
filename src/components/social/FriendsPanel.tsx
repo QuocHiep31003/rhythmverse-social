@@ -39,35 +39,35 @@ export const FriendsPanel = ({
 }: FriendsPanelProps) => {
   return (
     <>
-      {/* Pending Collaboration Invites */}
-      <div className="mb-6">
-        <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Collaboration Invites
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loadingCollabInvites ? (
-              <p className="text-sm text-muted-foreground">Loading...</p>
-            ) : collabInvites.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No pending collaboration invites</p>
-            ) : (
-              collabInvites.map((inv: CollabInviteDTO) => (
-                <CollabInviteCard
-                  key={inv.id}
-                  invite={inv}
-                  expanded={expandedInviteId === inv.id}
-                  onToggle={(id) => onToggleInvite(id)}
-                  onAccept={onAcceptInvite}
-                  onReject={onRejectInvite}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Collaboration Invites - chỉ hiện khi có invites */}
+      {collabInvites.length > 0 && (
+        <div className="mb-6">
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                Collaboration Invites ({collabInvites.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {loadingCollabInvites ? (
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              ) : (
+                collabInvites.map((inv: CollabInviteDTO) => (
+                  <CollabInviteCard
+                    key={inv.id}
+                    invite={inv}
+                    expanded={expandedInviteId === inv.id}
+                    onToggle={(id) => onToggleInvite(id)}
+                    onAccept={onAcceptInvite}
+                    onReject={onRejectInvite}
+                  />
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* My Profile */}
       <div className="mb-6">

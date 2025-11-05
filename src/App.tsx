@@ -16,7 +16,6 @@ import Top100 from "./pages/Top100";
 import PlaylistDetail from "./pages/PlaylistDetail";
 import CreatePlaylist from "./pages/CreatePlaylist";
 import PlaylistLibrary from "./pages/PlaylistLibrary";
-import PlaylistInvites from "./pages/PlaylistInvites";
 import Quiz from "./pages/Quiz";
 import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
@@ -92,7 +91,6 @@ const App = () => (
                     <Route path="/discover" element={<Discover />} />
                     <Route path="/playlist" element={<Playlist />} />
                     <Route path="/playlists" element={<PlaylistLibrary />} />
-                    <Route path="/playlists/invites" element={<PlaylistInvites />} />
                     <Route path="/playlist/:id" element={<PlaylistDetail />} />
                     <Route path="/create-playlist" element={<CreatePlaylist />} />
                     <Route path="/trending" element={<TrendingMusic />} />
