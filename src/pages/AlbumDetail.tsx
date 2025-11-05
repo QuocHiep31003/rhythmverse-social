@@ -9,7 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
-import { mapToPlayerSong } from "@/lib/utils";
+
+
+
+        import { mapToPlayerSong } from "@/lib/utils";
+import { parseSlug, createSlug } from "@/utils/playlistUtils";
 
 /* ========== Helper: Lấy màu và định dạng thời gian ========== */
 async function getDominantColor(url: string): Promise<{ r: number; g: number; b: number }> {
@@ -92,7 +96,7 @@ function formatTotalDuration(seconds: number) {
 
 /* ========== Component chính ========== */
 const AlbumDetail = () => {
-  const { id } = useParams();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { playSong, togglePlay, isPlaying, currentSong, setQueue } = useMusic();
 
@@ -114,10 +118,16 @@ const AlbumDetail = () => {
   /* ========== Fetch album ========== */
   useEffect(() => {
     (async () => {
-      if (!id) return;
+      if (!slug) return;
       try {
         setLoading(true);
-        const res = await albumsApi.getById(id);
+        const parsed = parseSlug(slug);
+        const albumId = parsed.id || Number(slug);
+        if (!albumId || isNaN(albumId)) {
+          navigate('/discover');
+          return;
+        }
+        const res = await albumsApi.getById(albumId);
         if (!res) return;
 
         const norm = {
@@ -160,7 +170,7 @@ const AlbumDetail = () => {
         setLoading(false);
       }
     })();
-  }, [id, setQueue]);
+  }, [slug, setQueue]);
 
   /* ========== Play / Pause logic chuẩn ========== */
   const handlePlayAlbum = () => {
@@ -243,7 +253,7 @@ const AlbumDetail = () => {
               >
                 <Heart className="w-5 h-5" />
               </Button>
-              <ShareButton title={album?.title || "Album"} type="album" url={`${window.location.origin}/album/${album?.id ?? id}`} albumId={Number(album?.id ?? id)} />
+              <ShareButton title={album?.title || "Album"} type="album" url={`${window.location.origin}/album/${createSlug(album?.title || album?.name || 'album', album?.id ?? (slug ? parseSlug(slug).id : undefined))}`} albumId={Number(album?.id ?? (slug ? parseSlug(slug).id : undefined))} />
             </div>
           </div>
         </div>
@@ -359,7 +369,7 @@ const AlbumDetail = () => {
             {related.map((rel: any) => (
               <Card
                 key={rel.id}
-                onClick={() => navigate(`/album/${rel.id}`)}
+                onClick={() => navigate(`/album/${createSlug(rel.name || rel.title || 'album', rel.id)}`)}
                 className="cursor-pointer border-border hover:border-primary/40 bg-card hover:bg-muted/30 transition-all overflow-hidden"
               >
                 <div className="aspect-square overflow-hidden">

@@ -16,7 +16,6 @@ import Top100 from "./pages/Top100";
 import PlaylistDetail from "./pages/PlaylistDetail";
 import CreatePlaylist from "./pages/CreatePlaylist";
 import PlaylistLibrary from "./pages/PlaylistLibrary";
-import PlaylistInvites from "./pages/PlaylistInvites";
 import Quiz from "./pages/Quiz";
 import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
@@ -92,8 +91,7 @@ const App = () => (
                     <Route path="/discover" element={<Discover />} />
                     <Route path="/playlist" element={<Playlist />} />
                     <Route path="/playlists" element={<PlaylistLibrary />} />
-                    <Route path="/playlists/invites" element={<PlaylistInvites />} />
-                    <Route path="/playlist/:id" element={<PlaylistDetail />} />
+                    <Route path="/playlist/:slug" element={<PlaylistDetail />} />
                     <Route path="/create-playlist" element={<CreatePlaylist />} />
                     <Route path="/trending" element={<TrendingMusic />} />
                     <Route path="/top100" element={<Top100 />} />
@@ -104,8 +102,8 @@ const App = () => (
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/social" element={<Social />} />
                     <Route path="/settings" element={<Settings />} />
-                    <Route path="/song/:id" element={<SongDetail />} />
-                    <Route path="/album/:id" element={<AlbumDetail />} />
+                    <Route path="/song/:slug" element={<SongDetail />} />
+                    <Route path="/album/:slug" element={<AlbumDetail />} />
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />

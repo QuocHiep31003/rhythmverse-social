@@ -15,6 +15,8 @@ import { useEffect, useMemo, useState } from "react";
 import { friendsApi } from "@/services/api/friendsApi";
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
 import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { sendMessage as sendChatMessage } from "@/services/firebase/chat";
 
 interface ShareButtonProps {
   title: string;
@@ -25,9 +27,12 @@ interface ShareButtonProps {
 }
 
 const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps) => {
+  const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [friends, setFriends] = useState<{ id: string; name: string; avatar?: string | null }[]>([]);
+  const [message, setMessage] = useState("");
+  const [isSharing, setIsSharing] = useState(false);
   const meId = useMemo(() => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
     const n = raw ? Number(raw) : NaN;
@@ -54,6 +59,12 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
 
   const filteredFriends = friends.filter(friend => friend.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
+
+  const resetForm = () => {
+    setSelectedFriends([]);
+    setSearchQuery("");
+    setMessage("");
+  };
   const toggleFriend = (friendId: string) => {
     setSelectedFriends(prev =>
       prev.includes(friendId)
@@ -121,9 +132,18 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
         return `${API_BASE_URL}/chat/share/song?${baseParams.toString()}`;
       };
 
-      // Share via chat endpoints for all supported content types
-      for (const fid of selectedFriends) {
-        const receiverId = Number(fid);
+      const receiverIds = selectedFriends
+        .map((fid) => Number(fid))
+        .filter((id) => Number.isFinite(id)) as number[];
+
+      if (!receiverIds.length) {
+        toast.error("Unable to share", { description: "No valid receivers selected." });
+        return;
+      }
+
+      setIsSharing(true);
+
+      for (const receiverId of receiverIds) {
         const endpoint = buildShareUrl(receiverId);
         const response = await fetch(endpoint, { method: "POST", headers: buildJsonHeaders() });
         if (!response.ok) {
@@ -135,21 +155,49 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
             detail: { receiverId, message: payload },
           })
         );
+
+        const note = message.trim();
+        if (note) {
+          try {
+            await sendChatMessage(meId, receiverId, note);
+          } catch (err) {
+            console.error("Failed to send accompanying message", err);
+            toast.warning("Shared without message", {
+              description: "We couldn't send your message. The share was delivered.",
+            });
+          }
+        }
       }
 
-      setSelectedFriends([]);
-      setSearchQuery("");
+      resetForm();
+      setOpen(false);
     } catch (e: any) {
       const messageText = e?.message || e;
       console.error("Share failed", messageText);
       toast.error("Share failed", { description: typeof messageText === "string" ? messageText : undefined });
+    } finally {
+      setIsSharing(false);
     }
   };
 
   return (
-    <Dialog>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        setOpen(value);
+        if (!value) resetForm();
+      }}
+    >
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); }}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+        >
           <Share2 className="w-4 h-4" />
         </Button>
       </DialogTrigger>
@@ -161,13 +209,11 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          {/* Share preview */}
           <div className="p-3 bg-muted rounded-lg">
             <p className="font-medium text-sm">{title}</p>
             <p className="text-xs text-muted-foreground capitalize">{type}</p>
           </div>
 
-          {/* Search friends */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -178,7 +224,6 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
             />
           </div>
 
-          {/* Friends list */}
           <div className="max-h-48 overflow-y-auto space-y-2 scrollbar-custom">
             {filteredFriends.map((friend) => (
               <div
@@ -202,15 +247,29 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
             ))}
           </div>
 
-          {/* Message input */}
-          {/* Share button */}
-          <Button 
-            onClick={handleShare} 
-            className="w-full" 
-            disabled={selectedFriends.length === 0}
+          <div className="space-y-2">
+            <label htmlFor="share-message" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Personal message (optional)
+            </label>
+            <Textarea
+              id="share-message"
+              placeholder="Add a short note…"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="resize-none"
+              rows={3}
+            />
+          </div>
+
+          <Button
+            onClick={handleShare}
+            className="w-full"
+            disabled={isSharing}
           >
             <Send className="w-4 h-4 mr-2" />
-            {type === 'playlist' ? 'Invite' : 'Share'} with {selectedFriends.length} friend{selectedFriends.length !== 1 ? 's' : ''}
+            {isSharing
+              ? "Sharing…"
+              : `${type === 'playlist' ? 'Invite' : 'Share'} with ${selectedFriends.length} friend${selectedFriends.length !== 1 ? 's' : ''}`}
           </Button>
         </div>
       </DialogContent>

@@ -23,6 +23,7 @@ import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
+import { createSlug } from "@/utils/playlistUtils";
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
@@ -289,7 +290,7 @@ const SearchResults = () => {
                   {(detailedResults.albums.length > 0 ? detailedResults.albums : searchResults.albums).slice(0, activeFilter === "all" ? 4 : 20).map((album) => (
                     <Card
                       key={album.id}
-                      onClick={() => navigate(`/album/${album.id}`)}
+                      onClick={() => navigate(`/album/${createSlug(album.name || album.title || 'album', album.id)}`)}
                       className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer"
                     >
                       <CardContent className="p-6 text-center">

@@ -203,6 +203,34 @@ export const playlistsApi = {
     return (await res.json()) as PlaylistDTO;
   },
 
+  addSong: async (playlistId: number | string, songId: number | string) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}/songs/${songId}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to add songs to this playlist",
+        403,
+        errorText
+      );
+    }
+
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    try { return await res.json(); } catch { return { success: true } as const; }
+  },
+
   // Remove a song from a playlist (dedicated endpoint)
   removeSong: async (playlistId: number | string, songId: number | string) => {
     const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}/songs/${songId}`, {

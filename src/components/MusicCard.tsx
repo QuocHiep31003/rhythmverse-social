@@ -9,6 +9,7 @@ import {
 import { Play, Heart, MoreHorizontal, Clock, Share2, ListPlus, Download } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { createSlug } from "@/utils/playlistUtils";
 
 interface MusicCardProps {
   title: string;
@@ -37,7 +38,7 @@ const MusicCard = ({
 
   const handleCardClick = () => {
     if (songId) {
-      navigate(`/song/${songId}`);
+      navigate(`/song/${createSlug(songName || 'song', songId)}`);
     }
   };
 
