@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
+import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, buildAuthHeaders } from "./config";
 
 export type SharedContentType = "PLAYLIST" | "ALBUM" | "SONG";
 
@@ -79,7 +79,7 @@ export const chatApi = {
     const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), playlistId: String(playlistId) });
     const res = await fetch(`${API_BASE_URL}/chat/share/playlist?${qs.toString()}`, {
       method: "POST",
-      headers: buildJsonHeaders(),
+      headers: buildAuthHeaders(),
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return (await res.json()) as ChatMessageDTO;
@@ -88,7 +88,7 @@ export const chatApi = {
     const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), songId: String(songId) });
     const res = await fetch(`${API_BASE_URL}/chat/share/song?${qs.toString()}`, {
       method: "POST",
-      headers: buildJsonHeaders(),
+      headers: buildAuthHeaders(),
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return (await res.json()) as ChatMessageDTO;
@@ -97,7 +97,7 @@ export const chatApi = {
     const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), albumId: String(albumId) });
     const res = await fetch(`${API_BASE_URL}/chat/share/album?${qs.toString()}`, {
       method: "POST",
-      headers: buildJsonHeaders(),
+      headers: buildAuthHeaders(),
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     return (await res.json()) as ChatMessageDTO;

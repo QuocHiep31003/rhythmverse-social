@@ -4,7 +4,7 @@
  *  EchoVerse – Music Universe Platform
  * ====================== */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card, CardContent, CardHeader
@@ -15,32 +15,38 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import {
-  Pencil, Trash2, Plus, Search, Upload, Download,
+  Search, Upload, Download,
   ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft,
-  ChevronsRight, Filter, MoreHorizontal, UserPlus
+  ChevronsRight
 } from "lucide-react";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuSeparator
-} from "@/components/ui/dropdown-menu";
-import { PlaylistFormDialog } from "@/components/admin/PlaylistFormDialog";
-import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "@/hooks/use-toast";
-import { friendsApi } from "@/services/api/friendsApi";
-import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+
+interface Collaborator {
+  userId: number;
+  name: string;
+  email: string;
+  role: string;
+}
 
 interface Playlist {
   id: number;
   name: string;
-  description: string;
-  isPublic: boolean;
-  songLimit: number;
+  description: string | null;
+  coverUrl: string | null;
+  visibility: "PUBLIC" | "PRIVATE" | "FRIENDS_ONLY" | null;
+  songLimit: number | null;
   dateUpdate: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   songIds: number[];
-  songs: any[];
-  coverImage?: string;
-  owner?: { name?: string };
+  songs: unknown[];
+  owner?: { id?: number; name?: string } | null;
+  ownerId?: number;
+  collaborators?: Collaborator[] | null;
+  songCount?: number;
+  totalSongs?: number;
 }
 
 const API_BASE_URL = "http://localhost:8080/api";
@@ -52,25 +58,16 @@ const AdminPlaylists = () => {
   /* ===== STATES ===== */
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
-  const [formOpen, setFormOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
-  const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-
-  // Cộng tác playlist
-  const [collabOpen, setCollabOpen] = useState(false);
-  const [collabPlaylistId, setCollabPlaylistId] = useState<number | null>(null);
-  const [friends, setFriends] = useState<Array<{ id: number; name: string; avatar?: string | null }>>([]);
-  const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
-  const [loadingFriends, setLoadingFriends] = useState(false);
-  const [sendingInvites, setSendingInvites] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [collaboratorsMap, setCollaboratorsMap] = useState<Record<number, Collaborator[]>>({});
+  const [loadingCollaborators, setLoadingCollaborators] = useState<Set<number>>(new Set());
 
   // Bộ lọc & sắp xếp
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPublic, setFilterPublic] = useState("all");
+  const [filterVisibility, setFilterVisibility] = useState("all");
   const [filterDate, setFilterDate] = useState("all");
   const [sortBy, setSortBy] = useState("name-asc");
 
@@ -81,62 +78,128 @@ const AdminPlaylists = () => {
   const [totalPages, setTotalPages] = useState(0);
 
   /* ===== LOAD DATA ===== */
-  useEffect(() => { loadPlaylists(); }, [currentPage, pageSize, searchQuery, filterPublic, filterDate, sortBy]);
-
-  const loadPlaylists = async () => {
+  const loadPlaylists = useCallback(async () => {
     try {
       setLoading(true);
       let sortParam = "name,asc";
       if (sortBy === "name-desc") sortParam = "name,desc";
       if (sortBy === "date-newest") sortParam = "dateUpdate,desc";
       if (sortBy === "date-oldest") sortParam = "dateUpdate,asc";
+      if (sortBy === "songs-desc") sortParam = "songCount,desc";
+      if (sortBy === "songs-asc") sortParam = "songCount,asc";
 
       const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
       const publicParam = filterPublic !== "all" ? `&isPublic=${filterPublic}` : '';
+      const visibilityParam = filterVisibility !== "all" ? `&visibility=${filterVisibility}` : '';
       const dateParam = filterDate !== "all" ? `&date=${filterDate}` : '';
 
-      const res = await fetch(`${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=${sortParam}${searchParam}${publicParam}${dateParam}`);
+      const res = await fetch(`${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=${sortParam}${searchParam}${publicParam}${visibilityParam}${dateParam}`);
       if (!res.ok) throw new Error("Không thể tải danh sách playlist");
 
       const data = await res.json();
-      const mapped = (data.content || []).map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description || "",
-        isPublic: (p.visibility || 'PUBLIC') === 'PUBLIC',
-        songLimit: p.songLimit ?? 0,
-        dateUpdate: p.dateUpdate ?? null,
-        songIds: p.songIds || [],
-        songs: p.songs || [],
-        coverImage: p.coverUrl || "",
-        owner: p.owner || null,
-      }));
+      const mapped = (data.content || []).map((p: {
+        id: number;
+        name: string;
+        description?: string | null;
+        coverUrl?: string | null;
+        visibility?: string;
+        songLimit?: number | null;
+        dateUpdate?: string | null;
+        updatedAt?: string | null;
+        createdAt?: string | null;
+        createdDate?: string | null;
+        songIds?: number[];
+        songs?: unknown[];
+        owner?: { id?: number; name?: string } | null;
+        ownerId?: number;
+        collaborators?: Array<{ userId?: number; id?: number }> | null;
+        collaboratorList?: Array<{ userId?: number; id?: number }> | null;
+        songCount?: number;
+        totalSongs?: number;
+      }) => {
+        // Xử lý collaborators để đảm bảo có đầy đủ thông tin
+        let collaborators = null;
+        if (p.collaborators && Array.isArray(p.collaborators)) {
+          collaborators = p.collaborators;
+        } else if (p.collaboratorList && Array.isArray(p.collaboratorList)) {
+          collaborators = p.collaboratorList;
+        }
+
+        return {
+          id: p.id,
+          name: p.name,
+          description: p.description || null,
+          coverUrl: p.coverUrl || null,
+          visibility: p.visibility || 'PUBLIC',
+          songLimit: p.songLimit ?? null,
+          dateUpdate: p.dateUpdate || p.updatedAt || null,
+          createdAt: p.createdAt || p.createdDate || null,
+          updatedAt: p.updatedAt || p.dateUpdate || null,
+          songIds: p.songIds || [],
+          songs: p.songs || [],
+          owner: p.owner || null,
+          ownerId: p.ownerId || p.owner?.id || null,
+          collaborators: collaborators,
+          songCount: p.songCount || p.totalSongs || (Array.isArray(p.songs) ? p.songs.length : 0) || 0,
+          totalSongs: p.totalSongs || p.songCount || (Array.isArray(p.songs) ? p.songs.length : 0) || 0,
+        };
+      });
       setPlaylists(mapped);
       setTotalElements(data.totalElements);
       setTotalPages(data.totalPages);
     } catch (e) {
       toast({ title: "Lỗi", description: "Không thể tải danh sách playlist", variant: "destructive" });
     } finally { setLoading(false); }
-  };
+  }, [currentPage, pageSize, searchQuery, filterPublic, filterVisibility, filterDate, sortBy]);
 
-  /* ===== CRUD ===== */
-  const handleCreate = () => { setFormMode("create"); setSelectedPlaylist(null); setFormOpen(true); };
-  const handleEdit = (p: Playlist) => { setFormMode("edit"); setSelectedPlaylist(p); setFormOpen(true); };
-  const handleDeleteClick = (p: Playlist) => { setSelectedPlaylist(p); setDeleteOpen(true); };
+  useEffect(() => { loadPlaylists(); }, [loadPlaylists]);
 
-  const handleDelete = async () => {
-    if (!selectedPlaylist) return;
-    try {
-      setIsSubmitting(true);
-      const res = await fetch(`${API_BASE_URL}/playlists/${selectedPlaylist.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Xóa thất bại");
-      toast({ title: "Thành công", description: "Đã xóa playlist" });
-      setDeleteOpen(false);
-      loadPlaylists();
-    } catch {
-      toast({ title: "Lỗi", description: "Không thể xóa playlist", variant: "destructive" });
-    } finally { setIsSubmitting(false); }
-  };
+  // Load collaborators cho tất cả playlists
+  useEffect(() => {
+    const loadCollaborators = async () => {
+      const newMap: Record<number, Collaborator[]> = {};
+      const loadingSet = new Set<number>();
+      
+      // Chỉ load cho những playlist chưa có trong map
+      const playlistsToLoad = playlists.filter(p => p.id && !collaboratorsMap[p.id]);
+      
+      for (const playlist of playlistsToLoad) {
+        if (playlist.id) {
+          loadingSet.add(playlist.id);
+          try {
+            const res = await fetch(`${API_BASE_URL}/playlists/invites/collaborators/${playlist.id}`);
+            if (res.ok) {
+              const data: Collaborator[] = await res.json();
+              newMap[playlist.id] = Array.isArray(data) ? data : [];
+            } else {
+              newMap[playlist.id] = [];
+            }
+          } catch {
+            newMap[playlist.id] = [];
+          } finally {
+            loadingSet.delete(playlist.id);
+          }
+        }
+      }
+      
+      if (Object.keys(newMap).length > 0) {
+        setCollaboratorsMap(prev => ({ ...prev, ...newMap }));
+      }
+      setLoadingCollaborators(prev => {
+        const newSet = new Set(prev);
+        loadingSet.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+    };
+
+    if (playlists.length > 0) {
+      loadCollaborators();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playlists]);
+
+  /* ===== IMPORT ONLY ===== */
+  // Admin chỉ import data, không được thao tác trên playlist của người dùng
 
   /* ===== GIAO DIỆN ===== */
   return (
@@ -156,13 +219,10 @@ const AdminPlaylists = () => {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <Upload className="w-4 h-4 mr-2" /> Import
+                <Upload className="w-4 h-4 mr-2" /> Import Excel
               </Button>
               <Button variant="outline" onClick={loadPlaylists}>
                 <Download className="w-4 h-4 mr-2" /> Export
-              </Button>
-              <Button onClick={handleCreate}>
-                <Plus className="w-4 h-4 mr-2" /> Tạo Playlist
               </Button>
             </div>
           </div>
@@ -183,6 +243,30 @@ const AdminPlaylists = () => {
                       className="pl-10 bg-background/50"
                     />
                   </div>
+                  <Select value={filterVisibility} onValueChange={(v) => { setFilterVisibility(v); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Visibility" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả visibility</SelectItem>
+                      <SelectItem value="PUBLIC">Công khai</SelectItem>
+                      <SelectItem value="PRIVATE">Riêng tư</SelectItem>
+                      <SelectItem value="FRIENDS_ONLY">Bạn bè</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setCurrentPage(0); }}>
+                    <SelectTrigger className="w-[180px] bg-background/50">
+                      <SelectValue placeholder="Sắp xếp" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name-asc">Tên A-Z</SelectItem>
+                      <SelectItem value="name-desc">Tên Z-A</SelectItem>
+                      <SelectItem value="date-newest">Mới nhất</SelectItem>
+                      <SelectItem value="date-oldest">Cũ nhất</SelectItem>
+                      <SelectItem value="songs-desc">Nhiều bài hát nhất</SelectItem>
+                      <SelectItem value="songs-asc">Ít bài hát nhất</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardHeader>
@@ -193,82 +277,124 @@ const AdminPlaylists = () => {
               ) : playlists.length === 0 ? (
                 <div className="text-center py-8">Không có playlist nào</div>
               ) : (
-                <table className="w-full table-auto">
+                <table className="w-full table-auto text-sm">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="p-2 text-left">STT</th>
-                      <th className="p-2 text-left">Ảnh bìa</th>
-                      <th className="p-2 text-left">Tên Playlist</th>
-                      <th className="p-2 text-left">Chủ sở hữu</th>
-                      <th className="p-2 text-left">Mô tả</th>
-                      <th className="p-2 text-left">Số bài hát</th>
-                      <th className="p-2 text-left">Trạng thái</th>
-                      <th className="p-2 text-right">Hành động</th>
+                      <th className="p-2 text-left text-sm font-semibold">STT</th>
+                      <th className="p-2 text-left text-sm font-semibold">Ảnh</th>
+                      <th className="p-2 text-left text-sm font-semibold">Tên</th>
+                      <th className="p-2 text-left text-sm font-semibold">Owner ID</th>
+                      <th className="p-2 text-left text-sm font-semibold">Mô tả</th>
+                      <th className="p-2 text-left text-sm font-semibold">Số bài</th>
+                      <th className="p-2 text-left text-sm font-semibold">Limit</th>
+                      <th className="p-2 text-left text-sm font-semibold">Visibility</th>
+                      <th className="p-2 text-left text-sm font-semibold">Collab IDs</th>
+                      <th className="p-2 text-left text-sm font-semibold">Cập nhật</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {playlists.map((p, i) => (
-                      <tr key={p.id} className="border-b border-border hover:bg-muted/50">
-                        <td className="p-2">{currentPage * pageSize + i + 1}</td>
-                        <td className="p-2">
-                          <img src={p.coverImage || DEFAULT_IMAGE_URL} alt="" className="w-10 h-10 rounded object-cover" />
-                        </td>
-                        <td className="p-2">{p.name}</td>
-                        <td className="p-2">{p.owner?.name || "—"}</td>
-                        <td className="p-2 max-w-xs truncate">{p.description || "—"}</td>
-                        <td className="p-2">{p.songs?.length || 0}</td>
-                        <td className="p-2">
-                          <span className={p.isPublic ? "text-green-400" : "text-yellow-400"}>
-                            {p.isPublic ? "Công khai" : "Riêng tư"}
-                          </span>
-                        </td>
-                        <td className="p-2 text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              <DropdownMenuItem onClick={() => handleEdit(p)}>
-                                <Pencil className="w-4 h-4 mr-2" />Sửa
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => { setCollabPlaylistId(p.id); setCollabOpen(true); }}>
-                                <UserPlus className="w-4 h-4 mr-2" />Cộng tác
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleDeleteClick(p)} className="text-destructive">
-                                <Trash2 className="w-4 h-4 mr-2" />Xóa
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </td>
-                      </tr>
-                    ))}
+                    {playlists.map((p, i) => {
+                      // Lấy danh sách collaborator IDs từ API /api/playlists/invites/collaborators/{playlistId}
+                      const collaborators = collaboratorsMap[p.id] || [];
+                      const collabIds = collaborators.map(c => c.userId);
+                      const collabIdsStr = collabIds.length > 0 ? collabIds.join(', ') : null;
+                      
+                      // Rút ngắn mô tả để hiển thị (tối đa 50 ký tự)
+                      const descriptionShort = p.description && p.description.length > 50 
+                        ? p.description.substring(0, 50) + '...' 
+                        : p.description;
+
+                      return (
+                        <tr key={p.id} className="border-b border-border hover:bg-muted/50">
+                          <td className="p-2 text-sm">{currentPage * pageSize + i + 1}</td>
+                          <td className="p-2">
+                            <img src={p.coverUrl || DEFAULT_IMAGE_URL} alt="" className="w-10 h-10 rounded object-cover" />
+                          </td>
+                          <td className="p-2 text-sm font-medium max-w-[150px] truncate" title={p.name}>
+                            {p.name}
+                          </td>
+                          <td className="p-2 text-sm text-blue-400 font-mono">
+                            {p.ownerId || "—"}
+                          </td>
+                          <td className="p-2 text-sm max-w-[150px]">
+                            {p.description && p.description.length > 50 ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="truncate block cursor-help">{descriptionShort}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-[400px]">
+                                    <p className="text-sm whitespace-pre-wrap">{p.description}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <span>{p.description || "—"}</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-sm">
+                            {p.songCount || p.totalSongs || (Array.isArray(p.songs) ? p.songs.length : 0)}
+                          </td>
+                          <td className="p-2 text-sm">
+                            {p.songLimit ? (
+                              <span className="text-blue-400">{p.songLimit}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-sm">
+                            <span className={
+                              p.visibility === 'PUBLIC' ? "text-green-400" :
+                              p.visibility === 'PRIVATE' ? "text-red-400" :
+                              p.visibility === 'FRIENDS_ONLY' ? "text-yellow-400" :
+                              "text-gray-400"
+                            }>
+                              {p.visibility === 'PUBLIC' ? "Public" :
+                               p.visibility === 'PRIVATE' ? "Private" :
+                               p.visibility === 'FRIENDS_ONLY' ? "Friends" :
+                               "—"}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            {loadingCollaborators.has(p.id) ? (
+                              <span className="text-sm text-muted-foreground">Đang tải...</span>
+                            ) : collabIdsStr ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-base font-mono text-blue-400 font-bold cursor-help max-w-[250px] inline-block truncate">
+                                      {collabIdsStr}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="max-w-[300px]">
+                                    <div className="space-y-1">
+                                      <p className="font-semibold text-sm">Collaborators:</p>
+                                      {collaborators.map((c, idx) => (
+                                        <p key={idx} className="text-xs font-mono">
+                                          ID: {c.userId} - {c.name} ({c.role})
+                                        </p>
+                                      ))}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-sm text-muted-foreground">
+                            {p.dateUpdate ? new Date(p.dateUpdate).toLocaleDateString('vi-VN') : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
             </CardContent>
           </Card>
 
-          {/* Form & Dialogs */}
-          <PlaylistFormDialog
-            open={formOpen}
-            onOpenChange={setFormOpen}
-            onSubmit={() => loadPlaylists()}
-            defaultValues={selectedPlaylist}
-            mode={formMode}
-            isLoading={isSubmitting}
-          />
-
-          <DeleteConfirmDialog
-            open={deleteOpen}
-            onOpenChange={setDeleteOpen}
-            onConfirm={handleDelete}
-            title="Xóa playlist?"
-            description={`Bạn có chắc muốn xóa playlist "${selectedPlaylist?.name}"? Hành động này không thể hoàn tác.`}
-            isLoading={isSubmitting}
-          />
+          {/* Import Dialog Only - Admin không được thao tác trên playlist của người dùng */}
 
           <Dialog open={importOpen} onOpenChange={setImportOpen}>
             <DialogContent className="sm:max-w-[425px] bg-card border-border">

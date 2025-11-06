@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Share2, Send, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { friendsApi } from "@/services/api/friendsApi";
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
+import { API_BASE_URL, buildAuthHeaders, parseErrorResponse } from "@/services/api/config";
+import { parseSlug } from "@/utils/playlistUtils";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { sendMessage as sendChatMessage } from "@/services/firebase/chat";
@@ -88,11 +89,26 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
 
       const extractIdFromUrl = (segment: "playlist" | "album" | "song"): number | undefined => {
         if (!url) return undefined;
-        const match = url.match(new RegExp(`/${segment}/(\\d+)`, "i"));
-        if (match && match[1]) {
-          const parsed = Number(match[1]);
-          return Number.isFinite(parsed) ? parsed : undefined;
-        }
+        try {
+          const u = new URL(url);
+          const parts = u.pathname.split('/').filter(Boolean);
+          const idx = parts.findIndex(p => p.toLowerCase() === segment);
+          if (idx >= 0 && parts[idx + 1]) {
+            const slugOrId = parts[idx + 1];
+            if (segment === 'song') {
+              const n = Number(slugOrId);
+              return Number.isFinite(n) ? n : undefined;
+            }
+            // playlist/album: support SEO slug "name-123"
+            const parsed = parseSlug(slugOrId).id;
+            if (parsed && Number.isFinite(parsed)) return parsed;
+            const digits = slugOrId.match(/(\d+)$/);
+            if (digits && digits[1]) {
+              const n = Number(digits[1]);
+              return Number.isFinite(n) ? n : undefined;
+            }
+          }
+        } catch { /* ignore */ }
         return undefined;
       };
 
@@ -145,16 +161,36 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
 
       for (const receiverId of receiverIds) {
         const endpoint = buildShareUrl(receiverId);
-        const response = await fetch(endpoint, { method: "POST", headers: buildJsonHeaders() });
-        if (!response.ok) {
-          throw new Error(await parseErrorResponse(response));
+        let sharedOk = false;
+        try {
+          const response = await fetch(endpoint, { method: "POST", headers: buildAuthHeaders() });
+          if (!response.ok) {
+            throw new Error(await parseErrorResponse(response));
+          }
+          const payload = await response.json();
+          window.dispatchEvent(
+            new CustomEvent("app:chat-share-sent", {
+              detail: { receiverId, message: payload },
+            })
+          );
+          sharedOk = true;
+        } catch (err: any) {
+          // Fallback: gửi tin nhắn Firebase chứa link nếu API share lỗi (ví dụ BE 500)
+          try {
+            const link =
+              type === 'playlist'
+                ? (url || `${window.location.origin}/playlist/${resourceId}`)
+                : type === 'album'
+                ? (url || `${window.location.origin}/album/${resourceId}`)
+                : (url || `${window.location.origin}/song/${resourceId}`);
+            await sendChatMessage(meId, receiverId, `${type.toUpperCase()}_LINK:${link}`);
+            toast.warning("Đã gửi link thay cho chia sẻ trực tiếp", {
+              description: typeof err?.message === 'string' ? err.message : undefined,
+            });
+          } catch (fbErr) {
+            throw err; // giữ nguyên lỗi gốc để hiển thị ở ngoài
+          }
         }
-        const payload = await response.json();
-        window.dispatchEvent(
-          new CustomEvent("app:chat-share-sent", {
-            detail: { receiverId, message: payload },
-          })
-        );
 
         const note = message.trim();
         if (note) {
@@ -162,9 +198,11 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
             await sendChatMessage(meId, receiverId, note);
           } catch (err) {
             console.error("Failed to send accompanying message", err);
-            toast.warning("Shared without message", {
-              description: "We couldn't send your message. The share was delivered.",
-            });
+            if (sharedOk) {
+              toast.warning("Shared without message", {
+                description: "We couldn't send your message. The share was delivered.",
+              });
+            }
           }
         }
       }

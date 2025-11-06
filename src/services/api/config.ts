@@ -226,6 +226,14 @@ export const buildJsonHeaders = (): Record<string, string> => {
   return headers;
 };
 
+// Helper: chỉ thêm Authorization, không set Content-Type
+export const buildAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+};
+
 // Helper function để parse error response
 export const parseErrorResponse = async (response: Response): Promise<string> => {
   try {

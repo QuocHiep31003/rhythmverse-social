@@ -80,8 +80,19 @@ const Login = () => {
 
       console.log('âœ… User authenticated, redirecting...');
 
-      // Navigate to home page immediately after successful login
-      navigate('/');
+      // Prefer redirect param or pendingInviteUrl if present
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const redirectParam = params.get('redirect');
+        const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
+        const target = redirectParam || pending || '/';
+        // Clear pending after using it
+        try { localStorage.removeItem('pendingInviteUrl'); } catch {}
+        try { sessionStorage.removeItem('pendingInviteUrl'); } catch {}
+        navigate(target);
+      } catch {
+        navigate('/');
+      }
     } catch (err) {
       console.error('âŒ Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -198,7 +209,17 @@ const Login = () => {
     // Mock social login
     setTimeout(() => {
       setIsLoading(false);
-      navigate('/');
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const redirectParam = params.get('redirect');
+        const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
+        const target = redirectParam || pending || '/';
+        try { localStorage.removeItem('pendingInviteUrl'); } catch {}
+        try { sessionStorage.removeItem('pendingInviteUrl'); } catch {}
+        navigate(target);
+      } catch {
+        navigate('/');
+      }
     }, 1000);
   };
 
@@ -407,6 +428,7 @@ const Login = () => {
                               type="checkbox" 
                               id="remember" 
                               className="rounded border-gray-300"
+                              aria-label="Remember me"
                               checked={rememberMe}
                               onChange={(e) => setRememberMe(e.target.checked)} />
                             <Label htmlFor="remember" className="text-sm">Remember me</Label>

@@ -89,23 +89,51 @@ const Social = () => {
 
   }, []);
 
-
+  // Note: do not memoize userId; always read latest from localStorage
+  const meId = useMemo(() => {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  }, [localStorage.getItem('userId')]);
 
   // Preserve invite URL so after login we can return
-
   useEffect(() => {
-
     if (inviteCode) {
-
       try {
-
         localStorage.setItem('pendingInviteUrl', window.location.pathname + window.location.search);
-
       } catch { void 0; }
-
     }
-
   }, [inviteCode]);
+
+  // Load invite preview when inviteCode is present
+  useEffect(() => {
+    if (inviteCode && meId) {
+      setLoadingInvitePreview(true);
+      (async () => {
+        try {
+          const preview = await inviteLinksApi.preview(inviteCode);
+          setInvitePreview({
+            inviterName: preview.inviterName || 'Ai đó',
+            inviterAvatar: preview.inviterAvatar || null,
+            message: preview.message || `${preview.inviterName} mời bạn kết bạn`,
+          });
+        } catch (e: any) {
+          console.error('Failed to load invite preview:', e);
+          setInvitePreview(null);
+        } finally {
+          setLoadingInvitePreview(false);
+        }
+      })();
+    } else if (inviteCode) {
+      // Chưa đăng nhập, lưu URL để sau khi login quay lại
+      try {
+        localStorage.setItem('pendingInviteUrl', window.location.pathname + window.location.search);
+      } catch { void 0; }
+      setInvitePreview(null);
+    } else {
+      setInvitePreview(null);
+    }
+  }, [inviteCode, meId]);
 
 
 
@@ -127,23 +155,17 @@ const Social = () => {
 
   const [expandedInviteId, setExpandedInviteId] = useState<number | null>(null);
 
+  // Invite link preview state
+  const [invitePreview, setInvitePreview] = useState<{
+    inviterName: string;
+    inviterAvatar?: string | null;
+    message: string;
+  } | null>(null);
+  const [loadingInvitePreview, setLoadingInvitePreview] = useState(false);
+
   // Đếm số tin nhắn chưa đọc và số thông báo chưa đọc
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
-
-
-
-  // Note: do not memoize userId; always read latest from localStorage
-
-  const meId = useMemo(() => {
-
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
-
-    const n = raw ? Number(raw) : NaN;
-
-    return Number.isFinite(n) ? n : undefined;
-
-  }, [localStorage.getItem('userId')]);
 
 
 
@@ -217,6 +239,13 @@ const Social = () => {
 
     if (!Number.isFinite(idNum)) return;
 
+    // Chỉ gọi API khi có token
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) {
+      setPending([]);
+      return;
+    }
+
     setLoadingPending(true);
 
     try {
@@ -242,6 +271,13 @@ const Social = () => {
 
 
   const loadCollabInvites = async () => {
+
+    // Chỉ gọi API khi có token (tránh 401 spam khi chưa đăng nhập)
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) {
+      setCollabInvites([]);
+      return;
+    }
 
     setLoadingCollabInvites(true);
 
@@ -1090,13 +1126,15 @@ const Social = () => {
 
       const result = await inviteLinksApi.create(Number(me));
 
-      if (result?.shareUrl) {
+      const linkUrl = result?.shareUrl || result?.inviteUrl;
 
-        setShareUrl(result.shareUrl);
+      if (linkUrl) {
 
-        try { await navigator.clipboard.writeText(result.shareUrl); } catch { void 0; }
+        setShareUrl(linkUrl);
 
-        toast.success('Invite link created and copied!', { description: result.shareUrl });
+        try { await navigator.clipboard.writeText(linkUrl); } catch { void 0; }
+
+        toast.success('Invite link created and copied!', { description: linkUrl });
 
       } else {
 
@@ -1178,7 +1216,17 @@ const Social = () => {
 
       }
 
-      navigate('/social');
+      // Xóa inviteCode khỏi URL sau khi accept
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('inviteCode');
+      const newUrl = newSearchParams.toString() 
+        ? `${window.location.pathname}?${newSearchParams.toString()}`
+        : window.location.pathname;
+      navigate(newUrl, { replace: true });
+      setInvitePreview(null);
+
+      // Reload friends list
+      await loadFriends();
 
     } catch (e: unknown) {
 
@@ -1229,11 +1277,15 @@ const Social = () => {
 
 
   const handleDeclineInviteFromQuery = () => {
-
-    toast('Invite dismissed');
-
-    navigate('/social');
-
+    // Chỉ xóa inviteCode khỏi URL, không xóa thông báo
+    const newSearchParams = new URLSearchParams(searchParams);
+    newSearchParams.delete('inviteCode');
+    const newUrl = newSearchParams.toString() 
+      ? `${window.location.pathname}?${newSearchParams.toString()}`
+      : window.location.pathname;
+    navigate(newUrl, { replace: true });
+    setInvitePreview(null);
+    toast('Đã từ chối lời mời');
   };
 
 
@@ -1267,35 +1319,83 @@ const Social = () => {
         <div className="max-w-6xl mx-auto">
 
           {inviteCode && (
-
             <div className="mb-6">
-
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-
                 <CardHeader>
-
-                  <CardTitle className="text-lg">Friend Invite</CardTitle>
-
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Lời mời kết bạn
+                  </CardTitle>
                 </CardHeader>
-
-                <CardContent className="flex flex-col sm:flex-row gap-2">
-
-                  <p className="text-sm text-muted-foreground flex-1">You received a friend invite. Accept to send a request to the inviter.</p>
-
+                <CardContent className="space-y-4">
+                  {loadingInvitePreview ? (
+                    <p className="text-sm text-muted-foreground">Đang tải thông tin...</p>
+                  ) : invitePreview ? (
+                    <>
+                      <div className="flex items-center gap-3">
+                        {invitePreview.inviterAvatar ? (
+                          <img 
+                            src={invitePreview.inviterAvatar} 
+                            alt={invitePreview.inviterName}
+                            className="w-12 h-12 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center text-white font-semibold">
+                            {invitePreview.inviterName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-foreground">
+                            {invitePreview.message}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Chấp nhận để gửi yêu cầu kết bạn lại cho người mời.
+                          </p>
+                        </div>
+                      </div>
                   <div className="flex gap-2">
-
-                    <Button variant="hero" onClick={handleAcceptInviteFromQuery}>Accept</Button>
-
-                    <Button variant="outline" onClick={handleDeclineInviteFromQuery}>Decline</Button>
-
+                        <Button 
+                          variant="hero" 
+                          onClick={handleAcceptInviteFromQuery}
+                          className="flex-1"
+                        >
+                          Chấp nhận
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={handleDeclineInviteFromQuery}
+                          className="flex-1"
+                        >
+                          Từ chối
+                        </Button>
                   </div>
-
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground">
+                        Bạn đã nhận được lời mời kết bạn. Chấp nhận để gửi yêu cầu kết bạn lại cho người mời.
+                      </p>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="hero" 
+                          onClick={handleAcceptInviteFromQuery}
+                          className="flex-1"
+                        >
+                          Chấp nhận
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={handleDeclineInviteFromQuery}
+                          className="flex-1"
+                        >
+                          Từ chối
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
-
               </Card>
-
             </div>
-
           )}
 
 
