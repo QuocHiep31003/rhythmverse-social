@@ -17,7 +17,8 @@ import {
   Clock,
   Headphones
 } from "lucide-react";
-import { songsApi, arcApi } from "@/services/api";
+import { songsApi } from "@/services/api";
+import { searchYouTubeMusicVideoId } from "@/services/ytmusic";
 import { useMusic } from "@/contexts/MusicContext";
 
 interface AuddResult {
@@ -116,6 +117,7 @@ const MusicRecognitionResult = () => {
   const [hummingResultsWithYoutube, setHummingResultsWithYoutube] = useState<HummingResult[]>([]);
   const [isSearchingYouTube, setIsSearchingYouTube] = useState(false);
   const [listResults, setListResults] = useState<RecognizeItem[] | null>(null);
+  const [enrichedListResults, setEnrichedListResults] = useState<RecognizeItem[] | null>(null);
 
   // Detect if result is array from /songs/recognize
   const isListResponse = (val: unknown): val is RecognizeItem[] => Array.isArray(val);
@@ -197,6 +199,26 @@ const MusicRecognitionResult = () => {
     handleRecognitionResult();
   }, [result, isLoading]);
 
+  // Enrich listResults with YouTube Music video IDs (client-side)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!listResults || listResults.length === 0) {
+        setEnrichedListResults(null);
+        return;
+      }
+      const enriched = await Promise.all(
+        listResults.map(async (item) => {
+          if (item.internal || item.youtubeVideoId) return item;
+          const vid = await searchYouTubeMusicVideoId(item.title || '', item.artist || '');
+          return { ...item, youtubeVideoId: vid || undefined };
+        })
+      );
+      if (!cancelled) setEnrichedListResults(enriched);
+    })();
+    return () => { cancelled = true; };
+  }, [listResults]);
+
   // Search YouTube videos cho humming results
   useEffect(() => {
     const searchYouTubeForHummingResults = async () => {
@@ -215,7 +237,7 @@ const MusicRecognitionResult = () => {
             
             if (title) {
               try {
-                const videoId = await arcApi.searchYouTubeVideo(title, artists);
+                const videoId = await searchYouTubeMusicVideoId(title, artists);
                 return {
                   ...item,
                   youtubeVideoId: videoId || undefined,
@@ -394,7 +416,7 @@ const MusicRecognitionResult = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {listResults.map((item, index) => {
+            {(enrichedListResults || listResults).map((item, index) => {
               const isInternal = !!item.internal && !!item.song;
               const isHumming = item.source === 'humming';
               const isMusic = item.source === 'music';
@@ -479,7 +501,19 @@ const MusicRecognitionResult = () => {
                         >
                           <ExternalLink className="w-4 h-4 mr-2" /> Open YouTube
                         </Button>
-                      ) : null}
+                      ) : (
+                        // Fallback: Quick search on YouTube if no videoId yet
+                        <Button
+                          onClick={() => {
+                            const q = encodeURIComponent([title, artists].filter(Boolean).join(' '));
+                            window.open(`https://www.youtube.com/results?search_query=${q}`, '_blank', 'noopener,noreferrer');
+                          }}
+                          variant="outline"
+                          className="border-border"
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" /> Search YouTube
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {/* YouTube Embed if available */}
