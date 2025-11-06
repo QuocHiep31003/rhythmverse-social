@@ -133,10 +133,13 @@ const MusicRecognitionResult = () => {
   useEffect(() => {
     if (location.state?.result) {
       const res = location.state.result;
+      console.log("[MusicRecognitionResult] Received result:", res);
       if (isListResponse(res)) {
+        console.log("[MusicRecognitionResult] Detected list response, length:", res.length);
         setListResults(res);
         setResult(null as any);
       } else {
+        console.log("[MusicRecognitionResult] Detected single result response");
         setResult(res);
         setAudioUrl(location.state.audioUrl);
       }
@@ -347,7 +350,11 @@ const MusicRecognitionResult = () => {
 
   // Render list results (internal/external)
   const renderListResults = () => {
-    if (!listResults || listResults.length === 0) return null;
+    console.log("[MusicRecognitionResult] renderListResults called, listResults:", listResults);
+    if (!listResults || listResults.length === 0) {
+      console.log("[MusicRecognitionResult] No listResults to render");
+      return null;
+    }
     return (
       <Card className="bg-card border-border">
         <CardHeader>
@@ -413,11 +420,36 @@ const MusicRecognitionResult = () => {
                           variant="outline"
                           className="bg-[#FF0000] hover:bg-[#ff3333] text-white border-0"
                         >
-                          <ExternalLink className="w-4 h-4 mr-2" /> YouTube
+                          <ExternalLink className="w-4 h-4 mr-2" /> Open YouTube
                         </Button>
                       ) : null}
                     </div>
                   </div>
+                  {/* YouTube Embed if available */}
+                  {item.youtubeVideoId && (
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <h5 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          className="w-4 h-4 text-red-600"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                        </svg>
+                        YouTube Music Video
+                      </h5>
+                      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                        <iframe
+                          className="absolute top-0 left-0 w-full h-full rounded-lg"
+                          src={`https://www.youtube.com/embed/${item.youtubeVideoId}?rel=0`}
+                          title={`${title} - ${artists} - YouTube`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
