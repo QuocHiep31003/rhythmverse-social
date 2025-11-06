@@ -96,7 +96,7 @@ const PlaylistDetail = () => {
     try {
       const raw = userIdFromStorage;
       const n = raw ? Number(raw) : NaN;
-        return Number.isFinite(n) ? n : undefined;
+      return Number.isFinite(n) ? n : undefined;
     } catch {
       return undefined;
     }
@@ -170,8 +170,8 @@ const PlaylistDetail = () => {
         normalizedRole === CollaboratorRole.EDITOR
           ? "Editor"
           : normalizedRole === CollaboratorRole.VIEWER
-          ? "Viewer"
-          : "Collaborator";
+            ? "Viewer"
+            : "Collaborator";
       entries.push({
         userId: idNum,
         name: c.name || c.email || `User ${idNum}`,
@@ -194,32 +194,32 @@ const PlaylistDetail = () => {
         // Parse slug từ URL - nếu có ID thì dùng, nếu không thì cần tìm bằng slug
         const parsed = parseSlug(slug);
         const playlistId = parsed.id;
-        
+
         if (!playlistId || isNaN(playlistId)) {
           toast({ title: 'Invalid playlist', description: 'Playlist not found', variant: 'destructive' });
           navigate('/playlists');
           return;
         }
-        
+
         const data: PlaylistDTO = await playlistsApi.getById(playlistId);
         const extendedData = data as ExtendedPlaylistDTO;
 
-        const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(data.songs)
-          ? data.songs.map((s: SearchSongResult) => ({
-              id: String(s.id),
-              name: s.name,
-              songName: s.name,
-              artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
-              album: s.album?.name || '',
-              cover: s.urlImageAlbum || '',
-              audioUrl: s.audioUrl || '',
-              duration: toSeconds(s.duration),
-            }))
-          : [];
-              const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
+        // const mappedSongs: (Song & { addedBy?: string; addedAt?: string })[] = Array.isArray(data.songs)
+        //   ? data.songs.map((s: SearchSongResult) => ({
+        //       id: String(s.id),
+        //       name: s.name,
+        //       songName: s.name,
+        //       artist: Array.isArray(s.artists) && s.artists.length ? (s.artists.map((a) => a.name).join(', ')) : 'Unknown',
+        //       album: s.album?.name || '',
+        //       cover: s.urlImageAlbum || '',
+        //       audioUrl: s.audioUrl || '',
+        //       duration: toSeconds(s.duration),
+        //     }))
+        //   : [];
+        const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
         const mappedSongs = mapSongsFromResponse(data.songs, playlistFallbackCover);
 
-        
+
         const ownerId = data.ownerId ?? data.owner?.id;
         const normalizeVisibility = (v: unknown): PlaylistVisibility => {
           const raw = typeof v === 'string' ? v.toUpperCase() : '';
@@ -229,7 +229,7 @@ const PlaylistDetail = () => {
           return PlaylistVisibility.PUBLIC;
         };
         const visibility = normalizeVisibility((data as PlaylistDTO).visibility);
-        
+
         setPlaylist({
           id: data.id,
           title: data.name,
@@ -248,7 +248,7 @@ const PlaylistDetail = () => {
         setEditedCoverUrl(data.coverUrl || extendedData.urlImagePlaylist || '');
         setEditedVisibility(visibility);
         setEditedSongLimit(extendedData?.songLimit ?? 500);
-        
+
         const rawRoleCandidate =
           (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.role ??
           (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.collaboratorRole ??
@@ -269,12 +269,12 @@ const PlaylistDetail = () => {
 
         updateCollaboratorsFromRaw(
           (extendedData as { collaborators?: unknown[] } | undefined)?.collaborators ??
-            (data as { collaborators?: unknown[] }).collaborators ??
-            [],
+          (data as { collaborators?: unknown[] }).collaborators ??
+          [],
           fallbackRole,
           shouldForceSelf
         );
-        
+
         if (meId && ownerId && visibility === PlaylistVisibility.FRIENDS_ONLY) {
           const friendCheck = await checkIfFriends(meId, ownerId);
           setIsFriend(friendCheck);
@@ -283,10 +283,10 @@ const PlaylistDetail = () => {
         }
       } catch (e) {
         if (e instanceof PlaylistPermissionError) {
-          toast({ 
-            title: 'Access Denied', 
-            description: e.message, 
-            variant: 'destructive' 
+          toast({
+            title: 'Access Denied',
+            description: e.message,
+            variant: 'destructive'
           });
           navigate('/playlist');
           return;
@@ -380,9 +380,9 @@ const PlaylistDetail = () => {
       });
       return;
     }
-    
+
     const visibility = playlist.visibility || PlaylistVisibility.PUBLIC;
-    
+
     const playlistData = {
       ownerId: playlist.ownerId,
       visibility,
@@ -400,16 +400,16 @@ const PlaylistDetail = () => {
         })
         .filter(Boolean) as Array<{ userId: number; name: string; email?: string; role: CollaboratorRole }>,
     };
-    
+
     const perms = getPlaylistPermissions({
       playlist: playlistData,
       currentUser: { id: meId },
       isFriend,
     });
-    
+
     setPermissions(perms);
   }, [playlist, collaborators, meId, isFriend]);
-  
+
   useEffect(() => {
     if (!playlist?.id) return;
     if (collaboratorsFetchIdRef.current === playlist.id && collaborators.length) return;
@@ -442,7 +442,7 @@ const PlaylistDetail = () => {
         if (!collabOpen) return;
         collabsLoadAttemptedRef.current = false;
         if (!permissions.isOwner) return;
-        
+
         const list = await playlistCollaboratorsApi.list(Number(playlistId));
         updateCollaboratorsFromRaw(
           list,
@@ -457,16 +457,16 @@ const PlaylistDetail = () => {
           const errorMsg = String(e).includes('500') || String(msg).includes('500')
             ? 'Server error loading collaborators. This feature may not be available yet.'
             : msg;
-          toast({ 
-            title: 'Failed to load collaborators', 
-            description: errorMsg, 
+          toast({
+            title: 'Failed to load collaborators',
+            description: errorMsg,
             variant: 'destructive',
             duration: 3000,
           });
         }
       }
     };
-    
+
     if (collabOpen && permissions.isOwner) {
       loadCollabs();
     }
@@ -477,7 +477,7 @@ const PlaylistDetail = () => {
       if (!collabOpen || !playlist) return;
       try {
         const pending = await playlistCollabInvitesApi.pending();
-        const playlistPendingInvites = Array.isArray(pending) 
+        const playlistPendingInvites = Array.isArray(pending)
           ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
           : [];
         setPendingInvites(playlistPendingInvites);
@@ -512,16 +512,16 @@ const PlaylistDetail = () => {
         }
         const mapped = Array.isArray(list)
           ? list.map((f: FriendListItem) => ({
-              id: f.friendId ?? f.userId ?? f.id ?? 0,
-              name: f.friendName ?? f.name ?? f.username ?? f.email ?? `User ${f.friendId ?? f.userId ?? f.id ?? ''}`,
-              avatar: f.friendAvatar ?? f.avatar ?? null,
-            }))
+            id: f.friendId ?? f.userId ?? f.id ?? 0,
+            name: f.friendName ?? f.name ?? f.username ?? f.email ?? `User ${f.friendId ?? f.userId ?? f.id ?? ''}`,
+            avatar: f.friendAvatar ?? f.avatar ?? null,
+          }))
           : [];
-        
+
         const existingCollaboratorIds = new Set(collaborators.map(c => c.userId));
         const pendingInviteIds = new Set(pendingInvites.map(inv => inv.receiverId));
         const ownerId = playlist?.ownerId;
-        
+
         const filtered = mapped.filter((x) => {
           if (typeof x.id !== 'number' || x.id <= 0) return false;
           if (ownerId && x.id === ownerId) return false;
@@ -529,7 +529,7 @@ const PlaylistDetail = () => {
           if (pendingInviteIds.has(x.id)) return false;
           return true;
         });
-        
+
         setFriends(filtered);
       } catch { setFriends([]); }
       finally { setLoadingFriends(false); }
@@ -610,8 +610,8 @@ const PlaylistDetail = () => {
         e instanceof PlaylistPermissionError
           ? e.message
           : e instanceof Error
-          ? e.message
-          : 'Failed to add song';
+            ? e.message
+            : 'Failed to add song';
       toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setAddingSongIds((prev) => prev.filter((value) => value !== songId));
@@ -619,7 +619,7 @@ const PlaylistDetail = () => {
   };
 
   const toggleSelectFriend = (fid: number) => setSelectedFriendIds((prev) => prev.includes(fid) ? prev.filter(x => x !== fid) : [...prev, fid]);
-  
+
   const handleRemoveCollaborator = async (collaboratorId: number, collaboratorName?: string) => {
     if (!playlist || !permissions.isOwner) return;
     const confirmed = window.confirm(`Bạn có chắc muốn gỡ ${collaboratorName || "cộng tác viên này"} khỏi playlist?`);
@@ -637,8 +637,8 @@ const PlaylistDetail = () => {
         e instanceof PlaylistPermissionError
           ? e.message
           : e instanceof Error
-          ? e.message
-          : "Failed to remove collaborator";
+            ? e.message
+            : "Failed to remove collaborator";
       toast({
         title: "Không thể gỡ cộng tác viên",
         description: message,
@@ -666,8 +666,8 @@ const PlaylistDetail = () => {
         e instanceof PlaylistPermissionError
           ? e.message
           : e instanceof Error
-          ? e.message
-          : "Không thể rời khỏi playlist. Vui lòng thử lại.";
+            ? e.message
+            : "Không thể rời khỏi playlist. Vui lòng thử lại.";
       toast({
         title: "Rời khỏi playlist thất bại",
         description: message,
@@ -677,14 +677,14 @@ const PlaylistDetail = () => {
       setLeaveLoading(false);
     }
   };
-  
+
   const sendInvites = async () => {
     if (!playlist) return;
     try {
       setSendingInvites(true);
       const successIds: number[] = [];
       const failedIds: number[] = [];
-      
+
       for (const fid of selectedFriendIds) {
         try {
           await playlistCollabInvitesApi.send(playlist.id, fid, inviteRole);
@@ -693,12 +693,12 @@ const PlaylistDetail = () => {
           failedIds.push(fid);
           const friendName = friends.find(f => f.id === fid)?.name || `Friend ${fid}`;
           const errorMessage = e instanceof Error ? e.message : String(e);
-          
+
           if (e instanceof PlaylistPermissionError) {
             console.error(`Permission denied sending invite to ${friendName}:`, e.message);
           } else {
             const errorStatus = (e as Error & { status?: number })?.status;
-            
+
             if (errorStatus === 401) {
               console.error(`Unauthorized: ${friendName} - Login required`);
             } else if (errorStatus === 400) {
@@ -729,19 +729,19 @@ const PlaylistDetail = () => {
           }
         }
       }
-      
+
       if (successIds.length > 0) {
         const successMsg = failedIds.length > 0
           ? `${successIds.length} friend${successIds.length > 1 ? 's' : ''} invited, ${failedIds.length} failed`
           : `${successIds.length} friend${successIds.length > 1 ? 's' : ''} invited`;
-        toast({ 
-          title: '✅ Invites sent', 
+        toast({
+          title: '✅ Invites sent',
           description: successMsg,
           duration: 3000,
         });
         try {
           const pending = await playlistCollabInvitesApi.pending();
-          const playlistPendingInvites = Array.isArray(pending) 
+          const playlistPendingInvites = Array.isArray(pending)
             ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
             : [];
           setPendingInvites(playlistPendingInvites);
@@ -765,24 +765,24 @@ const PlaylistDetail = () => {
           const friend = friends.find(f => f.id === id);
           return friend?.name || `Friend ${id}`;
         });
-        
+
         const firstError = failedIds[0];
         const firstFriendName = failedDetails[0];
         let errorMsg = '';
-        
-        errorMsg = failedIds.length === 1 
+
+        errorMsg = failedIds.length === 1
           ? `Không thể gửi lời mời cho ${firstFriendName}. Có thể đã được mời, đã là collaborator, hoặc không hợp lệ.`
           : `Không thể gửi lời mời cho ${failedIds.length} bạn bè (${failedDetails.slice(0, 2).join(', ')}${failedIds.length > 2 ? '...' : ''}).`;
-        
-        toast({ 
-          title: '❌ Error', 
-          description: errorMsg, 
+
+        toast({
+          title: '❌ Error',
+          description: errorMsg,
           variant: 'destructive',
           duration: 6000,
         });
         try {
           const pending = await playlistCollabInvitesApi.pending();
-          const playlistPendingInvites = Array.isArray(pending) 
+          const playlistPendingInvites = Array.isArray(pending)
             ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
             : [];
           setPendingInvites(playlistPendingInvites);
@@ -799,31 +799,31 @@ const PlaylistDetail = () => {
     } catch (e) {
       if (e instanceof PlaylistPermissionError) {
         if (e.status === 401) {
-          toast({ 
-            title: '❌ Unauthorized', 
-            description: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 
+          toast({
+            title: '❌ Unauthorized',
+            description: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
             variant: 'destructive',
             duration: 5000,
           });
         } else {
-          toast({ 
-            title: '❌ Permission Denied', 
-            description: e.message, 
+          toast({
+            title: '❌ Permission Denied',
+            description: e.message,
             variant: 'destructive',
             duration: 5000,
           });
         }
       } else {
         const msg = e instanceof Error ? e.message : 'Failed to send invites';
-        toast({ 
-          title: '❌ Error', 
-          description: `Có lỗi xảy ra khi gửi lời mời: ${msg}`, 
+        toast({
+          title: '❌ Error',
+          description: `Có lỗi xảy ra khi gửi lời mời: ${msg}`,
           variant: 'destructive',
           duration: 5000,
         });
       }
-    } finally { 
-      setSendingInvites(false); 
+    } finally {
+      setSendingInvites(false);
     }
   };
 
@@ -946,16 +946,16 @@ const PlaylistDetail = () => {
               {(() => {
                 const currentVisibility = isEditing ? editedVisibility : (playlist?.visibility || PlaylistVisibility.PUBLIC);
                 const visibilityConfig = {
-                  [PlaylistVisibility.PUBLIC]: { 
-                    label: "Public Playlist", 
+                  [PlaylistVisibility.PUBLIC]: {
+                    label: "Public Playlist",
                     className: "bg-green-500/10 text-green-400 border-green-500/30",
                   },
-                  [PlaylistVisibility.PRIVATE]: { 
-                    label: "Private Playlist", 
+                  [PlaylistVisibility.PRIVATE]: {
+                    label: "Private Playlist",
                     className: "bg-red-500/10 text-red-400 border-red-500/30",
                   },
-                  [PlaylistVisibility.FRIENDS_ONLY]: { 
-                    label: "Friends Only", 
+                  [PlaylistVisibility.FRIENDS_ONLY]: {
+                    label: "Friends Only",
                     className: "bg-blue-500/10 text-blue-400 border-blue-500/30",
                   }
                 };
@@ -1063,10 +1063,10 @@ const PlaylistDetail = () => {
                 const t = d ? new Date(d) : null;
                 const valid = t && !isNaN(t.getTime());
                 return valid ? (
-                <>
-                  <span className="text-muted-foreground">•</span>
+                  <>
+                    <span className="text-muted-foreground">•</span>
                     <span className="text-muted-foreground">Updated {t.toLocaleDateString()}</span>
-                </>
+                  </>
                 ) : null;
               })()}
             </div>
@@ -1089,8 +1089,8 @@ const PlaylistDetail = () => {
                       member.isOwner
                         ? "ring-2 ring-primary/60"
                         : member.role === CollaboratorRole.EDITOR
-                        ? "ring-2 ring-emerald-500/60"
-                        : "ring-2 ring-border/60";
+                          ? "ring-2 ring-emerald-500/60"
+                          : "ring-2 ring-border/60";
                     const isSelf = typeof meId === "number" && member.userId === meId;
                     return (
                       <div key={member.userId} className="relative group">
@@ -1137,7 +1137,7 @@ const PlaylistDetail = () => {
                 <Play className="w-5 h-5 mr-2" />
                 Play All
               </Button>
-              
+
               <Button
                 variant="outline"
                 size="lg"
@@ -1272,20 +1272,20 @@ const PlaylistDetail = () => {
             </div>
           </CardContent>
         </Card>
-    </div>
-    <DeleteConfirmDialog
-      open={deleteOpen}
-      onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); if (!o) setPendingDeleteSongId(null); }}
-      onConfirm={handleConfirmDelete}
-      isLoading={deleting}
-      title="Xóa bài hát khỏi playlist?"
-      description={(() => {
-        const t = playlist?.songs.find(s => String(s.id) === String(pendingDeleteSongId))?.title;
-        return t ? `Bạn có chắc muốn xóa "${t}" khỏi playlist này?` : 'Bạn có chắc muốn xóa bài hát này khỏi playlist?';
-      })()}
-    />
-    <Footer />
-    <style>{`
+      </div>
+      <DeleteConfirmDialog
+        open={deleteOpen}
+        onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); if (!o) setPendingDeleteSongId(null); }}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleting}
+        title="Xóa bài hát khỏi playlist?"
+        description={(() => {
+          const t = playlist?.songs.find(s => String(s.id) === String(pendingDeleteSongId))?.title;
+          return t ? `Bạn có chắc muốn xóa "${t}" khỏi playlist này?` : 'Bạn có chắc muốn xóa bài hát này khỏi playlist?';
+        })()}
+      />
+      <Footer />
+      <style>{`
       .bar { display:inline-block; width:2px; height:8px; background:${isPlaying ? 'hsl(var(--primary))' : 'transparent'}; animation:${isPlaying ? 'ev 1s ease-in-out infinite' : 'none'}; }
       .bar.delay-100{animation-delay:.12s}
       .bar.delay-200{animation-delay:.24s}
