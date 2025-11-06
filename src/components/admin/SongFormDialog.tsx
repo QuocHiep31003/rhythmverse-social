@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Check, ChevronsUpDown, Loader2, Upload, Link } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Upload, Play } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,11 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import {
   Command,
   CommandEmpty,
@@ -74,102 +69,6 @@ const getAudioDuration = async (file: File): Promise<string> => {
     });
     
     audio.src = url;
-  });
-};
-
-const getAudioDurationFromUrl = async (url: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    // Validate URL
-    if (!url || !url.trim() || !url.startsWith('http')) {
-      resolve("0:00");
-      return;
-    }
-
-    const audio = new Audio();
-    let resolved = false;
-    
-    const cleanup = () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('error', handleError);
-      audio.removeEventListener('canplaythrough', handleCanPlay);
-      audio.src = '';
-      audio.load();
-    };
-    
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    const handleLoadedMetadata = () => {
-      if (resolved) return;
-      resolved = true;
-      
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      
-      const duration = audio.duration;
-      if (isNaN(duration) || !isFinite(duration) || duration <= 0) {
-        cleanup();
-        resolve("0:00");
-        return;
-      }
-      
-      const minutes = Math.floor(duration / 60);
-      const seconds = Math.floor(duration % 60);
-      const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      cleanup();
-      resolve(formatted);
-    };
-    
-    const handleCanPlay = () => {
-      // Fallback nếu loadedmetadata không fire
-      if (!resolved && audio.duration && isFinite(audio.duration)) {
-        handleLoadedMetadata();
-      }
-    };
-    
-    const handleError = (e: Event) => {
-      if (resolved) return;
-      resolved = true;
-      
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      
-      console.error("Error loading audio:", e);
-      cleanup();
-      resolve("0:00");
-    };
-    
-    // Set timeout 10 seconds
-    timeoutId = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        cleanup();
-        resolve("0:00");
-      }
-    }, 10000);
-    
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplaythrough', handleCanPlay);
-    audio.addEventListener('error', handleError);
-    
-    // Preload audio
-    audio.preload = 'metadata';
-    audio.crossOrigin = 'anonymous';
-    
-    try {
-      audio.src = url;
-      audio.load();
-    } catch (error) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      cleanup();
-      resolve("0:00");
-    }
   });
 };
 
@@ -228,13 +127,10 @@ export const SongFormDialog = ({
   const [moodPopoverOpen, setMoodPopoverOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [audioInputMode, setAudioInputMode] = useState<"upload" | "url">("upload");
   const [originalAudioUrl, setOriginalAudioUrl] = useState<string>("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
-  const [fetchingDuration, setFetchingDuration] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
-  const urlTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -319,12 +215,6 @@ export const SongFormDialog = ({
       });
     }
     
-    // Cleanup timeout khi component unmount hoặc dialog đóng
-    return () => {
-      if (urlTimeoutRef.current) {
-        clearTimeout(urlTimeoutRef.current);
-      }
-    };
   }, [open, defaultValues, form]);
 
   const uploadToCloudinary = async (file: File): Promise<string> => {
@@ -409,17 +299,18 @@ export const SongFormDialog = ({
   };
 
   const handleSubmit = (data: SongFormValues) => {
-    // For update mode: include file if selected, and audioUrl if changed
+    // For update mode: include file if selected, exclude duration and audioUrl
     if (mode === "edit") {
+      const { duration, audioUrl, ...restData } = data;
       const submitData: SongFormValues & { file?: File } = {
-        ...data,
+        ...restData,
         file: selectedFile || undefined, // Include file if selected
-        // Send audioUrl if it was changed (user updated URL manually)
-        audioUrl: (data.audioUrl && data.audioUrl !== originalAudioUrl) ? data.audioUrl : undefined,
+        // Don't send audioUrl or duration - backend will reject them
       };
       onSubmit(submitData);
     } else {
       // Create mode: send as normal (may include file for create too)
+      // Note: duration can be included in create mode if needed
       onSubmit(data);
     }
   };
@@ -504,6 +395,7 @@ export const SongFormDialog = ({
                     <Input 
                       placeholder="3:45" 
                       {...field} 
+                      disabled
                       className="admin-input transition-all duration-200"
                     />
                   </FormControl>
@@ -951,37 +843,15 @@ export const SongFormDialog = ({
               control={form.control}
               name="audioUrl"
               render={({ field }) => {
-                const hasChanged = mode === "edit" && field.value !== originalAudioUrl;
                 return (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2 mb-3">
-                      File nhạc * {mode === "edit" && "(Upload file mới hoặc cập nhật URL)"}
-                      {hasChanged && (
-                        <Badge variant="destructive" className="text-xs">
-                          Đã thay đổi
-                        </Badge>
-                      )}
+                      File nhạc * {mode === "edit" && "(Chỉ upload file mới)"}
                     </FormLabel>
-                  <Tabs 
-                    value={audioInputMode} 
-                    onValueChange={(value) => setAudioInputMode(value as "upload" | "url")}
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2 mb-4">
-                      <TabsTrigger value="upload" className="flex items-center gap-2">
-                        <Upload className="w-4 h-4" />
-                        Upload File
-                      </TabsTrigger>
-                      <TabsTrigger value="url" className="flex items-center gap-2">
-                        <Link className="w-4 h-4" />
-                        Nhập URL
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <FormControl>
-                    <div className="space-y-2">
-                      {audioInputMode === "upload" ? (
-                        <>
+                    <FormControl>
+                      <div className="space-y-3">
+                        {/* Upload file input */}
+                        <div className="space-y-2">
                           <Input
                             type="file"
                             accept="audio/*"
@@ -1004,106 +874,54 @@ export const SongFormDialog = ({
                               </div>
                             </div>
                           )}
-                        </>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Input
-                              placeholder="https://example.com/audio.mp3"
-                              {...field}
-                              onChange={(e) => {
-                                const newUrl = e.target.value;
-                                field.onChange(e);
-                                
-                                // Clear timeout cũ
-                                if (urlTimeoutRef.current) {
-                                  clearTimeout(urlTimeoutRef.current);
-                                }
-                                
-                                // Tự động lấy duration sau 1.5s khi user ngừng gõ
-                                if (newUrl && newUrl.trim() !== '' && newUrl.startsWith('http')) {
-                                  setFetchingDuration(true);
-                                  urlTimeoutRef.current = setTimeout(async () => {
-                                    try {
-                                      const duration = await getAudioDurationFromUrl(newUrl);
-                                      form.setValue("duration", duration);
-                                    } catch (error) {
-                                      console.error("Error getting duration from URL:", error);
-                                    } finally {
-                                      setFetchingDuration(false);
-                                    }
-                                  }, 1500);
-                                } else {
-                                  setFetchingDuration(false);
-                                }
-                              }}
-                              onBlur={async () => {
-                                // Clear timeout khi blur
-                                if (urlTimeoutRef.current) {
-                                  clearTimeout(urlTimeoutRef.current);
-                                }
-                                
-                                // Lấy duration ngay nếu có URL hợp lệ
-                                if (field.value && field.value.trim() !== '' && field.value.startsWith('http')) {
-                                  setFetchingDuration(true);
-                                  try {
-                                    const duration = await getAudioDurationFromUrl(field.value);
-                                    form.setValue("duration", duration);
-                                  } catch (error) {
-                                    console.error("Error getting duration from URL:", error);
-                                  } finally {
-                                    setFetchingDuration(false);
-                                  }
-                                }
-                              }}
-                              className={cn(
-                                "admin-input transition-all duration-200 pr-10",
-                                fetchingDuration && "border-primary"
-                              )}
-                            />
-                            {fetchingDuration && (
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                              </div>
-                            )}
-                            {field.value && !fetchingDuration && form.getValues("duration") && (
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                <Check className="w-4 h-4 text-green-500" />
-                              </div>
-                            )}
+                        </div>
+
+                        {/* Hiển thị URL hiện tại (chỉ ở chế độ edit) */}
+                        {mode === "edit" && originalAudioUrl && (
+                          <div className="space-y-2 p-3 bg-muted/50 rounded-md border border-border">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-muted-foreground">
+                                Audio hiện tại:
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const audio = new Audio(originalAudioUrl);
+                                  audio.play().catch((err) => {
+                                    console.error("Error playing audio:", err);
+                                    alert("Không thể phát audio. Vui lòng kiểm tra URL.");
+                                  });
+                                }}
+                                className="flex items-center gap-2"
+                              >
+                                <Play className="w-4 h-4" />
+                                Nghe thử
+                              </Button>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                              <span className="truncate text-xs">
+                                {originalAudioUrl.substring(0, 80)}{originalAudioUrl.length > 80 ? '...' : ''}
+                              </span>
+                            </div>
                           </div>
-                          {fetchingDuration && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                              <span>Đang lấy thông tin từ URL...</span>
-                            </div>
-                          )}
-                          {field.value && form.getValues("duration") && !fetchingDuration && (
-                            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                              <Check className="w-3 h-3" />
-                              <span>Đã lấy thời lượng: {form.getValues("duration")}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {field.value && !uploading && !fetchingDuration && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
-                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                          <span className="truncate">Audio URL: {field.value.substring(0, 60)}{field.value.length > 60 ? '...' : ''}</span>
-                        </div>
-                      )}
-                      {hasChanged && (
-                        <Alert variant="destructive" className="py-2">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription className="text-sm">
-                            Bạn đang thay đổi Audio URL. Hãy đảm bảo URL đúng.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+                        )}
+
+                        {/* Hiển thị URL mới nếu đã upload file (chế độ create) */}
+                        {mode === "create" && field.value && !uploading && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                            <span className="truncate text-xs">
+                              Audio URL: {field.value.substring(0, 60)}{field.value.length > 60 ? '...' : ''}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
                 );
               }}
             />
