@@ -355,18 +355,51 @@ const MusicRecognitionResult = () => {
       console.log("[MusicRecognitionResult] No listResults to render");
       return null;
     }
+    
+    // Separate results by source
+    const hummingResults = listResults.filter(item => item.source === 'humming');
+    const musicResults = listResults.filter(item => item.source === 'music');
+    const customFilesResults = listResults.filter(item => item.source === 'custom_files');
+    const otherResults = listResults.filter(item => !['humming', 'music', 'custom_files'].includes(item.source || ''));
+    
+    // Determine title based on results
+    const getResultsTitle = () => {
+      if (customFilesResults.length > 0) {
+        return `Recognition Results (${customFilesResults.length} found in system)`;
+      }
+      if (hummingResults.length > 0 && musicResults.length > 0) {
+        return `Recognition Suggestions (${hummingResults.length} humming + ${musicResults.length} music)`;
+      }
+      if (hummingResults.length > 0) {
+        return `Humming Recognition Results (${hummingResults.length} suggestions)`;
+      }
+      if (musicResults.length > 0) {
+        return `Music Recognition Results (${musicResults.length} suggestions)`;
+      }
+      return `Recognition Suggestions (${listResults.length} results)`;
+    };
+    
     return (
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-xl text-foreground flex items-center gap-2">
             <Headphones className="w-5 h-5" />
-            Recognition Suggestions ({listResults.length} results)
+            {getResultsTitle()}
           </CardTitle>
+          {hummingResults.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Không tìm thấy trong hệ thống. Dưới đây là các gợi ý từ Humming Recognition để bạn tham khảo.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {listResults.map((item, index) => {
               const isInternal = !!item.internal && !!item.song;
+              const isHumming = item.source === 'humming';
+              const isMusic = item.source === 'music';
+              const isCustomFiles = item.source === 'custom_files';
+              
               const title = isInternal ? item.song?.name : (item.title || '(No title)');
               const artists = isInternal
                 ? (item.song?.artists || []).map((a: any) => a.name).join(', ')
@@ -374,18 +407,42 @@ const MusicRecognitionResult = () => {
               return (
                 <div key={item.acrId || index} className="p-4 border border-border rounded-lg bg-muted/50">
                   <div className="flex items-center justify-between gap-3">
-                    <div>
+                    <div className="flex-1">
                       <div className="font-semibold text-foreground text-lg">{title}</div>
-                      <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
                         <User className="w-3 h-3" />
                         {artists}
                       </div>
                       <div className="mt-2 flex gap-2 flex-wrap">
-                        <Badge variant={isInternal ? 'secondary' : 'outline'} className={isInternal ? 'bg-green-600/15 text-green-600' : ''}>
-                          {isInternal ? 'Internal' : 'External'}
-                        </Badge>
+                        {isInternal && (
+                          <Badge variant="secondary" className="bg-green-600/15 text-green-600">
+                            ✅ In System
+                          </Badge>
+                        )}
+                        {isHumming && (
+                          <Badge variant="outline" className="bg-yellow-500/15 text-yellow-600 border-yellow-500/50">
+                            🎵 Humming
+                          </Badge>
+                        )}
+                        {isMusic && (
+                          <Badge variant="outline" className="bg-blue-500/15 text-blue-600 border-blue-500/50">
+                            🎶 Music DB
+                          </Badge>
+                        )}
+                        {isCustomFiles && (
+                          <Badge variant="outline" className="bg-purple-500/15 text-purple-600 border-purple-500/50">
+                            📁 Custom Files
+                          </Badge>
+                        )}
+                        {!isInternal && (
+                          <Badge variant="outline" className="text-xs">
+                            External
+                          </Badge>
+                        )}
                         {item.acrId && (
-                          <Badge variant="outline" className="text-xs">ACR: {item.acrId.slice(0, 8)}…</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            ACR: {item.acrId.slice(0, 8)}…
+                          </Badge>
                         )}
                       </div>
                     </div>

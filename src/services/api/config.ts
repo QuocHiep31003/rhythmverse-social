@@ -178,13 +178,33 @@ apiClient.interceptors.response.use(
       const message = error.response.data?.message ||
         error.response.data?.error ||
         error.response.data?.details ||
+        (typeof error.response.data === 'string' ? error.response.data : null) ||
         `${error.response.status} ${error.response.statusText}`;
+      console.error("[apiClient] Server error response:", {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        message
+      });
       throw new Error(message);
     } else if (error.request) {
       // Request được gửi nhưng không nhận được response
-      throw new Error('Network error - please check your connection');
+      console.error("[apiClient] Network error - no response received:", {
+        code: error.code,
+        message: error.message,
+        timeout: error.config?.timeout,
+        url: error.config?.url
+      });
+      
+      // Check if it's a timeout
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        throw new Error('Request timeout - the server is taking too long to respond. Please try again.');
+      }
+      
+      throw new Error('Network error - please check your connection and ensure the backend server is running');
     } else {
       // Lỗi khác
+      console.error("[apiClient] Request setup error:", error.message);
       throw new Error(error.message || 'An unexpected error occurred');
     }
   }

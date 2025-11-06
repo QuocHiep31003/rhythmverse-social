@@ -326,15 +326,29 @@ export const arcApi = {
       formData.append("file", audioBlob, "recorded.wav");
 
       // Use songs endpoint which returns internal list or external suggestions
+      // Increased timeout for YouTube enrichment (60 seconds)
       const response = await apiClient.post('/songs/recognize', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
+        timeout: 60000, // 60 seconds - YouTube enrichment can take time
       });
 
+      console.log("[arcApi] recognizeMusic response:", response.data);
       return response.data;
-    } catch (error) {
-      console.error("Error recognizing music:", error);
+    } catch (error: any) {
+      console.error("[arcApi] Error recognizing music:", error);
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Request timeout - recognition is taking too long. Please try again.');
+      }
+      if (error.message && error.message.includes('Network error')) {
+        console.error("[arcApi] Network error details:", {
+          message: error.message,
+          request: error.request,
+          response: error.response,
+          config: error.config
+        });
+      }
       throw error;
     }
   },
