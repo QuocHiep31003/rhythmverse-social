@@ -48,6 +48,9 @@ import AdminPromotions from "./pages/admin/AdminPromotions";
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
 import AdminSnapshots from "./pages/admin/AdminSnapshots";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCancel from "./pages/PaymentCancel";
+import PaymentHistory from "./pages/PaymentHistory";
 
 const queryClient = new QueryClient();
 
@@ -108,6 +111,9 @@ const App = () => (
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
                     <Route path="/invite/friend/:code" element={<InviteFriend />} />
+                    <Route path="/payment/success" element={<PaymentSuccess />} />
+                    <Route path="/payment/cancel" element={<PaymentCancel />} />
+                    <Route path="/payment/history" element={<PaymentHistory />} />
 
                     <Route path="*" element={<NotFound />} />
                   </Routes>

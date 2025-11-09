@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,12 +16,19 @@ import {
   Heart,
   MessageCircle,
   Trophy,
-  Sparkles
+  Sparkles,
+  Loader2
 } from "lucide-react";
+import { paymentApi } from "@/services/api/paymentApi";
+import { exchangeRateApi } from "@/services/api/exchangeRateApi";
+import { useToast } from "@/hooks/use-toast";
 
 const Premium = () => {
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "yearly">("monthly");
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [isLoadingRate, setIsLoadingRate] = useState(true);
+  const { toast } = useToast();
 
   const features = {
     free: [
@@ -50,10 +57,44 @@ const Premium = () => {
     ]
   };
 
-  const pricing = {
-    monthly: { price: 4.0, originalPrice: null },
-    yearly: { price: 42.0, originalPrice: 48.0 }
-  };
+  // Lấy tỉ giá khi component mount
+  useEffect(() => {
+    const fetchExchangeRate = async () => {
+      try {
+        setIsLoadingRate(true);
+        const rate = await exchangeRateApi.getUSDtoVND();
+        setExchangeRate(rate);
+      } catch (error) {
+        console.error('Error fetching exchange rate:', error);
+        // Dùng tỉ giá mặc định nếu có lỗi
+        setExchangeRate(24000);
+      } finally {
+        setIsLoadingRate(false);
+      }
+    };
+
+    fetchExchangeRate();
+  }, []);
+
+  // Tính toán giá VNĐ dựa trên tỉ giá (reactive với exchangeRate)
+  const pricing = useMemo(() => {
+    const getAmountVND = (usdPrice: number): number => {
+      return exchangeRate ? Math.round(usdPrice * exchangeRate) : Math.round(usdPrice * 24000);
+    };
+
+    return {
+      monthly: { 
+        price: 4.0, 
+        originalPrice: null,
+        amountVND: getAmountVND(4.0)
+      },
+      yearly: { 
+        price: 42.0, 
+        originalPrice: 48.0,
+        amountVND: getAmountVND(42.0)
+      }
+    };
+  }, [exchangeRate]);
 
   const benefits = [
     {
@@ -88,13 +129,31 @@ const Premium = () => {
     }
   ];
 
-  const handleUpgrade = () => {
-    setIsUpgrading(true);
-    // Mock payment process
-    setTimeout(() => {
+  const handleUpgrade = async () => {
+    try {
+      setIsUpgrading(true);
+      
+      const plan = pricing[selectedPlan];
+      const description = `Premium ${selectedPlan === "monthly" ? "Tháng" : "Năm"}`;
+      
+      // Tạo đơn hàng
+      const result = await paymentApi.createOrder({
+        amount: plan.amountVND,
+        description: description,
+        // buyerEmail có thể lấy từ user profile nếu cần
+      });
+
+      // Redirect đến PayOS checkout
+      window.location.href = result.checkoutUrl;
+    } catch (error) {
+      console.error('Error creating order:', error);
       setIsUpgrading(false);
-      // Show success message or redirect
-    }, 2000);
+      toast({
+        title: 'Lỗi',
+        description: error instanceof Error ? error.message : 'Không thể tạo đơn hàng. Vui lòng thử lại.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
@@ -180,6 +239,17 @@ const Premium = () => {
                     /{selectedPlan === "monthly" ? "tháng" : "năm"}
                   </span>
                 </div>
+                {exchangeRate && !isLoadingRate && (
+                  <div className="text-sm text-muted-foreground">
+                    1 USD = {exchangeRate.toLocaleString('vi-VN')} VNĐ
+                  </div>
+                )}
+                {isLoadingRate && (
+                  <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Đang tải tỉ giá...</span>
+                  </div>
+                )}
                 {pricing[selectedPlan].originalPrice && (
                   <div className="text-sm text-muted-foreground line-through">
                     Gốc ${pricing[selectedPlan].originalPrice}/năm
