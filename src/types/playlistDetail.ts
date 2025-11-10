@@ -24,8 +24,14 @@ export interface SearchSongResult {
   addedBy?: string | null;
   addedByName?: string | null;
   createdByName?: string | null;
-  addedByUser?: { name?: string | null } | null;
+  addedByUser?: { 
+    id?: number; 
+    name?: string | null; 
+    avatar?: string | null;
+  } | null;
   addedByUserName?: string | null;
+  addedById?: number;
+  addedByAvatar?: string | null;
 }
 
 export interface PlaylistOwner {
@@ -73,6 +79,11 @@ export interface PlaylistState {
   visibility: import("@/types/playlist").PlaylistVisibility;
   updatedAt?: string | null;
   totalSongs?: number | null;
-  songs: (Song & { addedBy?: string; addedAt?: string })[];
+  songs: (Song & { 
+    addedBy?: string; 
+    addedAt?: string; 
+    addedById?: number;
+    addedByAvatar?: string | null;
+  })[];
 }
 

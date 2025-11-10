@@ -33,6 +33,7 @@ export interface PlaylistCollaborator {
   userId: number;
   name: string;
   email?: string;
+  avatar?: string | null; // Collaborator avatar (from backend DTO)
   role: CollaboratorRole;
 }
 

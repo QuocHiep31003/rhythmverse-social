@@ -35,6 +35,8 @@ export interface PlaylistDTO {
   }>;
   owner?: { id: number; name: string } | null;
   ownerId?: number; // Owner ID for permission checks
+  ownerName?: string; // Owner name (from backend DTO)
+  ownerAvatar?: string | null; // Owner avatar (from backend DTO)
   collaborators?: PlaylistCollaborator[]; // List of collaborators
 }
 

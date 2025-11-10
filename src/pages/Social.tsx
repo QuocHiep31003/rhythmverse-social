@@ -4,6 +4,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { friendsApi, inviteLinksApi } from "@/services/api/friendsApi";
+import { authApi } from "@/services/api/authApi";
+import { API_BASE_URL } from "@/services/api/config";
 
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 
@@ -96,14 +98,14 @@ const Social = () => {
     return Number.isFinite(n) ? n : undefined;
   }, [localStorage.getItem('userId')]);
 
-  // Preserve invite URL so after login we can return
+  // Chỉ lưu invite URL để quay lại sau đăng nhập khi người dùng chưa đăng nhập
   useEffect(() => {
-    if (inviteCode) {
+    if (inviteCode && !hasToken) {
       try {
         localStorage.setItem('pendingInviteUrl', window.location.pathname + window.location.search);
       } catch { void 0; }
     }
-  }, [inviteCode]);
+  }, [inviteCode, hasToken]);
 
   // Load invite preview when inviteCode is present
   useEffect(() => {
@@ -113,6 +115,7 @@ const Social = () => {
         try {
           const preview = await inviteLinksApi.preview(inviteCode);
           setInvitePreview({
+            inviterId: preview.inviterId,
             inviterName: preview.inviterName || 'Ai đó',
             inviterAvatar: preview.inviterAvatar || null,
             message: preview.message || `${preview.inviterName} mời bạn kết bạn`,
@@ -147,6 +150,8 @@ const Social = () => {
 
   const [profileEmail, setProfileEmail] = useState<string>("");
 
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+
   const [shareUrl, setShareUrl] = useState<string>("");
 
   const [collabInvites, setCollabInvites] = useState<CollabInviteDTO[]>([]);
@@ -157,6 +162,7 @@ const Social = () => {
 
   // Invite link preview state
   const [invitePreview, setInvitePreview] = useState<{
+    inviterId?: number;
     inviterName: string;
     inviterAvatar?: string | null;
     message: string;
@@ -179,7 +185,74 @@ const Social = () => {
 
   const [chatByFriend, setChatByFriend] = useState<Record<string, Message[]>>({});
 
+  // Normalize relative URLs from API to absolute
+  const toAbsoluteUrl = (u?: string | null): string | null => {
+    if (!u) return null;
+    if (/^https?:\/\//i.test(u)) return u;
+    const base = API_BASE_URL.replace(/\/?$/, '');
+    if (u.startsWith('/api/')) {
+      if (base.endsWith('/api')) {
+        return `${base.slice(0, -4)}${u}`;
+      }
+    }
+    // Ensure single slash between base and path
+    if (u.startsWith('/')) return `${base}${u}`;
+    return `${base}/${u}`;
+  };
 
+  // Load my profile info for Friends panel (name, email, avatar)
+  useEffect(() => {
+    const loadMe = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        if (!token) {
+          setProfileName("");
+          setProfileEmail("");
+          setProfileAvatar(null);
+          return;
+        }
+        const me = await authApi.me();
+        setProfileName((me?.name || me?.username || '').trim());
+        setProfileEmail((me?.email || '').trim());
+        setProfileAvatar(toAbsoluteUrl(me?.avatar || null));
+      } catch (e) {
+        // Non-fatal; keep fallbacks
+        try { console.warn('[Social] Failed to load profile', e); } catch { /* noop */ }
+      }
+    };
+    void loadMe();
+  }, []);
+
+
+
+  // Safety: auto-clear inviteCode from URL if it's invalid or you're already friends
+  useEffect(() => {
+    if (!inviteCode || !meId || !invitePreview) return;
+
+    const inviterId = invitePreview.inviterId;
+    const isSelf = inviterId && Number(inviterId) === Number(meId);
+    const isFriend = inviterId
+      ? friends.some(f => Number(f.id) === Number(inviterId))
+      : false;
+    const hasPending = inviterId
+      ? pending.some(p =>
+          (Number(p.senderId) === Number(meId) && Number(p.receiverId) === Number(inviterId)) ||
+          (Number(p.senderId) === Number(inviterId) && Number(p.receiverId) === Number(meId))
+        )
+      : false;
+
+    if (isSelf || isFriend || hasPending) {
+      try {
+        const p = new URLSearchParams(searchParams);
+        p.delete('inviteCode');
+        const newUrl = p.toString()
+          ? `${window.location.pathname}?${p.toString()}`
+          : window.location.pathname;
+        navigate(newUrl, { replace: true });
+      } catch { /* ignore */ }
+      setInvitePreview(null);
+    }
+  }, [inviteCode, invitePreview, meId, friends, pending, navigate, searchParams]);
 
   // Define load functions BEFORE they are used in useEffect
 
@@ -205,7 +278,7 @@ const Social = () => {
 
         username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
 
-        avatar: f.friendAvatar || undefined,
+        avatar: toAbsoluteUrl(f.friendAvatar) || undefined,
 
         isOnline: false,
 
@@ -306,6 +379,16 @@ const Social = () => {
     finally { setLoadingCollabInvites(false); }
 
   };
+
+
+
+  // Load dữ liệu chính ngay khi đã đăng nhập và có userId
+  useEffect(() => {
+    if (!hasToken || !meId) return;
+    void loadFriends();
+    void loadPending();
+    void loadCollabInvites();
+  }, [hasToken, meId]);
 
 
 
@@ -1036,7 +1119,7 @@ const Social = () => {
 
         const apiFriends: ApiFriendDTO[] = await friendsApi.getFriends(meId);
 
-        const mapped: Friend[] = apiFriends.map((f) => ({
+      const mapped: Friend[] = apiFriends.map((f) => ({
 
           id: String(f.friendId || f.id),
 
@@ -1044,7 +1127,7 @@ const Social = () => {
 
           username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
 
-          avatar: f.friendAvatar || undefined,
+          avatar: toAbsoluteUrl(f.friendAvatar) || undefined,
 
           isOnline: false,
 
@@ -1182,7 +1265,7 @@ const Social = () => {
 
             username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
 
-            avatar: f.friendAvatar || undefined,
+            avatar: toAbsoluteUrl(f.friendAvatar) || undefined,
 
             isOnline: false,
 
@@ -1349,7 +1432,7 @@ const Social = () => {
                             {invitePreview.message}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Chấp nhận để gửi yêu cầu kết bạn lại cho người mời.
+                            Chấp nhận để kết bạn trực tiếp với {invitePreview.inviterName || 'người mời'}. Lời mời sẽ giữ nguyên cho đến khi bạn quyết định.
                           </p>
                         </div>
                       </div>
@@ -1373,7 +1456,7 @@ const Social = () => {
                   ) : (
                     <>
                       <p className="text-sm text-muted-foreground">
-                        Bạn đã nhận được lời mời kết bạn. Chấp nhận để gửi yêu cầu kết bạn lại cho người mời.
+                        Bạn đã nhận được lời mời kết bạn. Chấp nhận để kết nối ngay với người mời, hoặc từ chối nếu chưa sẵn sàng.
                       </p>
                       <div className="flex gap-2">
                         <Button 
@@ -1459,6 +1542,7 @@ const Social = () => {
                 expandedInviteId={expandedInviteId}
                 profileName={profileName}
                 profileEmail={profileEmail}
+                profileAvatar={profileAvatar}
                 shareUrl={shareUrl}
                 onToggleInvite={(id) => setExpandedInviteId(prev => (prev === id ? null : id))}
                 onAcceptInvite={handleAcceptCollabInvite}

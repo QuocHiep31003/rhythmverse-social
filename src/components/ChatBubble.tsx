@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { X, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { API_BASE_URL } from "@/services/api/config";
 import { useNavigate } from "react-router-dom";
 import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
 import { type NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
@@ -126,18 +127,31 @@ const ChatBubble = () => {
     } catch { return undefined; }
   }, [typeof window !== 'undefined' ? localStorage.getItem('userId') : undefined]);
 
+  const toAbsoluteUrl = (u?: string | null): string | undefined => {
+    if (!u) return undefined;
+    if (/^https?:\/\//i.test(u)) return u;
+    const base = API_BASE_URL.replace(/\/?$/, '');
+    if (u.startsWith('/api/')) {
+      if (base.endsWith('/api')) {
+        return `${base.slice(0, -4)}${u}`;
+      }
+    }
+    if (u.startsWith('/')) return `${base}${u}`;
+    return `${base}/${u}`;
+  };
+
   useFirebaseRealtime(meId, {
     onNotification: (n: FBNotificationDTO) => {
       try {
         if (n?.type === 'MESSAGE') {
           const title = n.senderName || 'New message';
           const body = n.body || '';
-          const msg: ChatMessage = { id: `msg-${n.id || Date.now()}` , from: String(title), message: String(body), timestamp: new Date() };
+          const msg: ChatMessage = { id: `msg-${n.id || Date.now()}` , from: String(title), message: String(body), avatar: toAbsoluteUrl(n.senderAvatar ?? null), timestamp: new Date() };
           pushAndAutohide(msg);
         } else if (n?.type === 'INVITE') {
           const from = n.senderName || 'New Invite';
           const pName = (n.metadata as any)?.playlistName || 'a playlist';
-          const msg: ChatMessage = { id: `inv-${n.id || Date.now()}`, from: String(from), message: `mời bạn cộng tác trên "${pName}"`, timestamp: new Date() };
+          const msg: ChatMessage = { id: `inv-${n.id || Date.now()}`, from: String(from), message: `mời bạn cộng tác trên \"${pName}\"`, avatar: toAbsoluteUrl(n.senderAvatar ?? null), timestamp: new Date() };
           pushAndAutohide(msg);
         }
       } catch { /* ignore */ }
