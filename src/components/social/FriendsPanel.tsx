@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Users, Share2, MessageCircle, Flame, Headphones } from "lucide-react";
 import type { Friend, CollabInviteDTO } from "@/types/social";
@@ -13,6 +13,7 @@ interface FriendsPanelProps {
   expandedInviteId: number | null;
   profileName: string;
   profileEmail: string;
+  profileAvatar?: string | null;
   shareUrl: string;
   onToggleInvite: (id: number) => void;
   onAcceptInvite: (id: number) => Promise<void>;
@@ -29,6 +30,7 @@ export const FriendsPanel = ({
   expandedInviteId,
   profileName,
   profileEmail,
+  profileAvatar,
   shareUrl,
   onToggleInvite,
   onAcceptInvite,
@@ -81,6 +83,9 @@ export const FriendsPanel = ({
           <CardContent>
             <div className="flex items-center gap-4 p-4 bg-muted/10 rounded-lg">
               <Avatar className="w-16 h-16">
+                {profileAvatar ? (
+                  <AvatarImage src={profileAvatar || undefined} alt={profileName || profileEmail || 'Me'} />
+                ) : null}
                 <AvatarFallback className="bg-gradient-primary text-white text-lg">
                   {(() => {
                     const name = profileName && profileName.trim().length > 0 ? profileName : (profileEmail.split('@')[0] || 'U');
@@ -131,6 +136,9 @@ export const FriendsPanel = ({
               <div className="flex items-center gap-3 mb-4">
                 <div className="relative">
                   <Avatar className="w-12 h-12">
+                    {friend.avatar ? (
+                      <AvatarImage src={friend.avatar || undefined} alt={friend.name} />
+                    ) : null}
                     <AvatarFallback className="bg-gradient-primary text-white">
                       {friend.name.split(' ').map(n => n[0]).join('')}
                     </AvatarFallback>
@@ -178,4 +186,3 @@ export const FriendsPanel = ({
     </>
   );
 };
-

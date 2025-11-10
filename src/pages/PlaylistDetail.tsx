@@ -16,7 +16,7 @@ import Footer from "@/components/Footer";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { songsApi } from "@/services/api/songApi";
-import { buildJsonHeaders } from "@/services/api";
+import { buildJsonHeaders, API_BASE_URL } from "@/services/api";
 import { friendsApi } from "@/services/api/friendsApi";
 import { uploadImage } from "@/config/cloudinary";
 import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
@@ -84,6 +84,20 @@ const PlaylistDetail = () => {
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
   const fetchedSongCoverIdsRef = useRef<Set<string>>(new Set());
+  // Normalize relative URLs from API to absolute
+  const toAbsoluteUrl = useCallback((u?: string | null): string | null => {
+    if (!u) return null;
+    if (/^https?:\/\//i.test(u)) return u;
+    const base = API_BASE_URL.replace(/\/?$/, '');
+    if (u.startsWith('/api/')) {
+      if (base.endsWith('/api')) {
+        return `${base.slice(0, -4)}${u}`;
+      }
+    }
+    if (u.startsWith('/')) return `${base}${u}`;
+    return `${base}/${u}`;
+  }, []);
+
   const ownerDisplayName = useMemo(() => {
     const raw = playlist?.ownerName;
     if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
@@ -151,10 +165,22 @@ const PlaylistDetail = () => {
     const seen = new Set<number>();
 
     if (playlist.ownerId) {
+      // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list
+      let ownerAvatar = playlist.ownerAvatar;
+      let ownerName = playlist.ownerName;
+      
+      if ((!ownerAvatar || !ownerName) && friends.length > 0) {
+        const ownerFriend = friends.find(f => f.id === playlist.ownerId);
+        if (ownerFriend) {
+          ownerAvatar = ownerAvatar || ownerFriend.avatar || null;
+          ownerName = ownerName || ownerFriend.name || "Owner";
+        }
+      }
+      
       entries.push({
         userId: playlist.ownerId,
-        name: playlist.ownerName || "Owner",
-        avatar: playlist.ownerAvatar || null,
+        name: ownerName || "Owner",
+        avatar: toAbsoluteUrl(ownerAvatar) || null,
         role: "OWNER",
         roleLabel: "Owner",
         isOwner: true,
@@ -172,10 +198,20 @@ const PlaylistDetail = () => {
           : normalizedRole === CollaboratorRole.VIEWER
             ? "Viewer"
             : "Collaborator";
+      
+      // Lấy avatar: thử từ collaborator object, nếu không có thì lấy từ friends list
+      let collaboratorAvatar = (c as { avatar?: string | null }).avatar ?? null;
+      if (!collaboratorAvatar && friends.length > 0) {
+        const friend = friends.find(f => f.id === idNum);
+        if (friend?.avatar) {
+          collaboratorAvatar = friend.avatar;
+        }
+      }
+      
       entries.push({
         userId: idNum,
         name: c.name || c.email || `User ${idNum}`,
-        avatar: (c as { avatar?: string | null }).avatar ?? null,
+        avatar: toAbsoluteUrl(collaboratorAvatar) || null,
         role: normalizedRole,
         roleLabel,
         isOwner: false,
@@ -184,7 +220,7 @@ const PlaylistDetail = () => {
     });
 
     return entries;
-  }, [playlist, collaborators]);
+  }, [playlist, collaborators, friends, toAbsoluteUrl]);
 
   useEffect(() => {
     const load = async () => {
@@ -230,13 +266,23 @@ const PlaylistDetail = () => {
         };
         const visibility = normalizeVisibility((data as PlaylistDTO).visibility);
 
+        // Lấy owner name và avatar
+        const ownerName = extendedData?.owner?.name 
+          ?? (data.owner as { name?: string } | undefined)?.name 
+          ?? (data as { ownerName?: string }).ownerName
+          ?? undefined;
+        const ownerAvatar = extendedData?.owner?.avatar 
+          ?? (data.owner as { avatar?: string | null } | undefined)?.avatar 
+          ?? (data as { ownerAvatar?: string | null }).ownerAvatar
+          ?? null;
+
         setPlaylist({
           id: data.id,
           title: data.name,
           description: data.description || '',
           cover: playlistFallbackCover,
-          ownerName: extendedData?.owner?.name,
-          ownerAvatar: extendedData?.owner?.avatar ?? null,
+          ownerName,
+          ownerAvatar,
           ownerId,
           visibility,
           totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
@@ -491,8 +537,38 @@ const PlaylistDetail = () => {
     }
   }, [collabOpen, playlist]);
 
+  // Load friends sớm để có avatar cho collaborators
   useEffect(() => {
     const fetchFriends = async () => {
+      if (!meId) { setFriends([]); return; }
+      try {
+        const list = await friendsApi.getFriends(meId);
+        interface FriendListItem {
+          friendId?: number;
+          userId?: number;
+          id?: number;
+          friendName?: string;
+          name?: string;
+          username?: string;
+          email?: string;
+          friendAvatar?: string | null;
+          avatar?: string | null;
+        }
+        const mapped = Array.isArray(list)
+          ? list.map((f: FriendListItem) => ({
+            id: f.friendId ?? f.userId ?? f.id ?? 0,
+            name: f.friendName ?? f.name ?? f.username ?? f.email ?? `User ${f.friendId ?? f.userId ?? f.id ?? ''}`,
+            avatar: toAbsoluteUrl(f.friendAvatar ?? f.avatar ?? null) || null,
+          }))
+          : [];
+        setFriends(mapped);
+      } catch { setFriends([]); }
+    };
+    fetchFriends();
+  }, [meId, toAbsoluteUrl]);
+
+  useEffect(() => {
+    const fetchFriendsForDialog = async () => {
       try {
         setLoadingFriends(true);
         const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
@@ -534,7 +610,7 @@ const PlaylistDetail = () => {
       } catch { setFriends([]); }
       finally { setLoadingFriends(false); }
     };
-    if (collabOpen) fetchFriends();
+    if (collabOpen) fetchFriendsForDialog();
   }, [collabOpen, playlist?.ownerId, collaborators, pendingInvites]);
 
   useEffect(() => {
@@ -561,7 +637,16 @@ const PlaylistDetail = () => {
     const fallbackCover = playlist.cover ?? null;
     const previousSnapshot = playlist ? { ...playlist, songs: [...playlist.songs] } : null;
     const optimisticAddedAt = new Date().toISOString();
-    const optimisticSong: Song & { addedBy?: string; addedAt?: string } = {
+    // Lấy avatar của current user từ friends list hoặc từ localStorage
+    let currentUserAvatar: string | null = null;
+    if (meId && friends.length > 0) {
+      const currentUserFriend = friends.find(f => f.id === meId);
+      if (currentUserFriend?.avatar) {
+        currentUserAvatar = currentUserFriend.avatar;
+      }
+    }
+    
+    const optimisticSong: Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null } = {
       id: String(songId),
       title: song.name,
       artist: Array.isArray(song.artists) && song.artists.length
@@ -573,6 +658,8 @@ const PlaylistDetail = () => {
       duration: toSeconds(song.duration),
       addedAt: optimisticAddedAt,
       addedBy: 'You',
+      addedById: meId,
+      addedByAvatar: toAbsoluteUrl(currentUserAvatar) || null,
     };
     setAddingSongIds((prev) => (prev.includes(songId) ? prev : [...prev, songId]));
     setPlaylist((prev) => {
@@ -1027,29 +1114,48 @@ const PlaylistDetail = () => {
             )}
 
             <div className="flex items-center gap-3 mb-6 mt-4">
-              <Avatar className="w-9 h-9 border border-border/50 bg-muted">
-                {playlist?.ownerAvatar ? (
-                  <AvatarImage src={playlist.ownerAvatar} alt={playlist.ownerName || "Owner"} />
-                ) : (
-                  <UserIcon className="h-5 w-5 text-muted-foreground" />
-                )}
-                <AvatarFallback className="bg-muted">
-                  <UserIcon className="h-5 w-5 text-muted-foreground" />
-                </AvatarFallback>
-              </Avatar>
-              {playlist?.ownerName && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger className="text-left">
-                      <span className="font-medium truncate">{playlist.ownerName}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-sm font-medium">{playlist.ownerName}</p>
-                      {playlist?.ownerId && <p className="text-xs text-muted-foreground">User ID: {playlist.ownerId}</p>}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+              {(() => {
+                // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list
+                let ownerAvatar = playlist?.ownerAvatar;
+                let ownerName = playlist?.ownerName;
+                
+                if ((!ownerAvatar || !ownerName) && playlist?.ownerId && friends.length > 0) {
+                  const ownerFriend = friends.find(f => f.id === playlist.ownerId);
+                  if (ownerFriend) {
+                    ownerAvatar = ownerAvatar || ownerFriend.avatar || null;
+                    ownerName = ownerName || ownerFriend.name || "Owner";
+                  }
+                }
+                
+                return (
+                  <>
+                    <Avatar className="w-9 h-9 border border-border/50">
+                      {ownerAvatar ? (
+                        <AvatarImage src={toAbsoluteUrl(ownerAvatar) || undefined} alt={ownerName || "Owner"} />
+                      ) : null}
+                      <AvatarFallback className="bg-gradient-primary text-white">
+                        {ownerName 
+                          ? ownerName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                          : <UserIcon className="h-5 w-5" />
+                        }
+                      </AvatarFallback>
+                    </Avatar>
+                    {ownerName && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="text-left">
+                            <span className="font-medium truncate">{ownerName}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-sm font-medium">{ownerName}</p>
+                            {playlist?.ownerId && <p className="text-xs text-muted-foreground">User ID: {playlist.ownerId}</p>}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </>
+                );
+              })()}
               <span className="text-muted-foreground">•</span>
               <span className="text-muted-foreground">{(playlist?.songs.length || 0) > 0 ? playlist?.songs.length : (playlist?.totalSongs ?? 0)} songs</span>
               {playlist && playlist.songs.length > 0 && (
@@ -1097,15 +1203,19 @@ const PlaylistDetail = () => {
                         <Popover>
                           <PopoverTrigger asChild>
                             <Avatar className={`h-8 w-8 cursor-pointer border-2 border-background ${ringClass} hover:scale-110 transition-transform`}>
-                              <AvatarImage src={member.avatar || undefined} alt={member.name} />
-                              <AvatarFallback>{initials}</AvatarFallback>
+                              {member.avatar ? (
+                                <AvatarImage src={member.avatar} alt={member.name} />
+                              ) : null}
+                              <AvatarFallback className="bg-gradient-primary text-white">{initials}</AvatarFallback>
                             </Avatar>
                           </PopoverTrigger>
                           <PopoverContent className="w-56 p-3">
                             <div className="flex items-center gap-3 mb-3">
                               <Avatar className="h-10 w-10">
-                                <AvatarImage src={member.avatar || undefined} alt={member.name} />
-                                <AvatarFallback>{initials}</AvatarFallback>
+                                {member.avatar ? (
+                                  <AvatarImage src={member.avatar} alt={member.name} />
+                                ) : null}
+                                <AvatarFallback className="bg-gradient-primary text-white">{initials}</AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-sm truncate">{member.name}</p>
@@ -1251,24 +1361,42 @@ const PlaylistDetail = () => {
             </div>
 
             <div className="space-y-2">
-              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => (
-                <PlaylistSongItem
-                  key={song.id}
-                  song={song}
-                  index={index}
-                  isActive={currentSong?.id === song.id}
-                  isPlaying={isPlaying}
-                  isLiked={likedSongs.includes(song.id)}
-                  onPlay={() => handlePlaySong(song)}
-                  onToggleLike={() => toggleSongLike(song.id)}
-                  onRemove={permissions.canEdit ? () => confirmRemoveSong(song.id) : undefined}
-                  onHide={meId && isCurrentCollaborator ? () => setHiddenSongIds(prev => prev.includes(song.id) ? prev : [...prev, song.id]) : undefined}
-                  onCollab={permissions.isOwner ? () => setCollabOpen(true) : undefined}
-                  canEdit={permissions.canEdit}
-                  isCollaborator={isCurrentCollaborator}
-                  meId={meId}
-                />
-              ))}
+              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => {
+                // Lấy avatar của người thêm bài hát từ friends list
+                let addedByAvatar: string | null = null;
+                if ((song as { addedById?: number }).addedById && friends.length > 0) {
+                  const addedByFriend = friends.find(f => f.id === (song as { addedById?: number }).addedById);
+                  if (addedByFriend?.avatar) {
+                    addedByAvatar = addedByFriend.avatar;
+                  }
+                }
+                // Nếu không có trong friends, thử lấy từ song object
+                if (!addedByAvatar) {
+                  addedByAvatar = (song as { addedByAvatar?: string | null }).addedByAvatar ?? null;
+                }
+                
+                return (
+                  <PlaylistSongItem
+                    key={song.id}
+                    song={{
+                      ...song,
+                      addedByAvatar: toAbsoluteUrl(addedByAvatar) || null,
+                    }}
+                    index={index}
+                    isActive={currentSong?.id === song.id}
+                    isPlaying={isPlaying}
+                    isLiked={likedSongs.includes(song.id)}
+                    onPlay={() => handlePlaySong(song)}
+                    onToggleLike={() => toggleSongLike(song.id)}
+                    onRemove={permissions.canEdit ? () => confirmRemoveSong(song.id) : undefined}
+                    onHide={meId && isCurrentCollaborator ? () => setHiddenSongIds(prev => prev.includes(song.id) ? prev : [...prev, song.id]) : undefined}
+                    onCollab={permissions.isOwner ? () => setCollabOpen(true) : undefined}
+                    canEdit={permissions.canEdit}
+                    isCollaborator={isCurrentCollaborator}
+                    meId={meId}
+                  />
+                );
+              })}
             </div>
           </CardContent>
         </Card>

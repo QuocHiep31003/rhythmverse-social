@@ -49,32 +49,28 @@ export const resolveSongCover = (
   song: SearchSongResult & { songId?: number; cover?: string | null; artwork?: string | null; thumbUrl?: string | null; albumArtUrl?: string | null },
   fallback?: string | null,
 ): string => {
-  const sources = [
-    song.cover,
-    song.coverUrl,
-    song.urlImageAlbum,
-    song.artworkUrl,
-    song.albumArtUrl,
-    song.thumbnailUrl,
-    song.thumbUrl,
-    song.imageUrl,
-    song.image,
-    song.posterUrl,
-    song.artwork,
-    song.album?.name && typeof song.album !== 'string' ? (song as { albumCoverUrl?: string | null }).albumCoverUrl : undefined,
-    fallback,
-  ].filter(isValidImageValue);
-  return sources.length ? sources[0] : '';
+  // Đơn giản như các nơi khác: dùng cover hoặc urlImageAlbum
+  if (isValidImageValue(song.cover)) return song.cover;
+  if (isValidImageValue(song.urlImageAlbum)) return song.urlImageAlbum;
+  return '';
 };
 
 export const mapSongsFromResponse = (
   songsRaw: unknown,
   defaultCover?: string | null,
-): (Song & { addedBy?: string; addedAt?: string })[] => {
+): (Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null })[] => {
   if (!Array.isArray(songsRaw)) return [];
   return songsRaw
     .map((raw) => {
-      const song = raw as SearchSongResult & { songId?: number; addedByUser?: { name?: string | null } | null; creator?: { name?: string | null } | null };
+      const song = raw as SearchSongResult & { 
+        songId?: number; 
+        addedByUser?: { 
+          id?: number; 
+          name?: string | null; 
+          avatar?: string | null;
+        } | null; 
+        creator?: { name?: string | null } | null;
+      };
       const rawId = typeof song.id === 'number' ? song.id : typeof song.songId === 'number' ? song.songId : undefined;
       if (rawId == null) return undefined;
       const artistNames = Array.isArray(song.artists) && song.artists.length
@@ -99,9 +95,23 @@ export const mapSongsFromResponse = (
         (song as { creatorName?: string | null }).creatorName ??
         (song as { creator?: { name?: string | null } }).creator?.name ??
         undefined;
+      const addedById =
+        (song as { addedById?: number }).addedById ??
+        (song as { addedByUserId?: number }).addedByUserId ??
+        song.addedByUser?.id ??
+        (song as { creatorId?: number }).creatorId ??
+        (song as { creator?: { id?: number } }).creator?.id ??
+        undefined;
+      const addedByAvatar =
+        (song as { addedByAvatar?: string | null }).addedByAvatar ??
+        song.addedByUser?.avatar ??
+        (song as { creatorAvatar?: string | null }).creatorAvatar ??
+        (song as { creator?: { avatar?: string | null } }).creator?.avatar ??
+        null;
       return {
         id: String(rawId),
         title: song.name ?? (song as { title?: string }).title ?? 'Untitled',
+        songName: song.name ?? (song as { title?: string }).title ?? 'Untitled',
         artist: artistNames ?? (song as { artist?: string }).artist ?? 'Unknown',
         album: song.album?.name ?? (song as { albumName?: string }).albumName ?? '',
         cover: resolveSongCover(song, defaultCover),
@@ -109,9 +119,11 @@ export const mapSongsFromResponse = (
         duration: toSeconds(song.duration),
         addedAt: addedAt ?? undefined,
         addedBy: addedBy ?? undefined,
+        addedById: addedById ?? undefined,
+        addedByAvatar: addedByAvatar ?? null,
       };
     })
-    .filter((item): item is Song & { addedBy?: string; addedAt?: string } => Boolean(item));
+    .filter((item) => Boolean(item)) as (Song & { title?: string; addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null })[];
 };
 
 export const formatDateDisplay = (value?: string) => {

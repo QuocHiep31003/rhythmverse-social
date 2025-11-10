@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Play, Heart, MoreHorizontal, Users, Share2, Trash2 } from "lucide-react";
 import { Song } from "@/contexts/MusicContext";
 import { formatDateDisplay, msToMMSS, toSeconds } from "@/utils/playlistUtils";
 
 interface PlaylistSongItemProps {
-  song: Song & { addedBy?: string; addedAt?: string };
+  song: Song & { addedBy?: string; addedAt?: string; addedByAvatar?: string | null; addedById?: number };
   index: number;
   isActive: boolean;
   isPlaying: boolean;
@@ -71,14 +72,43 @@ export const PlaylistSongItem = ({
         <p className="text-sm text-muted-foreground truncate">{song.album}</p>
       </div>
 
+      {/* Avatar và tên người thêm bài hát ở giữa */}
+      <div className="hidden md:flex items-center gap-2 min-w-0">
+        {song.addedByAvatar || song.addedBy ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Avatar className="w-6 h-6 flex-shrink-0">
+                    {song.addedByAvatar ? (
+                      <AvatarImage src={song.addedByAvatar} alt={song.addedBy || "Added by"} />
+                    ) : null}
+                    <AvatarFallback className="bg-gradient-primary text-white text-[10px]">
+                      {song.addedBy 
+                        ? song.addedBy.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                        : '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  {song.addedBy && (
+                    <span className="text-xs text-muted-foreground truncate">{song.addedBy}</span>
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Thêm bởi {song.addedBy || "Unknown"}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : null}
+      </div>
+
       <div className="hidden lg:block w-36 text-right leading-tight">
         {(() => {
           const addedDate = formatDateDisplay(song.addedAt);
-          if (!addedDate && !song.addedBy) return null;
+          if (!addedDate) return null;
           return (
             <div className="space-y-0.5">
               {addedDate && <p className="text-xs text-muted-foreground">{addedDate}</p>}
-              {song.addedBy && <p className="text-[11px] text-muted-foreground">{song.addedBy}</p>}
             </div>
           );
         })()}

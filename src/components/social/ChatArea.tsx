@@ -1,6 +1,6 @@
 import { useRef, useEffect, useLayoutEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MessageCircle, Search, Send, Music, Edit } from "lucide-react";
@@ -118,6 +118,7 @@ export const ChatArea = ({
           <div className="flex items-center gap-3">
             <div className="relative">
               <Avatar className="w-10 h-10">
+                <AvatarImage src={friend.avatar} alt={friend.name} />
                 <AvatarFallback className="bg-purple-500 text-white text-sm">
                   {friend.name.split(' ').map(n => n[0]).join('')}
                 </AvatarFallback>
@@ -205,6 +206,10 @@ export const ChatArea = ({
             >
               <div className="relative flex items-center gap-3">
                 <Avatar className="w-9 h-9">
+                  <AvatarImage 
+                    src={friends.find((f) => f.id === selectedChat)?.avatar}
+                    alt={friends.find((f) => f.id === selectedChat)?.name || 'Friend'}
+                  />
                   <AvatarFallback className="bg-purple-500 text-white text-sm font-semibold">
                     {friends
                       .find((f) => f.id === selectedChat)
