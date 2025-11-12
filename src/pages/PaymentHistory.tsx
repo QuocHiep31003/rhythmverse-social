@@ -3,24 +3,42 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Clock, RefreshCw } from 'lucide-react';
 import { paymentApi, OrderHistoryItem } from '@/services/api/paymentApi';
 import { useToast } from '@/hooks/use-toast';
 import AppLayout from '@/components/AppLayout';
 
 export default function PaymentHistoryPage() {
+  const [allOrders, setAllOrders] = useState<OrderHistoryItem[]>([]);
   const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'SUCCESS' | 'FAILED'>('all');
   const { toast } = useToast();
 
   const loadHistory = async () => {
     try {
       setLoading(true);
+      // TODO: Backend cần hỗ trợ filter theo status
       const result = await paymentApi.getHistory(page, 10);
-      setOrders(result.content);
+      
+      // Lưu tất cả orders để tính statistics
+      setAllOrders(result.content);
+      
+      // Filter client-side nếu backend chưa hỗ trợ - check bằng desc
+      let filteredOrders = result.content;
+      if (filter !== 'all') {
+        if (filter === 'SUCCESS') {
+          filteredOrders = result.content.filter(order => isSuccess(order.desc));
+        } else if (filter === 'FAILED') {
+          filteredOrders = result.content.filter(order => order.desc && !isSuccess(order.desc));
+        }
+      }
+      
+      setOrders(filteredOrders);
       setTotalPages(result.totalPages);
       setTotalElements(result.totalElements);
     } catch (error) {
@@ -37,7 +55,7 @@ export default function PaymentHistoryPage() {
 
   useEffect(() => {
     loadHistory();
-  }, [page]);
+  }, [page, filter]);
 
   const formatDate = (dateString: string) => {
     try {
@@ -54,6 +72,51 @@ export default function PaymentHistoryPage() {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND',
+    }).format(amount);
+  };
+
+  // Helper function để check nếu desc là thành công
+  const isSuccess = (desc?: string): boolean => {
+    if (!desc) return false;
+    const descLower = desc.toLowerCase().trim();
+    return descLower === 'success' || descLower === 'thành công';
+  };
+
+  const getStatusBadge = (order: OrderHistoryItem) => {
+    const desc = order.desc || '';
+    if (isSuccess(desc)) {
+      return (
+        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          Đã thanh toán
+        </Badge>
+      );
+    } else {
+      // Nếu không phải thành công, coi là hủy/thất bại
+      // Fallback về status cũ nếu không có desc
+      const isFailed = desc && desc.toLowerCase().trim() !== '' && !isSuccess(desc);
+      const isCancelled = !desc && order.status === 'FAILED';
+      
+      return (
+        <Badge variant="destructive">
+          <XCircle className="w-3 h-3 mr-1" />
+          {isFailed || isCancelled ? 'Hủy' : 'Thất bại'}
+        </Badge>
+      );
+    }
+  };
+
+  // Tính statistics từ tất cả orders (không filter) - check bằng desc
+  const successCount = allOrders.filter(o => isSuccess(o.desc)).length;
+  const failedCount = allOrders.filter(o => o.desc && !isSuccess(o.desc)).length;
+  const totalAmount = allOrders
+    .filter(o => isSuccess(o.desc))
+    .reduce((sum, o) => sum + o.amount, 0);
+
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-8">
@@ -64,11 +127,51 @@ export default function PaymentHistoryPage() {
           </p>
         </div>
 
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-green-500">{successCount}</div>
+              <p className="text-sm text-muted-foreground">Giao dịch thành công</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-500">{failedCount}</div>
+              <p className="text-sm text-muted-foreground">Giao dịch thất bại</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
+              <p className="text-sm text-muted-foreground">Tổng đã thanh toán</p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
           <CardHeader>
-            <CardTitle>Tất cả giao dịch</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Giao dịch</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadHistory()}
+                disabled={loading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
+            <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)} className="mb-4">
+              <TabsList>
+                <TabsTrigger value="all">Tất cả</TabsTrigger>
+                <TabsTrigger value="SUCCESS">Thành công</TabsTrigger>
+                <TabsTrigger value="FAILED">Thất bại</TabsTrigger>
+              </TabsList>
+            </Tabs>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -96,25 +199,24 @@ export default function PaymentHistoryPage() {
                           <TableCell className="font-medium">
                             #{order.orderCode}
                           </TableCell>
-                          <TableCell>{order.description}</TableCell>
                           <TableCell>
-                            {order.amount.toLocaleString('vi-VN')} VNĐ
+                            <div className="font-medium">{order.description}</div>
                           </TableCell>
                           <TableCell>
-                            {order.status === 'SUCCESS' ? (
-                              <Badge variant="default" className="bg-green-500">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                Thành công
-                              </Badge>
-                            ) : (
-                              <Badge variant="destructive">
-                                <XCircle className="w-3 h-3 mr-1" />
-                                Thất bại
-                              </Badge>
-                            )}
+                            <div className="font-semibold text-primary">
+                              {formatCurrency(order.amount)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(order)}
                           </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {formatDate(order.createdAt)}
+                            <div>{formatDate(order.createdAt)}</div>
+                            {order.updatedAt && order.updatedAt !== order.createdAt && (
+                              <div className="text-xs text-muted-foreground/70 mt-1">
+                                Cập nhật: {formatDate(order.updatedAt)}
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
