@@ -1,20 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { useMusic } from "@/contexts/MusicContext";
-import {
-  Play,
-  Pause,
   Pencil,
   Trash2,
   Plus,
@@ -28,48 +17,67 @@ import {
   Music,
 } from "lucide-react";
 import { SongFormDialog } from "@/components/admin/SongFormDialog";
+import { SongEditDialog } from "@/components/admin/SongEditDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
-import { songsApi, artistsApi, genresApi, moodsApi } from "@/services/api";
+import { songsApi, genresApi, moodsApi } from "@/services/api";
+import type { Song } from "@/services/api/songApi";
 import { toast } from "@/hooks/use-toast";
-import { debounce, formatPlayCount } from "@/lib/utils";
+import { debounce } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const DEFAULT_AVATAR_URL =
-  "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
-
 const AdminSongs = () => {
-  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [songsList, setSongsList] = useState<any[]>([]);
+  const [songsList, setSongsList] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [selectedSong, setSelectedSong] = useState<any>(null);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { currentSong, isPlaying, playSong, togglePlay, setQueue } = useMusic();
   const [currentPage, setCurrentPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
-  const [selectedArtistId, setSelectedArtistId] = useState<number | undefined>();
   const [selectedGenreId, setSelectedGenreId] = useState<number | undefined>();
   const [selectedMoodId, setSelectedMoodId] = useState<number | undefined>();
-  const [artists, setArtists] = useState<any[]>([]);
   const [genres, setGenres] = useState<any[]>([]);
   const [moods, setMoods] = useState<any[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string | undefined>();
+  const [editTab, setEditTab] = useState<"metadata" | "contributor" | "genre" | "mood">("metadata");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const statusOptions = useMemo(
+    () => [
+      { value: "ACTIVE", label: "Đang hoạt động" },
+      { value: "INACTIVE", label: "Ngưng hoạt động" },
+    ],
+    []
+  );
+
+  const getArtistsDisplay = (song: Song): string => {
+    if (typeof song.artists === "string" && song.artists.trim()) {
+      return song.artists.trim();
+    }
+    if (Array.isArray(song.performers) && song.performers.length > 0) {
+      return song.performers.map((artist) => artist.name).filter(Boolean).join(", ");
+    }
+    if (Array.isArray(song.artists) && song.artists.length > 0) {
+      return song.artists.map((artist) => artist.name).filter(Boolean).join(", ");
+    }
+    if (Array.isArray(song.artistNames) && song.artistNames.length > 0) {
+      return song.artistNames.filter(Boolean).join(", ");
+    }
+    return "";
+  };
 
   const loadFilterData = async () => {
     try {
-      const [artistsData, genresData, moodsData] = await Promise.all([
-        artistsApi.getAll({ page: 0, size: 1000 }),
+      const [genresData, moodsData] = await Promise.all([
         genresApi.getAll({ page: 0, size: 1000 }),
         moodsApi.getAll({ page: 0, size: 1000 }),
       ]);
 
-      setArtists(artistsData.content || []);
       setGenres(genresData.content || []);
       setMoods(moodsData.content || []);
     } catch (error) {
@@ -85,9 +93,9 @@ const AdminSongs = () => {
         size: pageSize,
         sort: "name,asc",
         search: searchQuery || undefined,
-        artistId: selectedArtistId,
         genreId: selectedGenreId,
         moodId: selectedMoodId,
+        status: selectedStatus,
       });
       setSongsList(data.content || []);
       setTotalPages(data.totalPages || 0);
@@ -101,7 +109,7 @@ const AdminSongs = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, selectedArtistId, selectedGenreId, selectedMoodId]);
+  }, [currentPage, pageSize, searchQuery, selectedGenreId, selectedMoodId, selectedStatus]);
 
   useEffect(() => {
     loadSongs();
@@ -117,13 +125,14 @@ const AdminSongs = () => {
     setFormOpen(true);
   };
 
-  const handleEdit = (song: any) => {
+  const handleEdit = (song: Song, tab?: "metadata" | "contributor" | "genre" | "mood") => {
     setFormMode("edit");
     setSelectedSong(song);
+    setEditTab(tab || "metadata");
     setFormOpen(true);
   };
 
-  const handleDeleteClick = (song: any) => {
+  const handleDeleteClick = (song: Song) => {
     setSelectedSong(song);
     setDeleteOpen(true);
   };
@@ -133,13 +142,14 @@ const AdminSongs = () => {
     try {
       if (formMode === "create") {
         await songsApi.create(data);
-      } else {
+      } else if (selectedSong) {
         if (data.file) {
-          // console.log('cái dkmm')
           await songsApi.updateWithFile(String(selectedSong.id), data);
         } else {
           await songsApi.update(String(selectedSong.id), data);
         }
+      } else {
+        throw new Error("Không xác định được bài hát cần cập nhật");
       }
 
       toast({
@@ -164,7 +174,8 @@ const AdminSongs = () => {
   const handleDelete = async () => {
     try {
       setIsSubmitting(true);
-      await songsApi.delete(selectedSong.id);
+      if (!selectedSong) return;
+      await songsApi.delete(String(selectedSong.id));
       toast({ title: "Thành công", description: "Đã xóa bài hát" });
       setDeleteOpen(false);
       loadSongs();
@@ -231,24 +242,6 @@ const AdminSongs = () => {
     } finally {
       setIsSubmitting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handlePlayClick = (song: any) => {
-    const playableSongs = songsList.map(s => ({
-      ...s,
-      audio: s.audioUrl,
-      artist: s.artists?.map((a: any) => a.name).join(", ") || "Unknown",
-      genre: s.genres?.[0]?.name || "Unknown",
-    }));
-
-    const playableSong = playableSongs.find(s => s.id === song.id);
-
-    if (currentSong?.id === song.id) {
-      togglePlay();
-    } else {
-      setQueue(playableSongs);
-      playSong(playableSong);
     }
   };
 
@@ -362,29 +355,6 @@ const AdminSongs = () => {
               {/* Filter Dropdowns */}
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-muted-foreground">Artist:</label>
-                  <Select
-                    value={selectedArtistId?.toString() || "all"}
-                    onValueChange={(value) => {
-                      setSelectedArtistId(value === "all" ? undefined : Number(value));
-                      setCurrentPage(0);
-                    }}
-                  >
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="All artists" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All artists</SelectItem>
-                      {artists.map((artist) => (
-                        <SelectItem key={artist.id} value={artist.id.toString()}>
-                          {artist.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-2">
                   <label className="text-sm font-medium text-muted-foreground">Genre:</label>
                   <Select
                     value={selectedGenreId?.toString() || "all"}
@@ -430,13 +400,36 @@ const AdminSongs = () => {
                   </Select>
                 </div>
 
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-muted-foreground">Status:</label>
+                  <Select
+                    value={selectedStatus || "all"}
+                    onValueChange={(value) => {
+                      setSelectedStatus(value === "all" ? undefined : value);
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="All status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tất cả</SelectItem>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setSelectedArtistId(undefined);
                     setSelectedGenreId(undefined);
                     setSelectedMoodId(undefined);
+                    setSelectedStatus(undefined);
                     setCurrentPage(0);
                   }}
                   className="gap-2"
@@ -445,7 +438,7 @@ const AdminSongs = () => {
                 </Button>
 
                 <Badge variant="secondary">
-                  {totalElements} songs
+                  {totalElements} bài hát
                 </Badge>
               </div>
             </div>
@@ -460,101 +453,81 @@ const AdminSongs = () => {
                   : "Chưa có bài hát nào"}
               </div>
             ) : (
-              <>
-                {/* Fixed Header */}
-                <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-                  <table className="w-full table-fixed">
-                    <thead>
-                      <tr>
-                        <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                        <th className="w-12 text-left text-sm font-medium text-muted-foreground p-3"></th>
-                        <th className="w-64 text-left text-sm font-medium text-muted-foreground p-3">Bài hát</th>
-                        <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Nghệ sĩ</th>
-                        <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Năm phát hành</th>
-                        <th className="w-56 text-left text-sm font-medium text-muted-foreground p-3">Thể loại</th>
-                        <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Lượt nghe</th>
-                        <th className="w-28 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
-                      </tr>
-                    </thead>
-                  </table>
-                </div>
-
-                {/* Scrollable Body */}
-                <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
-                  <table className="w-full table-fixed">
-                    <tbody>
-                      {songsList.map((song, index) => (
-                        <tr key={song.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="w-16 text-center p-3">
-                            {currentPage * pageSize + index + 1}
-                          </td>
-                          <td className="w-12 p-3">
+              <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin rounded-b-lg">
+                <Table className="min-w-full">
+                  <TableHeader className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b border-border/70">
+                    <TableRow>
+                      <TableHead className="w-16 text-center text-sm font-medium text-muted-foreground">
+                        STT
+                      </TableHead>
+                      <TableHead className="w-1/2 text-sm font-medium text-muted-foreground">
+                        Bài hát
+                      </TableHead>
+                      <TableHead className="text-sm font-medium text-muted-foreground">
+                        Nghệ sĩ
+                      </TableHead>
+                      <TableHead className="w-28 text-center text-sm font-medium text-muted-foreground">
+                        Trạng thái
+                      </TableHead>
+                      <TableHead className="w-24 text-right text-sm font-medium text-muted-foreground">
+                        Hành động
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {songsList.map((song, index) => (
+                      <TableRow key={song.id} className="border-border/60 hover:bg-muted/50">
+                        <TableCell className="text-center">
+                          {currentPage * pageSize + index + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex flex-col">
+                            <span>{song.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {song.releaseYear ? `Năm phát hành: ${song.releaseYear}` : "Chưa rõ"}
+                              {song.duration ? ` • ${song.duration}` : ""}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {getArtistsDisplay(song) || "—"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            className={
+                              song.status === "INACTIVE"
+                                ? "bg-muted text-muted-foreground border border-dashed"
+                                : "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))]"
+                            }
+                          >
+                            {song.status === "INACTIVE" ? "Inactive" : "Active"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handlePlayClick(song)}
+                              onClick={() => handleEdit(song)}
                               className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
                             >
-                              {currentSong?.id === song.id && isPlaying ? (
-                                <Pause className="w-4 h-4" />
-                              ) : (
-                                <Play className="w-4 h-4" />
-                              )}
+                              <Pencil className="w-4 h-4" />
                             </Button>
-                          </td>
-                          <td className="w-64 p-3">
-                            <div className="flex items-center gap-3">
-                              <span className="font-medium truncate">{song.name}</span>
-                            </div>
-                          </td>
-                          <td className="w-48 p-3 truncate">
-                            {song.artists?.map((a: any) => a.name).join(", ") ||
-                              "—"}
-                          </td>
-                          <td className="w-32 p-3">{song.releaseYear || "—"}</td>
-                          <td className="w-56 p-3">
-                            <div className="flex flex-wrap gap-1">
-                              {song.genres?.map((g: any) => (
-                                <span
-                                  key={g.id}
-                                  className="px-2 py-1 rounded-full bg-primary/10 text-primary text-xs"
-                                >
-                                  {g.name}
-                                </span>
-                              )) || "—"}
-                            </div>
-                          </td>
-                          <td className="w-28 text-center p-3">
-                            <div className="flex flex-wrap gap-1">
-                              {formatPlayCount(song.playCount || 0)}
-                            </div>
-                          </td>
-                          <td className="w-28 text-right p-3">
-                            <div className="flex items-center justify-end gap-2">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEdit(song)}
-                                className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteClick(song)}
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteClick(song)}
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -620,14 +593,27 @@ const AdminSongs = () => {
           </div>
         )}
       </div>
-      <SongFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        onSubmit={handleFormSubmit}
-        defaultValues={selectedSong}
-        isLoading={isSubmitting}
-        mode={formMode}
-      />
+      {formMode === "edit" && selectedSong ? (
+        <SongEditDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          songId={Number(selectedSong.id)}
+          initialTab={editTab}
+          onSuccess={() => {
+            setFormOpen(false);
+            loadSongs();
+          }}
+        />
+      ) : (
+        <SongFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          onSubmit={handleFormSubmit}
+          defaultValues={selectedSong}
+          isLoading={isSubmitting}
+          mode={formMode}
+        />
+      )}
       <DeleteConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}

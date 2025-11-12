@@ -21,6 +21,9 @@ export { listeningHistoryApi } from './api/listeningHistoryApi';
 export { lyricsApi } from './api/lyricsApi';
 export { moodsApi } from './api/moodApi';
 export { authApi } from './api/authApi';
+export { songContributorApi } from './api/songContributorApi';
+export { songGenreApi } from './api/songGenreApi';
+export { songMoodApi } from './api/songMoodApi';
 
 
 // Import mock data for fallback

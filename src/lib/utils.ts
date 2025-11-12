@@ -73,7 +73,7 @@ export interface ApiSong {
   songName?: string;
   title?: string;
   artist?: string;
-  artists?: Array<{ id?: number; name: string }>;
+  artists?: Array<{ id?: number; name: string }> | string;
   album?: string | { name?: string };
   albumName?: string;
   albumCoverImg?: string; // Field chính thức cho ảnh album từ BE
@@ -112,6 +112,8 @@ export function mapToPlayerSong(song: ApiSong): PlayerSong {
   let artist = "Unknown";
   if (song.artists && Array.isArray(song.artists) && song.artists.length > 0) {
     artist = song.artists.map((a) => a.name).filter(Boolean).join(", ");
+  } else if (typeof song.artists === "string" && song.artists.trim().length > 0) {
+    artist = song.artists.trim();
   } else if (song.artist && typeof song.artist === "string") {
     artist = song.artist;
   }

@@ -638,6 +638,7 @@ const AdminAlbums = () => {
           isLoading={isSubmitting}
           mode={formMode}
           artists={artists}
+          existingSongs={selectedAlbum?.songs || []}
         />
 
         <DeleteConfirmDialog
