@@ -204,9 +204,15 @@ const Profile = () => {
     return date.toLocaleDateString();
   };
 
-  const formatPaymentDate = (dateString: string) => {
+  const formatPaymentDate = (dateString: string | null | undefined) => {
+    if (!dateString) {
+      return '-';
+    }
     try {
       const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) {
+        return dateString;
+      }
       return new Intl.DateTimeFormat('vi-VN', {
         year: 'numeric',
         month: '2-digit',
@@ -226,35 +232,33 @@ const Profile = () => {
     }).format(amount);
   };
 
-  // Helper function để check nếu desc là thành công
-  const isSuccess = (desc?: string): boolean => {
-    if (!desc) return false;
-    const descLower = desc.toLowerCase().trim();
-    return descLower === 'success' || descLower === 'thành công';
-  };
-
-  const getStatusBadge = (order: OrderHistoryItem) => {
-    const desc = order.desc || '';
-    if (isSuccess(desc)) {
+  const getPaymentStatusBadge = (order: OrderHistoryItem) => {
+    if (order.status === 'SUCCESS') {
       return (
         <Badge variant="default" className="bg-green-500 hover:bg-green-600">
           <CheckCircle2 className="w-3 h-3 mr-1" />
           Đã thanh toán
         </Badge>
       );
-    } else {
-      // Nếu không phải thành công, coi là hủy/thất bại
-      // Fallback về status cũ nếu không có desc
-      const isFailed = desc && desc.toLowerCase().trim() !== '' && !isSuccess(desc);
-      const isCancelled = !desc && order.status === 'FAILED';
-      
+    }
+
+    const isPending = order.payosCode?.toUpperCase() === 'PENDING' && !order.failureReason;
+
+    if (isPending) {
       return (
-        <Badge variant="destructive">
-          <XCircle className="w-3 h-3 mr-1" />
-          {isFailed || isCancelled ? 'Hủy' : 'Thất bại'}
+        <Badge variant="outline" className="border-amber-500 text-amber-500">
+          <Clock className="w-3 h-3 mr-1" />
+          Đang xử lý
         </Badge>
       );
     }
+
+    return (
+      <Badge variant="destructive">
+        <XCircle className="w-3 h-3 mr-1" />
+        Thất bại
+      </Badge>
+    );
   };
 
   const fetchPaymentHistory = async () => {
@@ -263,14 +267,13 @@ const Profile = () => {
       const result = await paymentApi.getHistory(paymentPage, 10);
       
       setAllPaymentOrders(result.content);
-      
-      // Filter client-side - check bằng desc
+
       let filteredOrders = result.content;
       if (paymentFilter !== 'all') {
         if (paymentFilter === 'SUCCESS') {
-          filteredOrders = result.content.filter(order => isSuccess(order.desc));
+          filteredOrders = result.content.filter((order) => order.status === 'SUCCESS');
         } else if (paymentFilter === 'FAILED') {
-          filteredOrders = result.content.filter(order => order.desc && !isSuccess(order.desc));
+          filteredOrders = result.content.filter((order) => order.status !== 'SUCCESS');
         }
       }
       
@@ -720,7 +723,7 @@ const Profile = () => {
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardContent className="pt-6">
                     <div className="text-2xl font-bold text-green-500">
-                      {allPaymentOrders.filter(o => isSuccess(o.desc)).length}
+                      {allPaymentOrders.filter(o => o.status === 'SUCCESS').length}
                     </div>
                     <p className="text-sm text-muted-foreground">Giao dịch thành công</p>
                   </CardContent>
@@ -728,7 +731,7 @@ const Profile = () => {
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardContent className="pt-6">
                     <div className="text-2xl font-bold text-red-500">
-                      {allPaymentOrders.filter(o => o.desc && !isSuccess(o.desc)).length}
+                      {allPaymentOrders.filter(o => o.status !== 'SUCCESS').length}
                     </div>
                     <p className="text-sm text-muted-foreground">Giao dịch thất bại</p>
                   </CardContent>
@@ -738,7 +741,7 @@ const Profile = () => {
                     <div className="text-2xl font-bold">
                       {formatCurrency(
                         allPaymentOrders
-                          .filter(o => isSuccess(o.desc))
+                          .filter(o => o.status === 'SUCCESS')
                           .reduce((sum, o) => sum + o.amount, 0)
                       )}
                     </div>
@@ -802,6 +805,25 @@ const Profile = () => {
                                 </TableCell>
                                 <TableCell>
                                   <div className="font-medium">{order.description}</div>
+                                  {order.status === 'SUCCESS' && order.reference && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      Mã giao dịch: {order.reference}
+                                    </div>
+                                  )}
+                                  {order.status === 'SUCCESS' && order.transactionDateTime && (
+                                    <div className="text-xs text-muted-foreground/80">
+                                      Thời gian PayOS: {order.transactionDateTime}
+                                    </div>
+                                  )}
+                                  {order.status !== 'SUCCESS' && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      {order.failureReason
+                                        ? order.failureReason
+                                        : order.payosCode?.toUpperCase() === 'PENDING'
+                                        ? 'Đang chờ PayOS gửi webhook xác nhận'
+                                        : order.payosDesc || 'Không có lý do được cung cấp'}
+                                    </div>
+                                  )}
                                 </TableCell>
                                 <TableCell>
                                   <div className="font-semibold text-primary">
@@ -809,10 +831,20 @@ const Profile = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {getStatusBadge(order)}
+                                  {getPaymentStatusBadge(order)} {order.status}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">
                                   <div>{formatPaymentDate(order.createdAt)}</div>
+                                  {order.paidAt && (
+                                    <div className="text-xs text-green-500 mt-1">
+                                      Thanh toán: {formatPaymentDate(order.paidAt)}
+                                    </div>
+                                  )}
+                                  {order.failedAt && (
+                                    <div className="text-xs text-red-500 mt-1">
+                                      Thất bại: {formatPaymentDate(order.failedAt)}
+                                    </div>
+                                  )}
                                   {order.updatedAt && order.updatedAt !== order.createdAt && (
                                     <div className="text-xs text-muted-foreground/70 mt-1">
                                       Cập nhật: {formatPaymentDate(order.updatedAt)}

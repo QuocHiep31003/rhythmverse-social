@@ -38,7 +38,27 @@ export interface OrderHistoryItem {
   amount: number;
   description: string;
   status: 'SUCCESS' | 'FAILED';
-  desc?: string; // Description từ PayOS response
+  currency?: string | null;
+  paymentLinkId?: string | null;
+  checkoutUrl?: string | null;
+  qrCode?: string | null;
+  expiredAt?: string | null;
+  accountNumber?: string | null;
+  accountName?: string | null;
+  bin?: string | null;
+  reference?: string | null;
+  transactionDateTime?: string | null;
+  payosCode?: string | null;
+  payosDesc?: string | null;
+  counterAccountBankId?: string | null;
+  counterAccountBankName?: string | null;
+  counterAccountName?: string | null;
+  counterAccountNumber?: string | null;
+  virtualAccountName?: string | null;
+  virtualAccountNumber?: string | null;
+  failureReason?: string | null;
+  paidAt?: string | null;
+  failedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
