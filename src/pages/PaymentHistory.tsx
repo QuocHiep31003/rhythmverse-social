@@ -22,22 +22,19 @@ export default function PaymentHistoryPage() {
   const loadHistory = async () => {
     try {
       setLoading(true);
-      // TODO: Backend cần hỗ trợ filter theo status
       const result = await paymentApi.getHistory(page, 10);
-      
-      // Lưu tất cả orders để tính statistics
+
       setAllOrders(result.content);
-      
-      // Filter client-side nếu backend chưa hỗ trợ - check bằng desc
+
       let filteredOrders = result.content;
       if (filter !== 'all') {
         if (filter === 'SUCCESS') {
-          filteredOrders = result.content.filter(order => isSuccess(order.desc));
+          filteredOrders = result.content.filter((order) => order.status === 'SUCCESS');
         } else if (filter === 'FAILED') {
-          filteredOrders = result.content.filter(order => order.desc && !isSuccess(order.desc));
+          filteredOrders = result.content.filter((order) => order.status !== 'SUCCESS');
         }
       }
-      
+
       setOrders(filteredOrders);
       setTotalPages(result.totalPages);
       setTotalElements(result.totalElements);
@@ -57,9 +54,15 @@ export default function PaymentHistoryPage() {
     loadHistory();
   }, [page, filter]);
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) {
+      return '-';
+    }
     try {
       const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) {
+        return dateString;
+      }
       return new Intl.DateTimeFormat('vi-VN', {
         year: 'numeric',
         month: '2-digit',
@@ -79,43 +82,43 @@ export default function PaymentHistoryPage() {
     }).format(amount);
   };
 
-  // Helper function để check nếu desc là thành công
-  const isSuccess = (desc?: string): boolean => {
-    if (!desc) return false;
-    const descLower = desc.toLowerCase().trim();
-    return descLower === 'success' || descLower === 'thành công';
-  };
-
   const getStatusBadge = (order: OrderHistoryItem) => {
-    const desc = order.desc || '';
-    if (isSuccess(desc)) {
+    if (order.status === 'SUCCESS') {
       return (
         <Badge variant="default" className="bg-green-500 hover:bg-green-600">
           <CheckCircle2 className="w-3 h-3 mr-1" />
-          Đã thanh toán
-        </Badge>
-      );
-    } else {
-      // Nếu không phải thành công, coi là hủy/thất bại
-      // Fallback về status cũ nếu không có desc
-      const isFailed = desc && desc.toLowerCase().trim() !== '' && !isSuccess(desc);
-      const isCancelled = !desc && order.status === 'FAILED';
-      
-      return (
-        <Badge variant="destructive">
-          <XCircle className="w-3 h-3 mr-1" />
-          {isFailed || isCancelled ? 'Hủy' : 'Thất bại'}
+          Thành công
         </Badge>
       );
     }
+
+    const isPending = order.payosCode?.toUpperCase() === 'PENDING' && !order.failureReason;
+
+    if (isPending) {
+      return (
+        <Badge variant="outline" className="border-amber-500 text-amber-500">
+          <Clock className="w-3 h-3 mr-1" />
+          Đang xử lýýý
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="destructive">
+        <XCircle className="w-3 h-3 mr-1" />
+        Thất bại
+      </Badge>
+    );
   };
 
-  // Tính statistics từ tất cả orders (không filter) - check bằng desc
-  const successCount = allOrders.filter(o => isSuccess(o.desc)).length;
-  const failedCount = allOrders.filter(o => o.desc && !isSuccess(o.desc)).length;
-  const totalAmount = allOrders
-    .filter(o => isSuccess(o.desc))
-    .reduce((sum, o) => sum + o.amount, 0);
+  const successOrders = allOrders.filter((o) => o.status === 'SUCCESS');
+  const pendingOrders = allOrders.filter(
+    (o) => o.status !== 'SUCCESS' && o.payosCode?.toUpperCase() === 'PENDING' && !o.failureReason
+  );
+  const failedOrders = allOrders.filter(
+    (o) => o.status !== 'SUCCESS' && !(o.payosCode?.toUpperCase() === 'PENDING' && !o.failureReason)
+  );
+  const totalAmount = successOrders.reduce((sum, o) => sum + o.amount, 0);
 
   return (
     <AppLayout>
@@ -128,16 +131,22 @@ export default function PaymentHistoryPage() {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-green-500">{successCount}</div>
+              <div className="text-2xl font-bold text-green-500">{successOrders.length}</div>
               <p className="text-sm text-muted-foreground">Giao dịch thành công</p>
             </CardContent>
           </Card>
           <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-red-500">{failedCount}</div>
+              <div className="text-2xl font-bold text-amber-500">{pendingOrders.length}</div>
+              <p className="text-sm text-muted-foreground">Giao dịch đang xử lý</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-500">{failedOrders.length}</div>
               <p className="text-sm text-muted-foreground">Giao dịch thất bại</p>
             </CardContent>
           </Card>
@@ -201,6 +210,25 @@ export default function PaymentHistoryPage() {
                           </TableCell>
                           <TableCell>
                             <div className="font-medium">{order.description}</div>
+                            {order.status === 'SUCCESS' && order.reference && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Mã giao dịch: {order.reference}
+                              </div>
+                            )}
+                            {order.status === 'SUCCESS' && order.transactionDateTime && (
+                              <div className="text-xs text-muted-foreground/80">
+                                Thời gian PayOS: {order.transactionDateTime}
+                              </div>
+                            )}
+                            {order.status !== 'SUCCESS' && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {order.failureReason
+                                  ? order.failureReason
+                                  : order.payosCode?.toUpperCase() === 'PENDING'
+                                  ? 'Đang chờ PayOS gửi webhook xác nhận'
+                                  : order.payosDesc || 'Không có lý do được cung cấp'}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="font-semibold text-primary">
@@ -212,6 +240,16 @@ export default function PaymentHistoryPage() {
                           </TableCell>
                           <TableCell className="text-muted-foreground">
                             <div>{formatDate(order.createdAt)}</div>
+                            {order.paidAt && (
+                              <div className="text-xs text-green-500 mt-1">
+                                Thanh toán: {formatDate(order.paidAt)}
+                              </div>
+                            )}
+                            {order.failedAt && (
+                              <div className="text-xs text-red-500 mt-1">
+                                Thất bại: {formatDate(order.failedAt)}
+                              </div>
+                            )}
                             {order.updatedAt && order.updatedAt !== order.createdAt && (
                               <div className="text-xs text-muted-foreground/70 mt-1">
                                 Cập nhật: {formatDate(order.updatedAt)}
