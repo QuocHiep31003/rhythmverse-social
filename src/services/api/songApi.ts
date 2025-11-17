@@ -10,7 +10,7 @@ export interface Song {
   genreIds?: number[];
   artistIds?: number[];
   artistNames?: string[];
-  audioUrl?: string;
+  uuid?: string;
   audio?: string;
   url?: string;
   streamPath?: string; // S3 stream path: stream/{uuid}/{uuid}_128kbps.m3u8
@@ -57,7 +57,7 @@ export interface SongCreateUpdateData {
   composerIds?: number[];
   lyricistIds?: number[];
   producerIds?: number[];
-  audioUrl?: string; // Optional for update (keep existing if not provided)
+  uuid?: string; // Optional for update/import nếu đã có audio trên S3
   duration?: string;
   moodIds?: number[];
   status?: "ACTIVE" | "INACTIVE";
@@ -194,13 +194,14 @@ export const songsApi = {
         genreIds: data.genreIds,
       };
       if (data.moodIds !== undefined) payload.moodIds = data.moodIds;
-      if (data.audioUrl) payload.audioUrl = data.audioUrl;
+      if (data.uuid) payload.uuid = data.uuid;
       if (data.duration) payload.duration = data.duration;
       if (data.performerIds !== undefined) payload.performerIds = data.performerIds;
       if (data.featIds !== undefined) payload.featIds = data.featIds;
       if (data.composerIds !== undefined) payload.composerIds = data.composerIds;
       if (data.lyricistIds !== undefined) payload.lyricistIds = data.lyricistIds;
       if (data.producerIds !== undefined) payload.producerIds = data.producerIds;
+      if (data.uuid !== undefined) payload.uuid = data.uuid;
       if (data.artistIds !== undefined) {
         payload.artistIds = data.artistIds;
       } else if (data.performerIds !== undefined) {
@@ -615,21 +616,9 @@ export const songsApi = {
     return response.data;
   },
 
-  // Extract UUID from audioUrl and build S3 stream URL
-  getS3StreamUrl: (audioUrl: string | undefined): string | null => {
-    if (!audioUrl) return null;
-    
-    // Extract UUID from URL pattern: https://echoverse.s3.ap-southeast-1.amazonaws.com/music/{uuid}.mp3
-    const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-    const match = audioUrl.match(uuidPattern);
-    
-    if (!match || !match[1]) {
-      console.warn("Could not extract UUID from audioUrl:", audioUrl);
-      return null;
-    }
-    
-    const uuid = match[1];
-    // Build S3 URL: https://echoverse.s3.ap-southeast-1.amazonaws.com/stream/{uuid}/{uuid}.m3u8
+  // Build S3 stream URL directly from uuid (used cho debug hoặc test)
+  getS3StreamUrl: (uuid: string | undefined | null): string | null => {
+    if (!uuid) return null;
     const bucketName = "echoverse";
     const region = "ap-southeast-1";
     return `https://${bucketName}.s3.${region}.amazonaws.com/stream/${uuid}/${uuid}.m3u8`;

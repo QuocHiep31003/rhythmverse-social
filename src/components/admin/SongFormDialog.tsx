@@ -94,22 +94,6 @@ const songFormSchema = z.object({
   producerIds: z.array(z.number()).optional(),
   artistIds: z.array(z.number()).optional(),
   moodIds: z.array(z.number()).optional(),
-  audioUrl: z.string().optional()
-    .refine((val) => {
-      if (!val || val.trim() === "") return true; // Optional field
-      try {
-        new URL(val);
-        const audioExtensions = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma'];
-        const lowerVal = val.toLowerCase();
-        return audioExtensions.some(ext => lowerVal.includes(ext)) || 
-               lowerVal.includes('cloudinary.com') || 
-               lowerVal.includes('res.cloudinary.com');
-      } catch {
-        return false;
-      }
-    }, {
-      message: "URL không hợp lệ hoặc không phải file audio. Vui lòng nhập URL có định dạng .mp3, .wav, .m4a hoặc từ Cloudinary"
-    }),
   duration: z.string().optional(),
 });
 
@@ -144,7 +128,6 @@ export const SongFormDialog = ({
   const [moodScores, setMoodScores] = useState<Map<number, string>>(new Map());
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [originalAudioUrl, setOriginalAudioUrl] = useState<string>("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
@@ -163,7 +146,6 @@ export const SongFormDialog = ({
       producerIds: [],
       artistIds: [],
       moodIds: [],
-      audioUrl: "",
       duration: "",
       ...defaultValues,
     },
@@ -225,7 +207,6 @@ export const SongFormDialog = ({
         composerIds?: number[];
         lyricistIds?: number[];
         producerIds?: number[];
-        audioUrl?: string;
         duration?: string;
       };
 
@@ -269,15 +250,12 @@ export const SongFormDialog = ({
         artistIds: unionArtistIds,
         genreIds: apiData.genres?.map((g: {id: number}) => g.id) || defaultValues.genreIds || [],
         moodIds: apiData.moods?.map((m: {id: number}) => m.id) || defaultValues.moodIds || [],
-        audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
         duration: apiData.duration || defaultValues.duration || "",
       };
       // Lưu giá trị gốc để so sánh khi submit
-      setOriginalAudioUrl(apiData.audioUrl || "");
       setSelectedFile(null); // Reset file when dialog opens with existing data
       form.reset(formValues);
     } else if (open) {
-      setOriginalAudioUrl("");
       setSelectedFile(null); // Reset file when creating new song
       setGenreScores(new Map());
       setMoodScores(new Map());
@@ -287,42 +265,12 @@ export const SongFormDialog = ({
         genreIds: [],
         artistIds: [],
         moodIds: [],
-        audioUrl: "",
         duration: "",
       });
     }
     
   }, [open, defaultValues, form]);
 
-  const uploadToCloudinary = async (file: File): Promise<string> => {
-    const cloudName = "dhylbhwvb"; // Cloudinary cloud name
-    const uploadPreset = "EchoVerse"; // Unsigned upload preset
-    
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
-    formData.append("resource_type", "video"); // audio files use 'video' resource type
-    
-    try {
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-      
-      const data = await response.json();
-      return data.secure_url;
-    } catch (error) {
-      console.error("Error uploading to Cloudinary:", error);
-      throw error;
-    }
-  };
 
   const handleFileChange = async (file: File | undefined) => {
     if (!file) {
@@ -338,34 +286,12 @@ export const SongFormDialog = ({
       const duration = await getAudioDuration(file);
       form.setValue("duration", duration);
       
-      // Store file for update (will be sent to backend)
+      // Store file - will be uploaded to S3 via backend API when form is submitted
       setSelectedFile(file);
-      
-      // For create mode, still upload to Cloudinary to get URL
-      // For update mode, file will be sent directly to backend
-      if (mode === "create") {
-        // Simulate progress
-        const progressInterval = setInterval(() => {
-          setUploadProgress((prev) => Math.min(prev + 10, 90));
-        }, 200);
-        
-        const url = await uploadToCloudinary(file);
-        
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-        
-        form.setValue("audioUrl", url);
-        
-        setTimeout(() => {
-          setUploadProgress(0);
-        }, 1000);
-      } else {
-        // Update mode: just store file, don't upload yet
-        setUploadProgress(100);
-        setTimeout(() => {
-          setUploadProgress(0);
-        }, 1000);
-      }
+      setUploadProgress(100);
+      setTimeout(() => {
+        setUploadProgress(0);
+      }, 1000);
     } catch (error) {
       console.error("File processing error:", error);
       alert("Lỗi khi xử lý file. Vui lòng thử lại.");
@@ -413,13 +339,13 @@ export const SongFormDialog = ({
       }
     });
     
-    // For update mode: include file if selected, exclude duration and audioUrl
+    // For update mode: include file if selected, exclude duration
     if (mode === "edit") {
-      const { duration, audioUrl, file: _unusedFile, ...restData } = normalizedData;
+      const { duration, file: _unusedFile, ...restData } = normalizedData;
       const submitData: SongFormValues & { file?: File } = {
         ...restData,
         file: selectedFile || undefined, // Include file if selected
-        // Don't send audioUrl or duration - backend will reject them
+        // Don't send duration - backend will reject it
       };
       onSubmit(submitData);
     } else {
@@ -524,87 +450,53 @@ export const SongFormDialog = ({
                       )}
                     />
                     <div className="md:col-span-2">
-                      <FormField
-                        control={form.control}
-                        name="audioUrl"
-                        render={({ field }) => {
-                          return (
-                            <FormItem>
-                              <FormLabel className="flex items-center gap-2 mb-3">
-                                File nhạc * {mode === "edit" && "(Chỉ upload file mới)"}
-                              </FormLabel>
-                              <FormControl>
-                                <div className="space-y-3">
-                                  <div className="space-y-2">
-                                    <Input
-                                      type="file"
-                                      accept="audio/*"
-                                      onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        handleFileChange(file);
-                                      }}
-                                      disabled={uploading}
-                                    />
-                                    {uploading && (
-                                      <div className="space-y-1">
-                                        <div className="text-sm text-muted-foreground">
-                                          Đang upload... {uploadProgress}%
-                                        </div>
-                                        <div className="w-full bg-secondary rounded-full h-2">
-                                          <div
-                                            className="bg-[hsl(var(--admin-active))] h-2 rounded-full transition-all duration-300"
-                                            style={{ width: `${uploadProgress}%` }}
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2 mb-3">
+                          File nhạc * {mode === "edit" && "(Chỉ upload file mới)"}
+                        </FormLabel>
+                        <FormControl>
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              <Input
+                                type="file"
+                                accept="audio/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  handleFileChange(file);
+                                }}
+                                disabled={uploading}
+                              />
+                              {uploading && (
+                                <div className="space-y-1">
+                                  <div className="text-sm text-muted-foreground">
+                                    Đang upload... {uploadProgress}%
                                   </div>
-                                  {mode === "edit" && originalAudioUrl && (
-                                    <div className="space-y-2 p-3 bg-muted/50 rounded-md border border-border">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-muted-foreground">
-                                          Audio hiện tại:
-                                        </span>
-                                        <Button
-                                          type="button"
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => {
-                                            const audio = new Audio(originalAudioUrl);
-                                            audio.play().catch((err) => {
-                                              console.error("Error playing audio:", err);
-                                              alert("Không thể phát audio. Vui lòng kiểm tra URL.");
-                                            });
-                                          }}
-                                          className="flex items-center gap-2"
-                                        >
-                                          <Play className="w-4 h-4" />
-                                          Nghe thử
-                                        </Button>
-                                      </div>
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                        <span className="truncate text-xs">
-                                          {originalAudioUrl.substring(0, 80)}{originalAudioUrl.length > 80 ? '...' : ''}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  )}
-                                  {mode === "create" && field.value && !uploading && (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
-                                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                      <span className="truncate text-xs">
-                                        Audio URL: {field.value.substring(0, 60)}{field.value.length > 60 ? '...' : ''}
-                                      </span>
-                                    </div>
-                                  )}
+                                  <div className="w-full bg-secondary rounded-full h-2">
+                                    <div
+                                      className="bg-[hsl(var(--admin-active))] h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${uploadProgress}%` }}
+                                    />
+                                  </div>
                                 </div>
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          );
-                        }}
-                      />
+                              )}
+                            </div>
+                            {mode === "edit" && (
+                              <div className="text-sm text-muted-foreground">
+                                Upload file mới để thay thế audio hiện tại
+                              </div>
+                            )}
+                            {selectedFile && !uploading && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                <span className="truncate text-xs">
+                                  File đã chọn: {selectedFile.name}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     </div>
                   </div>
                 </TabsContent>
@@ -1155,16 +1047,6 @@ export const SongFormDialog = ({
           <div className="space-y-3 py-4">
             {pendingSubmit && (
               <>
-                {pendingSubmit.audioUrl !== originalAudioUrl && (
-                  <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>Audio URL:</strong> Đã thay đổi
-                      <br />
-                      <span className="text-xs">Thay đổi URL audio có thể ảnh hưởng đến bài hát.</span>
-                    </AlertDescription>
-                  </Alert>
-                )}
               </>
             )}
           </div>

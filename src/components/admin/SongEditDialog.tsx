@@ -66,7 +66,6 @@ const metadataSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   duration: z.string().optional(),
-  audioUrl: z.string().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
 });
 
@@ -221,7 +220,6 @@ export const SongEditDialog = ({
       name: "",
       releaseYear: new Date().getFullYear(),
       duration: "",
-      audioUrl: "",
       status: "ACTIVE",
     },
   });
@@ -267,7 +265,6 @@ export const SongEditDialog = ({
           name: song.name || "",
           releaseYear: song.releaseYear || new Date().getFullYear(),
           duration: song.duration !== undefined && song.duration !== null ? String(song.duration) : "",
-          audioUrl: song.audioUrl || "",
           status: (song.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
         });
       }
@@ -719,11 +716,11 @@ export const SongEditDialog = ({
                       />
                     </FormItem>
 
-                    {/* Audio URL - Read only display */}
+                    {/* UUID - Read only display */}
                     <FormItem>
-                      <FormLabel>Audio URL hiện tại</FormLabel>
+                      <FormLabel>UUID (S3)</FormLabel>
                       <Input 
-                        value={songData?.audioUrl ? (songData.audioUrl.length > 60 ? songData.audioUrl.substring(0, 60) + "..." : songData.audioUrl) : "Chưa có"} 
+                        value={songData?.uuid ? (songData.uuid.length > 60 ? songData.uuid.substring(0, 60) + "..." : songData.uuid) : "Chưa có"} 
                         disabled 
                         className="bg-muted"
                       />
@@ -751,32 +748,26 @@ export const SongEditDialog = ({
                   </div>
 
                   {/* File Upload - Full width */}
-                  <FormField
-                    control={form.control}
-                    name="audioUrl"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Upload file nhạc mới (chỉ upload khi cần thay đổi)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="file"
-                            accept="audio/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              setSelectedFile(file || null);
-                            }}
-                            disabled={uploading}
-                          />
-                        </FormControl>
-                        {selectedFile && (
-                          <div className="text-sm text-muted-foreground">
-                            File đã chọn: {selectedFile.name}
-                          </div>
-                        )}
-                        <FormMessage />
-                      </FormItem>
+                  <FormItem>
+                    <FormLabel>Upload file nhạc mới (chỉ upload khi cần thay đổi)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          setSelectedFile(file || null);
+                        }}
+                        disabled={uploading}
+                      />
+                    </FormControl>
+                    {selectedFile && (
+                      <div className="text-sm text-muted-foreground">
+                        File đã chọn: {selectedFile.name}
+                      </div>
                     )}
-                  />
+                    <FormMessage />
+                  </FormItem>
 
                   <div className="flex justify-end pt-2">
                     <Button

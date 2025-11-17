@@ -40,8 +40,24 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const [repeatMode, setRepeatMode] = useState<"off" | "one" | "all">("off");
 
   const playSong = (song: Song) => {
+    console.log("[MusicContext] playSong called with:", song.id, song.songName || song.name);
+    console.log("[MusicContext] Current queue length:", queue.length);
     setCurrentSong(song);
     setIsPlaying(true);
+  };
+  
+  // Wrapper cho setQueue để log và đảm bảo state được update
+  const setQueueWithLog = (songs: Song[]) => {
+    console.log("[MusicContext] setQueue called with", songs.length, "songs");
+    console.log("[MusicContext] Song IDs:", songs.map(s => s.id));
+    if (songs.length === 0) {
+      console.warn("[MusicContext] WARNING: Setting empty queue!");
+    }
+    setQueue(songs);
+    // Log sau khi set để verify
+    setTimeout(() => {
+      console.log("[MusicContext] Queue state after setQueue:", songs.length, "songs");
+    }, 0);
   };
 
   const togglePlay = () => {
@@ -124,7 +140,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
         playNext,
         playPrevious,
         addToQueue,
-        setQueue,
+        setQueue: setQueueWithLog,
         toggleShuffle,
         setRepeatMode,
       }}
