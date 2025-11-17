@@ -14,6 +14,7 @@ import { Share2, Send, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { friendsApi } from "@/services/api/friendsApi";
 import { API_BASE_URL, buildAuthHeaders, parseErrorResponse } from "@/services/api/config";
+import { chatApi } from "@/services/api/chatApi";
 import { parseSlug } from "@/utils/playlistUtils";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,22 +132,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
         return;
       }
 
-      const buildShareUrl = (receiverId: number): string => {
-        const baseParams = new URLSearchParams({
-          senderId: String(meId),
-          receiverId: String(receiverId),
-        });
-        if (type === "playlist") {
-          baseParams.append("playlistId", String(resourceId));
-          return `${API_BASE_URL}/chat/share/playlist?${baseParams.toString()}`;
-        }
-        if (type === "album") {
-          baseParams.append("albumId", String(resourceId));
-          return `${API_BASE_URL}/chat/share/album?${baseParams.toString()}`;
-        }
-        baseParams.append("songId", String(resourceId));
-        return `${API_BASE_URL}/chat/share/song?${baseParams.toString()}`;
-      };
+      // Use chatApi to share via JSON body
 
       const receiverIds = selectedFriends
         .map((fid) => Number(fid))
@@ -160,14 +146,15 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
       setIsSharing(true);
 
       for (const receiverId of receiverIds) {
-        const endpoint = buildShareUrl(receiverId);
         let sharedOk = false;
         try {
-          const response = await fetch(endpoint, { method: "POST", headers: buildAuthHeaders() });
-          if (!response.ok) {
-            throw new Error(await parseErrorResponse(response));
-          }
-          const payload = await response.json();
+          const payload =
+            type === 'playlist'
+              ? await chatApi.sharePlaylist(meId, receiverId, resourceId)
+              : type === 'album'
+              ? await chatApi.shareAlbum(meId, receiverId, resourceId)
+              : await chatApi.shareSong(meId, receiverId, resourceId);
+
           window.dispatchEvent(
             new CustomEvent("app:chat-share-sent", {
               detail: { receiverId, message: payload },

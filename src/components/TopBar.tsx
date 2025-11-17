@@ -54,6 +54,7 @@ const TopBar = () => {
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
+  const [notifOpen, setNotifOpen] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       return typeof window !== "undefined" ? !!localStorage.getItem("token") : false;
@@ -460,7 +461,7 @@ const TopBar = () => {
         {/* Right side controls */}
         <div className="flex items-center gap-3 relative z-10">
           {/* Notifications (non-message alerts) dropdown */}
-          <DropdownMenu>
+          <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
@@ -479,7 +480,7 @@ const TopBar = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <NotificationsDropdown />
+            <NotificationsDropdown onClose={() => setNotifOpen(false)} />
           </DropdownMenu>
 
           {/* Messages (chat only) */}

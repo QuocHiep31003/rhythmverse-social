@@ -4,7 +4,7 @@ import ChatBubble from "@/components/ChatBubble";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
@@ -39,7 +39,7 @@ const typeMeta: Record<
     tone: "from-amber-500/10 via-transparent to-transparent",
   },
   FRIEND_REQUEST_ACCEPTED: {
-    label: "Đã kết nối",
+    label: "Bạn bè",
     icon: CheckCircle2,
     badge: "border-lime-500/30 bg-lime-500/12 text-lime-700 dark:text-lime-100",
     tone: "from-lime-500/10 via-transparent to-transparent",
@@ -166,12 +166,12 @@ const Notifications = () => {
     } catch { /* noop */ }
   };
 
-  const [visibleCount, setVisibleCount] = useState<number>(7);
+  const [visibleCount, setVisibleCount] = useState<number>(6);
   const items = useMemo(() => rawItems, [rawItems]);
 
   useEffect(() => {
     // Reset pagination if list shrinks (e.g., user logs out/in)
-    setVisibleCount((prev) => Math.min(prev, items.length || 7));
+    setVisibleCount((prev) => Math.min(prev, items.length || 6));
   }, [items.length]);
 
   const visibleItems = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
@@ -236,7 +236,7 @@ const Notifications = () => {
             className="rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
             onClick={withStop(() => navigate("/social?tab=friends"))}
           >
-            Xem yêu cầu
+            Xem lời mời
           </Button>
         );
       case "FRIEND_REQUEST_ACCEPTED":
@@ -286,12 +286,6 @@ const Notifications = () => {
           </p>
         </div>
         <Card className="overflow-hidden border border-border/60 bg-card shadow-lg shadow-primary/5 backdrop-blur-sm transition-colors dark:bg-card/80">
-          <CardHeader className="space-y-2 border-b border-border/50 bg-card/90 dark:bg-card/70">
-            <CardTitle className="text-xl font-semibold text-foreground">Nguồn thông báo</CardTitle>
-            <CardDescription className="text-sm text-muted-foreground">
-              Tự động cập nhật theo thời gian thực từ chat bubble – không còn thông báo giả lập.
-            </CardDescription>
-          </CardHeader>
           <CardContent className="space-y-6 p-6">
             {orderedSections.length === 0 ? (
               <div className="flex flex-col items-center gap-4 py-14 text-center text-muted-foreground">
@@ -386,7 +380,7 @@ const Notifications = () => {
                 <Button
                   variant="outline"
                   className="rounded-full"
-                  onClick={() => setVisibleCount((c) => Math.min(c + 7, items.length))}
+                  onClick={() => setVisibleCount((c) => Math.min(c + 6, items.length))}
                 >
                   Xem thông báo trước đó
                 </Button>

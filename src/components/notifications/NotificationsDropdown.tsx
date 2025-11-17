@@ -13,7 +13,7 @@ import { watchNotifications, type NotificationDTO } from "@/services/firebase/no
 import { BellRing, CheckCircle2, Share2, UserPlus, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-const MAX_DROPDOWN_ITEMS = 7;
+const MAX_DROPDOWN_ITEMS = 5;
 
 const typeMeta: Record<
   string,
@@ -39,7 +39,7 @@ const typeMeta: Record<
     badge: "border-amber-500/30 bg-amber-500/12 text-amber-700 dark:text-amber-100",
   },
   FRIEND_REQUEST_ACCEPTED: {
-    label: "Đã kết nối",
+    label: "Bạn bè",
     icon: CheckCircle2,
     badge: "border-lime-500/30 bg-lime-500/12 text-lime-700 dark:text-lime-100",
   },
@@ -119,7 +119,9 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
   }
 };
 
-const NotificationsDropdown = () => {
+interface Props { onClose?: () => void }
+
+const NotificationsDropdown = ({ onClose }: Props) => {
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const navigate = useNavigate();
 
@@ -146,15 +148,69 @@ const NotificationsDropdown = () => {
 
   const visible = items.slice(0, MAX_DROPDOWN_ITEMS);
 
+  const withStop = (handler: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    handler();
+  };
+
+  const renderAction = (n: NotificationDTO) => {
+    switch (n.type) {
+      case "FRIEND_REQUEST":
+        return (
+          <Button
+            size="sm"
+            className="rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 h-7 px-3"
+            onClick={withStop(() => { onClose?.(); navigate('/social?tab=friends'); })}
+          >
+            Xem lời mời
+          </Button>
+        );
+      case "FRIEND_REQUEST_ACCEPTED":
+        return (
+          <Badge
+            variant="secondary"
+            className="rounded-full border border-emerald-500/40 bg-emerald-500/12 text-emerald-700 dark:text-emerald-200 h-6"
+          >
+            Bạn bè
+          </Badge>
+        );
+      case "INVITE":
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-full border-primary/50 text-primary hover:bg-primary/10 dark:hover:bg-primary/15 h-7 px-3"
+            onClick={withStop(() => { onClose?.(); navigate('/social?tab=friends'); })}
+          >
+            Mở lời mời
+          </Button>
+        );
+      case "SHARE":
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15 h-7 px-3"
+            onClick={withStop(() => { onClose?.(); navigate('/social'); })}
+          >
+            Xem nội dung
+          </Button>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
-    <DropdownMenuContent align="end" className="w-[380px] p-0 overflow-hidden">
+    <DropdownMenuContent align="end" className="w-[420px] p-0 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
         <div className="text-sm font-semibold">Thông báo</div>
         <Button
           variant="ghost"
           size="sm"
           className="text-primary hover:text-primary/90"
-          onClick={() => navigate('/notifications')}
+          onClick={() => { onClose?.(); navigate('/notifications'); }}
         >
           Xem tất cả
         </Button>
@@ -181,10 +237,31 @@ const NotificationsDropdown = () => {
                   key={n.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate('/notifications')}
-                  onKeyDown={(e) => { if (e.key === 'Enter') navigate('/notifications'); }}
+                  onClick={() => {
+                    // Navigate to the relevant place when possible
+                    const t = n.type;
+                    const meta = (n.metadata || {}) as Record<string, unknown>;
+                    if (t === 'FRIEND_REQUEST' || t === 'FRIEND_REQUEST_ACCEPTED') {
+                      onClose?.();
+                      navigate('/social?tab=friends');
+                      return;
+                    }
+                    if (t === 'INVITE') {
+                      onClose?.();
+                      navigate('/social?tab=friends');
+                      return;
+                    }
+                    if (t === 'SHARE') {
+                      onClose?.();
+                      // Best effort: send user to social hub where shares are surfaced
+                      navigate('/social');
+                      return;
+                    }
+                    onClose?.();
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onClose?.(); navigate('/social'); } }}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl p-3 transition-colors",
+                    "flex items-start gap-3 rounded-xl p-3 transition-colors",
                     "hover:bg-muted/50 focus-visible:outline-none",
                   )}
                 >
@@ -201,15 +278,15 @@ const NotificationsDropdown = () => {
                     <AvatarFallback>{senderInitial}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm text-foreground">
+                    <p className="text-sm text-foreground whitespace-normal break-words leading-snug">
                       <span className="font-medium">{n.senderName || "Hệ thống EchoVerse"}</span>{" "}
                       <span className="text-muted-foreground">{description}</span>
                     </p>
                     <p className="text-xs text-muted-foreground">{timeAgo}</p>
                   </div>
-                  <Badge variant="outline" className={cn("text-xs", meta.badge)}>
-                    {typeMeta[typeKey].label}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {renderAction(n)}
+                  </div>
                 </div>
               );
             })}
@@ -226,4 +303,3 @@ const NotificationsDropdown = () => {
 };
 
 export default NotificationsDropdown;
-
