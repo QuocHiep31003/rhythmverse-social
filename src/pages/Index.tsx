@@ -483,7 +483,12 @@ const Index = () => {
                         {/* Song Info */}
                         <div className="flex-1 min-w-0">
                           <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
-                          <p className="text-sm text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {Array.isArray(song.artists) && song.artists.length > 0
+                            ? song.artists.map((a) => a?.name).filter(Boolean).join(", ")
+                            : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">#{idx + 1} • Hot Today</p>
                         </div>
 
                         {/* Extra info hidden for now */}

@@ -10,9 +10,10 @@ export interface Song {
   genreIds?: number[];
   artistIds?: number[];
   artistNames?: string[];
-  audioUrl?: string;
+  uuid?: string;
   audio?: string;
   url?: string;
+  streamPath?: string; // S3 stream path: stream/{uuid}/{uuid}_128kbps.m3u8
   plays?: string;
   playCount?: number;
   duration?: string | number; // BE trả về string format "3:45"
@@ -23,9 +24,19 @@ export interface Song {
   albumCoverImg?: string; // Field chính thức cho ảnh album từ BE
   albumImageUrl?: string; // Từ TrendingSong API
   urlImageAlbum?: string; // Từ BE SongDTO (legacy)
-  artists?: Array<{ id: number; name: string }>; // BE trả về List<SimpleDTO>
+  artists?: Array<{ id: number; name: string }> | string; // Có thể là chuỗi format "A, B ft C"
+  performers?: Array<{ id: number; name: string }>;
+  authors?: Array<{ id: number; name: string }>;
+  singer?: Array<{ id: number; name: string }>;
+  feat?: Array<{ id: number; name: string }>;
+  composer?: Array<{ id: number; name: string }>;
+  lyricist?: Array<{ id: number; name: string }>;
+  producer?: Array<{ id: number; name: string }>;
   genres?: Array<{ id: number; name: string }>;
   trendingScore?: number;
+  status?: 'ACTIVE' | 'INACTIVE' | string;
+  createdAt?: string;
+  updatedAt?: string;
   // Các field từ TrendingSong có thể có
   songId?: number;
   songName?: string; // Một số API trả về songName thay vì name
@@ -40,10 +51,16 @@ export interface SongCreateUpdateData {
   name: string;
   releaseYear: number;
   genreIds: number[];
-  artistIds: number[];
-  audioUrl?: string; // Optional for update (keep existing if not provided)
+  artistIds?: number[];
+  performerIds?: number[];
+  featIds?: number[];
+  composerIds?: number[];
+  lyricistIds?: number[];
+  producerIds?: number[];
+  uuid?: string; // Optional for update/import nếu đã có audio trên S3
   duration?: string;
   moodIds?: number[];
+  status?: "ACTIVE" | "INACTIVE";
   file?: File; // Optional file for update
 }
 
@@ -74,7 +91,7 @@ export const songsApi = {
   },
 
   // Lấy tất cả songs với pagination
-  getAll: async (params?: PaginationParams & { artistId?: number; genreId?: number; moodId?: number }): Promise<PaginatedResponse<Song>> => {
+  getAll: async (params?: PaginationParams & { artistId?: number; genreId?: number; moodId?: number; status?: string }): Promise<PaginatedResponse<Song>> => {
     try {
       const queryParams = new URLSearchParams();
       if (params?.page !== undefined) queryParams.append('page', params.page.toString());
@@ -84,6 +101,7 @@ export const songsApi = {
       if (params?.artistId !== undefined) queryParams.append('artistId', String(params.artistId));
       if (params?.genreId !== undefined) queryParams.append('genreId', String(params.genreId));
       if (params?.moodId !== undefined) queryParams.append('moodId', String(params.moodId));
+      if (params?.status) queryParams.append('status', params.status);
 
       const url = `/songs?${queryParams.toString()}`;
       console.log("🌐 API Call:", url);
@@ -95,6 +113,44 @@ export const songsApi = {
     } catch (error) {
       console.error("❌ Error fetching songs:", error);
       // Return empty paginated response instead of mock
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
+        first: true,
+        last: true,
+        empty: true,
+        pageable: {
+          pageNumber: params?.page ?? 0,
+          pageSize: params?.size ?? 0,
+          sort: { empty: true, sorted: false, unsorted: true },
+          offset: 0,
+          paged: true,
+          unpaged: false
+        },
+        sort: { empty: true, sorted: false, unsorted: true },
+        numberOfElements: 0
+      } as PaginatedResponse<Song>;
+    }
+  },
+
+  getWithoutAlbum: async (params?: PaginationParams & { search?: string; genreId?: number; moodId?: number }): Promise<PaginatedResponse<Song>> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.genreId !== undefined) queryParams.append('genreId', String(params.genreId));
+      if (params?.moodId !== undefined) queryParams.append('moodId', String(params.moodId));
+
+      const url = `/songs/without-album?${queryParams.toString()}`;
+      const response = await apiClient.get(url);
+      return response.data;
+    } catch (error) {
+      console.error("❌ Error fetching songs without album:", error);
       return {
         content: [],
         totalElements: 0,
@@ -132,14 +188,25 @@ export const songsApi = {
   // Tạo song mới
   create: async (data: SongCreateUpdateData): Promise<Song> => {
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         name: data.name,
         releaseYear: data.releaseYear,
         genreIds: data.genreIds,
-        artistIds: data.artistIds,
-        audioUrl: data.audioUrl,
-        duration: data.duration,
       };
+      if (data.moodIds !== undefined) payload.moodIds = data.moodIds;
+      if (data.uuid) payload.uuid = data.uuid;
+      if (data.duration) payload.duration = data.duration;
+      if (data.performerIds !== undefined) payload.performerIds = data.performerIds;
+      if (data.featIds !== undefined) payload.featIds = data.featIds;
+      if (data.composerIds !== undefined) payload.composerIds = data.composerIds;
+      if (data.lyricistIds !== undefined) payload.lyricistIds = data.lyricistIds;
+      if (data.producerIds !== undefined) payload.producerIds = data.producerIds;
+      if (data.uuid !== undefined) payload.uuid = data.uuid;
+      if (data.artistIds !== undefined) {
+        payload.artistIds = data.artistIds;
+      } else if (data.performerIds !== undefined) {
+        payload.artistIds = data.performerIds;
+      }
 
       const response = await apiClient.post('/songs', payload);
       return response.data;
@@ -152,15 +219,23 @@ export const songsApi = {
   // Cập nhật song (JSON body)
   update: async (id: string, data: SongCreateUpdateData): Promise<Song> => {
     try {
-      const payload: Record<string, any> = {
-        name: data.name,
-        releaseYear: data.releaseYear,
-        duration: data.duration,
-      };
-      if (data.genreIds && data.genreIds.length) payload.genreIds = data.genreIds;
-      if (data.artistIds && data.artistIds.length) payload.artistIds = data.artistIds;
-      if (data.moodIds && data.moodIds.length) payload.moodIds = data.moodIds;
-      if (data.audioUrl) payload.audioUrl = data.audioUrl;
+      const payload: Record<string, any> = {};
+      if (data.name !== undefined) payload.name = data.name;
+      if (data.releaseYear !== undefined) payload.releaseYear = data.releaseYear;
+      if (data.duration !== undefined) payload.duration = data.duration;
+      if (data.status !== undefined) payload.status = data.status;
+      if (data.genreIds !== undefined) payload.genreIds = data.genreIds;
+      if (data.moodIds !== undefined) payload.moodIds = data.moodIds;
+      if (data.performerIds !== undefined) payload.performerIds = data.performerIds;
+      if (data.featIds !== undefined) payload.featIds = data.featIds;
+      if (data.composerIds !== undefined) payload.composerIds = data.composerIds;
+      if (data.lyricistIds !== undefined) payload.lyricistIds = data.lyricistIds;
+      if (data.producerIds !== undefined) payload.producerIds = data.producerIds;
+      if (data.artistIds !== undefined) payload.artistIds = data.artistIds;
+
+      console.log("🌐 API Update Song - URL:", `/songs/${id}`);
+      console.log("📦 API Update Song - Payload:", payload);
+      console.log("📦 API Update Song - Status in payload:", payload.status);
 
       const response = await apiClient.put(`/songs/${id}`, payload);
       return response.data;
@@ -178,8 +253,14 @@ export const songsApi = {
       if (data.releaseYear !== undefined) formData.append('releaseYear', String(data.releaseYear));
       if (data.duration) formData.append('duration', data.duration);
       if (data.genreIds && data.genreIds.length) data.genreIds.forEach(v => formData.append('genreIds', String(v)));
+      if (data.performerIds && data.performerIds.length) data.performerIds.forEach(v => formData.append('performerIds', String(v)));
+      if (data.featIds && data.featIds.length) data.featIds.forEach(v => formData.append('featIds', String(v)));
+      if (data.composerIds && data.composerIds.length) data.composerIds.forEach(v => formData.append('composerIds', String(v)));
+      if (data.lyricistIds && data.lyricistIds.length) data.lyricistIds.forEach(v => formData.append('lyricistIds', String(v)));
+      if (data.producerIds && data.producerIds.length) data.producerIds.forEach(v => formData.append('producerIds', String(v)));
       if (data.artistIds && data.artistIds.length) data.artistIds.forEach(v => formData.append('artistIds', String(v)));
       if (data.moodIds && data.moodIds.length) data.moodIds.forEach(v => formData.append('moodIds', String(v)));
+      if (data.status) formData.append('status', data.status);
       if (data.file) formData.append('file', data.file, data.file.name || 'audio');
 
       // Use fetch to avoid axios default JSON Content-Type interfering with FormData boundary
@@ -527,6 +608,20 @@ export const songsApi = {
       // Không throw error để không ảnh hưởng listening history
       console.warn("⚠️ Play count increment failed, but listening history will still be recorded");
     }
+  },
+
+  // Get CloudFront HLS URL for streaming (BE trả về JSON với streamUrl)
+  getStreamUrl: async (songId: number | string): Promise<{ streamUrl: string; uuid?: string }> => {
+    const response = await apiClient.get(`/songs/${songId}/stream-url`);
+    return response.data;
+  },
+
+  // Build S3 stream URL directly from uuid (used cho debug hoặc test)
+  getS3StreamUrl: (uuid: string | undefined | null): string | null => {
+    if (!uuid) return null;
+    const bucketName = "echoverse";
+    const region = "ap-southeast-1";
+    return `https://${bucketName}.s3.${region}.amazonaws.com/stream/${uuid}/${uuid}.m3u8`;
   },
 };
 

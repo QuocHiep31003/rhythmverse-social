@@ -18,6 +18,7 @@ import {
   ListPlus,
   Copy,
   X,
+  Menu,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,7 +33,7 @@ import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
-import { streamApi } from "@/services/api/streamApi";
+import { getAuthToken } from "@/services/api";
 import Hls from "hls.js";
 
 interface LyricLine {
@@ -51,7 +52,9 @@ const MusicPlayer = () => {
     isShuffled,
     repeatMode,
     toggleShuffle,
-    setRepeatMode
+    setRepeatMode,
+    queue,
+    playSong,
   } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsRef = useRef<HTMLDivElement>(null);
@@ -69,6 +72,16 @@ const MusicPlayer = () => {
   const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [playlistTab, setPlaylistTab] = useState<"queue" | "suggested">("queue");
+  const isPlayingRef = useRef(isPlaying);
+  const cleanupCallbacks = useRef<(() => void)[]>([]);
+  const hlsInstanceRef = useRef<Hls | null>(null);
+  const hasTriggeredEndedRef = useRef(false);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -163,116 +176,305 @@ const MusicPlayer = () => {
     setCurrentLyricIndex(0);
     setDuration(0);
 
-    // Set new audio source via secure HLS session or fallback to direct audioUrl
+    cleanupCallbacks.current = [];
+    
+    // Reset flag khi load bài mới
+    hasTriggeredEndedRef.current = false;
+    hlsInstanceRef.current = null;
+
     let hls: Hls | null = null;
-    (async () => {
+    let safariMetadataListener: (() => void) | null = null;
+    let loadErrorTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const loadStreamUrl = async () => {
       try {
-        const { playbackUrl } = await streamApi.createSession(currentSong.id);
+        // Gọi BE lấy CloudFront HLS URL (không ký, không proxy)
+        const { streamUrl } = await songsApi.getStreamUrl(currentSong.id);
+        const finalStreamUrl = streamUrl;
+        
+        if (!finalStreamUrl) {
+          throw new Error("No stream URL available");
+        }
+
+        const finalStreamUrlAbsolute = finalStreamUrl.startsWith("http")
+          ? finalStreamUrl
+          : `${window.location.origin}${finalStreamUrl}`;
+
+        console.log("Using backend proxy HLS URL:", finalStreamUrlAbsolute);
+
         if (Hls.isSupported()) {
-          hls = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 90 });
-          hls.loadSource(playbackUrl);
+          hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 30, // Giảm back buffer
+            debug: false,
+            // Đảm bảo không loop playlist và không load quá nhiều
+            maxBufferLength: 20, // Giảm buffer để tránh load quá nhiều
+            maxMaxBufferLength: 30,
+            maxBufferSize: 30 * 1000 * 1000, // 30MB max buffer
+            xhrSetup: (xhr) => {
+              xhr.withCredentials = true;
+            },
+          });
+          
+          hlsInstanceRef.current = hls; // Lưu reference để có thể stop khi cần
+
+          hls.loadSource(finalStreamUrlAbsolute);
           hls.attachMedia(audio);
-          // End loading when manifest is parsed
+          
+          // Lưu duration ban đầu để detect khi HLS loop
+          let initialDuration = 0;
+          
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             setIsLoading(false);
-            if (isPlaying) {
-              audio.play().catch(() => { });
+            // Lưu duration ban đầu
+            setTimeout(() => {
+              if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+                initialDuration = audio.duration;
+                setDuration(initialDuration);
+                console.log("Initial duration set:", initialDuration, "seconds");
+              }
+            }, 1000);
+            if (isPlayingRef.current) {
+              audio.play().catch((err) => {
+                console.error("Auto-play failed:", err);
+              });
             }
           });
-          // Handle HLS errors to avoid infinite spinner
-          hls.on(Hls.Events.ERROR, (_event, data) => {
-            console.error("HLS error:", data);
-            if (data.fatal) {
-              setIsLoading(false);
-              // Fallback to direct audioUrl if HLS fails
-              const fallbackUrl = currentSong.audioUrl || currentSong.audio;
-              if (fallbackUrl) {
-                console.log('Falling back to direct audioUrl:', fallbackUrl);
-                audio.src = fallbackUrl;
-                audio.load();
-              } else {
-                toast({
-                  title: "Playback error",
-                  description: `${data.type || 'HLS'}: ${data.details || 'fatal error'}`,
-                  variant: "destructive",
-                });
+          
+          // Listen for when HLS reaches end of stream và dừng load
+          hls.on(Hls.Events.BUFFER_APPENDED, () => {
+            // Kiểm tra nếu đã load hết và gần hết bài (trong vòng 2 giây)
+            if (initialDuration > 0 && audio.currentTime >= initialDuration - 2) {
+              console.log("Near end of song, stopping HLS load. Current:", audio.currentTime, "Duration:", initialDuration);
+              try {
+                hlsInstanceRef.current?.stopLoad();
+                console.log("HLS load stopped successfully");
+              } catch (e) {
+                console.warn("Failed to stop HLS near end:", e);
+              }
+            }
+            // Nếu duration tăng quá nhiều so với ban đầu (HLS đang loop), dừng ngay
+            if (initialDuration > 0 && audio.duration > initialDuration * 1.1) {
+              console.warn("HLS loop detected! Duration:", audio.duration, "Initial:", initialDuration, "Stopping load");
+              try {
+                hlsInstanceRef.current?.stopLoad();
+                // Force set duration về giá trị ban đầu
+                setDuration(initialDuration);
+              } catch (e) {
+                console.warn("Failed to stop HLS loop:", e);
               }
             }
           });
-        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-          audio.src = playbackUrl; // Safari
-          audio.load();
-        } else {
-          audio.src = playbackUrl; // Fallback
-          audio.load();
-        }
-      } catch (e) {
-        console.error('Failed to init HLS session, falling back to direct audioUrl', e);
-        // Fallback to direct audioUrl
-        const fallbackUrl = currentSong.audioUrl || currentSong.audio || currentSong.url;
-        if (fallbackUrl) {
-          console.log('Using direct audioUrl fallback:', fallbackUrl);
-          audio.src = fallbackUrl;
+
+          hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+            console.log("HLS level loaded", data);
+            // Update duration when level is loaded - chỉ update 1 lần
+            if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+              const currentDuration = duration || 0;
+              // Chỉ update nếu duration tăng (không phải do HLS loop)
+              if (audio.duration > currentDuration) {
+                setDuration(audio.duration);
+                console.log("Duration updated from level loaded:", audio.duration, "seconds");
+              }
+            }
+          });
+          
+          // KHÔNG listen LEVEL_UPDATED vì nó trigger liên tục khi HLS loop
+          // Chỉ dùng LEVEL_LOADED để lấy duration ban đầu
+
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            // Chỉ log non-fatal errors, không báo lỗi
+            if (!data.fatal) {
+              console.warn("HLS non-fatal error (ignored):", data.type, data.details);
+              return;
+            }
+            
+            console.error("HLS fatal error:", data);
+            let shouldShowError = true;
+            let shouldRecover = false;
+            
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                // Thử recover trước
+                try {
+                  hls?.startLoad();
+                  shouldRecover = true;
+                  shouldShowError = false; // Không báo lỗi ngay, đợi xem recover có thành công không
+                  console.log("Attempting to recover from network error...");
+                } catch (e) {
+                  console.error("Failed to recover from network error:", e);
+                }
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                // Thử recover trước
+                try {
+                  hls?.recoverMediaError();
+                  shouldRecover = true;
+                  shouldShowError = false; // Không báo lỗi ngay, đợi xem recover có thành công không
+                  console.log("Attempting to recover from media error...");
+                } catch (e) {
+                  console.error("Failed to recover from media error:", e);
+                }
+                break;
+              default:
+                // Các lỗi khác không recover được
+                break;
+            }
+
+            // Chỉ hiển thị error sau khi đã thử recover và đợi một chút
+            // để xem có recover được không
+            if (shouldShowError) {
+              setIsLoading(false);
+              let errorMsg = `HLS stream error: ${data.type || "unknown"}`;
+              if (data.details) {
+                errorMsg += ` - ${data.details}`;
+              }
+              if (data.response) {
+                errorMsg += ` (Response: ${data.response.code || "N/A"})`;
+              }
+              toast({
+                title: "Playback error",
+                description: errorMsg,
+                variant: "destructive",
+              });
+            } else if (shouldRecover) {
+              // Đợi 3 giây, nếu vẫn không play được thì mới báo lỗi
+              setTimeout(() => {
+                if (audio.paused || audio.readyState < 2) {
+                  console.error("Recovery failed, audio still not playing");
+                  setIsLoading(false);
+                  toast({
+                    title: "Playback error",
+                    description: "Failed to recover from stream error. Trying next song...",
+                    variant: "destructive",
+                  });
+                  setTimeout(() => playNext(), 1000);
+                } else {
+                  console.log("Recovery successful, audio is playing");
+                }
+              }, 3000);
+            }
+          });
+        } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
+          safariMetadataListener = () => {
+            setIsLoading(false);
+            if (isPlayingRef.current) {
+              audio.play().catch((err) => {
+                console.error("Auto-play failed:", err);
+              });
+            }
+            if (safariMetadataListener) {
+              audio.removeEventListener("loadedmetadata", safariMetadataListener);
+              safariMetadataListener = null;
+            }
+          };
+
+          audio.addEventListener("loadedmetadata", safariMetadataListener);
+          audio.src = finalStreamUrl;
           audio.load();
         } else {
           setIsLoading(false);
           toast({
             title: "Playback error",
-            description: "No audio source available",
+            description: "Your browser does not support HLS streaming",
             variant: "destructive",
           });
         }
-      }
-    })();
-    console.log(currentSong)
-    // Handler for when audio is ready to play
-    const handleCanPlay = () => {
-      setIsLoading(false);
-
-      // Only auto-play if player was in playing state
-      if (isPlaying) {
-        audio.play().catch(err => {
-          console.error("Auto-play failed:", err);
-          toast({
-            title: "Playback paused",
-            description: "Click play to continue",
-          });
+      } catch (error) {
+        console.error("Failed to start proxy stream:", error);
+        setIsLoading(false);
+        toast({
+          title: "Playback error",
+          description: "Failed to get stream URL. Please try again.",
+          variant: "destructive",
         });
       }
     };
 
-    // Handler for load errors
-    const handleLoadError = (e: Event) => {
-      console.error("Audio load error:", e);
-      setIsLoading(false);
-      toast({
-        title: "Load error",
-        description: "Failed to load audio. Skipping to next song...",
-        variant: "destructive",
-      });
+    loadStreamUrl();
 
-      // Auto-skip to next song after 2 seconds
-      setTimeout(() => {
-        playNext();
-      }, 2000);
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      if (!isPlayingRef.current) return;
+
+      audio.play().catch((err) => {
+        console.error("Auto-play failed:", err);
+        toast({
+          title: "Playback paused",
+          description: "Click play to continue",
+        });
+      });
     };
 
-    // Attach event listeners
+    // Chỉ add error listener cho Safari native HLS, không add cho Hls.js
+    // Vì Hls.js sẽ tự xử lý errors qua HLS.Events.ERROR
+    if (!Hls.isSupported() && audio.canPlayType("application/vnd.apple.mpegurl")) {
+      const handleLoadError = (e: Event) => {
+        const target = e.target as HTMLAudioElement;
+        console.error("Audio load error:", e);
+        setIsLoading(false);
+        // Chỉ báo lỗi nếu thực sự không load được (không phải recoverable)
+        if (target.error && target.error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+          toast({
+            title: "Load error",
+            description: "Failed to load audio. Skipping to next song...",
+            variant: "destructive",
+          });
+          loadErrorTimeout = setTimeout(() => {
+            playNext();
+          }, 2000);
+        }
+      };
+      audio.addEventListener("error", handleLoadError);
+      cleanupCallbacks.current.push(() => {
+        audio.removeEventListener("error", handleLoadError);
+      });
+    }
+    
     audio.addEventListener("canplay", handleCanPlay);
-    audio.addEventListener("error", handleLoadError);
 
-    // Note: audio.load() will be called after source is set (Safari/fallback). For Hls.js, attachMedia triggers load.
-
-    // Cleanup
     return () => {
       audio.removeEventListener("canplay", handleCanPlay);
-      audio.removeEventListener("error", handleLoadError);
+      if (safariMetadataListener) {
+        audio.removeEventListener("loadedmetadata", safariMetadataListener);
+        safariMetadataListener = null;
+      }
+      if (loadErrorTimeout) {
+        clearTimeout(loadErrorTimeout);
+      }
+      cleanupCallbacks.current.forEach((cb) => {
+        try {
+          cb();
+        } catch (err) {
+          console.warn("Cleanup callback failed", err);
+        }
+      });
+      cleanupCallbacks.current = [];
+      // Cleanup HLS instance
+      if (hlsInstanceRef.current) {
+        try {
+          hlsInstanceRef.current.stopLoad();
+          hlsInstanceRef.current.destroy();
+          console.log("HLS instance destroyed (cleanup)");
+        } catch (e) {
+          console.warn("Error destroying HLS instance:", e);
+        }
+        hlsInstanceRef.current = null;
+      }
       if (hls) {
-        hls.destroy();
+        try {
+          hls.stopLoad();
+          hls.destroy();
+        } catch (e) {
+          console.warn("Error destroying HLS:", e);
+        }
         hls = null;
       }
+      audio.pause();
+      audio.src = "";
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks-exhaustive-deps
   }, [currentSong]); // Only reload when song changes, not isPlaying/playNext
 
   // Handle play/pause toggle separately
@@ -321,49 +523,217 @@ const MusicPlayer = () => {
       }
     };
 
+    // Lưu duration ban đầu để tránh update khi HLS loop
+    let initialDurationForCheck = 0;
+    
     const updateDuration = () => {
-      if (!isNaN(audio.duration)) {
-        setDuration(audio.duration);
+      if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+        // Lần đầu tiên, lưu duration ban đầu
+        if (initialDurationForCheck === 0) {
+          initialDurationForCheck = audio.duration;
+          setDuration(audio.duration);
+          console.log("Initial duration set in updateDuration:", audio.duration);
+        } else if (audio.duration <= initialDurationForCheck * 1.05) {
+          // Chỉ update nếu duration không tăng quá 5% (cho phép sai số nhỏ)
+          setDuration(audio.duration);
+        } else {
+          // Duration tăng quá nhiều, có thể HLS đang loop - không update
+          console.warn("Duration increased too much, possible HLS loop. Ignoring update. Current:", audio.duration, "Initial:", initialDurationForCheck);
+        }
       }
     };
 
+    // Reset flag khi song thay đổi
+    hasTriggeredEndedRef.current = false;
+    
     const handleEnded = () => {
-      console.log("Song ended, repeat mode:", repeatMode);
+      if (hasTriggeredEndedRef.current) return; // Tránh trigger nhiều lần
+      hasTriggeredEndedRef.current = true;
+      
+      console.log("Song ended event triggered, repeat mode:", repeatMode);
+      console.log("Final duration:", audio.duration, "Final time:", audio.currentTime);
+      
+      // Dừng HLS load khi bài hát kết thúc
+      if (hlsInstanceRef.current) {
+        try {
+          hlsInstanceRef.current.stopLoad();
+          console.log("HLS load stopped (ended event)");
+        } catch (e) {
+          console.warn("Failed to stop HLS load:", e);
+        }
+      }
 
       if (repeatMode === "one") {
         // Repeat current song
+        hasTriggeredEndedRef.current = false; // Reset để có thể repeat
         audio.currentTime = 0;
+        if (hlsInstanceRef.current) {
+          try {
+            hlsInstanceRef.current.startLoad();
+          } catch (e) {
+            console.warn("Failed to restart HLS load:", e);
+          }
+        }
         audio.play().catch(err => console.error("Repeat play error:", err));
       } else {
         // Play next song (works for both "all" and "off" modes)
         console.log("Playing next song");
+        // Kiểm tra queue trước khi chuyển bài
+        if (queue.length === 0) {
+          console.warn("Queue is empty, cannot play next song");
+          return;
+        }
         playNext();
       }
     };
 
-    const handleError = (e: Event) => {
-      console.error("Audio error:", e);
-      toast({
-        title: "Playback error",
-        description: "Failed to play audio. Trying next song...",
-        variant: "destructive",
-      });
-      // Try next song on error
-      setTimeout(() => playNext(), 1000);
+    // Fallback: Check if song should end based on duration and currentTime
+    // HLS có thể không trigger ended event đúng cách, đặc biệt khi playlist loop
+    const checkSongEnd = () => {
+      if (hasTriggeredEndedRef.current) return; // Đã trigger rồi, không check nữa
+      
+      if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
+        // Nếu currentTime >= duration (hoặc gần bằng trong vòng 0.3 giây) và đang play
+        // thì force stop và chuyển bài ngay (không để HLS load thêm segment)
+        const timeRemaining = audio.duration - audio.currentTime;
+        if (timeRemaining <= 0.3 && !audio.paused && audio.readyState >= 2) {
+          console.log("Song should end (fallback check), forcing stop and switching. Duration:", audio.duration, "Current:", audio.currentTime);
+          // Dừng HLS load ngay để tránh load thêm segment
+          if (hlsInstanceRef.current) {
+            try {
+              hlsInstanceRef.current.stopLoad();
+              console.log("HLS load stopped");
+            } catch (e) {
+              console.warn("Failed to stop HLS load:", e);
+            }
+          }
+          // Force stop audio ngay
+          audio.pause();
+          hasTriggeredEndedRef.current = true; // Đánh dấu đã trigger để tránh trigger lại
+          // Chuyển bài ngay lập tức
+          if (repeatMode === "one") {
+            hasTriggeredEndedRef.current = false; // Reset để có thể repeat
+            audio.currentTime = 0;
+            if (hlsInstanceRef.current) {
+              try {
+                hlsInstanceRef.current.startLoad();
+              } catch (e) {
+                console.warn("Failed to restart HLS load:", e);
+              }
+            }
+            audio.play().catch(err => console.error("Repeat play error:", err));
+          } else {
+            console.log("Auto-playing next song");
+            if (queue.length === 0) {
+              console.warn("Queue is empty, cannot auto-play next");
+              return;
+            }
+            playNext();
+          }
+          return;
+        }
+        // Nếu currentTime vượt quá duration (do HLS loop), force stop và chuyển bài ngay
+        if (audio.currentTime > audio.duration && audio.duration > 0) {
+          console.warn("CurrentTime exceeds duration (HLS loop detected), forcing stop and switching. Duration:", audio.duration, "Current:", audio.currentTime);
+          // Dừng HLS load
+          if (hlsInstanceRef.current) {
+            try {
+              hlsInstanceRef.current.stopLoad();
+              console.log("HLS load stopped (loop detected)");
+            } catch (e) {
+              console.warn("Failed to stop HLS load:", e);
+            }
+          }
+          audio.pause();
+          hasTriggeredEndedRef.current = true;
+          if (repeatMode === "one") {
+            hasTriggeredEndedRef.current = false;
+            audio.currentTime = 0;
+            if (hlsInstanceRef.current) {
+              try {
+                hlsInstanceRef.current.startLoad();
+              } catch (e) {
+                console.warn("Failed to restart HLS load:", e);
+              }
+            }
+            audio.play().catch(err => console.error("Repeat play error:", err));
+          } else {
+            console.log("Auto-playing next song (loop detected), queue length:", queue.length);
+            if (queue.length === 0) {
+              console.warn("Queue is empty, cannot auto-play next");
+              return;
+            }
+            playNext();
+          }
+        }
+      }
     };
+
+    // Chỉ add error listener cho Safari native HLS, KHÔNG add cho Hls.js
+    // Vì Hls.js sẽ tự xử lý tất cả errors qua HLS.Events.ERROR
+    // Nếu add error listener cho audio element khi dùng Hls.js, nó sẽ trigger
+    // ngay cả khi HLS đang recover, gây ra toast lỗi không cần thiết
+    let handleError: ((e: Event) => void) | null = null;
+    if (!Hls.isSupported() && audio.canPlayType("application/vnd.apple.mpegurl")) {
+      handleError = (e: Event) => {
+        const target = e.target as HTMLAudioElement;
+        // Chỉ xử lý lỗi thực sự fatal, không phải recoverable errors
+        if (target.error) {
+          const errorCode = target.error.code;
+          // MEDIA_ERR_ABORTED (1) và MEDIA_ERR_NETWORK (2) có thể recover
+          // Chỉ xử lý MEDIA_ERR_DECODE (3) và MEDIA_ERR_SRC_NOT_SUPPORTED (4)
+          if (errorCode === MediaError.MEDIA_ERR_DECODE || 
+              errorCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+            console.error("Fatal audio error:", e, "Code:", errorCode);
+            toast({
+              title: "Playback error",
+              description: "Failed to play audio. Trying next song...",
+              variant: "destructive",
+            });
+            // Try next song on fatal error
+            setTimeout(() => playNext(), 1000);
+          } else {
+            console.warn("Recoverable audio error (ignored):", errorCode);
+          }
+        }
+      };
+      audio.addEventListener("error", handleError);
+      cleanupCallbacks.current.push(() => {
+        if (handleError) {
+          audio.removeEventListener("error", handleError);
+        }
+      });
+    }
 
     audio.addEventListener("timeupdate", updateProgress);
     audio.addEventListener("loadedmetadata", updateDuration);
+    audio.addEventListener("durationchange", updateDuration); // Thêm listener cho duration change
     audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("error", handleError);
+    // KHÔNG add error listener cho audio element khi dùng Hls.js
+
+    // Fallback check cho ended event (mỗi giây)
+    const endCheckInterval = setInterval(checkSongEnd, 1000);
 
     return () => {
+      // Dừng HLS trước khi cleanup
+      if (hlsInstanceRef.current) {
+        try {
+          hlsInstanceRef.current.stopLoad();
+        } catch (e) {
+          console.warn("Failed to stop HLS in cleanup:", e);
+        }
+      }
+      
       audio.removeEventListener("timeupdate", updateProgress);
       audio.removeEventListener("loadedmetadata", updateDuration);
+      audio.removeEventListener("durationchange", updateDuration);
       audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleError);
+      if (handleError) {
+        audio.removeEventListener("error", handleError);
+      }
+      clearInterval(endCheckInterval);
     };
-  }, [repeatMode, playNext]);
+  }, [repeatMode, playNext, queue.length, currentSong]);
 
   // Handle volume
   useEffect(() => {
@@ -491,6 +861,14 @@ const MusicPlayer = () => {
   };
 
   // Hide player on login page or if no song is playing
+  // Also reset showLyrics and isExpanded when no song
+  useEffect(() => {
+    if (!currentSong) {
+      setShowLyrics(false);
+      setIsExpanded(false);
+    }
+  }, [currentSong]);
+
   if (location.pathname === "/login" || !currentSong) {
     return null;
   }
@@ -578,7 +956,11 @@ const MusicPlayer = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={playPrevious}
+                  onClick={() => {
+                    console.log("Previous clicked, queue length:", queue.length, "currentSong:", currentSong?.id);
+                    playPrevious();
+                  }}
+                  disabled={queue.length === 0}
                 >
                   <SkipBack className="w-4 h-4" />
                 </Button>
@@ -603,7 +985,12 @@ const MusicPlayer = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={playNext}
+                  onClick={() => {
+                    console.log("Next clicked, queue length:", queue.length, "currentSong:", currentSong?.id);
+                    console.log("Queue songs:", queue.map(s => ({ id: s.id, name: s.songName || s.name })));
+                    playNext();
+                  }}
+                  disabled={queue.length === 0}
                 >
                   <SkipForward className="w-4 h-4" />
                 </Button>
@@ -648,6 +1035,16 @@ const MusicPlayer = () => {
 
             {/* Volume & Actions */}
             <div className="flex items-center space-x-2 flex-1 justify-end order-2 sm:order-none">
+              {/* Playlist Menu Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setShowPlaylist(!showPlaylist)}
+              >
+                <Menu className="w-4 h-4" />
+              </Button>
+              
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -824,7 +1221,7 @@ const MusicPlayer = () => {
       )}
 
       {/* Lyrics Panel */}
-      {showLyrics && (
+      {showLyrics && currentSong && (
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
           <div
@@ -876,6 +1273,127 @@ const MusicPlayer = () => {
                   {line.text}
                 </p>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Playlist Panel */}
+      {showPlaylist && (
+        <div className="fixed inset-0 z-[52]">
+          {/* Background overlay */}
+          <div
+            className="absolute inset-0 bg-background/95 backdrop-blur-md"
+            onClick={() => setShowPlaylist(false)}
+          />
+
+          {/* Content panel */}
+          <div className="relative h-full flex flex-col max-w-2xl mx-auto bg-background border-x border-border/40">
+            {/* Header */}
+            <div className="flex justify-between items-center p-4 sm:p-6 border-b border-border/40 bg-background/90 backdrop-blur-sm">
+              <h3 className="text-lg font-semibold">Danh sách phát</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowPlaylist(false)}>
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-border/40 bg-background/50">
+              <button
+                onClick={() => setPlaylistTab("queue")}
+                className={cn(
+                  "flex-1 px-4 py-3 text-sm font-medium transition-colors",
+                  playlistTab === "queue"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Đẩy vào ({queue.length})
+              </button>
+              <button
+                onClick={() => setPlaylistTab("suggested")}
+                className={cn(
+                  "flex-1 px-4 py-3 text-sm font-medium transition-colors",
+                  playlistTab === "suggested"
+                    ? "text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Gợi ý
+              </button>
+            </div>
+
+            {/* Playlist Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {playlistTab === "queue" ? (
+                queue.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                    <Music className="w-12 h-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Danh sách phát trống</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Phát nhạc từ các trang như Trending để thêm vào danh sách
+                    </p>
+                  </div>
+                ) : (
+                  queue.map((song, index) => (
+                    <div
+                      key={song.id}
+                      onClick={() => {
+                        playSong(song);
+                        setShowPlaylist(false);
+                      }}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
+                        currentSong?.id === song.id && "bg-primary/10 border border-primary/20"
+                      )}
+                    >
+                      <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
+                        {song.cover ? (
+                          <img
+                            src={song.cover}
+                            alt={song.songName || song.name || "Unknown Song"}
+                            onError={handleImageError}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                            <Music className="w-6 h-6 text-white" />
+                          </div>
+                        )}
+                        {currentSong?.id === song.id && isPlaying && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={cn(
+                            "text-sm font-medium truncate",
+                            currentSong?.id === song.id && "text-primary"
+                          )}
+                        >
+                          {song.songName || song.name || "Unknown Song"}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {song.artist || "Unknown Artist"}
+                        </p>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex-shrink-0">
+                        {formatTime(song.duration || 0)}
+                      </div>
+                    </div>
+                  ))
+                )
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                  <Music className="w-12 h-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">Chức năng gợi ý đang phát triển</p>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Sẽ có các bài hát gợi ý dựa trên bài hát hiện tại
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

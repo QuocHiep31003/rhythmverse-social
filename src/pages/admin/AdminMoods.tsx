@@ -25,6 +25,31 @@ const AdminMoods = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const formatDateTime = (value?: string) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString("vi-VN", { hour12: false });
+  };
+
+  const formatWeight = (value: unknown) => {
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numeric)) return "1.00";
+    return numeric.toFixed(2);
+  };
+
+  const renderStatusBadge = (status?: string) => {
+    if (!status) return null;
+    const normalized = status.toUpperCase();
+    if (normalized === "ACTIVE") {
+      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20">Hoạt động</Badge>;
+    }
+    if (normalized === "INACTIVE") {
+      return <Badge variant="outline" className="text-destructive border-destructive/40">Ngưng hoạt động</Badge>;
+    }
+    return <Badge variant="outline">{normalized}</Badge>;
+  };
+
   useEffect(() => {
     loadMoods();
   }, [currentPage, pageSize, searchQuery]);
@@ -128,22 +153,61 @@ const AdminMoods = () => {
                       <thead className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b-2 border-[hsl(var(--admin-border))]">
                         <tr>
                           <th className="w-12 text-left text-sm font-medium text-muted-foreground pl-3 pr-0 py-2">STT</th>
-                          <th className="w-1/3 text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
-                          <th className="w-1/3 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
+                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
+                          <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
+                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
+                          <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                         </tr>
                       </thead>
                       <tbody>
                         {moods.map((mood, index) => (
                           <tr key={mood.id} className="border-b border-border hover:bg-muted/50">
-                            <td className="w-12 pl-3 pr-0 py-3 text-left">{currentPage * pageSize + index + 1}</td>
-                            <td className="p-3 text-left">
-                              <span className="font-medium">{mood.name}</span>
+                            <td className="w-12 pl-3 pr-0 py-3 text-left align-top">{currentPage * pageSize + index + 1}</td>
+                            <td className="p-3 text-left align-top">
+                              <div className="flex flex-col gap-1">
+                                <span className="font-medium">{mood.name}</span>
+                                {renderStatusBadge(mood.status)}
+                              </div>
                             </td>
-                            <td className="p-3 text-left">
-                              <span className="text-sm text-muted-foreground font-mono">{mood.gradient || "N/A"}</span>
+                            <td className="w-28 p-3 align-top">
+                              {mood.iconUrl ? (
+                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-border/60">
+                                  <img
+                                    src={mood.iconUrl}
+                                    alt={mood.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground">Không có</Badge>
+                              )}
                             </td>
-                            <td className="w-32 text-right p-3">
+                            <td className="p-3 text-left align-top">
+                              {mood.gradient ? (
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-12 h-6 rounded border border-border/40"
+                                    style={{ background: mood.gradient }}
+                                  />
+                                  <span className="text-sm text-muted-foreground font-mono truncate">{mood.gradient}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="w-24 p-3 align-top">
+                              <span className="font-medium">{formatWeight(mood.weight)}</span>
+                            </td>
+                            <td className="w-40 p-3 align-top text-sm text-muted-foreground">
+                              {formatDateTime(mood.createdAt)}
+                            </td>
+                            <td className="w-40 p-3 align-top text-sm text-muted-foreground">
+                              {formatDateTime(mood.updatedAt)}
+                            </td>
+                            <td className="w-32 text-right p-3 align-top">
                               <div className="flex items-center justify-end gap-2">
                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(mood)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
                                   <Pencil className="w-4 h-4" />

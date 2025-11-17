@@ -27,6 +27,31 @@ const AdminGenres = () => {
   const [totalElements, setTotalElements] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const formatDateTime = (value?: string) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString("vi-VN", { hour12: false });
+  };
+
+  const formatWeight = (value: unknown) => {
+    const numeric = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numeric)) return "1.00";
+    return numeric.toFixed(2);
+  };
+
+  const renderStatusBadge = (status?: string) => {
+    if (!status) return null;
+    const normalized = status.toUpperCase();
+    if (normalized === "ACTIVE") {
+      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20">Hoạt động</Badge>;
+    }
+    if (normalized === "INACTIVE") {
+      return <Badge variant="outline" className="text-destructive border-destructive/40">Ngưng hoạt động</Badge>;
+    }
+    return <Badge variant="outline">{normalized}</Badge>;
+  };
+
   useEffect(() => {
     loadGenres();
   }, [currentPage, pageSize, searchQuery]);
@@ -131,7 +156,11 @@ const AdminGenres = () => {
                       <thead>
                         <tr>
                           <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                          <th className="text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
+                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
+                          <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
+                          <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                         </tr>
                       </thead>
@@ -143,12 +172,37 @@ const AdminGenres = () => {
                     <table className="w-full table-fixed">
                       <tbody>
                         {genres.map((genre, index) => (
-                          <tr key={genre.id} className="border-b border-border hover:bg-muted/50">
-                            <td className="w-16 p-3 text-center">{currentPage * pageSize + index + 1}</td>
-                            <td className="p-3 text-left">
-                              <span className="font-medium">{genre.name}</span>
+                              <tr key={genre.id} className="border-b border-border hover:bg-muted/50">
+                            <td className="w-16 p-3 text-center align-top">{currentPage * pageSize + index + 1}</td>
+                            <td className="p-3 text-left align-top">
+                              <div className="flex flex-col gap-1">
+                                <span className="font-medium">{genre.name}</span>
+                                {renderStatusBadge(genre.status)}
+                              </div>
                             </td>
-                            <td className="w-32 text-right p-3">
+                            <td className="w-28 p-3 align-top">
+                              {genre.iconUrl ? (
+                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-border/60">
+                                  <img
+                                    src={genre.iconUrl}
+                                    alt={genre.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground">Không có</Badge>
+                              )}
+                            </td>
+                            <td className="w-24 p-3 align-top">
+                              <span className="font-medium">{formatWeight(genre.weight)}</span>
+                            </td>
+                            <td className="w-40 p-3 align-top text-sm text-muted-foreground">
+                              {formatDateTime(genre.createdAt)}
+                            </td>
+                            <td className="w-40 p-3 align-top text-sm text-muted-foreground">
+                              {formatDateTime(genre.updatedAt)}
+                            </td>
+                            <td className="w-32 text-right p-3 align-top">
                               <div className="flex items-center justify-end gap-2">
                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(genre)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
                                   <Pencil className="w-4 h-4" />

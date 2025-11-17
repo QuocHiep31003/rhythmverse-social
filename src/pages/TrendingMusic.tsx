@@ -72,20 +72,39 @@ const TrendingMusic = () => {
   }, [currentPage, filteredSongs, itemsPerPage]);
 
   const handlePlaySong = (song: TrendingSong) => {
+    console.log("handlePlaySong called, allSongs length:", allSongs.length);
+    console.log("allSongs:", allSongs);
+    
+    // Format toàn bộ danh sách trending thành queue
     const formattedQueue = allSongs.map(s => ({
       id: String(s.songId),
-      title: s.songName,
+      songName: s.songName, // Thêm songName để tương thích với MusicPlayer
+      name: s.songName, // Alias
+      title: s.songName, // Alias
       artist: s.artists?.map(a => a.name).join(", ") || "Unknown",
-      album: s.albumName || "Unknown", // <-- Thêm dòng này
+      album: s.albumName || "Unknown",
       duration: toSeconds(s.duration),
       cover: s.albumImageUrl,
       audioUrl: s.audioUrl,
+      uuid: s.uuid, // Thêm uuid nếu có
     }));
+    
+    console.log("Formatted queue length:", formattedQueue.length);
+    console.log("Formatted queue:", formattedQueue);
     
     const songToPlay = formattedQueue.find(s => s.id === String(song.songId));
     if(songToPlay) {
+      console.log("Setting queue with", formattedQueue.length, "songs, playing:", songToPlay.songName);
+      // Set queue trước, sau đó mới play để đảm bảo queue đã được set
       setQueue(formattedQueue);
-      playSong(songToPlay);
+      // Đợi một chút để React update state, sau đó mới play
+      setTimeout(() => {
+        playSong(songToPlay);
+        // Verify queue sau khi set
+        console.log("Queue should be set with", formattedQueue.length, "songs");
+      }, 0);
+    } else {
+      console.warn("Song not found in queue:", song.songId, "Available IDs:", formattedQueue.map(s => s.id));
     }
   };
 

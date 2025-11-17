@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Check, ChevronsUpDown, Loader2, Upload, Link } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Upload, Play } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,11 +27,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -51,7 +46,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { genresApi, artistsApi, moodsApi } from "@/services/api";
+import { genresApi, artistsApi, moodsApi, songGenreApi, songMoodApi } from "@/services/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const contributorFieldConfigs = [
+  { field: "performerIds", label: "Ca sĩ chính", required: true, badgeLabel: "ca sĩ" },
+  { field: "featIds", label: "Feat (ca sĩ phụ)", required: false, badgeLabel: "feat" },
+  { field: "composerIds", label: "Nhạc sĩ (Composer)", required: false, badgeLabel: "composer" },
+  { field: "lyricistIds", label: "Người viết lời (Lyricist)", required: false, badgeLabel: "lyricist" },
+  { field: "producerIds", label: "Producer", required: false, badgeLabel: "producer" },
+] as const;
+
+type ContributorField = typeof contributorFieldConfigs[number]["field"];
 
 // Utility function to get audio duration from file or URL
 const getAudioDuration = async (file: File): Promise<string> => {
@@ -77,124 +83,17 @@ const getAudioDuration = async (file: File): Promise<string> => {
   });
 };
 
-const getAudioDurationFromUrl = async (url: string): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    // Validate URL
-    if (!url || !url.trim() || !url.startsWith('http')) {
-      resolve("0:00");
-      return;
-    }
-
-    const audio = new Audio();
-    let resolved = false;
-    
-    const cleanup = () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('error', handleError);
-      audio.removeEventListener('canplaythrough', handleCanPlay);
-      audio.src = '';
-      audio.load();
-    };
-    
-    let timeoutId: NodeJS.Timeout | null = null;
-    
-    const handleLoadedMetadata = () => {
-      if (resolved) return;
-      resolved = true;
-      
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      
-      const duration = audio.duration;
-      if (isNaN(duration) || !isFinite(duration) || duration <= 0) {
-        cleanup();
-        resolve("0:00");
-        return;
-      }
-      
-      const minutes = Math.floor(duration / 60);
-      const seconds = Math.floor(duration % 60);
-      const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      cleanup();
-      resolve(formatted);
-    };
-    
-    const handleCanPlay = () => {
-      // Fallback nếu loadedmetadata không fire
-      if (!resolved && audio.duration && isFinite(audio.duration)) {
-        handleLoadedMetadata();
-      }
-    };
-    
-    const handleError = (e: Event) => {
-      if (resolved) return;
-      resolved = true;
-      
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      
-      console.error("Error loading audio:", e);
-      cleanup();
-      resolve("0:00");
-    };
-    
-    // Set timeout 10 seconds
-    timeoutId = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        cleanup();
-        resolve("0:00");
-      }
-    }, 10000);
-    
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('canplaythrough', handleCanPlay);
-    audio.addEventListener('error', handleError);
-    
-    // Preload audio
-    audio.preload = 'metadata';
-    audio.crossOrigin = 'anonymous';
-    
-    try {
-      audio.src = url;
-      audio.load();
-    } catch (error) {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      cleanup();
-      resolve("0:00");
-    }
-  });
-};
-
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
   releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
-  artistIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 nghệ sĩ"),
+  performerIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 ca sĩ chính"),
+  featIds: z.array(z.number()).optional(),
+  composerIds: z.array(z.number()).optional(),
+  lyricistIds: z.array(z.number()).optional(),
+  producerIds: z.array(z.number()).optional(),
+  artistIds: z.array(z.number()).optional(),
   moodIds: z.array(z.number()).optional(),
-  audioUrl: z.string().optional()
-    .refine((val) => {
-      if (!val || val.trim() === "") return true; // Optional field
-      try {
-        new URL(val);
-        const audioExtensions = ['.mp3', '.wav', '.m4a', '.ogg', '.flac', '.aac', '.wma'];
-        const lowerVal = val.toLowerCase();
-        return audioExtensions.some(ext => lowerVal.includes(ext)) || 
-               lowerVal.includes('cloudinary.com') || 
-               lowerVal.includes('res.cloudinary.com');
-      } catch {
-        return false;
-      }
-    }, {
-      message: "URL không hợp lệ hoặc không phải file audio. Vui lòng nhập URL có định dạng .mp3, .wav, .m4a hoặc từ Cloudinary"
-    }),
   duration: z.string().optional(),
 });
 
@@ -203,7 +102,7 @@ type SongFormValues = z.infer<typeof songFormSchema>;
 interface SongFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: SongFormValues & { file?: File }) => void;
+  onSubmit: (data: SongFormValues & { file?: File }, genreScores?: Map<number, number>, moodScores?: Map<number, number>) => void;
   defaultValues?: Partial<SongFormValues>;
   isLoading?: boolean;
   mode: "create" | "edit";
@@ -223,18 +122,16 @@ export const SongFormDialog = ({
   const [artistSearchQuery, setArtistSearchQuery] = useState("");
   const [genreSearchQuery, setGenreSearchQuery] = useState("");
   const [moodSearchQuery, setMoodSearchQuery] = useState("");
-  const [artistPopoverOpen, setArtistPopoverOpen] = useState(false);
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
   const [moodPopoverOpen, setMoodPopoverOpen] = useState(false);
+  const [genreScores, setGenreScores] = useState<Map<number, string>>(new Map());
+  const [moodScores, setMoodScores] = useState<Map<number, string>>(new Map());
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [audioInputMode, setAudioInputMode] = useState<"upload" | "url">("upload");
-  const [originalAudioUrl, setOriginalAudioUrl] = useState<string>("");
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
-  const [fetchingDuration, setFetchingDuration] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
-  const urlTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [activeContributorPopover, setActiveContributorPopover] = useState<ContributorField | null>(null);
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -242,9 +139,13 @@ export const SongFormDialog = ({
       name: "",
       releaseYear: new Date().getFullYear(),
       genreIds: [],
+      performerIds: [],
+      featIds: [],
+      composerIds: [],
+      lyricistIds: [],
+      producerIds: [],
       artistIds: [],
       moodIds: [],
-      audioUrl: "",
       duration: "",
       ...defaultValues,
     },
@@ -292,70 +193,84 @@ export const SongFormDialog = ({
   useEffect(() => {
     if (open && defaultValues) {
       // Xử lý data từ API: artists, genres và moods là array of objects
-      const apiData = defaultValues as {artists?: {id: number}[], genres?: {id: number}[], moods?: {id: number}[], audioUrl?: string, duration?: string};
+      const apiData = defaultValues as {
+        genres?: {id: number}[];
+        moods?: {id: number}[];
+        performers?: {id: number}[];
+        singer?: {id: number}[];
+        feat?: {id: number}[];
+        composer?: {id: number}[];
+        lyricist?: {id: number}[];
+        producer?: {id: number}[];
+        performerIds?: number[];
+        featIds?: number[];
+        composerIds?: number[];
+        lyricistIds?: number[];
+        producerIds?: number[];
+        duration?: string;
+      };
+
+      const resolvedPerformerIds = apiData.performerIds
+        ?? apiData.singer?.map((a) => a.id)
+        ?? apiData.performers?.map((a) => a.id)
+        ?? defaultValues.performerIds
+        ?? [];
+      const resolvedFeatIds = apiData.featIds
+        ?? apiData.feat?.map((a) => a.id)
+        ?? defaultValues.featIds
+        ?? [];
+      const resolvedComposerIds = apiData.composerIds
+        ?? apiData.composer?.map((a) => a.id)
+        ?? defaultValues.composerIds
+        ?? [];
+      const resolvedLyricistIds = apiData.lyricistIds
+        ?? apiData.lyricist?.map((a) => a.id)
+        ?? defaultValues.lyricistIds
+        ?? [];
+      const resolvedProducerIds = apiData.producerIds
+        ?? apiData.producer?.map((a) => a.id)
+        ?? defaultValues.producerIds
+        ?? [];
+
+      const unionArtistIds = Array.from(new Set([
+        ...resolvedPerformerIds,
+        ...resolvedFeatIds,
+        ...resolvedComposerIds,
+        ...resolvedLyricistIds,
+        ...resolvedProducerIds,
+      ]));
+
       const formValues = {
         ...defaultValues,
-        artistIds: apiData.artists?.map((a: {id: number}) => a.id) || defaultValues.artistIds || [],
+        performerIds: resolvedPerformerIds,
+        featIds: resolvedFeatIds,
+        composerIds: resolvedComposerIds,
+        lyricistIds: resolvedLyricistIds,
+        producerIds: resolvedProducerIds,
+        artistIds: unionArtistIds,
         genreIds: apiData.genres?.map((g: {id: number}) => g.id) || defaultValues.genreIds || [],
         moodIds: apiData.moods?.map((m: {id: number}) => m.id) || defaultValues.moodIds || [],
-        audioUrl: apiData.audioUrl || defaultValues.audioUrl || "",
         duration: apiData.duration || defaultValues.duration || "",
       };
       // Lưu giá trị gốc để so sánh khi submit
-      setOriginalAudioUrl(apiData.audioUrl || "");
       setSelectedFile(null); // Reset file when dialog opens with existing data
       form.reset(formValues);
     } else if (open) {
-      setOriginalAudioUrl("");
       setSelectedFile(null); // Reset file when creating new song
+      setGenreScores(new Map());
+      setMoodScores(new Map());
       form.reset({
         name: "",
         releaseYear: new Date().getFullYear(),
         genreIds: [],
         artistIds: [],
         moodIds: [],
-        audioUrl: "",
         duration: "",
       });
     }
     
-    // Cleanup timeout khi component unmount hoặc dialog đóng
-    return () => {
-      if (urlTimeoutRef.current) {
-        clearTimeout(urlTimeoutRef.current);
-      }
-    };
   }, [open, defaultValues, form]);
 
-  const uploadToCloudinary = async (file: File): Promise<string> => {
-    const cloudName = "dhylbhwvb"; // Cloudinary cloud name
-    const uploadPreset = "EchoVerse"; // Unsigned upload preset
-    
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
-    formData.append("resource_type", "video"); // audio files use 'video' resource type
-    
-    try {
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-      
-      if (!response.ok) {
-        throw new Error("Upload failed");
-      }
-      
-      const data = await response.json();
-      return data.secure_url;
-    } catch (error) {
-      console.error("Error uploading to Cloudinary:", error);
-      throw error;
-    }
-  };
 
   const handleFileChange = async (file: File | undefined) => {
     if (!file) {
@@ -371,34 +286,12 @@ export const SongFormDialog = ({
       const duration = await getAudioDuration(file);
       form.setValue("duration", duration);
       
-      // Store file for update (will be sent to backend)
+      // Store file - will be uploaded to S3 via backend API when form is submitted
       setSelectedFile(file);
-      
-      // For create mode, still upload to Cloudinary to get URL
-      // For update mode, file will be sent directly to backend
-      if (mode === "create") {
-        // Simulate progress
-        const progressInterval = setInterval(() => {
-          setUploadProgress((prev) => Math.min(prev + 10, 90));
-        }, 200);
-        
-        const url = await uploadToCloudinary(file);
-        
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-        
-        form.setValue("audioUrl", url);
-        
-        setTimeout(() => {
-          setUploadProgress(0);
-        }, 1000);
-      } else {
-        // Update mode: just store file, don't upload yet
-        setUploadProgress(100);
-        setTimeout(() => {
-          setUploadProgress(0);
-        }, 1000);
-      }
+      setUploadProgress(100);
+      setTimeout(() => {
+        setUploadProgress(0);
+      }, 1000);
     } catch (error) {
       console.error("File processing error:", error);
       alert("Lỗi khi xử lý file. Vui lòng thử lại.");
@@ -408,19 +301,57 @@ export const SongFormDialog = ({
     }
   };
 
+  const collectArtistIds = (values: SongFormValues): number[] => {
+    const ids = new Set<number>();
+    (values.performerIds ?? []).forEach((id) => ids.add(id));
+    (values.featIds ?? []).forEach((id) => ids.add(id));
+    (values.composerIds ?? []).forEach((id) => ids.add(id));
+    (values.lyricistIds ?? []).forEach((id) => ids.add(id));
+    (values.producerIds ?? []).forEach((id) => ids.add(id));
+    return Array.from(ids);
+  };
+
   const handleSubmit = (data: SongFormValues) => {
-    // For update mode: include file if selected, and audioUrl if changed
+    const artistUnion = collectArtistIds(data);
+    const normalizedData: SongFormValues & { file?: File } = {
+      ...data,
+      artistIds: artistUnion,
+    };
+    
+    // Convert genreScores and moodScores from Map<number, string> to Map<number, number>
+    const genreScoresMap = new Map<number, number>();
+    genreScores.forEach((scoreStr, genreId) => {
+      const score = parseFloat(scoreStr);
+      if (Number.isFinite(score) && score >= 0 && score <= 1) {
+        genreScoresMap.set(genreId, score);
+      } else {
+        genreScoresMap.set(genreId, 1.0); // Default to 1.0 if invalid
+      }
+    });
+    
+    const moodScoresMap = new Map<number, number>();
+    moodScores.forEach((scoreStr, moodId) => {
+      const score = parseFloat(scoreStr);
+      if (Number.isFinite(score) && score >= 0 && score <= 1) {
+        moodScoresMap.set(moodId, score);
+      } else {
+        moodScoresMap.set(moodId, 1.0); // Default to 1.0 if invalid
+      }
+    });
+    
+    // For update mode: include file if selected, exclude duration
     if (mode === "edit") {
+      const { duration, file: _unusedFile, ...restData } = normalizedData;
       const submitData: SongFormValues & { file?: File } = {
-        ...data,
+        ...restData,
         file: selectedFile || undefined, // Include file if selected
-        // Send audioUrl if it was changed (user updated URL manually)
-        audioUrl: (data.audioUrl && data.audioUrl !== originalAudioUrl) ? data.audioUrl : undefined,
+        // Don't send duration - backend will reject it
       };
       onSubmit(submitData);
     } else {
       // Create mode: send as normal (may include file for create too)
-      onSubmit(data);
+      // Note: duration can be included in create mode if needed
+      onSubmit(normalizedData, genreScoresMap, moodScoresMap);
     }
   };
 
@@ -437,11 +368,9 @@ export const SongFormDialog = ({
     setPendingSubmit(null);
   };
 
-  const selectedArtistIds = form.watch("artistIds") || [];
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[900px] w-[calc(100vw-2rem)] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
             {mode === "create" ? "Thêm bài hát mới" : "Chỉnh sửa bài hát"}
@@ -454,662 +383,634 @@ export const SongFormDialog = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tên bài hát *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="Tên bài hát" 
-                      {...field} 
-                      className="admin-input transition-all duration-200"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="releaseYear"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Năm phát hành *</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      placeholder="2024" 
-                      {...field} 
-                      className="admin-input transition-all duration-200"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="duration"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Thời lượng (mm:ss)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="3:45" 
-                      {...field} 
-                      className="admin-input transition-all duration-200"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="genreIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium flex items-center gap-2">
-                    Thể loại *
-                    {field.value?.length > 0 && (
-                      <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
-                        {field.value.length} đã chọn
-                      </span>
-                    )}
-                  </FormLabel>
-                  <Popover open={genrePopoverOpen} onOpenChange={setGenrePopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className={cn(
-                            "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
-                            !field.value?.length && "text-muted-foreground",
-                            field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 flex-1 text-left">
-                            {field.value?.length ? (
-                              <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
-                                <span className="font-medium">
-                                  {field.value.length} thể loại đã chọn
-                                </span>
-                              </div>
-                            ) : (
-                              <span>Tìm kiếm và chọn thể loại...</span>
-                            )}
-                          </div>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
-                      <Command shouldFilter={false}>
-                        <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-                          <CommandInput
-                            placeholder="Tìm kiếm thể loại..."
-                            value={genreSearchQuery}
-                            onValueChange={setGenreSearchQuery}
-                            className="border-0 focus:ring-0"
-                          />
-                        </div>
-                        <CommandEmpty className="py-6 text-center text-muted-foreground">
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                              <span className="text-xs">🔍</span>
-                            </div>
-                            <span>Không tìm thấy thể loại</span>
-                          </div>
-                        </CommandEmpty>
-                        <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
-                          {filteredGenres.map((genre) => {
-                            const isSelected = field.value?.includes(genre.id);
-                            return (
-                              <CommandItem
-                                key={genre.id}
-                                value={genre.id.toString()}
-                                onSelect={() => {
-                                  if (isSelected) {
-                                    field.onChange(
-                                      field.value?.filter((id: number) => id !== genre.id)
-                                    );
-                                  } else {
-                                    field.onChange([...(field.value || []), genre.id]);
-                                  }
-                                }}
-                                className={cn(
-                                  "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
-                                  isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
-                                )}
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  <div className={cn(
-                                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
-                                    isSelected 
-                                      ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
-                                      : "border-muted-foreground"
-                                  )}>
-                                    {isSelected && (
-                                      <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{genre.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      ID: {genre.id}
-                                    </span>
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
-                                )}
-                              </CommandItem>
-                            );
-                          })}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  {field.value?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {field.value.map((genreId: number) => {
-                        const genre = allGenres.find(g => g.id === genreId);
-                        return (
-                          <div
-                            key={genreId}
-                            className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
-                          >
-                            <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
-                            <span className="truncate max-w-[120px]">{genre?.name || `ID: ${genreId}`}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                field.onChange(
-                                  field.value?.filter((id: number) => id !== genreId)
-                                );
-                              }}
-                              className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
-                            >
-                              <span className="text-xs">×</span>
-                            </button>
-                          </div>
-                        );
-                      })}
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex-1 flex flex-col overflow-hidden">
+            <Tabs defaultValue="metadata" className="flex-1 flex flex-col overflow-hidden">
+              <TabsList className="mx-1 md:mx-2 mt-1 md:mt-2 mb-0 w-full overflow-x-auto">
+                <TabsTrigger value="metadata">Metadata</TabsTrigger>
+                <TabsTrigger value="contributor">Contributor</TabsTrigger>
+                <TabsTrigger value="genre">Genre</TabsTrigger>
+                <TabsTrigger value="mood">Mood</TabsTrigger>
+              </TabsList>
+              <div className="flex-1 overflow-y-auto px-1 md:px-2 py-3">
+                <TabsContent value="metadata" className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tên bài hát *</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Tên bài hát"
+                                {...field}
+                                className="admin-input transition-all duration-200"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="artistIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium flex items-center gap-2">
-                    Nghệ sĩ *
-                    {field.value?.length > 0 && (
-                      <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
-                        {field.value.length} đã chọn
-                      </span>
-                    )}
-                  </FormLabel>
-                  <Popover open={artistPopoverOpen} onOpenChange={setArtistPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className={cn(
-                            "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
-                            !field.value?.length && "text-muted-foreground",
-                            field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 flex-1 text-left">
-                            {field.value?.length ? (
-                              <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
-                                <span className="font-medium">
-                                  {field.value.length} nghệ sĩ đã chọn
-                                </span>
-                              </div>
-                            ) : (
-                              <span>Tìm kiếm và chọn nghệ sĩ...</span>
-                            )}
-                          </div>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
-                      <Command shouldFilter={false}>
-                        <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-                          <CommandInput
-                            placeholder="Tìm kiếm nghệ sĩ..."
-                            value={artistSearchQuery}
-                            onValueChange={setArtistSearchQuery}
-                            className="border-0 focus:ring-0"
-                          />
-                        </div>
-                        <CommandEmpty className="py-6 text-center text-muted-foreground">
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                              <span className="text-xs">🎤</span>
-                            </div>
-                            <span>Không tìm thấy nghệ sĩ</span>
-                          </div>
-                        </CommandEmpty>
-                        <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
-                          {filteredArtists.map((artist) => {
-                            const isSelected = field.value?.includes(artist.id);
-                            return (
-                              <CommandItem
-                                key={artist.id}
-                                value={artist.id.toString()}
-                                onSelect={() => {
-                                  if (isSelected) {
-                                    field.onChange(
-                                      field.value?.filter((id: number) => id !== artist.id)
-                                    );
-                                  } else {
-                                    field.onChange([...(field.value || []), artist.id]);
-                                  }
-                                }}
-                                className={cn(
-                                  "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
-                                  isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
-                                )}
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  <div className={cn(
-                                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
-                                    isSelected 
-                                      ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
-                                      : "border-muted-foreground"
-                                  )}>
-                                    {isSelected && (
-                                      <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
-                                    )}
-                                  </div>
-                                  <Avatar className="h-8 w-8">
-                                    <AvatarImage src={artist.avatar} alt={artist.name} />
-                                    <AvatarFallback className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] text-xs">
-                                      {artist.name[0]}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{artist.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      ID: {artist.id} • {artist.country || "N/A"}
-                                    </span>
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
-                                )}
-                              </CommandItem>
-                            );
-                          })}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  {field.value?.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {field.value.map((artistId: number) => {
-                        const artist = allArtists.find((a) => a.id === artistId);
-                        if (!artist) return null;
-                        return (
-                          <div
-                            key={artistId}
-                            className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
-                          >
-                            <Avatar className="h-5 w-5">
-                              <AvatarImage src={artist.avatar} alt={artist.name} />
-                              <AvatarFallback className="bg-[hsl(var(--admin-active-foreground))] text-[hsl(var(--admin-active))] text-xs">
-                                {artist.name[0]}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="truncate max-w-[120px]">{artist.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                field.onChange(
-                                  field.value?.filter((id: number) => id !== artistId)
-                                );
-                              }}
-                              className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
-                            >
-                              <span className="text-xs">×</span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="md:col-span-2">
-            <FormField
-              control={form.control}
-              name="moodIds"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-sm font-medium flex items-center gap-2">
-                    Mood (tùy chọn)
-                    {field.value && field.value.length > 0 && (
-                      <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
-                        {field.value.length} đã chọn
-                      </span>
-                    )}
-                  </FormLabel>
-                  <Popover open={moodPopoverOpen} onOpenChange={setMoodPopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className={cn(
-                            "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
-                            !field.value?.length && "text-muted-foreground",
-                            field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 flex-1 text-left">
-                            {field.value?.length ? (
-                              <div className="flex items-center gap-1">
-                                <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
-                                <span className="font-medium">
-                                  {field.value.length} mood đã chọn
-                                </span>
-                              </div>
-                            ) : (
-                              <span>Tìm kiếm và chọn mood...</span>
-                            )}
-                          </div>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
-                      <Command shouldFilter={false}>
-                        <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-                          <CommandInput
-                            placeholder="Tìm kiếm mood..."
-                            value={moodSearchQuery}
-                            onValueChange={setMoodSearchQuery}
-                            className="border-0 focus:ring-0"
-                          />
-                        </div>
-                        <CommandEmpty className="py-6 text-center text-muted-foreground">
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                              <span className="text-xs">😊</span>
-                            </div>
-                            <span>Không tìm thấy mood</span>
-                          </div>
-                        </CommandEmpty>
-                        <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
-                          {filteredMoods.map((mood) => {
-                            const isSelected = field.value?.includes(mood.id);
-                            return (
-                              <CommandItem
-                                key={mood.id}
-                                value={mood.id.toString()}
-                                onSelect={() => {
-                                  if (isSelected) {
-                                    field.onChange(
-                                      field.value?.filter((id: number) => id !== mood.id)
-                                    );
-                                  } else {
-                                    field.onChange([...(field.value || []), mood.id]);
-                                  }
-                                }}
-                                className={cn(
-                                  "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
-                                  isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
-                                )}
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  <div className={cn(
-                                    "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
-                                    isSelected 
-                                      ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
-                                      : "border-muted-foreground"
-                                  )}>
-                                    {isSelected && (
-                                      <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
-                                    )}
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">{mood.name}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      ID: {mood.id}
-                                    </span>
-                                  </div>
-                                </div>
-                                {isSelected && (
-                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
-                                )}
-                              </CommandItem>
-                            );
-                          })}
-                        </CommandGroup>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                  {field.value && field.value.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {field.value.map((moodId: number) => {
-                        const mood = allMoods.find(m => m.id === moodId);
-                        return (
-                          <div
-                            key={moodId}
-                            className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
-                          >
-                            <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
-                            <span className="truncate max-w-[120px]">{mood?.name || `ID: ${moodId}`}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                field.onChange(
-                                  field.value?.filter((id: number) => id !== moodId)
-                                );
-                              }}
-                              className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
-                            >
-                              <span className="text-xs">×</span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            </div>
-
-            <div className="md:col-span-2">
-            <FormField
-              control={form.control}
-              name="audioUrl"
-              render={({ field }) => {
-                const hasChanged = mode === "edit" && field.value !== originalAudioUrl;
-                return (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-2 mb-3">
-                      File nhạc * {mode === "edit" && "(Upload file mới hoặc cập nhật URL)"}
-                      {hasChanged && (
-                        <Badge variant="destructive" className="text-xs">
-                          Đã thay đổi
-                        </Badge>
+                    <FormField
+                      control={form.control}
+                      name="releaseYear"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Năm phát hành *</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="2024"
+                              {...field}
+                              className="admin-input transition-all duration-200"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
                       )}
-                    </FormLabel>
-                  <Tabs 
-                    value={audioInputMode} 
-                    onValueChange={(value) => setAudioInputMode(value as "upload" | "url")}
-                    className="w-full"
-                  >
-                    <TabsList className="grid w-full grid-cols-2 mb-4">
-                      <TabsTrigger value="upload" className="flex items-center gap-2">
-                        <Upload className="w-4 h-4" />
-                        Upload File
-                      </TabsTrigger>
-                      <TabsTrigger value="url" className="flex items-center gap-2">
-                        <Link className="w-4 h-4" />
-                        Nhập URL
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                  <FormControl>
-                    <div className="space-y-2">
-                      {audioInputMode === "upload" ? (
-                        <>
-                          <Input
-                            type="file"
-                            accept="audio/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              handleFileChange(file);
-                            }}
-                            disabled={uploading}
-                          />
-                          {uploading && (
-                            <div className="space-y-1">
+                    />
+                    <FormField
+                      control={form.control}
+                      name="duration"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Thời lượng (mm:ss)</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="3:45"
+                              {...field}
+                              disabled
+                              className="admin-input transition-all duration-200"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <div className="md:col-span-2">
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2 mb-3">
+                          File nhạc * {mode === "edit" && "(Chỉ upload file mới)"}
+                        </FormLabel>
+                        <FormControl>
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              <Input
+                                type="file"
+                                accept="audio/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  handleFileChange(file);
+                                }}
+                                disabled={uploading}
+                              />
+                              {uploading && (
+                                <div className="space-y-1">
+                                  <div className="text-sm text-muted-foreground">
+                                    Đang upload... {uploadProgress}%
+                                  </div>
+                                  <div className="w-full bg-secondary rounded-full h-2">
+                                    <div
+                                      className="bg-[hsl(var(--admin-active))] h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${uploadProgress}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {mode === "edit" && (
                               <div className="text-sm text-muted-foreground">
-                                Đang upload... {uploadProgress}%
+                                Upload file mới để thay thế audio hiện tại
                               </div>
-                              <div className="w-full bg-secondary rounded-full h-2">
-                                <div
-                                  className="bg-[hsl(var(--admin-active))] h-2 rounded-full transition-all duration-300"
-                                  style={{ width: `${uploadProgress}%` }}
+                            )}
+                            {selectedFile && !uploading && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                <span className="truncate text-xs">
+                                  File đã chọn: {selectedFile.name}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="contributor" className="space-y-4">
+                  <div>
+                    <h3 className="text-lg font-semibold">Nghệ sĩ & Credits</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Sắp xếp nghệ sĩ theo từng vai trò. Thứ tự trong danh sách sẽ được giữ nguyên.
+                    </p>
+                  </div>
+                  {contributorFieldConfigs.map(({ field, label, required, badgeLabel }) => (
+                    <FormField
+                      key={field}
+                      control={form.control}
+                      name={field}
+                      render={({ field: formField }) => {
+                        const value: number[] = formField.value ?? [];
+                        const isOpen = activeContributorPopover === field;
+                        return (
+                          <FormItem>
+                            <FormLabel className="text-sm font-medium flex items-center gap-2">
+                              {label} {required && <span className="text-destructive">*</span>}
+                              {value.length > 0 && (
+                                <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
+                                  {value.length} đã chọn
+                                </span>
+                              )}
+                            </FormLabel>
+                            <Popover
+                              open={isOpen}
+                              onOpenChange={(open) => {
+                                setActiveContributorPopover(open ? field : null);
+                                if (!open) setArtistSearchQuery("");
+                              }}
+                            >
+                              <PopoverTrigger asChild>
+                                <FormControl>
+                                  <Button
+                                    variant="outline"
+                                    role="combobox"
+                                    className={cn(
+                                      "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
+                                      !value.length && "text-muted-foreground",
+                                      value.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-2 flex-1 text-left">
+                                      {value.length ? (
+                                        <div className="flex items-center gap-1">
+                                          <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
+                                          <span className="font-medium">
+                                            {value.length} nghệ sĩ {badgeLabel ? `(${badgeLabel})` : ""}
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <span>Tìm kiếm và chọn nghệ sĩ...</span>
+                                      )}
+                                    </div>
+                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                  </Button>
+                                </FormControl>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
+                                <Command shouldFilter={false}>
+                                  <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                                    <CommandInput
+                                      placeholder="Tìm kiếm nghệ sĩ..."
+                                      value={artistSearchQuery}
+                                      onValueChange={setArtistSearchQuery}
+                                      className="border-0 focus:ring-0"
+                                    />
+                                  </div>
+                                  <CommandEmpty className="py-6 text-center text-muted-foreground">
+                                    <div className="flex flex-col items-center gap-2">
+                                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                        <span className="text-xs">🎤</span>
+                                      </div>
+                                      <span>Không tìm thấy nghệ sĩ</span>
+                                    </div>
+                                  </CommandEmpty>
+                                  <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                                    {filteredArtists.map((artist) => {
+                                      const isSelected = value.includes(artist.id);
+                                      return (
+                                        <CommandItem
+                                          key={artist.id}
+                                          value={artist.id.toString()}
+                                          onSelect={() => {
+                                            if (isSelected) {
+                                              formField.onChange(value.filter((id) => id !== artist.id));
+                                            } else {
+                                              formField.onChange([...value, artist.id]);
+                                            }
+                                          }}
+                                          className={cn(
+                                            "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
+                                            isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
+                                          )}
+                                        >
+                                          <div className="flex items-center gap-3 flex-1">
+                                            <div
+                                              className={cn(
+                                                "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                                isSelected
+                                                  ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]"
+                                                  : "border-muted-foreground"
+                                              )}
+                                            >
+                                              {isSelected && (
+                                                <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
+                                              )}
+                                            </div>
+                                            <Avatar className="h-8 w-8">
+                                              <AvatarImage src={artist.avatar} alt={artist.name} />
+                                              <AvatarFallback className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] text-xs">
+                                                {artist.name[0]}
+                                              </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex flex-col">
+                                              <span className="font-medium">{artist.name}</span>
+                                              <span className="text-xs text-muted-foreground">
+                                                ID: {artist.id} • {artist.country || "N/A"}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          {isSelected && (
+                                            <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
+                                          )}
+                                        </CommandItem>
+                                      );
+                                    })}
+                                  </CommandGroup>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
+                            {value.length > 0 && (
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                {value.map((artistId) => {
+                                  const artist = allArtists.find((a) => a.id === artistId);
+                                  if (!artist) return null;
+                                  return (
+                                    <div
+                                      key={artistId}
+                                      className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
+                                    >
+                                      <Avatar className="h-5 w-5">
+                                        <AvatarImage src={artist.avatar} alt={artist.name} />
+                                        <AvatarFallback className="bg-[hsl(var(--admin-active-foreground))] text-[hsl(var(--admin-active))] text-xs">
+                                          {artist.name[0]}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="truncate max-w-[120px]">{artist.name}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => formField.onChange(value.filter((id) => id !== artistId))}
+                                        className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
+                                      >
+                                        <span className="text-xs">×</span>
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }}
+                    />
+                  ))}
+                </TabsContent>
+
+                <TabsContent value="genre" className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="genreIds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium flex items-center gap-2">
+                          Thể loại *
+                          {field.value?.length > 0 && (
+                            <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
+                              {field.value.length} đã chọn
+                            </span>
+                          )}
+                        </FormLabel>
+                        <Popover open={genrePopoverOpen} onOpenChange={setGenrePopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className={cn(
+                                  "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
+                                  !field.value?.length && "text-muted-foreground",
+                                  field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
+                                )}
+                              >
+                                <div className="flex items-center gap-2 flex-1 text-left">
+                                  {field.value?.length ? (
+                                    <div className="flex items-center gap-1">
+                                      <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
+                                      <span className="font-medium">
+                                        {field.value.length} thể loại đã chọn
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span>Tìm kiếm và chọn thể loại...</span>
+                                  )}
+                                </div>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
+                            <Command shouldFilter={false}>
+                              <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                                <CommandInput
+                                  placeholder="Tìm kiếm thể loại..."
+                                  value={genreSearchQuery}
+                                  onValueChange={setGenreSearchQuery}
+                                  className="border-0 focus:ring-0"
                                 />
                               </div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <Input
-                              placeholder="https://example.com/audio.mp3"
-                              {...field}
-                              onChange={(e) => {
-                                const newUrl = e.target.value;
-                                field.onChange(e);
-                                
-                                // Clear timeout cũ
-                                if (urlTimeoutRef.current) {
-                                  clearTimeout(urlTimeoutRef.current);
-                                }
-                                
-                                // Tự động lấy duration sau 1.5s khi user ngừng gõ
-                                if (newUrl && newUrl.trim() !== '' && newUrl.startsWith('http')) {
-                                  setFetchingDuration(true);
-                                  urlTimeoutRef.current = setTimeout(async () => {
-                                    try {
-                                      const duration = await getAudioDurationFromUrl(newUrl);
-                                      form.setValue("duration", duration);
-                                    } catch (error) {
-                                      console.error("Error getting duration from URL:", error);
-                                    } finally {
-                                      setFetchingDuration(false);
-                                    }
-                                  }, 1500);
-                                } else {
-                                  setFetchingDuration(false);
-                                }
-                              }}
-                              onBlur={async () => {
-                                // Clear timeout khi blur
-                                if (urlTimeoutRef.current) {
-                                  clearTimeout(urlTimeoutRef.current);
-                                }
-                                
-                                // Lấy duration ngay nếu có URL hợp lệ
-                                if (field.value && field.value.trim() !== '' && field.value.startsWith('http')) {
-                                  setFetchingDuration(true);
-                                  try {
-                                    const duration = await getAudioDurationFromUrl(field.value);
-                                    form.setValue("duration", duration);
-                                  } catch (error) {
-                                    console.error("Error getting duration from URL:", error);
-                                  } finally {
-                                    setFetchingDuration(false);
-                                  }
-                                }
-                              }}
-                              className={cn(
-                                "admin-input transition-all duration-200 pr-10",
-                                fetchingDuration && "border-primary"
-                              )}
-                            />
-                            {fetchingDuration && (
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                              </div>
-                            )}
-                            {field.value && !fetchingDuration && form.getValues("duration") && (
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                <Check className="w-4 h-4 text-green-500" />
-                              </div>
-                            )}
+                              <CommandEmpty className="py-6 text-center text-muted-foreground">
+                                <div className="flex flex-col items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                    <span className="text-xs">🔍</span>
+                                  </div>
+                                  <span>Không tìm thấy thể loại</span>
+                                </div>
+                              </CommandEmpty>
+                              <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                                {filteredGenres.map((genre) => {
+                                  const isSelected = field.value?.includes(genre.id);
+                                  return (
+                                    <CommandItem
+                                      key={genre.id}
+                                      value={genre.id.toString()}
+                                      onSelect={() => {
+                                        if (isSelected) {
+                                          field.onChange(
+                                            field.value?.filter((id: number) => id !== genre.id)
+                                          );
+                                          const newScores = new Map(genreScores);
+                                          newScores.delete(genre.id);
+                                          setGenreScores(newScores);
+                                        } else {
+                                          field.onChange([...(field.value || []), genre.id]);
+                                          const newScores = new Map(genreScores);
+                                          newScores.set(genre.id, "1.0");
+                                          setGenreScores(newScores);
+                                        }
+                                      }}
+                                      className={cn(
+                                        "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
+                                        isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <div className={cn(
+                                          "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                          isSelected 
+                                            ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
+                                            : "border-muted-foreground"
+                                        )}>
+                                          {isSelected && (
+                                            <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
+                                          )}
+                                        </div>
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">{genre.name}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            ID: {genre.id}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {isSelected && (
+                                        <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
+                                      )}
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {field.value?.length > 0 && (
+                          <div className="space-y-2 mt-3">
+                            {field.value.map((genreId: number) => {
+                              const genre = allGenres.find(g => g.id === genreId);
+                              const currentScore = genreScores.get(genreId) || "1.0";
+                              return (
+                                <div
+                                  key={genreId}
+                                  className="group flex items-center gap-3 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md"
+                                >
+                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
+                                  <span className="truncate flex-1 min-w-0">{genre?.name || `ID: ${genreId}`}</span>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      min="0"
+                                      max="1"
+                                      value={currentScore}
+                                      onChange={(e) => {
+                                        const newScores = new Map(genreScores);
+                                        newScores.set(genreId, e.target.value);
+                                        setGenreScores(newScores);
+                                      }}
+                                      className="w-20 h-8 text-xs"
+                                      placeholder="1.0"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      field.onChange(
+                                        field.value?.filter((id: number) => id !== genreId)
+                                      );
+                                      const newScores = new Map(genreScores);
+                                      newScores.delete(genreId);
+                                      setGenreScores(newScores);
+                                    }}
+                                    className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
+                                  >
+                                    <span className="text-xs">×</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
                           </div>
-                          {fetchingDuration && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                              <span>Đang lấy thông tin từ URL...</span>
-                            </div>
-                          )}
-                          {field.value && form.getValues("duration") && !fetchingDuration && (
-                            <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
-                              <Check className="w-3 h-3" />
-                              <span>Đã lấy thời lượng: {form.getValues("duration")}</span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {field.value && !uploading && !fetchingDuration && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
-                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                          <span className="truncate">Audio URL: {field.value.substring(0, 60)}{field.value.length > 60 ? '...' : ''}</span>
-                        </div>
-                      )}
-                      {hasChanged && (
-                        <Alert variant="destructive" className="py-2">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription className="text-sm">
-                            Bạn đang thay đổi Audio URL. Hãy đảm bảo URL đúng.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-                );
-              }}
-            />
-            </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
 
-            <DialogFooter className="md:col-span-2">
+                <TabsContent value="mood" className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="moodIds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium flex items-center gap-2">
+                          Mood (tùy chọn)
+                          {field.value && field.value.length > 0 && (
+                            <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
+                              {field.value.length} đã chọn
+                            </span>
+                          )}
+                        </FormLabel>
+                        <Popover open={moodPopoverOpen} onOpenChange={setMoodPopoverOpen}>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className={cn(
+                                  "w-full justify-between h-12 transition-all duration-200 hover:border-[hsl(var(--admin-active))] hover:shadow-sm",
+                                  !field.value?.length && "text-muted-foreground",
+                                  field.value?.length && "border-[hsl(var(--admin-active))] bg-[hsl(var(--admin-hover))]"
+                                )}
+                              >
+                                <div className="flex items-center gap-2 flex-1 text-left">
+                                  {field.value?.length ? (
+                                    <div className="flex items-center gap-1">
+                                      <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
+                                      <span className="font-medium">
+                                        {field.value.length} mood đã chọn
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span>Tìm kiếm và chọn mood...</span>
+                                  )}
+                                </div>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-full p-0 shadow-lg border-[hsl(var(--admin-border))]" align="start">
+                            <Command shouldFilter={false}>
+                              <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+                                <CommandInput
+                                  placeholder="Tìm kiếm mood..."
+                                  value={moodSearchQuery}
+                                  onValueChange={setMoodSearchQuery}
+                                  className="border-0 focus:ring-0"
+                                />
+                              </div>
+                              <CommandEmpty className="py-6 text-center text-muted-foreground">
+                                <div className="flex flex-col items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                    <span className="text-xs">😊</span>
+                                  </div>
+                                  <span>Không tìm thấy mood</span>
+                                </div>
+                              </CommandEmpty>
+                              <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                                {filteredMoods.map((mood) => {
+                                  const isSelected = field.value?.includes(mood.id);
+                                  return (
+                                    <CommandItem
+                                      key={mood.id}
+                                      value={mood.id.toString()}
+                                      onSelect={() => {
+                                        if (isSelected) {
+                                          field.onChange(
+                                            field.value?.filter((id: number) => id !== mood.id)
+                                          );
+                                          const newScores = new Map(moodScores);
+                                          newScores.delete(mood.id);
+                                          setMoodScores(newScores);
+                                        } else {
+                                          field.onChange([...(field.value || []), mood.id]);
+                                          const newScores = new Map(moodScores);
+                                          newScores.set(mood.id, "1.0");
+                                          setMoodScores(newScores);
+                                        }
+                                      }}
+                                      className={cn(
+                                        "flex items-center justify-between p-3 cursor-pointer transition-all duration-200",
+                                        isSelected && "bg-[hsl(var(--admin-hover))] text-[hsl(var(--admin-active-foreground))]"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <div className={cn(
+                                          "w-4 h-4 rounded border-2 flex items-center justify-center transition-all duration-200",
+                                          isSelected 
+                                            ? "bg-[hsl(var(--admin-active))] border-[hsl(var(--admin-active))]" 
+                                            : "border-muted-foreground"
+                                        )}>
+                                          {isSelected && (
+                                            <Check className="h-3 w-3 text-[hsl(var(--admin-active-foreground))]" />
+                                          )}
+                                        </div>
+                                        <div className="flex flex-col">
+                                          <span className="font-medium">{mood.name}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            ID: {mood.id}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {isSelected && (
+                                        <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full animate-pulse"></div>
+                                      )}
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {field.value && field.value.length > 0 && (
+                          <div className="space-y-2 mt-3">
+                            {field.value.map((moodId: number) => {
+                              const mood = allMoods.find(m => m.id === moodId);
+                              const currentScore = moodScores.get(moodId) || "1.0";
+                              return (
+                                <div
+                                  key={moodId}
+                                  className="group flex items-center gap-3 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md"
+                                >
+                                  <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
+                                  <span className="truncate flex-1 min-w-0">{mood?.name || `ID: ${moodId}`}</span>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      min="0"
+                                      max="1"
+                                      value={currentScore}
+                                      onChange={(e) => {
+                                        const newScores = new Map(moodScores);
+                                        newScores.set(moodId, e.target.value);
+                                        setMoodScores(newScores);
+                                      }}
+                                      className="w-20 h-8 text-xs"
+                                      placeholder="1.0"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      field.onChange(
+                                        field.value?.filter((id: number) => id !== moodId)
+                                      );
+                                      const newScores = new Map(moodScores);
+                                      newScores.delete(moodId);
+                                      setMoodScores(newScores);
+                                    }}
+                                    className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
+                                  >
+                                    <span className="text-xs">×</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+              </div>
+            </Tabs>
+
+            <DialogFooter className="mt-2">
               <Button
                 type="button"
                 variant="outline"
@@ -1119,8 +1020,8 @@ export const SongFormDialog = ({
               >
                 Hủy
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={isLoading}
                 className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 transition-all duration-200"
               >
@@ -1146,16 +1047,6 @@ export const SongFormDialog = ({
           <div className="space-y-3 py-4">
             {pendingSubmit && (
               <>
-                {pendingSubmit.audioUrl !== originalAudioUrl && (
-                  <Alert variant="destructive">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>Audio URL:</strong> Đã thay đổi
-                      <br />
-                      <span className="text-xs">Thay đổi URL audio có thể ảnh hưởng đến bài hát.</span>
-                    </AlertDescription>
-                  </Alert>
-                )}
               </>
             )}
           </div>

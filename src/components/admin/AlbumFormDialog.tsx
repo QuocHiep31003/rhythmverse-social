@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -21,17 +21,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Image, Music2, User, X, Upload } from "lucide-react";
+import { Search, Music2, User, X, Upload, ChevronsUpDown, Check } from "lucide-react";
 import { songsApi } from "@/services/api";
-import { debounce } from "lodash";
 import { uploadImage } from "@/config/cloudinary";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // === Validation Schema ===
 const albumSchema = z.object({
   name: z.string().min(1, "Album name is required"),
   artistId: z.number().min(1, "Artist is required"),
-  songIds: z.array(z.number()).optional().default([]),
+  songIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 bài hát"),
   releaseDate: z.string().min(1, "Release date is required"),
   coverUrl: z.string().optional().or(z.literal("")),
 });
@@ -46,11 +56,10 @@ interface Artist {
   avatar?: string;
 }
 
-interface Song {
+interface SongOption {
   id: number;
   name: string;
-  releaseYear: number;
-  albumId?: number | null;
+  releaseYear?: number | null;
   isInOtherAlbum?: boolean;
 }
 
@@ -62,6 +71,7 @@ interface AlbumFormDialogProps {
   isLoading?: boolean;
   mode: "create" | "edit";
   artists: Artist[];
+  existingSongs?: SongOption[];
 }
 
 export const AlbumFormDialog = ({
@@ -72,15 +82,16 @@ export const AlbumFormDialog = ({
   isLoading = false,
   mode,
   artists,
+  existingSongs = [],
 }: AlbumFormDialogProps) => {
   const [coverPreview, setCoverPreview] = useState<string>("");
   const [artistQuery, setArtistQuery] = useState("");
   const [showArtistDropdown, setShowArtistDropdown] = useState(false);
-  const [songs, setSongs] = useState<Song[]>([]);
-  const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
+  const [songs, setSongs] = useState<SongOption[]>([]);
   const [songQuery, setSongQuery] = useState("");
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [songsPopoverOpen, setSongsPopoverOpen] = useState(false);
 
   const form = useForm<AlbumFormValues>({
     resolver: zodResolver(albumSchema),
@@ -97,7 +108,6 @@ export const AlbumFormDialog = ({
   const artistId = form.watch("artistId");
   const selectedSongs = form.watch("songIds") || [];
 
-  // ✅ Reset form each time "create new" dialog opens
   useEffect(() => {
     if (open && mode === "create") {
       form.reset({
@@ -110,11 +120,9 @@ export const AlbumFormDialog = ({
       setCoverPreview("");
       setArtistQuery("");
       setSongs([]);
-      setFilteredSongs([]);
       setSongQuery("");
     }
     if (open && defaultValues) {
-      // Normalize date format for the date input
       const normalized = {
         name: defaultValues.name || "",
         artistId: Number(defaultValues.artistId) || 0,
@@ -127,7 +135,6 @@ export const AlbumFormDialog = ({
 
       form.reset(normalized);
       setCoverPreview(normalized.coverUrl || "");
-      // Pre-fill artist search box when editing
       const currentArtist = artists.find((a) => a.id === Number(normalized.artistId));
       if (currentArtist) {
         setArtistQuery(currentArtist.name);
@@ -135,7 +142,6 @@ export const AlbumFormDialog = ({
     }
   }, [open, mode, defaultValues, form, artists]);
 
-  // Keep artist query in sync if artistId changes while editing and query is empty
   useEffect(() => {
     if (!open) return;
     if (mode !== "edit") return;
@@ -148,54 +154,67 @@ export const AlbumFormDialog = ({
     }
   }, [artistId, mode, open, artistQuery, artists]);
 
-  // ✅ Load songs by artist, filter out those already in another album
-  useEffect(() => {
-    if (artistId && artistId > 0) {
-      setLoadingSongs(true);
-      songsApi
-        .getByArtist(artistId)
-        .then((res) => {
-          // FE filter logic: mark which songs already have album
-          const processed = res.map((song: any) => ({
-            id: typeof song.id === 'string' ? parseInt(song.id) : song.id,
-            name: song.name,
-            releaseYear: song.releaseYear,
-            albumId: song.albumId,
-            isInOtherAlbum:
-              !!song.albumId &&
-              song.albumId !== (defaultValues as any)?.id, // ignore current album
-          })) as Song[];
-
-          setSongs(processed);
-          setFilteredSongs(processed);
-        })
-        .finally(() => setLoadingSongs(false));
-    } else {
-      setSongs([]);
-      setFilteredSongs([]);
+  const mergeExistingSongs = useCallback((fetched: SongOption[]) => {
+    if ((!defaultValues?.songIds || defaultValues.songIds.length === 0) && existingSongs.length === 0) {
+      return fetched;
     }
-  }, [artistId, defaultValues]);
+    const map = new Map<number, SongOption>();
+    existingSongs.forEach((song) => {
+      if (!song) return;
+      map.set(Number(song.id), {
+        id: Number(song.id),
+        name: song.name,
+        releaseYear: song.releaseYear ?? null,
+        isInOtherAlbum: false,
+      });
+    });
+    fetched.forEach((song) => {
+      if (!map.has(song.id)) {
+        map.set(song.id, song);
+      }
+    });
+    return Array.from(map.values());
+  }, [existingSongs, defaultValues]);
 
-  // ✅ Debounced song search
-  const handleSongSearch = debounce((query: string) => {
-    const lower = query.toLowerCase();
-    setFilteredSongs(
-      songs.filter(
-        (s) =>
-          s.name.toLowerCase().includes(lower) ||
-          s.releaseYear.toString().includes(lower)
-      )
-    );
-  }, 200);
+  const fetchSongsWithoutAlbum = useCallback(async (query: string) => {
+    setLoadingSongs(true);
+    try {
+      const response = await songsApi.getWithoutAlbum({ page: 0, size: 500, search: query || undefined });
+      const available = (response.content || []).map((item: any) => ({
+        id: Number(item.id),
+        name: item.name,
+        releaseYear: item.releaseYear ?? null,
+        isInOtherAlbum: false,
+      })) as SongOption[];
 
-  // ✅ Select artist
+      const merged = mergeExistingSongs(available);
+      setSongs(merged);
+    } catch (error) {
+      console.error("Error loading songs without album:", error);
+    } finally {
+      setLoadingSongs(false);
+    }
+  }, [mergeExistingSongs]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchSongsWithoutAlbum("");
+  }, [open, fetchSongsWithoutAlbum]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = setTimeout(() => {
+      fetchSongsWithoutAlbum(songQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [songQuery, open, fetchSongsWithoutAlbum]);
+
   const handleArtistSelect = (artist: Artist) => {
     form.setValue("artistId", artist.id);
     setArtistQuery(artist.name);
     setShowArtistDropdown(false);
   };
 
-  // ✅ Select/Deselect song
   const handleSongToggle = (id: number) => {
     const current = form.getValues("songIds");
     form.setValue(
@@ -206,7 +225,6 @@ export const AlbumFormDialog = ({
     );
   };
 
-  // ✅ Upload image to Cloudinary
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -241,11 +259,21 @@ export const AlbumFormDialog = ({
     a.name.toLowerCase().includes(artistQuery.toLowerCase())
   );
 
+  const songLookup = useMemo(() => {
+    const map = new Map<number, SongOption>();
+    [...existingSongs, ...songs].forEach((song) => {
+      if (song) {
+        map.set(Number(song.id), song);
+      }
+    });
+    return map;
+  }, [existingSongs, songs]);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-zinc-800">
-          <DialogTitle className="text-2xl font-bold">
+          <DialogTitle className="text-2l font-bold">
             {mode === "create" ? "Tạo Album mới" : "Chỉnh sửa Album"}
           </DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -258,10 +286,7 @@ export const AlbumFormDialog = ({
             onSubmit={form.handleSubmit(handleFormSubmit)}
             className="flex flex-col sm:flex-row gap-6 px-6 py-6"
           >
-            {/* Hidden field to register coverUrl with RHF */}
             <input type="hidden" {...form.register("coverUrl")} />
-            
-            {/* === LEFT: COVER PREVIEW === */}
             <div className="flex flex-col items-center justify-start gap-4 w-full sm:w-2/5">
               <div className="relative w-40 h-40 border-2 border-dashed border-zinc-700 rounded-xl overflow-hidden flex items-center justify-center bg-zinc-900">
                 {coverPreview ? (
@@ -300,9 +325,7 @@ export const AlbumFormDialog = ({
               </p>
             </div>
 
-            {/* === RIGHT: FORM FIELDS === */}
             <div className="flex-1 space-y-4">
-              {/* Album Name */}
               <FormField
                 control={form.control}
                 name="name"
@@ -321,7 +344,6 @@ export const AlbumFormDialog = ({
                 )}
               />
 
-              {/* Artist Select */}
               <FormField
                 control={form.control}
                 name="artistId"
@@ -375,7 +397,6 @@ export const AlbumFormDialog = ({
                 )}
               />
 
-              {/* Release Date */}
               <FormField
                 control={form.control}
                 name="releaseDate"
@@ -394,95 +415,96 @@ export const AlbumFormDialog = ({
                 )}
               />
 
-              {/* Song Selection - COMPACT VERSION */}
               <FormField
                 control={form.control}
                 name="songIds"
-                render={() => (
-                  <FormItem>
-                    <FormLabel className="text-sm">
-                      Songs <span className="text-gray-500 text-xs">(optional)</span>
-                    </FormLabel>
-                    <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-3 space-y-2">
-                      {loadingSongs ? (
-                        <p className="text-center text-gray-400 text-sm py-2">
-                          Loading songs...
-                        </p>
-                      ) : songs.length === 0 ? (
-                        <p className="text-center text-gray-500 text-sm py-2">
-                          {artistId
-                            ? "No songs available for this artist."
-                            : "Select an artist first."}
-                        </p>
-                      ) : (
-                        <>
-                          <Input
-                            placeholder="Search songs..."
-                            value={songQuery}
-                            onChange={(e) => {
-                              setSongQuery(e.target.value);
-                              handleSongSearch(e.target.value);
-                            }}
-                            className="bg-zinc-950 border-zinc-700 text-sm h-8 focus:border-indigo-500 transition-colors"
-                          />
-                          
-                          {/* Compact scrollable song list - CHỈ HIỆN 2 DÒNG */}
-                          <div className="max-h-16 overflow-y-auto space-y-1 [&::-webkit-scrollbar]:w-0 [&::-webkit-scrollbar]:hidden">
-                            {filteredSongs.map((song) => {
-                              const checked = selectedSongs.includes(song.id);
-                              const disabled = song.isInOtherAlbum;
-                              return (
-                                <div
-                                  key={song.id}
-                                  onClick={() =>
-                                    !disabled && handleSongToggle(song.id)
-                                  }
-                                  className={`flex items-center gap-2 px-2 py-1 rounded border text-xs transition-all ${
-                                    disabled
-                                      ? "bg-zinc-800 border-zinc-700 opacity-50 cursor-not-allowed"
-                                      : checked
-                                      ? "bg-indigo-600 border-indigo-600 cursor-pointer hover:bg-indigo-700"
-                                      : "bg-zinc-800 border-zinc-700 hover:border-zinc-500 cursor-pointer hover:bg-zinc-700"
-                                  }`}
-                                >
-                                  <Music2 className="w-3 h-3 flex-shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-medium truncate">{song.name}</p>
-                                  </div>
-                                  <span className="text-xs text-gray-400 whitespace-nowrap">
-                                    {song.releaseYear}
-                                  </span>
-                                  {disabled && (
-                                    <span className="text-xs text-red-400 whitespace-nowrap ml-1">
-                                      (taken)
-                                    </span>
-                                  )}
-                                  {checked && !disabled && (
-                                    <div className="w-3 h-3 bg-white rounded-full flex items-center justify-center ml-1">
-                                      <div className="w-1 h-1 bg-indigo-600 rounded-full" />
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                          
-                          {/* Selected songs count */}
-                          {selectedSongs.length > 0 && (
-                            <div className="pt-2 border-t border-zinc-700">
-                              <p className="text-xs text-gray-400">
-                                Selected: {selectedSongs.length} song{selectedSongs.length !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                          )}
-                        </>
+                render={({ field }) => {
+                  const selectedDetails = (field.value || []).map((id: number) => songLookup.get(id)).filter(Boolean) as SongOption[];
+                  return (
+                    <FormItem>
+                      <FormLabel className="text-sm">
+                        Songs <span className="text-gray-500 text-xs">(bắt buộc)</span>
+                      </FormLabel>
+                      <Popover open={songsPopoverOpen} onOpenChange={setSongsPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full justify-between bg-zinc-900 border-zinc-700 hover:bg-zinc-800 text-sm"
+                          >
+                            <span>
+                              {field.value?.length
+                                ? `Đã chọn ${field.value.length} bài hát`
+                                : "Chọn bài hát"}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[320px] p-0" align="start">
+                          <Command>
+                            <CommandInput
+                              placeholder="Tìm bài hát..."
+                              value={songQuery}
+                              onValueChange={setSongQuery}
+                            />
+                            <CommandEmpty>
+                              {loadingSongs ? "Đang tải bài hát..." : "Không tìm thấy bài hát."}
+                            </CommandEmpty>
+                            <CommandList>
+                              <CommandGroup>
+                                {songs.map((song) => {
+                                  const checked = field.value?.includes(song.id);
+                                  return (
+                                    <CommandItem
+                                      key={song.id}
+                                      value={song.name}
+                                      onSelect={() => handleSongToggle(song.id)}
+                                      className="flex items-center gap-2"
+                                    >
+                                      <Checkbox
+                                        checked={checked}
+                                        onCheckedChange={() => handleSongToggle(song.id)}
+                                        className="h-4 w-4"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm truncate">{song.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {song.releaseYear ?? "Chưa rõ"}
+                                        </p>
+                                      </div>
+                                      {checked && <Check className="h-4 w-4 text-green-500" />}
+                                    </CommandItem>
+                                  );
+                                })}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      {selectedDetails.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {selectedDetails.map((song) => (
+                            <Badge key={song.id} variant="secondary" className="gap-2">
+                              {song.name}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={() => handleSongToggle(song.id)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </Badge>
+                          ))}
+                        </div>
                       )}
-                    </div>
-                  </FormItem>
-                )}
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
               />
 
-              {/* Footer */}
               <DialogFooter className="pt-4 border-t border-zinc-800 flex justify-end gap-2">
                 <Button
                   type="button"
@@ -514,3 +536,5 @@ export const AlbumFormDialog = ({
     </Dialog>
   );
 };
+
+export default AlbumFormDialog;
