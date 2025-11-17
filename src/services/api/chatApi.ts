@@ -76,30 +76,53 @@ export const chatApi = {
     return await res.json();
   },
   sharePlaylist: async (senderId: number, receiverId: number, playlistId: number) => {
+    // First try JSON body (preferred)
+    let res = await fetch(`${API_BASE_URL}/chat/share/playlist`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify({ senderId, receiverId, playlistId }),
+    });
+    if (res.ok) return (await res.json()) as ChatMessageDTO;
+    const jsonErr = await parseErrorResponse(res);
+    // Backward compatibility: try query params if server expects it
     const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), playlistId: String(playlistId) });
-    const res = await fetch(`${API_BASE_URL}/chat/share/playlist?${qs.toString()}`, {
+    res = await fetch(`${API_BASE_URL}/chat/share/playlist?${qs.toString()}`, {
       method: "POST",
       headers: buildAuthHeaders(),
     });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
     return (await res.json()) as ChatMessageDTO;
   },
   shareSong: async (senderId: number, receiverId: number, songId: number) => {
+    let res = await fetch(`${API_BASE_URL}/chat/share/song`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify({ senderId, receiverId, songId }),
+    });
+    if (res.ok) return (await res.json()) as ChatMessageDTO;
+    const jsonErr = await parseErrorResponse(res);
     const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), songId: String(songId) });
-    const res = await fetch(`${API_BASE_URL}/chat/share/song?${qs.toString()}`, {
+    res = await fetch(`${API_BASE_URL}/chat/share/song?${qs.toString()}`, {
       method: "POST",
       headers: buildAuthHeaders(),
     });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
     return (await res.json()) as ChatMessageDTO;
   },
   shareAlbum: async (senderId: number, receiverId: number, albumId: number) => {
+    let res = await fetch(`${API_BASE_URL}/chat/share/album`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify({ senderId, receiverId, albumId }),
+    });
+    if (res.ok) return (await res.json()) as ChatMessageDTO;
+    const jsonErr = await parseErrorResponse(res);
     const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), albumId: String(albumId) });
-    const res = await fetch(`${API_BASE_URL}/chat/share/album?${qs.toString()}`, {
+    res = await fetch(`${API_BASE_URL}/chat/share/album?${qs.toString()}`, {
       method: "POST",
       headers: buildAuthHeaders(),
     });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
     return (await res.json()) as ChatMessageDTO;
   },
 };

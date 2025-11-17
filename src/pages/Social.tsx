@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { toast } from "sonner";
 
-import { friendsApi, inviteLinksApi } from "@/services/api/friendsApi";
+import { friendsApi } from "@/services/api/friendsApi";
 import { authApi } from "@/services/api/authApi";
 import { API_BASE_URL } from "@/services/api/config";
 
@@ -15,7 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { Badge } from "@/components/ui/badge";
 
 import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
 
@@ -36,11 +35,21 @@ import type { CollabInviteDTO, Message, Friend, ApiFriendDTO, ApiPendingDTO } fr
 import { parseIncomingContent } from "@/utils/socialUtils";
 import { ChatArea } from "@/components/social/ChatArea";
 import { FriendsPanel } from "@/components/social/FriendsPanel";
+import { FriendRequestsList } from "@/components/social/FriendRequestsList";
+import { PublicProfileCard } from "@/components/social/PublicProfileCard";
+import { SocialInlineCard } from "@/components/social/SocialInlineCard";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 // Realtime notification DTO from /user/queue/notifications
 
 const envVars = ((import.meta as unknown) as { env?: Record<string, string | undefined> }).env || {};
+
+type SocialTab = "chat" | "friends";
+
+const normalizeSocialTab = (value?: string | null): SocialTab =>
+  (value || "").toLowerCase() === "friends" ? "friends" : "chat";
 
 
 
@@ -48,7 +57,11 @@ const Social = () => {
 
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<string>(((new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')).get('tab') || 'chat'));
+  const [activeTab, setActiveTab] = useState<SocialTab>(() => {
+    if (typeof window === 'undefined') return 'chat';
+    const search = new URLSearchParams(window.location.search || '');
+    return normalizeSocialTab(search.get('tab'));
+  });
   const [newMessage, setNewMessage] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -56,14 +69,31 @@ const Social = () => {
   
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const updateTabQuery = useCallback((tab: SocialTab, replace = false) => {
+    const baseSearch = typeof window !== 'undefined'
+      ? window.location.search
+      : searchParams.toString();
+    const next = new URLSearchParams(baseSearch);
+    if (tab === 'chat') {
+      next.delete('tab');
+    } else {
+      next.set('tab', tab);
+    }
+    setSearchParams(next, replace ? { replace: true } : undefined);
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const nextTab = normalizeSocialTab(searchParams.get('tab'));
+    setActiveTab(prev => (prev === nextTab ? prev : nextTab));
+  }, [searchParams]);
 
   const [friends, setFriends] = useState<Friend[]>([]);
 
   const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
 
-  const [searchParams] = useSearchParams();
-
-  const inviteCode = (searchParams.get('inviteCode') || '').trim();
+  // Legacy invite link flow removed
 
 
 
@@ -98,45 +128,11 @@ const Social = () => {
     return Number.isFinite(n) ? n : undefined;
   }, [localStorage.getItem('userId')]);
 
-  // Chỉ lưu invite URL để quay lại sau đăng nhập khi người dùng chưa đăng nhập
-  useEffect(() => {
-    if (inviteCode && !hasToken) {
-      try {
-        localStorage.setItem('pendingInviteUrl', window.location.pathname + window.location.search);
-      } catch { void 0; }
-    }
-  }, [inviteCode, hasToken]);
+  // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° lÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°u invite URL ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ quay lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i sau ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p khi ngÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi dÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ng chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p
+  // Legacy invite persistence removed
 
-  // Load invite preview when inviteCode is present
-  useEffect(() => {
-    if (inviteCode && meId) {
-      setLoadingInvitePreview(true);
-      (async () => {
-        try {
-          const preview = await inviteLinksApi.preview(inviteCode);
-          setInvitePreview({
-            inviterId: preview.inviterId,
-            inviterName: preview.inviterName || 'Ai đó',
-            inviterAvatar: preview.inviterAvatar || null,
-            message: preview.message || `${preview.inviterName} mời bạn kết bạn`,
-          });
-        } catch (e: any) {
-          console.error('Failed to load invite preview:', e);
-          setInvitePreview(null);
-        } finally {
-          setLoadingInvitePreview(false);
-        }
-      })();
-    } else if (inviteCode) {
-      // Chưa đăng nhập, lưu URL để sau khi login quay lại
-      try {
-        localStorage.setItem('pendingInviteUrl', window.location.pathname + window.location.search);
-      } catch { void 0; }
-      setInvitePreview(null);
-    } else {
-      setInvitePreview(null);
-    }
-  }, [inviteCode, meId]);
+  // Legacy invite preview flow removed
+  // Legacy invite preview removed
 
 
 
@@ -153,6 +149,13 @@ const Social = () => {
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
 
   const [shareUrl, setShareUrl] = useState<string>("");
+  const [profileUsername, setProfileUsername] = useState<string>("");
+  const [profileUserId, setProfileUserId] = useState<number | null>(null);
+  // Inline public profile viewing via /social?u=USERNAME
+  const [inlineProfileLoading, setInlineProfileLoading] = useState(false);
+  const [inlineProfile, setInlineProfile] = useState<{ id?: number; username?: string; name?: string | null; avatar?: string | null; bio?: string | null } | null>(null);
+  const [inlineProfileNotFound, setInlineProfileNotFound] = useState(false);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   const [collabInvites, setCollabInvites] = useState<CollabInviteDTO[]>([]);
 
@@ -161,17 +164,12 @@ const Social = () => {
   const [expandedInviteId, setExpandedInviteId] = useState<number | null>(null);
 
   // Invite link preview state
-  const [invitePreview, setInvitePreview] = useState<{
-    inviterId?: number;
-    inviterName: string;
-    inviterAvatar?: string | null;
-    message: string;
-  } | null>(null);
-  const [loadingInvitePreview, setLoadingInvitePreview] = useState(false);
+  // Legacy states removed
 
-  // Đếm số tin nhắn chưa đọc và số thông báo chưa đọc
+  // ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿m sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ tin nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯n chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng bÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+  const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>({});
 
 
 
@@ -215,6 +213,25 @@ const Social = () => {
         setProfileName((me?.name || me?.username || '').trim());
         setProfileEmail((me?.email || '').trim());
         setProfileAvatar(toAbsoluteUrl(me?.avatar || null));
+        if (typeof me?.id === 'number') {
+          setProfileUserId(me.id);
+        } else {
+          const idRaw = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+          const idNum = idRaw ? Number(idRaw) : NaN;
+          setProfileUserId(Number.isFinite(idNum) ? idNum : null);
+        }
+        const uname = (me?.username || (me?.email ? me.email.split('@')[0] : '') || '').trim();
+        setProfileUsername(uname);
+        try {
+          const origin = typeof window !== 'undefined' ? window.location.origin : '';
+          // Prefer sharing by numeric userId for robustness
+          if (origin && (typeof me?.id === 'number' || profileUserId)) {
+            const uid = typeof me?.id === 'number' ? me.id : profileUserId;
+            setShareUrl(`${origin}/social?u=${encodeURIComponent(String(uid))}`);
+          } else if (origin && uname) {
+            setShareUrl(`${origin}/social?u=${encodeURIComponent(uname)}`);
+          }
+        } catch { /* noop */ }
       } catch (e) {
         // Non-fatal; keep fallbacks
         try { console.warn('[Social] Failed to load profile', e); } catch { /* noop */ }
@@ -225,34 +242,8 @@ const Social = () => {
 
 
 
-  // Safety: auto-clear inviteCode from URL if it's invalid or you're already friends
-  useEffect(() => {
-    if (!inviteCode || !meId || !invitePreview) return;
-
-    const inviterId = invitePreview.inviterId;
-    const isSelf = inviterId && Number(inviterId) === Number(meId);
-    const isFriend = inviterId
-      ? friends.some(f => Number(f.id) === Number(inviterId))
-      : false;
-    const hasPending = inviterId
-      ? pending.some(p =>
-          (Number(p.senderId) === Number(meId) && Number(p.receiverId) === Number(inviterId)) ||
-          (Number(p.senderId) === Number(inviterId) && Number(p.receiverId) === Number(meId))
-        )
-      : false;
-
-    if (isSelf || isFriend || hasPending) {
-      try {
-        const p = new URLSearchParams(searchParams);
-        p.delete('inviteCode');
-        const newUrl = p.toString()
-          ? `${window.location.pathname}?${p.toString()}`
-          : window.location.pathname;
-        navigate(newUrl, { replace: true });
-      } catch { /* ignore */ }
-      setInvitePreview(null);
-    }
-  }, [inviteCode, invitePreview, meId, friends, pending, navigate, searchParams]);
+  // Legacy auto-clear for inviteCode removed
+  // Legacy auto-clear removed
 
   // Define load functions BEFORE they are used in useEffect
 
@@ -312,7 +303,7 @@ const Social = () => {
 
     if (!Number.isFinite(idNum)) return;
 
-    // Chỉ gọi API khi có token
+    // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi API khi cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ token
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (!token) {
       setPending([]);
@@ -341,11 +332,33 @@ const Social = () => {
 
   };
 
+  const handleAcceptFriendReq = async (id: number) => {
+    try {
+      await friendsApi.accept(id);
+      await Promise.all([loadPending(), loadFriends()]);
+      toast.success('ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥p nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­n lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || 'KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥p nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­n ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
+      toast.error(msg);
+    }
+  };
+
+  const handleRejectFriendReq = async (id: number) => {
+    try {
+      await friendsApi.reject(id);
+      await loadPending();
+      toast.success('ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œi lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || 'KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œi ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
+      toast.error(msg);
+    }
+  };
 
 
-  const loadCollabInvites = async () => {
 
-    // Chỉ gọi API khi có token (tránh 401 spam khi chưa đăng nhập)
+  const loadCollabInvites = useCallback(async () => {
+
+    // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi API khi cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ token (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh 401 spam khi chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p)
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (!token) {
       setCollabInvites([]);
@@ -360,8 +373,8 @@ const Social = () => {
 
       setCollabInvites(Array.isArray(list) ? list : []);
 
-      // Đánh dấu đã xem khi load invites (giả định rằng khi vào tab friends thì đã xem)
-      // Có thể lưu vào localStorage để track invites đã xem
+      // ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥u ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ xem khi load invites (giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¹nh rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ng khi vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â o tab friends thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ xem)
+      // CÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ lÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°u vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â o localStorage ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ track invites ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ xem
       if (Array.isArray(list) && list.length > 0 && meId) {
         try {
           const viewedInvitesKey = `viewedInvites_${meId}`;
@@ -378,17 +391,24 @@ const Social = () => {
 
     finally { setLoadingCollabInvites(false); }
 
-  };
+  }, [meId]);
 
 
 
-  // Load dữ liệu chính ngay khi đã đăng nhập và có userId
+  // Load dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯ liÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡u chÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nh ngay khi ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ userId
   useEffect(() => {
     if (!hasToken || !meId) return;
     void loadFriends();
     void loadPending();
-    void loadCollabInvites();
-  }, [hasToken, meId]);
+    if (activeTab !== 'friends') {
+      void loadCollabInvites();
+    }
+  }, [hasToken, meId, activeTab, loadCollabInvites]);
+
+  useEffect(() => {
+    if (activeTab !== 'friends') return;
+    loadCollabInvites().catch(() => { void 0; });
+  }, [activeTab, loadCollabInvites]);
 
 
 
@@ -408,7 +428,7 @@ const Social = () => {
 
   // Firebase Realtime handler
 
-  // Memoize friendIds để tránh tạo array mới mỗi lần render (tránh trigger presence watch không cần thiết)
+  // Memoize friendIds ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o array mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âi lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§n render (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh trigger presence watch khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§n thiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿t)
 
   const friendsIdsString = useMemo(() => JSON.stringify(friends.map(f => f.id).sort()), [friends.map(f => f.id).join(',')]);
 
@@ -432,7 +452,7 @@ const Social = () => {
 
             const newOnlineStatus = !!p.online;
 
-            console.log('[Social] ✅ MATCH! Updating friend', friendId, 'from', f.isOnline, 'to', newOnlineStatus);
+            console.log('[Social] ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ MATCH! Updating friend', friendId, 'from', f.isOnline, 'to', newOnlineStatus);
 
             return { ...f, isOnline: newOnlineStatus };
 
@@ -451,7 +471,7 @@ const Social = () => {
     },
 
     onNotification: (n: FBNotificationDTO) => {
-      // Cập nhật số thông báo chưa đọc
+      // CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng bÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc
       if (!n.read) {
         setUnreadNotificationsCount(prev => prev + 1);
       }
@@ -459,9 +479,17 @@ const Social = () => {
       try {
 
         if (n?.type === 'MESSAGE') {
-          // Tăng số tin nhắn chưa đọc
+          // TÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ tin nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯n chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc theo tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«ng bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡n
           if (!n.read) {
-            setUnreadMessagesCount(prev => prev + 1);
+            const sid = n.senderId ? String(n.senderId) : undefined;
+            if (sid) {
+              setUnreadByFriend(prev => {
+                const curr = prev[sid] || 0;
+                // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œang mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ chat vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi user nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â y, khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ng dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“n
+                if (selectedChat && String(selectedChat) === sid) return { ...prev, [sid]: 0 };
+                return { ...prev, [sid]: curr + 1 };
+              });
+            }
           }
           toast(`${n.senderName || 'Someone'}: ${n.body || ''}`);
 
@@ -481,7 +509,7 @@ const Social = () => {
               const m = n.metadata as { playlistId?: number; songId?: number; albumId?: number } | undefined;
 
             
-            // Load message từ chat history để lấy sharedContent (async, không await)
+            // Load message tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« chat history ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥y sharedContent (async, khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng await)
             void (async () => {
               try {
                 const history = await chatApi.getHistory(meId, sid);
@@ -510,7 +538,7 @@ const Social = () => {
                 }
               } catch { /* fallback to creating message from metadata */ }
               
-              // Fallback: tạo message với type đúng từ metadata
+              // Fallback: tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o message vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi type ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºng tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« metadata
               let msgType: "text" | "song" | "playlist" | "album" = 'text';
               if (m?.playlistId) msgType = 'playlist';
               else if (m?.albumId) msgType = 'album';
@@ -548,8 +576,6 @@ const Social = () => {
 
           loadCollabInvites().catch(() => { void 0; });
 
-          // Hiển thị trong Social → chuyển sang tab Friends
-          try { setActiveTab('friends'); } catch { void 0; }
         } else if (n?.type === 'FRIEND_REQUEST') {
 
           toast(`${n.senderName || 'Someone'} sent you a friend request`);
@@ -575,12 +601,19 @@ const Social = () => {
 
 
   // Watch chat messages for selected friend
-  // Reset unread count khi chọn chat
+  // Reset unread count khi chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Ân chat
   useEffect(() => {
     if (selectedChat) {
-      setUnreadMessagesCount(0);
+      // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° clear unread cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§a cuÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢c chat ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œang mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸
+      setUnreadByFriend(prev => ({ ...prev, [selectedChat]: 0 }));
     }
   }, [selectedChat]);
+
+  // Recompute tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ng unread tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« per-friend map
+  useEffect(() => {
+    const total = Object.values(unreadByFriend).reduce((a, b) => a + (b || 0), 0);
+    setUnreadMessagesCount(total);
+  }, [unreadByFriend]);
 
   useEffect(() => {
 
@@ -618,7 +651,7 @@ const Social = () => {
 
       setChatByFriend(prev => {
 
-        // Merge với messages hiện tại để tránh mất optimistic updates
+        // Merge vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi messages hiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡n tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥t optimistic updates
 
         const existing = prev[selectedChat] || [];
 
@@ -627,9 +660,9 @@ const Social = () => {
         const newParsed = parsed.filter(m => !existingIds.has(m.id));
 
         
-        // Tìm và thay thế optimistic messages có cùng content
+        // TÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ optimistic messages cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ng content
         const replaced = existing.map(m => {
-          // Nếu là optimistic message (temp ID), tìm message thật tương ứng
+          // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  optimistic message (temp ID), tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t tÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ng ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©ng
           if (m.id.startsWith('temp-')) {
             const matching = parsed.find(p => 
               p.sender === m.sender &&
@@ -694,7 +727,7 @@ const Social = () => {
 
 
 
-  // Initial presence fetch for all friends (fallback nếu Firebase chưa ready)
+  // Initial presence fetch for all friends (fallback nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u Firebase chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ready)
   useEffect(() => {
 
     (async () => {
@@ -713,7 +746,7 @@ const Social = () => {
 
         setFriends(prev => prev.map(f => ({ ...f, isOnline: !!map[String(f.id)] })));
 
-        // Firebase realtime sẽ override sau đó
+        // Firebase realtime sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ override sau ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³
       } catch { void 0; }
 
     })();
@@ -910,7 +943,7 @@ const Social = () => {
 
     
 
-    // Optimistic update - hiển thị message ngay
+    // Optimistic update - hiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢n thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¹ message ngay
 
     const now = Date.now();
     const optimisticMsg: Message = { 
@@ -1009,7 +1042,7 @@ const Social = () => {
     try {
 
       const result = await sendMessage(meId, receiverId, content);
-      // Optimistic update với ID tạm, sẽ được thay thế khi Firebase broadcast message thật
+      // Optimistic update vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi ID tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡m, sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ khi Firebase broadcast message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t
       const now = Date.now();
       const tempId = `temp-share-${now}`;
       const optimisticMsg: Message = { 
@@ -1023,7 +1056,7 @@ const Social = () => {
       };
       setChatByFriend(prev => {
         const existing = prev[selectedChat] || [];
-        // Check xem đã có message này chưa (tránh duplicate)
+        // Check xem ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ message nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â y chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh duplicate)
         const alreadyExists = existing.some(m => 
           m.type === 'song' && 
           m.songData?.id === currentSong.id && 
@@ -1034,7 +1067,7 @@ const Social = () => {
         return { ...prev, [selectedChat]: [...existing, optimisticMsg] };
       });
       
-      // Nếu sendMessage trả về message thật, thay thế optimistic message
+      // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u sendMessage trÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t, thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ optimistic message
       if (result && typeof result === "object" && "id" in result) {
         const normalizedResult = {
           ...result,
@@ -1046,7 +1079,7 @@ const Social = () => {
           [selectedChat]: prev[selectedChat]?.map(m => 
             m.id === tempId ? parsed : m
           ).filter((m, idx, arr) => {
-            // Remove duplicate nếu có
+            // Remove duplicate nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³
             return idx === arr.findIndex(ms => ms.id === m.id);
           }) || []
         }));
@@ -1105,7 +1138,7 @@ const Social = () => {
 
   // Poll friends list so new friendship reflects without manual reload
 
-  // Chỉ update nếu friends list thực sự thay đổi (tránh trigger presence watch không cần thiết)
+  // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° update nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u friends list thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±c sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â± thay ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢i (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh trigger presence watch khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§n thiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿t)
 
   useEffect(() => {
 
@@ -1139,7 +1172,7 @@ const Social = () => {
 
         
 
-        // Chỉ update nếu friends list thực sự thay đổi (so sánh IDs)
+        // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° update nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u friends list thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±c sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â± thay ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢i (so sÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh IDs)
 
         setFriends(prev => {
 
@@ -1149,11 +1182,11 @@ const Social = () => {
 
           
 
-          // Nếu IDs giống nhau, giữ lại isOnline từ prev (tránh reset presence)
+          // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u IDs giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œng nhau, giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯ lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i isOnline tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« prev (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh reset presence)
 
           if (prevIds === newIds) {
 
-            // Map lại để giữ isOnline từ prev
+            // Map lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯ isOnline tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« prev
 
             const updated = mapped.map(newF => {
 
@@ -1169,7 +1202,7 @@ const Social = () => {
 
           
 
-          // Nếu IDs khác nhau (thêm/bớt friends), update bình thường
+          // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u IDs khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡c nhau (thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âªm/bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºt friends), update bÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬nh thÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âng
 
           return mapped;
 
@@ -1179,7 +1212,7 @@ const Social = () => {
 
     };
 
-    // Tăng interval lên 30 giây để giảm polling
+    // TÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng interval lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âªn 30 giÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢y ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£m polling
 
     const iv = setInterval(tick, 30000);
 
@@ -1192,184 +1225,119 @@ const Social = () => {
 
 
   const handleCreateInviteLink = async () => {
-
     try {
-
-      const me = localStorage.getItem('userId');
-
-      if (!me) {
-
-        toast.error('Please login to create invite link');
-
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token) {
+        toast.error('Please login to copy your profile link');
         navigate('/login');
-
         return;
-
       }
-
-      const result = await inviteLinksApi.create(Number(me));
-
-      const linkUrl = result?.shareUrl || result?.inviteUrl;
-
-      if (linkUrl) {
-
-        setShareUrl(linkUrl);
-
-        try { await navigator.clipboard.writeText(linkUrl); } catch { void 0; }
-
-        toast.success('Invite link created and copied!', { description: linkUrl });
-
-      } else {
-
-        toast.success('Invite link created');
-
-      }
-
-    } catch (e: unknown) {
-
-      const msg = e instanceof Error ? e.message : String(e);
-
-      toast.error(msg || 'Failed to create invite link');
-
-      console.error(e);
-
-    }
-
-  };
-
-
-
-  const handleAcceptInviteFromQuery = async () => {
-
-    if (!inviteCode) return;
-
-    try {
-
-      const prevCount = friends.length;
-
-      const res = await inviteLinksApi.accept(inviteCode);
-
-      // After accepting, try to refresh friends immediately
-
-      if (meId) {
-
-        try {
-
-          const apiFriends: ApiFriendDTO[] = await friendsApi.getFriends(meId);
-
-          const mapped: Friend[] = apiFriends.map((f) => ({
-
-            id: String(f.friendId || f.id),
-
-            name: f.friendName || `User ${f.friendId}`,
-
-            username: f.friendEmail ? `@${(f.friendEmail.split('@')[0] || '').toLowerCase()}` : `@user${f.friendId}`,
-
-            avatar: toAbsoluteUrl(f.friendAvatar) || undefined,
-
-            isOnline: false,
-
-            streak: 0,
-
-          }));
-
-          setFriends(mapped);
-
-          if (mapped.length > 0) setSelectedChat((prev) => prev ?? mapped[0].id);
-
-          const becameFriends = mapped.length > prevCount;
-
-          const msg = typeof res === 'string' ? res : (res?.message || (becameFriends ? 'You are now friends!' : 'Request sent to inviter'));
-
-          toast.success(msg);
-
-        } catch {
-
-          const msg = typeof res === 'string' ? res : (res?.message || 'Request sent to inviter');
-
-          toast.success(msg);
-
+      let uid = profileUserId;
+      let uname = profileUsername;
+      if (!uid) {
+        const idRaw = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+        const idNum = idRaw ? Number(idRaw) : NaN;
+        if (Number.isFinite(idNum)) uid = idNum; else {
+          try {
+            const me = await authApi.me();
+            if (typeof me?.id === 'number') uid = me.id;
+            uname = (me?.username || (me?.email ? me.email.split('@')[0] : '') || '').trim();
+            setProfileUsername(uname);
+            setProfileUserId(typeof me?.id === 'number' ? me.id : null);
+          } catch { /* ignore */ }
         }
-
-      } else {
-
-        const msg = typeof res === 'string' ? res : (res?.message || 'Request sent to inviter');
-
-        toast.success(msg);
-
       }
-
-      // Xóa inviteCode khỏi URL sau khi accept
-      const newSearchParams = new URLSearchParams(searchParams);
-      newSearchParams.delete('inviteCode');
-      const newUrl = newSearchParams.toString() 
-        ? `${window.location.pathname}?${newSearchParams.toString()}`
-        : window.location.pathname;
-      navigate(newUrl, { replace: true });
-      setInvitePreview(null);
-
-      // Reload friends list
-      await loadFriends();
-
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const linkUrl = (uid != null && origin)
+        ? `${origin}/social?u=${encodeURIComponent(String(uid))}`
+        : (uname && origin ? `${origin}/social?u=${encodeURIComponent(uname)}` : '');
+      if (linkUrl) {
+        setShareUrl(linkUrl);
+        try { await navigator.clipboard.writeText(linkUrl); } catch { /* noop */ }
+        toast.success('Profile link copied!', { description: linkUrl });
+      } else {
+        toast.error('Could not build profile link');
+      }
     } catch (e: unknown) {
-
-      const raw = e instanceof Error ? e.message : String(e || 'Failed to accept invite');
-
-      if (/401|unauthorized/i.test(raw)) {
-
-        toast.error('Please login to accept the invite');
-
-        try {
-
-          const ret = window.location.pathname + window.location.search;
-
-          localStorage.setItem('pendingInviteUrl', ret);
-
-          navigate(`/login?redirect=${encodeURIComponent(ret)}`);
-
-        } catch { void 0; }
-
-        return;
-
-      }
-
-      // Surface clearer messages for common domain errors
-
-      if (/already\s*friend/i.test(raw)) {
-
-        toast.error('Already friends');
-
-      } else if (/already\s*sent|duplicate/i.test(raw)) {
-
-        toast.error('Friend request already sent');
-
-      } else if (/expired|invalid\s*invite/i.test(raw)) {
-
-        toast.error('Invalid or expired invite link');
-
-      } else {
-
-        toast.error(raw);
-
-      }
-
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg || 'Failed to copy profile link');
     }
+  };
 
+  // Panel routing by query: panel=profile|requests|friends and u=username
+  const panelParam = (searchParams.get('panel') || '').trim();
+  const usernameParam = (searchParams.get('u') || '').trim();
+  const currentPanel = panelParam || (usernameParam ? 'profile' : 'friends');
+
+  useEffect(() => {
+    if (currentPanel === 'profile' && usernameParam) {
+      setInlineProfileLoading(true);
+      setInlineProfile(null);
+      setInlineProfileNotFound(false);
+      (async () => {
+        try {
+          const isNumericId = /^\d+$/.test(usernameParam);
+          const url = isNumericId
+            ? `${API_BASE_URL}/user/id/${usernameParam}/public`
+            : `${API_BASE_URL}/user/${encodeURIComponent(usernameParam)}/public`;
+          const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+          if (res.status === 404) {
+            setInlineProfileNotFound(true);
+            setInlineProfile(null);
+            return;
+          }
+          if (!res.ok) {
+            throw new Error(await res.text());
+          }
+          const data = await res.json();
+          setInlineProfile(data || null);
+        } catch {
+          setInlineProfile(null);
+          setInlineProfileNotFound(true);
+        } finally {
+          setInlineProfileLoading(false);
+        }
+      })();
+    } else {
+      setInlineProfile(null);
+      setInlineProfileNotFound(false);
+      setInlineProfileLoading(false);
+    }
+  }, [currentPanel, usernameParam]);
+
+  useEffect(() => {
+    if (currentPanel !== 'profile' || !usernameParam) {
+      setProfileDialogOpen(false);
+      return;
+    }
+    if (inlineProfileLoading) {
+      setProfileDialogOpen(true);
+      return;
+    }
+    if (inlineProfile || inlineProfileNotFound) {
+      setProfileDialogOpen(true);
+    }
+  }, [currentPanel, usernameParam, inlineProfile, inlineProfileNotFound, inlineProfileLoading]);
+
+  const closeProfileModal = () => {
+    setProfileDialogOpen(false);
+    setInlineProfile(null);
+    setInlineProfileNotFound(false);
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete('u');
+    if (next.get('panel') === 'profile') {
+      next.set('panel', 'friends');
+    }
+    setSearchParams(next, { replace: true });
   };
 
 
 
-  const handleDeclineInviteFromQuery = () => {
-    // Chỉ xóa inviteCode khỏi URL, không xóa thông báo
-    const newSearchParams = new URLSearchParams(searchParams);
-    newSearchParams.delete('inviteCode');
-    const newUrl = newSearchParams.toString() 
-      ? `${window.location.pathname}?${newSearchParams.toString()}`
-      : window.location.pathname;
-    navigate(newUrl, { replace: true });
-    setInvitePreview(null);
-    toast('Đã từ chối lời mời');
-  };
+  const handleAcceptInviteFromQuery = async () => { /* Legacy flow removed */ };
+
+
+
+  const handleDeclineInviteFromQuery = () => { /* Legacy flow removed */ };
 
 
 
@@ -1401,105 +1369,85 @@ const Social = () => {
 
         <div className="max-w-6xl mx-auto">
 
-          {inviteCode && (
-            <div className="mb-6">
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    Lời mời kết bạn
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {loadingInvitePreview ? (
-                    <p className="text-sm text-muted-foreground">Đang tải thông tin...</p>
-                  ) : invitePreview ? (
-                    <>
-                      <div className="flex items-center gap-3">
-                        {invitePreview.inviterAvatar ? (
-                          <img 
-                            src={invitePreview.inviterAvatar} 
-                            alt={invitePreview.inviterName}
-                            className="w-12 h-12 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center text-white font-semibold">
-                            {invitePreview.inviterName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold text-foreground">
-                            {invitePreview.message}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Chấp nhận để kết bạn trực tiếp với {invitePreview.inviterName || 'người mời'}. Lời mời sẽ giữ nguyên cho đến khi bạn quyết định.
-                          </p>
-                        </div>
+          {/* Legacy invite UI removed */}
+
+
+
+          {/* Inline profile panel via query */}
+          {currentPanel === 'profile' && usernameParam ? (
+            <Dialog
+              open={profileDialogOpen}
+              onOpenChange={(open) => {
+                if (!open) {
+                  closeProfileModal();
+                } else {
+                  setProfileDialogOpen(true);
+                }
+              }}
+            >
+              <DialogContent className="max-w-lg border border-white/10 bg-gradient-to-b from-background/95 to-background/80 p-0 backdrop-blur">
+              {inlineProfileLoading ? (
+                  <div className="p-6 space-y-5">
+                    <div className="flex items-center gap-4">
+                      <Skeleton className="h-16 w-16 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-3 w-3/4" />
                       </div>
-                  <div className="flex gap-2">
-                        <Button 
-                          variant="hero" 
-                          onClick={handleAcceptInviteFromQuery}
-                          className="flex-1"
-                        >
-                          Chấp nhận
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={handleDeclineInviteFromQuery}
-                          className="flex-1"
-                        >
-                          Từ chối
-                        </Button>
+                    </div>
+                    <Skeleton className="h-20 w-full rounded-xl" />
                   </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm text-muted-foreground">
-                        Bạn đã nhận được lời mời kết bạn. Chấp nhận để kết nối ngay với người mời, hoặc từ chối nếu chưa sẵn sàng.
-                      </p>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="hero" 
-                          onClick={handleAcceptInviteFromQuery}
-                          className="flex-1"
-                        >
-                          Chấp nhận
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={handleDeclineInviteFromQuery}
-                          className="flex-1"
-                        >
-                          Từ chối
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
+              ) : inlineProfileNotFound ? (
+                  <div className="p-6">
+                    <DialogHeader className="text-center">
+                      <DialogTitle>KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥y profile</DialogTitle>
+                      <DialogDescription>
+                        KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥y profile / Vui lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²ng kiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢m tra lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i username hoÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·c ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âng dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«n.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-6 flex justify-center">
+                      <Button variant="outline" onClick={closeProfileModal}>
+                        Quay lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i
+                      </Button>
+                    </div>
+                  </div>
+              ) : inlineProfile ? (
+                <PublicProfileCard profile={inlineProfile} />
+              ) : null}
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {/* Requests-only panel via query */}
+          {currentPanel === 'requests' && (
+            <div className="mb-6">
+              <FriendRequestsList
+                items={pending}
+                loading={loadingPending}
+                onAccept={handleAcceptFriendReq}
+                onReject={handleRejectFriendReq}
+              />
             </div>
           )}
 
-
-
-          <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (tab === 'friends') loadCollabInvites(); }} className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={(tab) => {
+              const nextTab: SocialTab = tab === 'friends' ? 'friends' : 'chat';
+              setActiveTab(nextTab);
+              updateTabQuery(nextTab, true);
+            }}
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-2 mb-6">
 
-              <TabsTrigger value="chat" className="gap-2 relative">
-                <MessageCircle className="w-4 h-4" />
-                Chat
-                {unreadMessagesCount > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px]"
-                  >
-                    {unreadMessagesCount > 99 ? '99+' : unreadMessagesCount}
-                  </Badge>
-                )}
-              </TabsTrigger>
+            <TabsTrigger value="chat" className="gap-2 relative">
+              <MessageCircle className="w-4 h-4" />
+              Chat
+                {/* Per-user unread shown in list; hide tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ng here */}
+            </TabsTrigger>
 
-              <TabsTrigger value="friends" className="gap-2">
+            <TabsTrigger value="friends" className="gap-2">
 
                 <Users className="w-4 h-4" />
 
@@ -1517,6 +1465,7 @@ const Social = () => {
                 selectedChat={selectedChat}
                 friends={friends}
                 messages={chatByFriend}
+                unreadByFriend={unreadByFriend}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 onFriendSelect={setSelectedChat}
@@ -1534,7 +1483,12 @@ const Social = () => {
 
 
             <TabsContent value="friends">
-
+              <FriendRequestsList
+                items={pending}
+                loading={loadingPending}
+                onAccept={handleAcceptFriendReq}
+                onReject={handleRejectFriendReq}
+              />
               <FriendsPanel
                 friends={friends}
                 collabInvites={collabInvites}

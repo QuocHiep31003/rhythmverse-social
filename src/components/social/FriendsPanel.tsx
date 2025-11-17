@@ -118,7 +118,7 @@ export const FriendsPanel = ({
                       </a>
                     ) : (
                       <>
-                        Share: Click "Share Profile" to generate an invite link
+                        Share: Click "Share Profile" to copy your profile link
                       </>
                     )}
                 </p>

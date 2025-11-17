@@ -10,8 +10,7 @@ import {
   TrendingUp,
   Trophy,
   Library,
-  Mic,
-  Clock
+  Mic
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,21 +26,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useEffect, useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-// Mock notification data - in real app, this would come from context/state
-const getNotificationCount = (url: string) => {
-  if (url === "/social") {
-    // 3 friend requests + 2 unread messages = 5 total
-    return 5;
-  }
-  return 0;
-};
-
-const getTotalNotifications = () => {
-  return 5; // Total unread notifications across all sections
-};
+// Removed Friend Requests polling; requests are handled within Social panel
 
 const menuItems = [
   { title: "Home", url: "/", icon: Home },
@@ -62,6 +47,9 @@ export function AppSidebar() {
   const isActive = (path: string) => currentPath === path;
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
+
+  // No per-item notifications in sidebar; Social panel handles requests
+  const getNotificationCount = (_url: string) => 0;
 
   // Không hiển thị section user info nào ở sidebar nữa, chỉ giữ lại SidebarMenu/menuItems nav
 
