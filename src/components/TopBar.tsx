@@ -18,8 +18,9 @@ import {
   Upload,
   ChevronDown,
   Music,
-  Crown
+  Crown,
 } from "lucide-react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,22 +28,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 import { Badge } from "@/components/ui/badge";
-import { Link } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 
 import { arcApi, authApi } from "@/services/api";
-
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
-import { watchNotifications, NotificationDTO } from "@/services/firebase/notifications";
-<<<<<<< HEAD
-import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
-=======
+import {
+  watchNotifications,
+  NotificationDTO,
+} from "@/services/firebase/notifications";
+
+import {
+  premiumSubscriptionApi,
+  PremiumSubscriptionDTO,
+} from "@/services/api/premiumSubscriptionApi";
+
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
->>>>>>> 4edd66b5638466e2b23527ec37b9e08131dc8d1b
-
-
 
 const TopBar = () => {
   const [searchText, setSearchText] = useState("");
@@ -52,26 +55,30 @@ const TopBar = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
+
   const [inviteCount, setInviteCount] = useState<number>(0);
-  // Split counters: messages vs. alerts (non-MESSAGE)
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const [unreadAlertCount, setUnreadAlertCount] = useState<number>(0);
+
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
-<<<<<<< HEAD
+
   const [profileIsPremium, setProfileIsPremium] = useState<boolean>(false);
   const [profilePlanLabel, setProfilePlanLabel] = useState<string>("");
-=======
+
   const [notifOpen, setNotifOpen] = useState(false);
->>>>>>> 4edd66b5638466e2b23527ec37b9e08131dc8d1b
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return typeof window !== "undefined" ? !!localStorage.getItem("token") : false;
+      return typeof window !== "undefined"
+        ? !!localStorage.getItem("token")
+        : false;
     } catch {
       return false;
     }
   });
+
   const navigate = useNavigate();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -84,7 +91,7 @@ const TopBar = () => {
     if (trimmed) {
       navigate(`/search?query=${encodeURIComponent(trimmed)}`);
     }
-  }
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -108,14 +115,13 @@ const TopBar = () => {
       };
 
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/wav' });
+        const blob = new Blob(chunksRef.current, { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
         setAudioUrl(url);
         setError("");
 
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
+        stream.getTracks().forEach((track) => track.stop());
       };
 
       mediaRecorder.start();
@@ -138,7 +144,6 @@ const TopBar = () => {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
-
       const audio = new Audio(audioUrl);
       audioRef.current = audio;
 
@@ -166,13 +171,10 @@ const TopBar = () => {
 
     try {
       const result = await arcApi.recognizeMusic(audioBlob);
-      console.log("ACR API Response:", result);
-
-      // Navigate to music recognition result page
       navigate("/music-recognition-result", {
         state: {
-          result: result,
-          audioUrl: audioUrl
+          result,
+          audioUrl,
         },
       });
     } catch (err: unknown) {
@@ -195,13 +197,17 @@ const TopBar = () => {
       fileInputRef.current.value = "";
     }
   };
+
+  /** ================= LOAD USER PROFILE + PREMIUM ================= **/
   useEffect(() => {
     const loadMe = async () => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (!token) {
         setIsAuthenticated(false);
         return;
       }
+
       try {
         const me = await authApi.me();
         if (me) {
@@ -210,196 +216,153 @@ const TopBar = () => {
           setProfileEmail(me?.email || "");
           setProfileAvatar(me?.avatar || "");
 
-          const roleName = typeof me?.roleName === "string" ? me.roleName.toUpperCase() : undefined;
-          const userPremiumBoolean =
+          let isPremiumFromUser =
             (me as any)?.isPremium ??
             (me as any)?.premium ??
-            undefined;
+            me?.roleName?.toUpperCase() === "PREMIUM";
 
-          // Tạm thời set theo user
-          const isPremiumFromUser = Boolean(
-            userPremiumBoolean ??
-            (roleName === "PREMIUM")
-          );
-          setProfileIsPremium(isPremiumFromUser);
+          setProfileIsPremium(Boolean(isPremiumFromUser));
 
-          // Gọi thêm subscription để lấy gói chi tiết & trạng thái chính xác
           try {
             const subscription: PremiumSubscriptionDTO | null =
-              me?.id != null ? await premiumSubscriptionApi.getMySubscription(me.id) : null;
+              me?.id != null
+                ? await premiumSubscriptionApi.getMySubscription(me.id)
+                : null;
 
             if (subscription) {
-              const status = subscription.status || subscription.subscriptionStatus;
-              const normalizedStatus = status?.toUpperCase();
-              const isActive =
+              const status =
+                subscription.status ||
+                subscription.subscriptionStatus ||
+                "";
+              const normalizedStatus = status.toUpperCase();
+
+              const active =
                 normalizedStatus === "ACTIVE" ||
                 normalizedStatus === "TRIALING" ||
-                subscription.isActive ||
-                subscription.active;
+                subscription?.isActive ||
+                subscription?.active;
 
-              if (isActive) {
+              if (active) {
                 setProfileIsPremium(true);
-                const label =
+                setProfilePlanLabel(
                   subscription.planName ||
-                  subscription.planCode ||
-                  (me as any)?.planName ||
-                  (me as any)?.plan ||
-                  "Premium";
-                setProfilePlanLabel(label);
+                    subscription.planCode ||
+                    (me as any)?.plan ||
+                    "Premium"
+                );
               }
-            } else {
-              setProfilePlanLabel(isPremiumFromUser ? "Premium" : "Free");
             }
-          } catch (subError) {
-            console.warn("Failed to load premium subscription for top bar", subError);
-            setProfilePlanLabel(isPremiumFromUser ? "Premium" : "Free");
+          } catch (e) {
+            console.warn("Failed to load premium subscription", e);
           }
         }
-      } catch (error) {
-        console.error("❌ Failed to load profile:", error);
+      } catch (err) {
+        console.error("Failed to load profile", err);
         setIsAuthenticated(false);
-        setProfileIsPremium(false);
-        setProfilePlanLabel("");
       }
     };
     loadMe();
   }, []);
 
-  // Poll pending collaboration invites to show a badge (optional, will be superseded by realtime alerts if present)
+  /** ================= LOAD COLLAB INVITES ================= **/
   useEffect(() => {
-    let mounted = true;
     const loadInvites = async () => {
-      // Only poll when authenticated
-      const hasToken = (() => { try { return !!localStorage.getItem('token'); } catch { return false; } })();
-      if (!hasToken) {
-        if (mounted) setInviteCount(0);
-        return;
-      }
       try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          setInviteCount(0);
+          return;
+        }
         const list = await playlistCollabInvitesApi.pending();
-        if (!mounted) return;
-        const count = Array.isArray(list) ? list.length : 0;
-        setInviteCount(count);
+        setInviteCount(Array.isArray(list) ? list.length : 0);
       } catch {
-        // ignore errors (e.g., unauthenticated)
-        if (mounted) setInviteCount(0);
+        setInviteCount(0);
       }
     };
-    void loadInvites();
+
+    loadInvites();
     const interval = setInterval(loadInvites, 30000);
-    // Re-run on storage token changes
-    const onStorage = (e: StorageEvent) => { if (e.key === 'token') void loadInvites(); };
-    window.addEventListener('storage', onStorage);
-    return () => { mounted = false; clearInterval(interval); window.removeEventListener('storage', onStorage); };
+
+    return () => clearInterval(interval);
   }, []);
 
-  // Watch notifications: compute unread MESSAGE and unread non-MESSAGE separately
+  /** ================= FIREBASE NOTIFS ================= **/
   useEffect(() => {
-    let mounted = true;
-    const userId = (() => {
-      try {
-        const raw = localStorage.getItem('userId');
-        if (!raw) return null;
-        const num = Number(raw);
-        return Number.isFinite(num) ? num : null;
-      } catch {
-        return null;
+    const raw = localStorage.getItem("userId");
+    const userId = raw ? Number(raw) : null;
+    if (!userId) return;
+
+    const unsubscribe = watchNotifications(
+      userId,
+      (notifications: NotificationDTO[]) => {
+        const unreadMsg = notifications.filter(
+          (n) => n.type === "MESSAGE" && !n.read
+        ).length;
+        const unreadAlert = notifications.filter(
+          (n) => n.type !== "MESSAGE" && !n.read
+        ).length;
+
+        setUnreadMsgCount(unreadMsg);
+        setUnreadAlertCount(unreadAlert);
       }
-    })();
+    );
 
-    if (!userId) {
-      if (mounted) { setUnreadMsgCount(0); setUnreadAlertCount(0); }
-      return;
-    }
-
-    const unsubscribe = watchNotifications(userId, (notifications: NotificationDTO[]) => {
-      if (!mounted) return;
-      const unreadMsgs = notifications.filter(n => n.type === 'MESSAGE' && !n.read).length;
-      const unreadAlerts = notifications.filter(n => n.type !== 'MESSAGE' && !n.read).length;
-      setUnreadMsgCount(unreadMsgs);
-      setUnreadAlertCount(unreadAlerts);
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
+  /** ================= LOGOUT ================= **/
   const handleLogout = () => {
-    try {
-      // Clear localStorage
-      localStorage.removeItem('token');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('userAvatar'); // Clear user avatar
+    localStorage.clear();
+    sessionStorage.clear();
 
-      // Clear sessionStorage
-      sessionStorage.removeItem('token');
-      sessionStorage.removeItem('userId');
-    } catch (e) { /* ignore */ }
-
-    // Reset state
     setIsAuthenticated(false);
     setProfileName("");
     setProfileEmail("");
-    setProfileAvatar(""); // Reset avatar
+    setProfileAvatar("");
     setProfileIsPremium(false);
 
-    // Navigate to login page
-    navigate('/login');
-  }
+    navigate("/login");
+  };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70 shadow-[0_4px_20px_rgba(168,85,247,0.1)]" style={{ borderImage: 'var(--gradient-navbar) 1' }}>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
       <div className="flex h-16 items-center justify-between px-4 gap-4 relative">
-        <div className="absolute inset-0 bg-gradient-navbar opacity-5 pointer-events-none" />
-        {/* Search Bar */}
+        {/* Search */}
         <div className="flex-1 max-w-lg relative z-10">
           <form onSubmit={handleSearch} className="flex gap-2">
-            {/* Search Input */}
             <div className="relative flex-1 group">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[hsl(var(--primary))] transition-all group-focus-within:scale-110" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" />
               <Input
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 placeholder="Search songs, artists..."
-                className="pl-10 pr-4 bg-gradient-search dark:bg-none dark:bg-zinc-900 border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400 transition-all duration-300 focus:shadow-[0_0_20px_rgba(59,130,246,0.3)] text-black dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                className="pl-10"
               />
             </div>
 
-            {/* Search Button */}
-            <Button
-              type="submit"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground px-4"
-            >
+            <Button type="submit" className="px-4">
               <Search className="h-4 w-4" />
             </Button>
 
-            {/* Music Recognition Dropdown */}
+            {/* Music Recognition */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-gray-300 dark:border-gray-600 hover:bg-muted/50"
-                >
+                <Button variant="outline">
                   <Music className="h-4 w-4 mr-2" />
                   Music Recognition
                   <ChevronDown className="h-3 w-3 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-80 bg-background/95 backdrop-blur-xl border-[hsl(var(--primary)/0.3)] shadow-[0_8px_30px_hsl(var(--primary)/0.2)]"
-                align="end"
-              >
+
+              <DropdownMenuContent className="w-80" align="end">
                 <div className="p-3 space-y-3">
-                  {/* Upload Section */}
+                  {/* Upload */}
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Upload className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">Upload Audio File</span>
+                    <div className="flex gap-2">
+                      <Upload className="h-4 w-4" />
+                      <span className="text-sm font-medium">
+                        Upload Audio File
+                      </span>
                     </div>
                     <Button
                       variant="outline"
@@ -413,15 +376,15 @@ const TopBar = () => {
                       ref={fileInputRef}
                       type="file"
                       accept="audio/*"
-                      onChange={handleFileUpload}
                       className="hidden"
+                      onChange={handleFileUpload}
                     />
                   </div>
 
-                  {/* Recording Section */}
+                  {/* Record */}
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Mic className="h-4 w-4 text-muted-foreground" />
+                    <div className="flex gap-2">
+                      <Mic className="h-4 w-4" />
                       <span className="text-sm font-medium">Record Audio</span>
                     </div>
                     <Button
@@ -431,25 +394,26 @@ const TopBar = () => {
                     >
                       {isRecording ? (
                         <>
-                          <Square className="h-4 w-4 mr-2" />
-                          Stop Recording
+                          <Square className="h-4 w-4 mr-2" /> Stop Recording
                         </>
                       ) : (
                         <>
-                          <Mic className="h-4 w-4 mr-2" />
-                          Start Recording
+                          <Mic className="h-4 w-4 mr-2" /> Start Recording
                         </>
                       )}
                     </Button>
                   </div>
 
-                  {/* Audio Preview */}
+                  {/* Preview */}
                   {audioBlob && (
                     <div className="space-y-2 pt-2 border-t">
-                      <div className="flex items-center gap-2">
-                        <Music className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">Audio Preview</span>
+                      <div className="flex gap-2">
+                        <Music className="h-4 w-4" />
+                        <span className="text-sm font-medium">
+                          Audio Preview
+                        </span>
                       </div>
+
                       <div className="flex items-center gap-2">
                         {!isPlaying ? (
                           <Button
@@ -470,9 +434,11 @@ const TopBar = () => {
                             <Pause className="h-3 w-3" />
                           </Button>
                         )}
-                        <span className="text-xs text-muted-foreground flex-1">
-                          {isRecording ? "Recording..." : "Audio ready"}
+
+                        <span className="text-xs flex-1 text-muted-foreground">
+                          Audio ready
                         </span>
+
                         <Button
                           onClick={clearAudio}
                           variant="ghost"
@@ -483,15 +449,14 @@ const TopBar = () => {
                         </Button>
                       </div>
 
-                      {/* Recognition Button */}
                       <Button
                         onClick={handleRecognize}
                         disabled={isRecognizing}
-                        className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                        className="w-full"
                       >
                         {isRecognizing ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             Recognizing...
                           </>
                         ) : (
@@ -502,11 +467,8 @@ const TopBar = () => {
                         )}
                       </Button>
 
-                      {/* Error Display */}
                       {error && (
-                        <div className="text-xs text-red-500 bg-red-50 dark:bg-red-950/20 p-2 rounded">
-                          {error}
-                        </div>
+                        <p className="text-xs text-red-500">{error}</p>
                       )}
                     </div>
                   )}
@@ -516,24 +478,16 @@ const TopBar = () => {
           </form>
         </div>
 
-        {/* Right side controls */}
+        {/* Right section */}
         <div className="flex items-center gap-3 relative z-10">
-          {/* Notifications (non-message alerts) dropdown */}
+          {/* Notifications */}
           <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
-                title="Notifications"
-              >
+              <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-5 w-5" />
                 {unreadAlertCount > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
-                  >
-                    {unreadAlertCount > 99 ? '99+' : unreadAlertCount}
+                  <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
+                    {unreadAlertCount > 99 ? "99+" : unreadAlertCount}
                   </Badge>
                 )}
               </Button>
@@ -541,28 +495,24 @@ const TopBar = () => {
             <NotificationsDropdown onClose={() => setNotifOpen(false)} />
           </DropdownMenu>
 
-          {/* Messages (chat only) */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="relative hover:bg-gradient-secondary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--accent)/0.4)]"
-            onClick={() => navigate('/social?tab=chat')}
-            title="Messages"
+          {/* Messages */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            onClick={() => navigate("/social?tab=chat")}
           >
             <MessageCircle className="h-5 w-5" />
             {unreadMsgCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
-              >
-                {unreadMsgCount > 99 ? '99+' : unreadMsgCount}
+              <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
+                {unreadMsgCount > 99 ? "99+" : unreadMsgCount}
               </Badge>
             )}
           </Button>
 
-          {/* Khám phá Premium or membership badge */}
+          {/* Premium */}
           {profileIsPremium ? (
-            <Badge className="gap-1 bg-gradient-primary text-white border-primary/60 shadow-lg">
+            <Badge className="gap-1 bg-primary text-white">
               <Crown className="h-3.5 w-3.5" />
               {profilePlanLabel || "Premium"}
             </Badge>
@@ -570,74 +520,72 @@ const TopBar = () => {
             <Button
               variant="outline"
               size="sm"
-              className="border-primary/30 text-primary hover:bg-primary/10 transition-all duration-300 font-semibold"
-              onClick={() => navigate('/premium')}
+              className="border-primary text-primary"
+              onClick={() => navigate("/premium")}
             >
               Khám phá Premium
             </Button>
           )}
 
-          {/* Auth area */}
+          {/* Account */}
           {isAuthenticated ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:scale-110 transition-all duration-300">
-                  <Avatar className="h-8 w-8 ring-2 ring-[hsl(var(--primary)/0.5)] hover:ring-[hsl(var(--primary))] transition-all">
-                    <AvatarImage src={profileAvatar || "/placeholder.svg"} alt="User" />
-                    <AvatarFallback className="bg-gradient-primary text-white font-semibold shadow-[0_0_15px_hsl(var(--primary)/0.4)]">
+                <Button variant="ghost" className="h-8 w-8 rounded-full">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage
+                      src={profileAvatar || "/placeholder.svg"}
+                      alt="User"
+                    />
+                    <AvatarFallback>
                       {(() => {
-                        const base = (profileName && profileName.trim().length > 0)
-                          ? profileName
-                          : (profileEmail ? profileEmail.split('@')[0] : 'U');
-                        const parts = base.trim().split(' ').filter(Boolean);
-                        const initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]) : base[0];
-                        return (initials || 'U').toUpperCase();
+                        const base =
+                          profileName ||
+                          (profileEmail ? profileEmail.split("@")[0] : "U");
+                        const parts = base.split(" ");
+                        const initials =
+                          parts.length >= 2
+                            ? parts[0][0] + parts[1][0]
+                            : base[0];
+                        return initials.toUpperCase();
                       })()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-56 bg-background/95 backdrop-blur-xl border-[hsl(var(--primary)/0.3)] shadow-[0_8px_30px_hsl(var(--primary)/0.2)]"
-                align="end"
-              >
-                <div className="flex items-center justify-start gap-2 p-2">
-                  <div className="flex flex-col space-y-1 leading-none">
-                    <p className="font-medium">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'User')}</p>
-                    {profileEmail && (
-                      <p className="w-[200px] truncate text-sm text-muted-foreground">
-                        {profileEmail}
-                      </p>
-                    )}
+
+              <DropdownMenuContent className="w-56" align="end">
+                <div className="flex items-center gap-2 p-2">
+                  <div>
+                    <p className="font-medium">{profileName}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {profileEmail}
+                    </p>
                   </div>
                 </div>
                 <DropdownMenuSeparator />
+
                 <DropdownMenuItem asChild>
-                  <Link to="/profile" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Profile
+                  <Link to="/profile">
+                    <User className="h-4 w-4 mr-2" /> Profile
                   </Link>
                 </DropdownMenuItem>
+
                 <DropdownMenuItem asChild>
-                  <Link to="/settings" className="flex items-center gap-2">
-                    <Settings className="h-4 w-4" />
-                    Settings
+                  <Link to="/settings">
+                    <Settings className="h-4 w-4 mr-2" /> Settings
                   </Link>
                 </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="flex items-center gap-2" onClick={handleLogout}>
-                  <LogOut className="h-4 w-4" />
-                  Log out
+
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut className="h-4 w-4 mr-2" /> Log out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button
-              className="bg-primary hover:bg-primary/90 text-primary-foreground ml-auto"
-              onClick={() => navigate('/login')}
-            >
-              Login
-            </Button>
+            <Button onClick={() => navigate("/login")}>Login</Button>
           )}
         </div>
       </div>
