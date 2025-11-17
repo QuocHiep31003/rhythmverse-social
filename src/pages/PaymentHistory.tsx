@@ -3,24 +3,39 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, CheckCircle2, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Loader2, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Clock, RefreshCw } from 'lucide-react';
 import { paymentApi, OrderHistoryItem } from '@/services/api/paymentApi';
 import { useToast } from '@/hooks/use-toast';
 import AppLayout from '@/components/AppLayout';
 
 export default function PaymentHistoryPage() {
+  const [allOrders, setAllOrders] = useState<OrderHistoryItem[]>([]);
   const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'SUCCESS' | 'FAILED'>('all');
   const { toast } = useToast();
 
   const loadHistory = async () => {
     try {
       setLoading(true);
       const result = await paymentApi.getHistory(page, 10);
-      setOrders(result.content);
+
+      setAllOrders(result.content);
+
+      let filteredOrders = result.content;
+      if (filter !== 'all') {
+        if (filter === 'SUCCESS') {
+          filteredOrders = result.content.filter((order) => order.status === 'SUCCESS');
+        } else if (filter === 'FAILED') {
+          filteredOrders = result.content.filter((order) => order.status !== 'SUCCESS');
+        }
+      }
+
+      setOrders(filteredOrders);
       setTotalPages(result.totalPages);
       setTotalElements(result.totalElements);
     } catch (error) {
@@ -37,11 +52,17 @@ export default function PaymentHistoryPage() {
 
   useEffect(() => {
     loadHistory();
-  }, [page]);
+  }, [page, filter]);
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) {
+      return '-';
+    }
     try {
       const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) {
+        return dateString;
+      }
       return new Intl.DateTimeFormat('vi-VN', {
         year: 'numeric',
         month: '2-digit',
@@ -54,6 +75,51 @@ export default function PaymentHistoryPage() {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND',
+    }).format(amount);
+  };
+
+  const getStatusBadge = (order: OrderHistoryItem) => {
+    if (order.status === 'SUCCESS') {
+      return (
+        <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+          <CheckCircle2 className="w-3 h-3 mr-1" />
+          Thành công
+        </Badge>
+      );
+    }
+
+    const isPending = order.payosCode?.toUpperCase() === 'PENDING' && !order.failureReason;
+
+    if (isPending) {
+      return (
+        <Badge variant="outline" className="border-amber-500 text-amber-500">
+          <Clock className="w-3 h-3 mr-1" />
+          Đang xử lýýý
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="destructive">
+        <XCircle className="w-3 h-3 mr-1" />
+        Thất bại
+      </Badge>
+    );
+  };
+
+  const successOrders = allOrders.filter((o) => o.status === 'SUCCESS');
+  const pendingOrders = allOrders.filter(
+    (o) => o.status !== 'SUCCESS' && o.payosCode?.toUpperCase() === 'PENDING' && !o.failureReason
+  );
+  const failedOrders = allOrders.filter(
+    (o) => o.status !== 'SUCCESS' && !(o.payosCode?.toUpperCase() === 'PENDING' && !o.failureReason)
+  );
+  const totalAmount = successOrders.reduce((sum, o) => sum + o.amount, 0);
+
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-8">
@@ -64,11 +130,57 @@ export default function PaymentHistoryPage() {
           </p>
         </div>
 
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-green-500">{successOrders.length}</div>
+              <p className="text-sm text-muted-foreground">Giao dịch thành công</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-amber-500">{pendingOrders.length}</div>
+              <p className="text-sm text-muted-foreground">Giao dịch đang xử lý</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold text-red-500">{failedOrders.length}</div>
+              <p className="text-sm text-muted-foreground">Giao dịch thất bại</p>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+            <CardContent className="pt-6">
+              <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
+              <p className="text-sm text-muted-foreground">Tổng đã thanh toán</p>
+            </CardContent>
+          </Card>
+        </div>
+
         <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
           <CardHeader>
-            <CardTitle>Tất cả giao dịch</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Giao dịch</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => loadHistory()}
+                disabled={loading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Làm mới
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
+            <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)} className="mb-4">
+              <TabsList>
+                <TabsTrigger value="all">Tất cả</TabsTrigger>
+                <TabsTrigger value="SUCCESS">Thành công</TabsTrigger>
+                <TabsTrigger value="FAILED">Thất bại</TabsTrigger>
+              </TabsList>
+            </Tabs>
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -96,25 +208,53 @@ export default function PaymentHistoryPage() {
                           <TableCell className="font-medium">
                             #{order.orderCode}
                           </TableCell>
-                          <TableCell>{order.description}</TableCell>
                           <TableCell>
-                            {order.amount.toLocaleString('vi-VN')} VNĐ
-                          </TableCell>
-                          <TableCell>
-                            {order.status === 'SUCCESS' ? (
-                              <Badge variant="default" className="bg-green-500">
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                                Thành công
-                              </Badge>
-                            ) : (
-                              <Badge variant="destructive">
-                                <XCircle className="w-3 h-3 mr-1" />
-                                Thất bại
-                              </Badge>
+                            <div className="font-medium">{order.description}</div>
+                            {order.status === 'SUCCESS' && order.reference && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Mã giao dịch: {order.reference}
+                              </div>
+                            )}
+                            {order.status === 'SUCCESS' && order.transactionDateTime && (
+                              <div className="text-xs text-muted-foreground/80">
+                                Thời gian PayOS: {order.transactionDateTime}
+                              </div>
+                            )}
+                            {order.status !== 'SUCCESS' && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {order.failureReason
+                                  ? order.failureReason
+                                  : order.payosCode?.toUpperCase() === 'PENDING'
+                                  ? 'Đang chờ PayOS gửi webhook xác nhận'
+                                  : order.payosDesc || 'Không có lý do được cung cấp'}
+                              </div>
                             )}
                           </TableCell>
+                          <TableCell>
+                            <div className="font-semibold text-primary">
+                              {formatCurrency(order.amount)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(order)}
+                          </TableCell>
                           <TableCell className="text-muted-foreground">
-                            {formatDate(order.createdAt)}
+                            <div>{formatDate(order.createdAt)}</div>
+                            {order.paidAt && (
+                              <div className="text-xs text-green-500 mt-1">
+                                Thanh toán: {formatDate(order.paidAt)}
+                              </div>
+                            )}
+                            {order.failedAt && (
+                              <div className="text-xs text-red-500 mt-1">
+                                Thất bại: {formatDate(order.failedAt)}
+                              </div>
+                            )}
+                            {order.updatedAt && order.updatedAt !== order.createdAt && (
+                              <div className="text-xs text-muted-foreground/70 mt-1">
+                                Cập nhật: {formatDate(order.updatedAt)}
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

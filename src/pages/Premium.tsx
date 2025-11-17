@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ import { exchangeRateApi } from "@/services/api/exchangeRateApi";
 import { useToast } from "@/hooks/use-toast";
 
 const Premium = () => {
+  const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState<"monthly" | "yearly">("monthly");
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
@@ -84,9 +86,9 @@ const Premium = () => {
 
     return {
       monthly: { 
-        price: 4.0, 
+        price: 0.1, 
         originalPrice: null,
-        amountVND: getAmountVND(4.0)
+        amountVND: getAmountVND(0.1)
       },
       yearly: { 
         price: 42.0, 
@@ -134,7 +136,19 @@ const Premium = () => {
       setIsUpgrading(true);
       
       const plan = pricing[selectedPlan];
+      
+      // Kiểm tra plan và amountVND
+      if (!plan || !plan.amountVND || plan.amountVND <= 0) {
+        throw new Error('Giá trị đơn hàng không hợp lệ. Vui lòng thử lại.');
+      }
+      
       const description = `Premium ${selectedPlan === "monthly" ? "Tháng" : "Năm"}`;
+      
+      console.log('Creating order with:', {
+        amount: plan.amountVND,
+        description: description,
+        plan: selectedPlan
+      });
       
       // Tạo đơn hàng
       const result = await paymentApi.createOrder({
@@ -143,8 +157,14 @@ const Premium = () => {
         // buyerEmail có thể lấy từ user profile nếu cần
       });
 
+      console.log('Order created successfully:', result);
+
       // Redirect đến PayOS checkout
-      window.location.href = result.checkoutUrl;
+      if (result?.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      } else {
+        throw new Error('Không nhận được link thanh toán từ server');
+      }
     } catch (error) {
       console.error('Error creating order:', error);
       setIsUpgrading(false);
@@ -334,9 +354,18 @@ const Premium = () => {
         <div className="text-center mt-12 p-8 bg-gradient-primary/10 rounded-lg border border-primary/20">
           <h2 className="text-2xl font-bold mb-4">Sẵn sàng nâng cấp trải nghiệm nghe nhạc?</h2>
           <p className="text-muted-foreground mb-6">Tham gia cùng hàng triệu người dùng đã chọn Premium.</p>
-          <Button variant="hero" size="lg" onClick={handleUpgrade} disabled={isUpgrading}>
-            {isUpgrading ? "Đang xử lý..." : "Bắt đầu hành trình Premium"}
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Button variant="hero" size="lg" onClick={handleUpgrade} disabled={isUpgrading}>
+              {isUpgrading ? "Đang xử lý..." : "Bắt đầu hành trình Premium"}
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg" 
+              onClick={() => navigate('/profile')}
+            >
+              Xem lịch sử thanh toán
+            </Button>
+          </div>
         </div>
       </div>
       <Footer />

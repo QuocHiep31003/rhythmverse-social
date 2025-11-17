@@ -1,4 +1,5 @@
 import { API_BASE_URL, fetchWithAuth } from './config';
+import { verifyPayosSignature, verifyPayosWebhookPayload } from '@/utils/payosSignatureVerifier';
 
 export interface CreateOrderRequest {
   amount: number;
@@ -37,6 +38,27 @@ export interface OrderHistoryItem {
   amount: number;
   description: string;
   status: 'SUCCESS' | 'FAILED';
+  currency?: string | null;
+  paymentLinkId?: string | null;
+  checkoutUrl?: string | null;
+  qrCode?: string | null;
+  expiredAt?: string | null;
+  accountNumber?: string | null;
+  accountName?: string | null;
+  bin?: string | null;
+  reference?: string | null;
+  transactionDateTime?: string | null;
+  payosCode?: string | null;
+  payosDesc?: string | null;
+  counterAccountBankId?: string | null;
+  counterAccountBankName?: string | null;
+  counterAccountName?: string | null;
+  counterAccountNumber?: string | null;
+  virtualAccountName?: string | null;
+  virtualAccountNumber?: string | null;
+  failureReason?: string | null;
+  paidAt?: string | null;
+  failedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,38 +104,62 @@ export const paymentApi = {
       cancelUrl: `${baseUrl}/payment/cancel`,
     };
 
-    const response = await fetchWithAuth(`${API_BASE_URL}/payments/orders`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    console.log('[paymentApi] Creating order with payload:', payload);
+    console.log('[paymentApi] API URL:', `${API_BASE_URL}/payments/orders`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = 'Không thể tạo đơn hàng';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.desc || errorData.message || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
+    try {
+      const response = await fetchWithAuth(`${API_BASE_URL}/payments/orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log('[paymentApi] Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[paymentApi] Error response:', errorText);
+        let errorMessage = 'Không thể tạo đơn hàng';
+        try {
+          const errorData = JSON.parse(errorText);
+          console.error('[paymentApi] Parsed error data:', errorData);
+          errorMessage = errorData.desc || errorData.message || errorData.error || errorMessage;
+          // Nếu có errors object, thêm chi tiết
+          if (errorData.errors) {
+            const errorDetails = Object.entries(errorData.errors)
+              .map(([field, msg]) => `${field}: ${msg}`)
+              .join(', ');
+            errorMessage += ` (${errorDetails})`;
+          }
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
-    }
 
-    const result: CreateOrderResponse = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.desc || 'Không thể tạo đơn hàng');
-    }
+      const result: CreateOrderResponse = await response.json();
+      console.log('[paymentApi] Success response:', result);
+      
+      if (!result.success) {
+        throw new Error(result.desc || 'Không thể tạo đơn hàng');
+      }
 
-    // Lưu orderCode vào sessionStorage
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('payos_order_code', result.data.orderCode.toString());
-    }
+      if (!result.data || !result.data.checkoutUrl) {
+        throw new Error('Response không chứa checkoutUrl');
+      }
 
-    return result.data;
+      // Lưu orderCode vào sessionStorage
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('payos_order_code', result.data.orderCode.toString());
+      }
+
+      return result.data;
+    } catch (error) {
+      console.error('[paymentApi] Exception in createOrder:', error);
+      throw error;
+    }
   },
 
   /**
@@ -202,6 +248,44 @@ export const paymentApi = {
     }
 
     return result.data;
+  },
+
+  /**
+   * Xác thực chữ ký PayOS webhook (utility function)
+   * 
+   * ⚠️ LƯU Ý: Thông thường Frontend không cần verify signature vì:
+   * - ReturnUrl từ PayOS không có signature
+   * - Webhook chỉ được gửi đến Backend
+   * 
+   * Function này chỉ dùng khi:
+   * - Testing/Development
+   * - Nhận data từ PayOS có kèm signature (hiếm)
+   * 
+   * @param webhookData Data object từ webhook
+   * @param signature Signature từ webhook
+   * @returns Promise<boolean> true nếu signature hợp lệ
+   */
+  verifySignature: async (
+    webhookData: Record<string, any>,
+    signature: string
+  ): Promise<boolean> => {
+    return verifyPayosSignature(webhookData, signature);
+  },
+
+  /**
+   * Xác thực chữ ký từ webhook payload đầy đủ
+   * 
+   * @param payload Webhook payload từ PayOS
+   * @returns Promise<boolean> true nếu signature hợp lệ
+   */
+  verifyWebhookPayload: async (payload: {
+    code?: string;
+    desc?: string;
+    success?: boolean;
+    data?: Record<string, any>;
+    signature?: string;
+  }): Promise<boolean> => {
+    return verifyPayosWebhookPayload(payload);
   },
 };
 
