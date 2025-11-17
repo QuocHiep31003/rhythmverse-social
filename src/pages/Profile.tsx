@@ -41,6 +41,7 @@ import { toast } from "@/hooks/use-toast";
 import { songsApi } from "@/services/api/songApi";
 import { paymentApi, OrderHistoryItem } from "@/services/api/paymentApi";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
@@ -59,6 +60,7 @@ const Profile = () => {
   const [paymentTotalElements, setPaymentTotalElements] = useState(0);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'SUCCESS' | 'FAILED'>('all');
+  const [premiumSubscription, setPremiumSubscription] = useState<PremiumSubscriptionDTO | null>(null);
   
   useEffect(() => {
     fetchProfile();
@@ -69,11 +71,82 @@ const Profile = () => {
     fetchPaymentHistory();
   }, [paymentPage, paymentFilter]);
 
+  const isSubscriptionActive = (subscription: PremiumSubscriptionDTO | null) => {
+    if (!subscription) return false;
+    const normalizeStatus = (value?: string | null) => value?.toUpperCase();
+    const statusCandidates = [
+      subscription.status,
+      subscription.subscriptionStatus,
+      subscription.state,
+      subscription.paymentStatus
+    ].map(normalizeStatus);
+    const activeStatuses = ["ACTIVE", "TRIALING", "SUCCESS", "PAID"];
+    const hasActiveStatus = statusCandidates.some(
+      (status) => status && activeStatuses.includes(status)
+    );
+    const booleanActive = subscription.active ?? subscription.isActive ?? null;
+
+    if (!hasActiveStatus && !booleanActive) {
+      return false;
+    }
+
+    const endDateString = subscription.endDate || subscription.currentPeriodEnd;
+    if (!endDateString) {
+      return hasActiveStatus || Boolean(booleanActive);
+    }
+    const endDate = new Date(endDateString);
+    if (Number.isNaN(endDate.getTime())) {
+      return hasActiveStatus || Boolean(booleanActive);
+    }
+    return endDate.getTime() >= Date.now();
+  };
+
   const fetchProfile = async () => {
     try {
       setProfileLoading(true);
       const user = await userApi.getCurrentProfile();
       setUserId(user.id || null);
+      let subscription: PremiumSubscriptionDTO | null = null;
+      try {
+        subscription = await premiumSubscriptionApi.getMySubscription(user.id);
+        setPremiumSubscription(subscription);
+      } catch (subscriptionError) {
+        console.warn("Failed to fetch premium subscription", subscriptionError);
+      }
+      const getPremiumStringFlag = (value?: string | null) => {
+        if (!value) return undefined;
+        return value.toUpperCase() === 'PREMIUM';
+      };
+      const userPremiumBoolean =
+        (user as any)?.isPremium ??
+        (user as any)?.premium ??
+        undefined;
+      const premiumSources = [
+        userPremiumBoolean,
+        getPremiumStringFlag((user as any)?.plan),
+        getPremiumStringFlag((user as any)?.membership),
+        getPremiumStringFlag(user.roleName),
+        isSubscriptionActive(subscription)
+      ];
+      const isPremiumUser = premiumSources.some((flag) => Boolean(flag));
+      const premiumStartDate =
+        user.premiumStartDate ||
+        user.premiumActivatedAt ||
+        subscription?.startDate ||
+        null;
+      const premiumEndDate =
+        user.premiumEndDate ||
+        user.premiumExpiresAt ||
+        subscription?.endDate ||
+        subscription?.currentPeriodEnd ||
+        null;
+      const planLabel =
+        subscription?.planName ||
+        subscription?.planCode ||
+        (user as any)?.planName ||
+        (user as any)?.plan ||
+        (user as any)?.membership ||
+        (isPremiumUser ? "Premium" : "Free");
       setProfileData({
         name: user.name || "",
         username: user.email ? `@${user.email.split('@')[0]}` : "",
@@ -81,7 +154,11 @@ const Profile = () => {
         bio: "", // Bio không có trong User entity, giữ nguyên để hiển thị
         phone: user.phone || "",
         address: user.address || "",
-        avatar: user.avatar || ""
+        avatar: user.avatar || "",
+        premium: isPremiumUser,
+        premiumStart: premiumStartDate || "",
+        premiumEnd: premiumEndDate || "",
+        planLabel
       });
       setAvatarPreview(user.avatar || "");
       setAvatarFile(null);
@@ -225,6 +302,23 @@ const Profile = () => {
     }
   };
 
+  const formatMembershipDate = (dateString?: string | null) => {
+    if (!dateString) return null;
+    try {
+      const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) {
+        return dateString;
+      }
+      return new Intl.DateTimeFormat('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }).format(date);
+    } catch {
+      return dateString || null;
+    }
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -299,7 +393,11 @@ const Profile = () => {
     bio: "Music enthusiast | Always discovering new sounds | Premium member since 2023",
     phone: "",
     address: "",
-    avatar: ""
+    avatar: "",
+    premium: true,
+    premiumStart: "",
+    premiumEnd: "",
+    planLabel: "Premium"
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -543,13 +641,46 @@ const Profile = () => {
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-2 justify-center md:justify-start mb-2">
+                      <div className="flex flex-col md:flex-row md:items-center md:gap-3 mb-3 text-center md:text-left">
                         <h1 className="text-3xl font-bold">{profileData.name}</h1>
-                        <Badge variant="default" className="gap-1">
-                          <Crown className="w-3 h-3" />
-                          Premium
+                        <Badge
+                          variant={profileData.premium ? "default" : "outline"}
+                          className={
+                            profileData.premium
+                              ? "gap-1 w-fit md:w-auto mx-auto md:mx-0 bg-primary/10 text-primary border-primary/40"
+                              : "gap-1 w-fit md:w-auto mx-auto md:mx-0 text-muted-foreground border-muted-foreground/40"
+                          }
+                        >
+                          {profileData.premium && <Crown className="w-3 h-3" />}
+                          {profileData.planLabel || (profileData.premium ? "Premium" : "Free")}
                         </Badge>
                       </div>
+                      {(profileData.planLabel || profileData.premiumStart || profileData.premiumEnd) && (
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground justify-center md:justify-start mb-2">
+                          {profileData.planLabel && (
+                            <span>
+                              Gói hiện tại:{" "}
+                              <span className="font-medium text-foreground">{profileData.planLabel}</span>
+                            </span>
+                          )}
+                          {profileData.premiumStart && (
+                            <span>
+                              Bắt đầu:{" "}
+                              <span className="font-medium text-foreground">
+                                {formatMembershipDate(profileData.premiumStart)}
+                              </span>
+                            </span>
+                          )}
+                          {profileData.premiumEnd && (
+                            <span>
+                              Hết hạn:{" "}
+                              <span className={`font-medium ${profileData.premium ? "text-green-400" : "text-red-400"}`}>
+                                {formatMembershipDate(profileData.premiumEnd)}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <p className="text-muted-foreground mb-1">{profileData.username}</p>
                       <p className="text-sm mb-4 max-w-md">{profileData.bio}</p>
                       

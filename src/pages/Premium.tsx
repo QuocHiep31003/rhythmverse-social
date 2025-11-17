@@ -91,9 +91,9 @@ const Premium = () => {
         amountVND: getAmountVND(0.1)
       },
       yearly: { 
-        price: 42.0, 
+        price: 1, 
         originalPrice: 48.0,
-        amountVND: getAmountVND(42.0)
+        amountVND: getAmountVND(1)
       }
     };
   }, [exchangeRate]);
