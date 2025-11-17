@@ -1,11 +1,14 @@
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
 
 export const friendsApi = {
-  sendRequest: async (senderId: number, receiverId: number) => {
-    const url = `${API_BASE_URL}/friends/request?senderId=${encodeURIComponent(senderId)}&receiverId=${encodeURIComponent(receiverId)}`;
+  // Backward-compatible: senderId tham số bị bỏ qua theo API mới
+  sendRequest: async (_senderId: number, receiverId: number) => {
+    // New API: POST /api/friends/requests  body: { toUserId }
+    const url = `${API_BASE_URL}/friends/requests`;
     const response = await fetch(url, {
       method: 'POST',
       headers: buildJsonHeaders(),
+      body: JSON.stringify({ toUserId: receiverId }),
     });
     if (!response.ok) {
       throw new Error(await parseErrorResponse(response));
@@ -18,7 +21,8 @@ export const friendsApi = {
   },
 
   accept: async (requestId: number) => {
-    const response = await fetch(`${API_BASE_URL}/friends/accept/${requestId}`, {
+    // New API: POST /api/friends/requests/{id}/accept
+    const response = await fetch(`${API_BASE_URL}/friends/requests/${requestId}/accept`, {
       method: 'POST',
       headers: buildJsonHeaders(),
     });
@@ -32,8 +36,27 @@ export const friendsApi = {
     }
   },
 
-  getFriends: async (userId: number) => {
-    const response = await fetch(`${API_BASE_URL}/friends/${userId}`, {
+  // New API: Reject a friend request
+  reject: async (requestId: number) => {
+    // POST /api/friends/requests/{id}/reject
+    const response = await fetch(`${API_BASE_URL}/friends/requests/${requestId}/reject`, {
+      method: 'POST',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+    try {
+      return await response.text();
+    } catch {
+      return 'Friend request rejected';
+    }
+  },
+
+  // Backward-compatible: userId tham số bị bỏ qua theo API mới
+  getFriends: async (_userId?: number) => {
+    // New API: GET /api/friends
+    const response = await fetch(`${API_BASE_URL}/friends`, {
       method: 'GET',
       headers: buildJsonHeaders(),
     });
@@ -43,8 +66,9 @@ export const friendsApi = {
     return await response.json();
   },
 
-  getPending: async (userId: number) => {
-    const response = await fetch(`${API_BASE_URL}/friends/pending/${userId}`, {
+  // Backward-compatible: thay bằng requests?incoming=true
+  getPending: async (_userId?: number) => {
+    const response = await fetch(`${API_BASE_URL}/friends/requests?incoming=true`, {
       method: 'GET',
       headers: buildJsonHeaders(),
     });
@@ -54,9 +78,10 @@ export const friendsApi = {
     return await response.json();
   },
 
-  remove: async (userId: number, friendId: number) => {
-    const qs = new URLSearchParams({ userId: String(userId), friendId: String(friendId) }).toString();
-    const response = await fetch(`${API_BASE_URL}/friends?${qs}`, {
+  // Backward-compatible: userId tham số bị bỏ qua theo API mới
+  remove: async (_userId: number, friendId: number) => {
+    // New API: DELETE /api/friends/{friendId}
+    const response = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
       method: 'DELETE',
       headers: buildJsonHeaders(),
     });
@@ -64,6 +89,45 @@ export const friendsApi = {
       throw new Error(await parseErrorResponse(response));
     }
     try { return await response.text(); } catch { return 'Unfriended'; }
+  },
+};
+
+// New API: Friend Requests listing with direction
+export const friendRequestsApi = {
+  // GET /api/friends/requests?incoming=true|false
+  list: async (incoming: boolean) => {
+    const qs = new URLSearchParams({ incoming: String(incoming) }).toString();
+    const response = await fetch(`${API_BASE_URL}/friends/requests?${qs}`, {
+      method: 'GET',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+    return await response.json();
+  },
+};
+
+// Public profile API (no token required)
+export interface PublicProfileDTO {
+  id?: number;
+  username: string;
+  name?: string | null;
+  avatar?: string | null;
+  bio?: string | null;
+}
+
+export const publicProfileApi = {
+  // GET /api/user/{username}/public
+  get: async (username: string): Promise<PublicProfileDTO> => {
+    const response = await fetch(`${API_BASE_URL}/user/${encodeURIComponent(username)}/public`, {
+      method: 'GET',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+    return await response.json();
   },
 };
 
@@ -186,4 +250,3 @@ export const inviteLinksApi = {
     return await response.json();
   },
 };
-

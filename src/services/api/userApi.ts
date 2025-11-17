@@ -11,6 +11,12 @@ export interface UserDTO {
     roleName?: string;
     password?: string;
     avatar?: string; // <-- add avatar field
+    premium?: boolean;
+    isPremium?: boolean;
+    premiumStartDate?: string;
+    premiumEndDate?: string;
+    premiumActivatedAt?: string;
+    premiumExpiresAt?: string;
 }
 
 export interface UpdateProfilePayload {

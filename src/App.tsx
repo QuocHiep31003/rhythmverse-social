@@ -27,12 +27,12 @@ import Settings from "./pages/Settings";
 import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
-import InviteFriend from "./pages/InviteFriend";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
+import Notifications from "./pages/Notifications";
 
-// ✅ Admin pages
+// Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminHome from "./pages/admin/AdminHome";
 import AdminSongs from "./pages/admin/AdminSongs";
@@ -45,12 +45,19 @@ import AdminMoods from "./pages/admin/AdminMoods";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminTrending from "./pages/admin/AdminTrending";
 import AdminPromotions from "./pages/admin/AdminPromotions";
+import AdminSnapshots from "./pages/admin/AdminSnapshots";
+
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
-import AdminSnapshots from "./pages/admin/AdminSnapshots";
+
 import PaymentCancel from "./pages/PaymentCancel";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentHistory from "./pages/PaymentHistory";
+
+import FriendRequestWatcher from "./components/FriendRequestWatcher";
+
+// ⭐ Missing import from main branch
+import InviteFriend from "./pages/InviteFriend";
 
 const queryClient = new QueryClient();
 
@@ -105,12 +112,19 @@ const App = () => (
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/social" element={<Social />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/notifications" element={<Notifications />} />
                     <Route path="/song/:slug" element={<SongDetail />} />
                     <Route path="/album/:slug" element={<AlbumDetail />} />
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
+
+                    {/* ⭐ Public profile is inline via /social?u=... */}
+
+                    {/* ⭐ Invite link route from main */}
                     <Route path="/invite/friend/:code" element={<InviteFriend />} />
+
+                    {/* Payments */}
                     <Route path="/payment/cancel" element={<PaymentCancel />} />
                     <Route path="/payment/success" element={<PaymentSuccess />} />
                     <Route path="/payment/history" element={<PaymentHistory />} />
@@ -120,15 +134,24 @@ const App = () => (
                 </AppLayout>
               } />
             </Routes>
+
             <MusicPlayer />
+
             {(() => {
               try {
-                const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken') || sessionStorage.getItem('token')) : null;
+                const token = typeof window !== 'undefined'
+                  ? (localStorage.getItem('token')
+                    || localStorage.getItem('adminToken')
+                    || sessionStorage.getItem('token'))
+                  : null;
+
                 return token ? <ChatBubble /> : null;
               } catch {
                 return null;
               }
             })()}
+
+            <FriendRequestWatcher />
           </BrowserRouter>
         </TooltipProvider>
       </MusicProvider>

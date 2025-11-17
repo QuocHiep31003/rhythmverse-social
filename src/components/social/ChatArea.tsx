@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { MessageCircle, Search, Send, Music, Edit } from "lucide-react";
 import type { Friend, Message } from "@/types/social";
 import { MessageCard } from "@/components/social/MessageCard";
+import { cn } from "@/lib/utils";
 
 interface ChatAreaProps {
   selectedChat: string | null;
   friends: Friend[];
   messages: Record<string, Message[]>;
+  unreadByFriend?: Record<string, number>;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onFriendSelect: (friendId: string) => void;
@@ -39,6 +41,7 @@ export const ChatArea = ({
   currentSong,
   loadingFriends,
   meId,
+  unreadByFriend = {},
 }: ChatAreaProps) => {
   const chatContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -108,28 +111,32 @@ export const ChatArea = ({
         {sortedFriends.map((friend) => (
         <div
           key={friend.id}
-          className={`p-3 rounded-lg cursor-pointer ${
-            selectedChat === friend.id
-              ? "bg-purple-500/20 border border-purple-400/40"
-              : "bg-purple-500/5 border border-purple-300/10"
-          }`}
+          className={cn(
+            "p-3 rounded-xl cursor-pointer border transition-all duration-200 flex flex-col gap-2 bg-muted/40 dark:bg-muted/20 hover:bg-muted/60 dark:hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/60",
+            selectedChat === friend.id && "bg-primary/10 border-primary/40 shadow-sm hover:bg-primary/15"
+          )}
           onClick={() => onFriendSelect(friend.id)}
         >
           <div className="flex items-center gap-3">
             <div className="relative">
               <Avatar className="w-10 h-10">
                 <AvatarImage src={friend.avatar} alt={friend.name} />
-                <AvatarFallback className="bg-purple-500 text-white text-sm">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                   {friend.name.split(' ').map(n => n[0]).join('')}
                 </AvatarFallback>
               </Avatar>
               {friend.isOnline && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-purple-500/20" />
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-card" />
+              )}
+              {unreadByFriend[friend.id] > 0 && (
+                <div className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
+                  {unreadByFriend[friend.id] > 99 ? '99+' : unreadByFriend[friend.id]}
+                </div>
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate text-purple-50/90">{friend.name}</p>
-              <p className="text-xs text-purple-100/70">{friend.username}</p>
+              <p className="font-medium truncate text-foreground">{friend.name}</p>
+              <p className="text-xs text-muted-foreground">{friend.username}</p>
             </div>
           </div>
         </div>
@@ -160,32 +167,31 @@ export const ChatArea = ({
   };
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6 min-h-[420px] max-h-[calc(100vh-220px)] overflow-hidden">
+    <div className="grid lg:grid-cols-3 gap-6 min-h-[420px] max-h-[calc(100vh-220px)] overflow-hidden text-foreground">
       {/* Friends List */}
       <Card 
-        className="lg:col-span-1 border-purple-300/20 shadow-none bg-transparent"
-        style={{ boxShadow: 'none !important' }}
+        className="lg:col-span-1 border-border/80 bg-card/90 dark:bg-card/70 shadow-sm backdrop-blur-sm transition-colors"
       >
-        <CardHeader className="border-b border-purple-300/20 bg-transparent">
-          <CardTitle className="flex items-center gap-2 text-purple-50/90">
-            <MessageCircle className="w-5 h-5" />
+        <CardHeader className="border-b border-border/70 bg-card/95 dark:bg-card/70">
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <MessageCircle className="w-5 h-5 text-primary" />
             Messages
           </CardTitle>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 text-purple-200/70" style={{ transform: 'translateY(-50%)' }} />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 text-muted-foreground/70 -translate-y-1/2" />
             <Input
               placeholder="Search conversations..."
-              className="pl-10 bg-purple-500/10 border-purple-300/30 text-purple-50 placeholder:text-purple-200/50"
+              className="pl-10 bg-muted/50 dark:bg-muted/30 border border-border/70 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/40"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
         </CardHeader>
-        <CardContent className="p-4 overflow-y-auto">
+        <CardContent className="p-4 overflow-y-auto scrollbar-custom">
           {loadingFriends ? (
-            <p className="text-sm text-purple-100/70">Loading friends...</p>
+            <p className="text-sm text-muted-foreground">Loading friends...</p>
           ) : friends.length === 0 ? (
-            <p className="text-sm text-purple-100/70">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
+            <p className="text-sm text-muted-foreground">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
           ) : (
             renderFriendsList()
           )}
@@ -194,15 +200,13 @@ export const ChatArea = ({
 
       {/* Chat Area */}
       <Card 
-        className="lg:col-span-2 flex flex-col relative overflow-hidden rounded-[24px] border border-purple-300/30 shadow-none bg-transparent min-h-[480px] lg:h-[calc(100vh-240px)] lg:max-h-[calc(100vh-240px)]"
-        style={{ boxShadow: 'none !important' }}
+        className="lg:col-span-2 flex flex-col relative overflow-hidden rounded-3xl border border-border/70 shadow-lg shadow-primary/5 bg-card/95 dark:bg-card/70 min-h-[480px] lg:h-[calc(100vh-240px)] lg:max-h-[calc(100vh-240px)] transition-colors"
       >
         {selectedChat ? (
           <>
             {/* Header */}
             <CardHeader 
-              className="p-2 border-b border-purple-300/20 relative z-10 bg-transparent"
-              style={{ boxShadow: 'none !important', filter: 'none !important' }}
+              className="p-4 border-b border-border/70 relative z-10 bg-card/95 dark:bg-card/70"
             >
               <div className="relative flex items-center gap-3">
                 <Avatar className="w-9 h-9">
@@ -210,7 +214,7 @@ export const ChatArea = ({
                     src={friends.find((f) => f.id === selectedChat)?.avatar}
                     alt={friends.find((f) => f.id === selectedChat)?.name || 'Friend'}
                   />
-                  <AvatarFallback className="bg-purple-500 text-white text-sm font-semibold">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                     {friends
                       .find((f) => f.id === selectedChat)
                       ?.name.split(" ")
@@ -219,11 +223,11 @@ export const ChatArea = ({
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <CardTitle className="text-[15px] font-semibold text-white/90 tracking-wide">
+                  <CardTitle className="text-[15px] font-semibold text-foreground tracking-wide">
                     {friends.find((f) => f.id === selectedChat)?.name}
                   </CardTitle>
-                  <p className="text-[12px] text-white/60">
-                    {friends.find((f) => f.id === selectedChat)?.isOnline ? "Online" : "Offline"}
+                  <p className="text-[12px] text-muted-foreground">
+                    {friends.find((f) => f.id === selectedChat)?.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
                   </p>
                 </div>
               </div>
@@ -232,13 +236,7 @@ export const ChatArea = ({
             {/* Message content */}
             <CardContent
               ref={chatContentRef}
-              className="flex-1 min-h-0 p-4 overflow-y-auto scrollbar-hide bg-transparent"
-              style={{
-                scrollbarWidth: 'none',
-                msOverflowStyle: 'none',
-                boxShadow: 'none !important',
-                filter: 'none !important',
-              }}
+              className="flex-1 min-h-0 p-4 overflow-y-auto scrollbar-hide bg-gradient-to-b from-background/80 via-card/80 to-background/70 dark:from-background/40 dark:via-card/40 dark:to-background/50"
             >
               <div className="flex flex-col space-y-4 min-h-full">
                 {renderMessages()}
@@ -246,23 +244,23 @@ export const ChatArea = ({
             </CardContent>
 
             {/* Input bar */}
-            <div className="p-4 border-t border-purple-300/30 sticky bottom-0 left-0 right-0 z-10 bg-transparent">
-              <div className="flex gap-2">
+            <div className="p-4 border-t border-border/70 sticky bottom-0 left-0 right-0 z-10 bg-card/90 dark:bg-card/70 backdrop-blur">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="relative flex-1">
-                  <Edit className="absolute left-4 top-1/2 h-4 w-4 text-purple-300/70" style={{ transform: 'translateY(-50%)' }} />
+                  <Edit className="absolute left-4 top-1/2 h-4 w-4 text-muted-foreground/70 -translate-y-1/2" />
                   <Input
                     placeholder="Type a message..."
                     value={newMessage}
                     onChange={(e) => onMessageChange(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && onSendMessage()}
-                    className="w-full pl-11 bg-white/15 border border-purple-300/30 text-white/95 placeholder:text-white/60 rounded-full"
+                    className="w-full pl-11 h-12 rounded-full bg-muted/40 dark:bg-muted/30 border border-border/60 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/40"
                   />
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="default"
                   size="icon"
                   onClick={onSendMessage}
-                  className="rounded-full bg-purple-500 text-white"
+                  className="h-12 w-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 transition"
                 >
                   <Send className="w-4 h-4" />
                 </Button>
@@ -270,7 +268,7 @@ export const ChatArea = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="ml-2 rounded-full border border-purple-400/30 text-white/90 bg-purple-500/5"
+                    className="sm:ml-2 rounded-full border border-border/70 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50"
                     onClick={onShareCurrentSong}
                   >
                     <Music className="w-4 h-4 mr-2" /> Share current song
@@ -282,43 +280,13 @@ export const ChatArea = ({
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <MessageCircle className="w-14 h-14 text-purple-300/60 mx-auto mb-4" />
-              <h3 className="text-base font-semibold mb-1 text-white/90">Select a conversation</h3>
-              <p className="text-sm text-white/70">Choose a friend to start messaging</p>
+              <MessageCircle className="w-14 h-14 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-base font-semibold mb-1 text-foreground">Chọn một cuộc trò chuyện</h3>
+              <p className="text-sm text-muted-foreground">Hãy chọn bạn bè để bắt đầu nhắn tin</p>
             </div>
           </div>
         )}
       </Card>
-      <style>{`
-        /* Remove gradient, backdrop-blur, shadow, and mix-blend effects */
-        [class*="bg-gradient-to-br"][class*="from-[#1a0033]"],
-        [class*="bg-gradient-to-br"][class*="via-[#1d0b40]"],
-        [class*="bg-gradient-to-br"][class*="to-[#261b5a]"] {
-          background: transparent !important;
-          background-image: none !important;
-        }
-        
-        [class*="backdrop-blur-2xl"],
-        [class*="backdrop-saturate-150"] {
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
-        }
-        
-        [class*="shadow-"][class*="inset"],
-        [class*="shadow-[0_0_30px"] {
-          box-shadow: none !important;
-        }
-        
-        [class*="mix-blend-screen"] {
-          mix-blend-mode: normal !important;
-        }
-        
-        /* Remove gradient overlay divs */
-        [class*="absolute"][class*="inset-0"][class*="bg-gradient-to-b"][class*="from-fuchsia"],
-        [class*="absolute"][class*="inset-0"][class*="bg-gradient-to-b"][class*="to-purple-900"] {
-          display: none !important;
-        }
-      `}</style>
     </div>
   );
 };

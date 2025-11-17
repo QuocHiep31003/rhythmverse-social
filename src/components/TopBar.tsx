@@ -18,6 +18,7 @@ import {
   Upload,
   ChevronDown,
   Music,
+  Crown
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,6 +36,11 @@ import { arcApi, authApi } from "@/services/api";
 
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import { watchNotifications, NotificationDTO } from "@/services/firebase/notifications";
+<<<<<<< HEAD
+import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
+=======
+import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
+>>>>>>> 4edd66b5638466e2b23527ec37b9e08131dc8d1b
 
 
 
@@ -47,10 +53,18 @@ const TopBar = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
   const [inviteCount, setInviteCount] = useState<number>(0);
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
+  // Split counters: messages vs. alerts (non-MESSAGE)
+  const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
+  const [unreadAlertCount, setUnreadAlertCount] = useState<number>(0);
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
   const [profileAvatar, setProfileAvatar] = useState<string>("");
+<<<<<<< HEAD
+  const [profileIsPremium, setProfileIsPremium] = useState<boolean>(false);
+  const [profilePlanLabel, setProfilePlanLabel] = useState<string>("");
+=======
+  const [notifOpen, setNotifOpen] = useState(false);
+>>>>>>> 4edd66b5638466e2b23527ec37b9e08131dc8d1b
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
       return typeof window !== "undefined" ? !!localStorage.getItem("token") : false;
@@ -195,16 +209,63 @@ const TopBar = () => {
           setProfileName(me?.name || me?.username || "");
           setProfileEmail(me?.email || "");
           setProfileAvatar(me?.avatar || "");
+
+          const roleName = typeof me?.roleName === "string" ? me.roleName.toUpperCase() : undefined;
+          const userPremiumBoolean =
+            (me as any)?.isPremium ??
+            (me as any)?.premium ??
+            undefined;
+
+          // Tạm thời set theo user
+          const isPremiumFromUser = Boolean(
+            userPremiumBoolean ??
+            (roleName === "PREMIUM")
+          );
+          setProfileIsPremium(isPremiumFromUser);
+
+          // Gọi thêm subscription để lấy gói chi tiết & trạng thái chính xác
+          try {
+            const subscription: PremiumSubscriptionDTO | null =
+              me?.id != null ? await premiumSubscriptionApi.getMySubscription(me.id) : null;
+
+            if (subscription) {
+              const status = subscription.status || subscription.subscriptionStatus;
+              const normalizedStatus = status?.toUpperCase();
+              const isActive =
+                normalizedStatus === "ACTIVE" ||
+                normalizedStatus === "TRIALING" ||
+                subscription.isActive ||
+                subscription.active;
+
+              if (isActive) {
+                setProfileIsPremium(true);
+                const label =
+                  subscription.planName ||
+                  subscription.planCode ||
+                  (me as any)?.planName ||
+                  (me as any)?.plan ||
+                  "Premium";
+                setProfilePlanLabel(label);
+              }
+            } else {
+              setProfilePlanLabel(isPremiumFromUser ? "Premium" : "Free");
+            }
+          } catch (subError) {
+            console.warn("Failed to load premium subscription for top bar", subError);
+            setProfilePlanLabel(isPremiumFromUser ? "Premium" : "Free");
+          }
         }
       } catch (error) {
         console.error("❌ Failed to load profile:", error);
         setIsAuthenticated(false);
+        setProfileIsPremium(false);
+        setProfilePlanLabel("");
       }
     };
     loadMe();
   }, []);
 
-  // Poll pending collaboration invites to show a badge
+  // Poll pending collaboration invites to show a badge (optional, will be superseded by realtime alerts if present)
   useEffect(() => {
     let mounted = true;
     const loadInvites = async () => {
@@ -232,7 +293,7 @@ const TopBar = () => {
     return () => { mounted = false; clearInterval(interval); window.removeEventListener('storage', onStorage); };
   }, []);
 
-  // Watch notifications để tính số thông báo chưa đọc
+  // Watch notifications: compute unread MESSAGE and unread non-MESSAGE separately
   useEffect(() => {
     let mounted = true;
     const userId = (() => {
@@ -247,14 +308,16 @@ const TopBar = () => {
     })();
 
     if (!userId) {
-      if (mounted) setUnreadNotificationsCount(0);
+      if (mounted) { setUnreadMsgCount(0); setUnreadAlertCount(0); }
       return;
     }
 
     const unsubscribe = watchNotifications(userId, (notifications: NotificationDTO[]) => {
       if (!mounted) return;
-      const unread = notifications.filter(n => !n.read);
-      setUnreadNotificationsCount(unread.length);
+      const unreadMsgs = notifications.filter(n => n.type === 'MESSAGE' && !n.read).length;
+      const unreadAlerts = notifications.filter(n => n.type !== 'MESSAGE' && !n.read).length;
+      setUnreadMsgCount(unreadMsgs);
+      setUnreadAlertCount(unreadAlerts);
     });
 
     return () => {
@@ -282,6 +345,7 @@ const TopBar = () => {
     setProfileName("");
     setProfileEmail("");
     setProfileAvatar(""); // Reset avatar
+    setProfileIsPremium(false);
 
     // Navigate to login page
     navigate('/login');
@@ -454,53 +518,64 @@ const TopBar = () => {
 
         {/* Right side controls */}
         <div className="flex items-center gap-3 relative z-10">
-          {/* Notifications */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
-            onClick={() => navigate('/social?tab=friends')}
-            title="Messages & Collaboration Invites"
-          >
-            <Bell className="h-5 w-5" />
-            {unreadNotificationsCount > 0 && (
-              <Badge
-                variant="destructive"
-                className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
+          {/* Notifications (non-message alerts) dropdown */}
+          <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative hover:bg-gradient-primary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--primary)/0.4)]"
+                title="Notifications"
               >
-                {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
-              </Badge>
-            )}
-          </Button>
+                <Bell className="h-5 w-5" />
+                {unreadAlertCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
+                  >
+                    {unreadAlertCount > 99 ? '99+' : unreadAlertCount}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <NotificationsDropdown onClose={() => setNotifOpen(false)} />
+          </DropdownMenu>
 
-          {/* Messages */}
+          {/* Messages (chat only) */}
           <Button 
             variant="ghost" 
             size="icon" 
             className="relative hover:bg-gradient-secondary hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-[0_0_20px_hsl(var(--accent)/0.4)]"
-            onClick={() => navigate('/social?tab=friends')}
-            title="Messages & Collaboration Invites"
+            onClick={() => navigate('/social?tab=chat')}
+            title="Messages"
           >
             <MessageCircle className="h-5 w-5" />
-            {(inviteCount > 0 || unreadNotificationsCount > 0) && (
+            {unreadMsgCount > 0 && (
               <Badge
                 variant="destructive"
                 className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 flex items-center justify-center text-[10px] animate-pulse shadow-[0_0_10px_hsl(var(--destructive)/0.5)]"
               >
-                {inviteCount + unreadNotificationsCount > 99 ? '99+' : inviteCount + unreadNotificationsCount}
+                {unreadMsgCount > 99 ? '99+' : unreadMsgCount}
               </Badge>
             )}
           </Button>
 
-          {/* Khám phá Premium */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-primary/30 text-primary hover:bg-primary/10 transition-all duration-300 font-semibold"
-            onClick={() => navigate('/premium')}
-          >
-            Khám phá Premium
-          </Button>
+          {/* Khám phá Premium or membership badge */}
+          {profileIsPremium ? (
+            <Badge className="gap-1 bg-gradient-primary text-white border-primary/60 shadow-lg">
+              <Crown className="h-3.5 w-3.5" />
+              {profilePlanLabel || "Premium"}
+            </Badge>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-primary/30 text-primary hover:bg-primary/10 transition-all duration-300 font-semibold"
+              onClick={() => navigate('/premium')}
+            >
+              Khám phá Premium
+            </Button>
+          )}
 
           {/* Auth area */}
           {isAuthenticated ? (
