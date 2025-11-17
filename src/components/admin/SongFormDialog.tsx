@@ -46,7 +46,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { genresApi, artistsApi, moodsApi } from "@/services/api";
+import { genresApi, artistsApi, moodsApi, songGenreApi, songMoodApi } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const contributorFieldConfigs = [
@@ -118,7 +118,7 @@ type SongFormValues = z.infer<typeof songFormSchema>;
 interface SongFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: SongFormValues & { file?: File }) => void;
+  onSubmit: (data: SongFormValues & { file?: File }, genreScores?: Map<number, number>, moodScores?: Map<number, number>) => void;
   defaultValues?: Partial<SongFormValues>;
   isLoading?: boolean;
   mode: "create" | "edit";
@@ -140,6 +140,8 @@ export const SongFormDialog = ({
   const [moodSearchQuery, setMoodSearchQuery] = useState("");
   const [genrePopoverOpen, setGenrePopoverOpen] = useState(false);
   const [moodPopoverOpen, setMoodPopoverOpen] = useState(false);
+  const [genreScores, setGenreScores] = useState<Map<number, string>>(new Map());
+  const [moodScores, setMoodScores] = useState<Map<number, string>>(new Map());
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [originalAudioUrl, setOriginalAudioUrl] = useState<string>("");
@@ -277,6 +279,8 @@ export const SongFormDialog = ({
     } else if (open) {
       setOriginalAudioUrl("");
       setSelectedFile(null); // Reset file when creating new song
+      setGenreScores(new Map());
+      setMoodScores(new Map());
       form.reset({
         name: "",
         releaseYear: new Date().getFullYear(),
@@ -387,6 +391,28 @@ export const SongFormDialog = ({
       ...data,
       artistIds: artistUnion,
     };
+    
+    // Convert genreScores and moodScores from Map<number, string> to Map<number, number>
+    const genreScoresMap = new Map<number, number>();
+    genreScores.forEach((scoreStr, genreId) => {
+      const score = parseFloat(scoreStr);
+      if (Number.isFinite(score) && score >= 0 && score <= 1) {
+        genreScoresMap.set(genreId, score);
+      } else {
+        genreScoresMap.set(genreId, 1.0); // Default to 1.0 if invalid
+      }
+    });
+    
+    const moodScoresMap = new Map<number, number>();
+    moodScores.forEach((scoreStr, moodId) => {
+      const score = parseFloat(scoreStr);
+      if (Number.isFinite(score) && score >= 0 && score <= 1) {
+        moodScoresMap.set(moodId, score);
+      } else {
+        moodScoresMap.set(moodId, 1.0); // Default to 1.0 if invalid
+      }
+    });
+    
     // For update mode: include file if selected, exclude duration and audioUrl
     if (mode === "edit") {
       const { duration, audioUrl, file: _unusedFile, ...restData } = normalizedData;
@@ -399,7 +425,7 @@ export const SongFormDialog = ({
     } else {
       // Create mode: send as normal (may include file for create too)
       // Note: duration can be included in create mode if needed
-      onSubmit(normalizedData);
+      onSubmit(normalizedData, genreScoresMap, moodScoresMap);
     }
   };
 
@@ -824,8 +850,14 @@ export const SongFormDialog = ({
                                           field.onChange(
                                             field.value?.filter((id: number) => id !== genre.id)
                                           );
+                                          const newScores = new Map(genreScores);
+                                          newScores.delete(genre.id);
+                                          setGenreScores(newScores);
                                         } else {
                                           field.onChange([...(field.value || []), genre.id]);
+                                          const newScores = new Map(genreScores);
+                                          newScores.set(genre.id, "1.0");
+                                          setGenreScores(newScores);
                                         }
                                       }}
                                       className={cn(
@@ -862,22 +894,43 @@ export const SongFormDialog = ({
                           </PopoverContent>
                         </Popover>
                         {field.value?.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
+                          <div className="space-y-2 mt-3">
                             {field.value.map((genreId: number) => {
                               const genre = allGenres.find(g => g.id === genreId);
+                              const currentScore = genreScores.get(genreId) || "1.0";
                               return (
                                 <div
                                   key={genreId}
-                                  className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
+                                  className="group flex items-center gap-3 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md"
                                 >
                                   <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
-                                  <span className="truncate max-w-[120px]">{genre?.name || `ID: ${genreId}`}</span>
+                                  <span className="truncate flex-1 min-w-0">{genre?.name || `ID: ${genreId}`}</span>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      min="0"
+                                      max="1"
+                                      value={currentScore}
+                                      onChange={(e) => {
+                                        const newScores = new Map(genreScores);
+                                        newScores.set(genreId, e.target.value);
+                                        setGenreScores(newScores);
+                                      }}
+                                      className="w-20 h-8 text-xs"
+                                      placeholder="1.0"
+                                    />
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       field.onChange(
                                         field.value?.filter((id: number) => id !== genreId)
                                       );
+                                      const newScores = new Map(genreScores);
+                                      newScores.delete(genreId);
+                                      setGenreScores(newScores);
                                     }}
                                     className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
                                   >
@@ -966,8 +1019,14 @@ export const SongFormDialog = ({
                                           field.onChange(
                                             field.value?.filter((id: number) => id !== mood.id)
                                           );
+                                          const newScores = new Map(moodScores);
+                                          newScores.delete(mood.id);
+                                          setMoodScores(newScores);
                                         } else {
                                           field.onChange([...(field.value || []), mood.id]);
+                                          const newScores = new Map(moodScores);
+                                          newScores.set(mood.id, "1.0");
+                                          setMoodScores(newScores);
                                         }
                                       }}
                                       className={cn(
@@ -1004,22 +1063,43 @@ export const SongFormDialog = ({
                           </PopoverContent>
                         </Popover>
                         {field.value && field.value.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
+                          <div className="space-y-2 mt-3">
                             {field.value.map((moodId: number) => {
                               const mood = allMoods.find(m => m.id === moodId);
+                              const currentScore = moodScores.get(moodId) || "1.0";
                               return (
                                 <div
                                   key={moodId}
-                                  className="group flex items-center gap-2 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md hover:scale-105"
+                                  className="group flex items-center gap-3 bg-gradient-to-r from-[hsl(var(--admin-hover))] to-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-3 py-2 rounded-lg text-sm font-medium shadow-sm transition-all duration-200 hover:shadow-md"
                                 >
                                   <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
-                                  <span className="truncate max-w-[120px]">{mood?.name || `ID: ${moodId}`}</span>
+                                  <span className="truncate flex-1 min-w-0">{mood?.name || `ID: ${moodId}`}</span>
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <Input
+                                      type="number"
+                                      step="0.1"
+                                      min="0"
+                                      max="1"
+                                      value={currentScore}
+                                      onChange={(e) => {
+                                        const newScores = new Map(moodScores);
+                                        newScores.set(moodId, e.target.value);
+                                        setMoodScores(newScores);
+                                      }}
+                                      className="w-20 h-8 text-xs"
+                                      placeholder="1.0"
+                                    />
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => {
                                       field.onChange(
                                         field.value?.filter((id: number) => id !== moodId)
                                       );
+                                      const newScores = new Map(moodScores);
+                                      newScores.delete(moodId);
+                                      setMoodScores(newScores);
                                     }}
                                     className="ml-1 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5 transition-all duration-200 opacity-70 hover:opacity-100"
                                   >

@@ -13,6 +13,7 @@ export interface Song {
   audioUrl?: string;
   audio?: string;
   url?: string;
+  streamPath?: string; // S3 stream path: stream/{uuid}/{uuid}_128kbps.m3u8
   plays?: string;
   playCount?: number;
   duration?: string | number; // BE trả về string format "3:45"
@@ -606,6 +607,32 @@ export const songsApi = {
       // Không throw error để không ảnh hưởng listening history
       console.warn("⚠️ Play count increment failed, but listening history will still be recorded");
     }
+  },
+
+  // Get CloudFront HLS URL for streaming (BE trả về JSON với streamUrl)
+  getStreamUrl: async (songId: number | string): Promise<{ streamUrl: string; uuid?: string }> => {
+    const response = await apiClient.get(`/songs/${songId}/stream-url`);
+    return response.data;
+  },
+
+  // Extract UUID from audioUrl and build S3 stream URL
+  getS3StreamUrl: (audioUrl: string | undefined): string | null => {
+    if (!audioUrl) return null;
+    
+    // Extract UUID from URL pattern: https://echoverse.s3.ap-southeast-1.amazonaws.com/music/{uuid}.mp3
+    const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+    const match = audioUrl.match(uuidPattern);
+    
+    if (!match || !match[1]) {
+      console.warn("Could not extract UUID from audioUrl:", audioUrl);
+      return null;
+    }
+    
+    const uuid = match[1];
+    // Build S3 URL: https://echoverse.s3.ap-southeast-1.amazonaws.com/stream/{uuid}/{uuid}.m3u8
+    const bucketName = "echoverse";
+    const region = "ap-southeast-1";
+    return `https://${bucketName}.s3.${region}.amazonaws.com/stream/${uuid}/${uuid}.m3u8`;
   },
 };
 

@@ -32,7 +32,7 @@ import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
-import { streamApi } from "@/services/api/streamApi";
+import { getAuthToken } from "@/services/api";
 import Hls from "hls.js";
 
 interface LyricLine {
@@ -69,6 +69,12 @@ const MusicPlayer = () => {
   const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const isPlayingRef = useRef(isPlaying);
+  const cleanupCallbacks = useRef<(() => void)[]>([]);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -163,85 +169,132 @@ const MusicPlayer = () => {
     setCurrentLyricIndex(0);
     setDuration(0);
 
-    // Set new audio source via secure HLS session or fallback to direct audioUrl
+    cleanupCallbacks.current = [];
+
     let hls: Hls | null = null;
-    (async () => {
+    let safariMetadataListener: (() => void) | null = null;
+    let loadErrorTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const loadStreamUrl = async () => {
       try {
-        const { playbackUrl } = await streamApi.createSession(currentSong.id);
+        // Gọi BE lấy CloudFront HLS URL (không ký, không proxy)
+        const { streamUrl } = await songsApi.getStreamUrl(currentSong.id);
+        const finalStreamUrl = streamUrl;
+        
+        if (!finalStreamUrl) {
+          throw new Error("No stream URL available");
+        }
+
+        console.log("Using CloudFront HLS URL:", finalStreamUrl);
+
         if (Hls.isSupported()) {
-          hls = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 90 });
-          hls.loadSource(playbackUrl);
+          hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: false,
+            backBufferLength: 90,
+            debug: false,
+            xhrSetup: (xhr) => {
+              // Không cần gửi credentials khi gọi CloudFront public
+              xhr.withCredentials = false;
+            },
+          });
+
+          hls.loadSource(finalStreamUrl);
           hls.attachMedia(audio);
-          // End loading when manifest is parsed
+
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             setIsLoading(false);
-            if (isPlaying) {
-              audio.play().catch(() => { });
+            if (isPlayingRef.current) {
+              audio.play().catch((err) => {
+                console.error("Auto-play failed:", err);
+              });
             }
           });
-          // Handle HLS errors to avoid infinite spinner
+
           hls.on(Hls.Events.ERROR, (_event, data) => {
             console.error("HLS error:", data);
             if (data.fatal) {
               setIsLoading(false);
-              // Fallback to direct audioUrl if HLS fails
-              const fallbackUrl = currentSong.audioUrl || currentSong.audio;
-              if (fallbackUrl) {
-                console.log('Falling back to direct audioUrl:', fallbackUrl);
-                audio.src = fallbackUrl;
-                audio.load();
-              } else {
-                toast({
-                  title: "Playback error",
-                  description: `${data.type || 'HLS'}: ${data.details || 'fatal error'}`,
-                  variant: "destructive",
-                });
+              let errorMsg = `HLS stream error: ${data.type || "unknown"}`;
+              if (data.details) {
+                errorMsg += ` - ${data.details}`;
+              }
+              if (data.response) {
+                errorMsg += ` (Response: ${data.response.code || "N/A"})`;
+              }
+              toast({
+                title: "Playback error",
+                description: errorMsg,
+                variant: "destructive",
+              });
+
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  hls?.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  hls?.recoverMediaError();
+                  break;
+                default:
+                  break;
               }
             }
           });
-        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
-          audio.src = playbackUrl; // Safari
-          audio.load();
-        } else {
-          audio.src = playbackUrl; // Fallback
-          audio.load();
-        }
-      } catch (e) {
-        console.error('Failed to init HLS session, falling back to direct audioUrl', e);
-        // Fallback to direct audioUrl
-        const fallbackUrl = currentSong.audioUrl || currentSong.audio || currentSong.url;
-        if (fallbackUrl) {
-          console.log('Using direct audioUrl fallback:', fallbackUrl);
-          audio.src = fallbackUrl;
+
+          hls.on(Hls.Events.LEVEL_LOADED, () => {
+            console.log("HLS level loaded");
+          });
+        } else if (audio.canPlayType("application/vnd.apple.mpegurl")) {
+          safariMetadataListener = () => {
+            setIsLoading(false);
+            if (isPlayingRef.current) {
+              audio.play().catch((err) => {
+                console.error("Auto-play failed:", err);
+              });
+            }
+            if (safariMetadataListener) {
+              audio.removeEventListener("loadedmetadata", safariMetadataListener);
+              safariMetadataListener = null;
+            }
+          };
+
+          audio.addEventListener("loadedmetadata", safariMetadataListener);
+          audio.src = finalStreamUrl;
           audio.load();
         } else {
           setIsLoading(false);
           toast({
             title: "Playback error",
-            description: "No audio source available",
+            description: "Your browser does not support HLS streaming",
             variant: "destructive",
           });
         }
-      }
-    })();
-    console.log(currentSong)
-    // Handler for when audio is ready to play
-    const handleCanPlay = () => {
-      setIsLoading(false);
-
-      // Only auto-play if player was in playing state
-      if (isPlaying) {
-        audio.play().catch(err => {
-          console.error("Auto-play failed:", err);
-          toast({
-            title: "Playback paused",
-            description: "Click play to continue",
-          });
+      } catch (error) {
+        console.error("Failed to start proxy stream:", error);
+        setIsLoading(false);
+        toast({
+          title: "Playback error",
+          description: "Failed to get stream URL. Please try again.",
+          variant: "destructive",
         });
       }
     };
 
-    // Handler for load errors
+    loadStreamUrl();
+
+    const handleCanPlay = () => {
+      setIsLoading(false);
+      if (!isPlayingRef.current) return;
+
+      audio.play().catch((err) => {
+        console.error("Auto-play failed:", err);
+        toast({
+          title: "Playback paused",
+          description: "Click play to continue",
+        });
+      });
+    };
+
     const handleLoadError = (e: Event) => {
       console.error("Audio load error:", e);
       setIsLoading(false);
@@ -251,28 +304,40 @@ const MusicPlayer = () => {
         variant: "destructive",
       });
 
-      // Auto-skip to next song after 2 seconds
-      setTimeout(() => {
+      loadErrorTimeout = setTimeout(() => {
         playNext();
       }, 2000);
     };
 
-    // Attach event listeners
     audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("error", handleLoadError);
 
-    // Note: audio.load() will be called after source is set (Safari/fallback). For Hls.js, attachMedia triggers load.
-
-    // Cleanup
     return () => {
       audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("error", handleLoadError);
+      if (safariMetadataListener) {
+        audio.removeEventListener("loadedmetadata", safariMetadataListener);
+        safariMetadataListener = null;
+      }
+      if (loadErrorTimeout) {
+        clearTimeout(loadErrorTimeout);
+      }
+      cleanupCallbacks.current.forEach((cb) => {
+        try {
+          cb();
+        } catch (err) {
+          console.warn("Cleanup callback failed", err);
+        }
+      });
+      cleanupCallbacks.current = [];
       if (hls) {
         hls.destroy();
         hls = null;
       }
+      audio.pause();
+      audio.src = "";
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks-exhaustive-deps
   }, [currentSong]); // Only reload when song changes, not isPlaying/playNext
 
   // Handle play/pause toggle separately
@@ -491,6 +556,14 @@ const MusicPlayer = () => {
   };
 
   // Hide player on login page or if no song is playing
+  // Also reset showLyrics and isExpanded when no song
+  useEffect(() => {
+    if (!currentSong) {
+      setShowLyrics(false);
+      setIsExpanded(false);
+    }
+  }, [currentSong]);
+
   if (location.pathname === "/login" || !currentSong) {
     return null;
   }
@@ -824,7 +897,7 @@ const MusicPlayer = () => {
       )}
 
       {/* Lyrics Panel */}
-      {showLyrics && (
+      {showLyrics && currentSong && (
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
           <div

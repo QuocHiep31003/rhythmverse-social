@@ -7,7 +7,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -159,6 +158,8 @@ export const SongEditDialog = ({
   const [artistPickerOpen, setArtistPickerOpen] = useState(false);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
   const [moodPickerOpen, setMoodPickerOpen] = useState(false);
+  const [isSavingGenre, setIsSavingGenre] = useState(false);
+  const [isSavingMood, setIsSavingMood] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     type: "contributor" | "genre" | "mood";
     id: number;
@@ -238,6 +239,12 @@ export const SongEditDialog = ({
       setNewMoodId(null);
       setMoodPickerOpen(false);
       setNewMoodScore("1.0");
+      setEditingGenreId(null);
+      setGenreScoreDraft("");
+      setEditingMoodId(null);
+      setMoodScoreDraft("");
+      setIsSavingGenre(false);
+      setIsSavingMood(false);
     }
   }, [open]);
 
@@ -426,6 +433,7 @@ export const SongEditDialog = ({
   const handleUpdateGenre = async (songGenreId: number, score: number) => {
     try {
       setIsLoading(true);
+      setIsSavingGenre(true);
       await songGenreApi.update(songGenreId, score);
       toast({
         title: "Thành công",
@@ -443,6 +451,7 @@ export const SongEditDialog = ({
       });
     } finally {
       setIsLoading(false);
+      setIsSavingGenre(false);
     }
   };
 
@@ -504,6 +513,7 @@ export const SongEditDialog = ({
   const handleUpdateMood = async (songMoodId: number, score: number) => {
     try {
       setIsLoading(true);
+      setIsSavingMood(true);
       await songMoodApi.update(songMoodId, score);
       toast({
         title: "Thành công",
@@ -521,6 +531,7 @@ export const SongEditDialog = ({
       });
     } finally {
       setIsLoading(false);
+      setIsSavingMood(false);
     }
   };
 
@@ -598,90 +609,154 @@ export const SongEditDialog = ({
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {/* Metadata Tab */}
-            <TabsContent value="metadata" className="mt-4 space-y-4">
+            <TabsContent value="metadata" className="mt-4">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(handleSaveMetadata)} className="space-y-4">
-                  {albumName ? (
-                    <div className="rounded-lg border border-dashed border-zinc-300/60 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                      Album hiện tại: <span className="font-medium text-foreground">{albumName}</span>
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border border-dashed border-zinc-300/60 bg-muted/10 px-3 py-2 text-sm text-muted-foreground">
-                      Bài hát chưa thuộc album nào
-                    </div>
-                  )}
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tên bài hát *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Tên bài hát" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* ID - Read only */}
+                    <FormItem>
+                      <FormLabel>ID</FormLabel>
+                      <Input 
+                        value={songData?.id || ""} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </FormItem>
 
-                  <FormField
-                    control={form.control}
-                    name="releaseYear"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Năm phát hành *</FormLabel>
-                        <FormControl>
-                          <Input type="number" placeholder="2024" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Trạng thái</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
+                    {/* Name - Editable */}
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tên bài hát *</FormLabel>
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue /></SelectTrigger>
+                            <Input placeholder="Tên bài hát" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="ACTIVE">Active</SelectItem>
-                            <SelectItem value="INACTIVE">Inactive</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <FormField
-                    control={form.control}
-                    name="duration"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Thời lượng (mm:ss)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="3:45" {...field} disabled />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    {/* Release Year - Editable */}
+                    <FormField
+                      control={form.control}
+                      name="releaseYear"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Năm phát hành *</FormLabel>
+                          <FormControl>
+                            <Input type="number" placeholder="2024" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
+                    {/* Status - Editable */}
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Trạng thái</FormLabel>
+                          <Select
+                            value={field.value}
+                            onValueChange={field.onChange}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="ACTIVE">Active</SelectItem>
+                              <SelectItem value="INACTIVE">Inactive</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Duration - Read only */}
+                    <FormField
+                      control={form.control}
+                      name="duration"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Thời lượng (mm:ss)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              placeholder="3:45" 
+                              {...field} 
+                              disabled 
+                              className="bg-muted"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    {/* Play Count - Read only */}
+                    <FormItem>
+                      <FormLabel>Lượt phát</FormLabel>
+                      <Input 
+                        value={songData?.playCount?.toLocaleString() || "0"} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </FormItem>
+
+                    {/* Album - Read only */}
+                    <FormItem>
+                      <FormLabel>Album</FormLabel>
+                      <Input 
+                        value={albumName || "Chưa có album"} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </FormItem>
+
+                    {/* Audio URL - Read only display */}
+                    <FormItem>
+                      <FormLabel>Audio URL hiện tại</FormLabel>
+                      <Input 
+                        value={songData?.audioUrl ? (songData.audioUrl.length > 60 ? songData.audioUrl.substring(0, 60) + "..." : songData.audioUrl) : "Chưa có"} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </FormItem>
+
+                    {/* Created At - Read only */}
+                    <FormItem>
+                      <FormLabel>Ngày tạo</FormLabel>
+                      <Input 
+                        value={songData?.createdAt ? new Date(songData.createdAt).toLocaleString("vi-VN") : "N/A"} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </FormItem>
+
+                    {/* Updated At - Read only */}
+                    <FormItem>
+                      <FormLabel>Ngày cập nhật</FormLabel>
+                      <Input 
+                        value={songData?.updatedAt ? new Date(songData.updatedAt).toLocaleString("vi-VN") : "N/A"} 
+                        disabled 
+                        className="bg-muted"
+                      />
+                    </FormItem>
+                  </div>
+
+                  {/* File Upload - Full width */}
                   <FormField
                     control={form.control}
                     name="audioUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>File nhạc (chỉ upload file mới)</FormLabel>
+                        <FormLabel>Upload file nhạc mới (chỉ upload khi cần thay đổi)</FormLabel>
                         <FormControl>
                           <Input
                             type="file"
@@ -693,9 +768,9 @@ export const SongEditDialog = ({
                             disabled={uploading}
                           />
                         </FormControl>
-                        {songData?.audioUrl && (
+                        {selectedFile && (
                           <div className="text-sm text-muted-foreground">
-                            Audio hiện tại: {songData.audioUrl.substring(0, 60)}...
+                            File đã chọn: {selectedFile.name}
                           </div>
                         )}
                         <FormMessage />
@@ -703,7 +778,7 @@ export const SongEditDialog = ({
                     )}
                   />
 
-                  <div className="flex justify-end">
+                  <div className="flex justify-end pt-2">
                     <Button
                       type="submit"
                       disabled={isLoading}
@@ -930,9 +1005,10 @@ export const SongEditDialog = ({
                             value={genreScoreDraft}
                             onChange={(e) => setGenreScoreDraft(e.target.value)}
                             onBlur={() => {
-                              const parsed = parseFloat(genreScoreDraft);
-                              const newScore = Number.isFinite(parsed) ? parsed : sg.score;
-                              handleUpdateGenre(sg.id, newScore);
+                              // 如果正在保存，不恢复旧值
+                              if (!isSavingGenre) {
+                                setGenreScoreDraft(sg.score.toString());
+                              }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
@@ -955,10 +1031,15 @@ export const SongEditDialog = ({
                               <Button
                                 size="sm"
                                 className="h-8 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90"
+                                onMouseDown={(e) => {
+                                  e.preventDefault(); // 防止输入框失去焦点
+                                  setIsSavingGenre(true);
+                                }}
                                 onClick={() => {
                                   const parsed = parseFloat(genreScoreDraft);
                                   const newScore = Number.isFinite(parsed) ? parsed : sg.score;
                                   handleUpdateGenre(sg.id, newScore);
+                                  setIsSavingGenre(false);
                                 }}
                                 disabled={isLoading}
                               >
@@ -1152,9 +1233,10 @@ export const SongEditDialog = ({
                             value={moodScoreDraft}
                             onChange={(e) => setMoodScoreDraft(e.target.value)}
                             onBlur={() => {
-                              const parsed = parseFloat(moodScoreDraft);
-                              const newScore = Number.isFinite(parsed) ? parsed : sm.score;
-                              handleUpdateMood(sm.id, newScore);
+                              // 如果正在保存，不恢复旧值
+                              if (!isSavingMood) {
+                                setMoodScoreDraft(sm.score.toString());
+                              }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
@@ -1177,10 +1259,15 @@ export const SongEditDialog = ({
                               <Button
                                 size="sm"
                                 className="h-8 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90"
+                                onMouseDown={(e) => {
+                                  e.preventDefault(); // 防止输入框失去焦点
+                                  setIsSavingMood(true);
+                                }}
                                 onClick={() => {
                                   const parsed = parseFloat(moodScoreDraft);
                                   const newScore = Number.isFinite(parsed) ? parsed : sm.score;
                                   handleUpdateMood(sm.id, newScore);
+                                  setIsSavingMood(false);
                                 }}
                                 disabled={isLoading}
                               >
@@ -1324,12 +1411,6 @@ export const SongEditDialog = ({
             </TabsContent>
           </div>
         </Tabs>
-
-        <DialogFooter className="px-6 py-4 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Đóng
-          </Button>
-        </DialogFooter>
       </DialogContent>
 
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>

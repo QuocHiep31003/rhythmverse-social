@@ -19,7 +19,7 @@ import {
 import { SongFormDialog } from "@/components/admin/SongFormDialog";
 import { SongEditDialog } from "@/components/admin/SongEditDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
-import { songsApi, genresApi, moodsApi } from "@/services/api";
+import { songsApi, genresApi, moodsApi, songGenreApi, songMoodApi } from "@/services/api";
 import type { Song } from "@/services/api/songApi";
 import { toast } from "@/hooks/use-toast";
 import { debounce } from "@/lib/utils";
@@ -44,6 +44,7 @@ const AdminSongs = () => {
   const [genres, setGenres] = useState<any[]>([]);
   const [moods, setMoods] = useState<any[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<string | undefined>();
+  const [sortBy, setSortBy] = useState<string>("name,asc");
   const [editTab, setEditTab] = useState<"metadata" | "contributor" | "genre" | "mood">("metadata");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,7 +92,7 @@ const AdminSongs = () => {
       const data = await songsApi.getAll({
         page: currentPage,
         size: pageSize,
-        sort: "name,asc",
+        sort: sortBy,
         search: searchQuery || undefined,
         genreId: selectedGenreId,
         moodId: selectedMoodId,
@@ -109,7 +110,7 @@ const AdminSongs = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, searchQuery, selectedGenreId, selectedMoodId, selectedStatus]);
+  }, [currentPage, pageSize, searchQuery, selectedGenreId, selectedMoodId, selectedStatus, sortBy]);
 
   useEffect(() => {
     loadSongs();
@@ -137,11 +138,37 @@ const AdminSongs = () => {
     setDeleteOpen(true);
   };
 
-  const handleFormSubmit = async (data: any) => {
+  const handleFormSubmit = async (data: any, genreScores?: Map<number, number>, moodScores?: Map<number, number>) => {
     setIsSubmitting(true);
     try {
       if (formMode === "create") {
-        await songsApi.create(data);
+        // Create song without genreIds and moodIds first, then add them with scores
+        const { genreIds, moodIds, ...songData } = data;
+        const createdSong = await songsApi.create(songData);
+        
+        // Add genres with scores after song is created
+        if (createdSong && createdSong.id && genreIds && genreIds.length > 0) {
+          for (const genreId of genreIds) {
+            const score = genreScores?.get(genreId) || 1.0;
+            try {
+              await songGenreApi.add(Number(createdSong.id), genreId, score);
+            } catch (error) {
+              console.error(`Error adding genre ${genreId} with score ${score}:`, error);
+            }
+          }
+        }
+        
+        // Add moods with scores after song is created
+        if (createdSong && createdSong.id && moodIds && moodIds.length > 0) {
+          for (const moodId of moodIds) {
+            const score = moodScores?.get(moodId) || 1.0;
+            try {
+              await songMoodApi.add(Number(createdSong.id), moodId, score);
+            } catch (error) {
+              console.error(`Error adding mood ${moodId} with score ${score}:`, error);
+            }
+          }
+        }
       } else if (selectedSong) {
         if (data.file) {
           await songsApi.updateWithFile(String(selectedSong.id), data);
@@ -423,6 +450,29 @@ const AdminSongs = () => {
                   </Select>
                 </div>
 
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-muted-foreground">Sắp xếp:</label>
+                  <Select
+                    value={sortBy}
+                    onValueChange={(value) => {
+                      setSortBy(value);
+                      setCurrentPage(0);
+                    }}
+                  >
+                    <SelectTrigger className="w-56">
+                      <SelectValue placeholder="Sắp xếp" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name,asc">Tên A-Z</SelectItem>
+                      <SelectItem value="name,desc">Tên Z-A</SelectItem>
+                      <SelectItem value="releaseYear,desc">Năm phát hành: Mới nhất</SelectItem>
+                      <SelectItem value="releaseYear,asc">Năm phát hành: Cũ nhất</SelectItem>
+                      <SelectItem value="updatedAt,desc">Cập nhật: Mới nhất</SelectItem>
+                      <SelectItem value="updatedAt,asc">Cập nhật: Cũ nhất</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <Button
                   variant="outline"
                   size="sm"
@@ -430,6 +480,7 @@ const AdminSongs = () => {
                     setSelectedGenreId(undefined);
                     setSelectedMoodId(undefined);
                     setSelectedStatus(undefined);
+                    setSortBy("name,asc");
                     setCurrentPage(0);
                   }}
                   className="gap-2"
