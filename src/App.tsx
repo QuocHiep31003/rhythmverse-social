@@ -27,10 +27,10 @@ import Settings from "./pages/Settings";
 import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
-import InviteFriend from "./pages/InviteFriend";
 import MusicPlayer from "./components/MusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
+import Notifications from "./pages/Notifications";
 
 // ✅ Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -51,6 +51,8 @@ import AdminSnapshots from "./pages/admin/AdminSnapshots";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 import PaymentHistory from "./pages/PaymentHistory";
+// Friends and Friend Requests are handled inside Social panel now
+import FriendRequestWatcher from "./components/FriendRequestWatcher";
 
 const queryClient = new QueryClient();
 
@@ -105,12 +107,14 @@ const App = () => (
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/social" element={<Social />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="/notifications" element={<Notifications />} />
                     <Route path="/song/:slug" element={<SongDetail />} />
                     <Route path="/album/:slug" element={<AlbumDetail />} />
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
-                    <Route path="/invite/friend/:code" element={<InviteFriend />} />
+                    {/** Public profile is shown inline via /social?u=... */}
+                    {/** Friends and Friend Requests routes removed; use /social */}
                     <Route path="/payment/success" element={<PaymentSuccess />} />
                     <Route path="/payment/cancel" element={<PaymentCancel />} />
                     <Route path="/payment/history" element={<PaymentHistory />} />
@@ -129,6 +133,7 @@ const App = () => (
                 return null;
               }
             })()}
+            <FriendRequestWatcher />
           </BrowserRouter>
         </TooltipProvider>
       </MusicProvider>
