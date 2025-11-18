@@ -433,7 +433,7 @@ const Login = () => {
                               onChange={(e) => setRememberMe(e.target.checked)} />
                             <Label htmlFor="remember" className="text-sm">Remember me</Label>
                           </div>
-                          <Button variant="link" className="p-0 h-auto text-sm" onClick={() => setShowResetPassword(true)}>
+                          <Button variant="link" type="button" className="p-0 h-auto text-sm" onClick={() => setShowResetPassword(true)}>
                             Forgot password?
                           </Button>
                         </div>

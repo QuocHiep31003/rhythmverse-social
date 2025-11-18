@@ -189,18 +189,37 @@ const MusicPlayer = () => {
     const loadStreamUrl = async () => {
       try {
         // Gọi BE lấy CloudFront HLS URL (không ký, không proxy)
-        const { streamUrl } = await songsApi.getStreamUrl(currentSong.id);
-        const finalStreamUrl = streamUrl;
+        const { streamUrl, uuid } = await songsApi.getStreamUrl(currentSong.id);
+        let finalStreamUrl = streamUrl;
         
         if (!finalStreamUrl) {
           throw new Error("No stream URL available");
+        }
+
+        // QUAN TRỌNG: Load bitrate playlist (_128kbps.m3u8) thay vì master playlist (.m3u8)
+        // Master playlist sẽ khiến HLS player auto-fallback và retry → load thêm segment
+        // Backend trả về URL dạng: /api/songs/{songId}/stream-proxy/
+        // Cần append filename vào cuối URL
+        let useBitratePlaylist = false;
+        if (uuid && !finalStreamUrl.includes('_128kbps.m3u8')) {
+          // Nếu URL kết thúc bằng / hoặc không có filename, append bitrate playlist
+          if (finalStreamUrl.endsWith('/') || !finalStreamUrl.endsWith('.m3u8')) {
+            // Append filename vào cuối URL
+            finalStreamUrl = finalStreamUrl.replace(/\/$/, '') + '/' + uuid + '_128kbps.m3u8';
+            useBitratePlaylist = true;
+          } else if (finalStreamUrl.endsWith('.m3u8') && !finalStreamUrl.includes('_128kbps')) {
+            // Nếu đã có .m3u8 nhưng không phải bitrate playlist, thay thế filename
+            finalStreamUrl = finalStreamUrl.replace(/[^/]+\.m3u8$/, `${uuid}_128kbps.m3u8`);
+            useBitratePlaylist = true;
+          }
+          console.log("🔄 Converted to bitrate playlist:", finalStreamUrl);
         }
 
         const finalStreamUrlAbsolute = finalStreamUrl.startsWith("http")
           ? finalStreamUrl
           : `${window.location.origin}${finalStreamUrl}`;
 
-        console.log("Using backend proxy HLS URL:", finalStreamUrlAbsolute);
+        console.log("Using backend proxy HLS URL (bitrate playlist):", finalStreamUrlAbsolute);
 
         if (Hls.isSupported()) {
           hls = new Hls({
@@ -212,6 +231,21 @@ const MusicPlayer = () => {
             maxBufferLength: 20, // Giảm buffer để tránh load quá nhiều
             maxMaxBufferLength: 30,
             maxBufferSize: 30 * 1000 * 1000, // 30MB max buffer
+            // QUAN TRỌNG: Không set liveSyncDurationCount/liveMaxLatencyDurationCount cho VOD
+            // Vì đây là VOD playlist (có #EXT-X-ENDLIST), không phải live stream
+            // Hls.js sẽ tự động detect VOD và không reload playlist
+            // Giảm số lần retry để tránh load thêm khi hết segment
+            maxMaxLoadingDelay: 4, // Giảm max loading delay
+            maxLoadingDelay: 2, // Giảm loading delay
+            manifestLoadingTimeOut: 10000, // 10s timeout cho manifest
+            manifestLoadingMaxRetry: 2, // Chỉ retry 2 lần cho manifest
+            manifestLoadingRetryDelay: 1000, // Delay 1s giữa các retry
+            levelLoadingTimeOut: 10000, // 10s timeout cho level
+            levelLoadingMaxRetry: 2, // Chỉ retry 2 lần cho level
+            levelLoadingRetryDelay: 1000, // Delay 1s giữa các retry
+            fragLoadingTimeOut: 20000, // 20s timeout cho fragment
+            fragLoadingMaxRetry: 3, // Retry 3 lần cho fragment (ít hơn mặc định)
+            fragLoadingRetryDelay: 1000, // Delay 1s giữa các retry
             xhrSetup: (xhr) => {
               xhr.withCredentials = true;
             },
@@ -225,8 +259,19 @@ const MusicPlayer = () => {
           // Lưu duration ban đầu để detect khi HLS loop
           let initialDuration = 0;
           
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
             setIsLoading(false);
+            
+            // QUAN TRỌNG: Kiểm tra nếu playlist có #EXT-X-ENDLIST (VOD - không loop)
+            // Nếu có, đảm bảo không reload playlist
+            if (data && data.levels && data.levels.length > 0) {
+              const level = data.levels[0];
+              if (level.details && level.details.live === false) {
+                console.log("✅ VOD playlist detected (has #EXT-X-ENDLIST), will not reload");
+                // VOD playlist không cần reload, stop load khi hết segment
+              }
+            }
+            
             // Lưu duration ban đầu
             setTimeout(() => {
               if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
@@ -242,7 +287,7 @@ const MusicPlayer = () => {
             }
           });
           
-          // Listen for when HLS reaches end of stream và dừng load
+          // QUAN TRỌNG: Listen khi HLS đã load hết tất cả fragments (VOD)
           hls.on(Hls.Events.BUFFER_APPENDED, () => {
             // Kiểm tra nếu đã load hết và gần hết bài (trong vòng 2 giây)
             if (initialDuration > 0 && audio.currentTime >= initialDuration - 2) {
@@ -264,6 +309,18 @@ const MusicPlayer = () => {
               } catch (e) {
                 console.warn("Failed to stop HLS loop:", e);
               }
+            }
+          });
+          
+          // QUAN TRỌNG: Listen khi HLS đã load hết tất cả fragments (VOD playlist)
+          // Khi hết fragments, stop load ngay để tránh retry/reload
+          hls.on(Hls.Events.BUFFER_EOS, () => {
+            console.log("✅ End of stream (EOS) detected, stopping HLS load");
+            try {
+              hlsInstanceRef.current?.stopLoad();
+              console.log("HLS load stopped at end of stream");
+            } catch (e) {
+              console.warn("Failed to stop HLS at EOS:", e);
             }
           });
 
@@ -293,6 +350,30 @@ const MusicPlayer = () => {
             console.error("HLS fatal error:", data);
             let shouldShowError = true;
             let shouldRecover = false;
+            
+            // QUAN TRỌNG: Nếu lỗi 404 (file không tồn tại), có thể là bitrate playlist chưa có
+            // Fallback về master playlist nếu đang dùng bitrate playlist
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR && 
+                (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
+                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR)) {
+              const currentUrl = hls?.url || '';
+              if (currentUrl.includes('_128kbps.m3u8')) {
+                console.warn("⚠️ Bitrate playlist not found, falling back to master playlist");
+                // Fallback về master playlist
+                const masterUrl = currentUrl.replace('_128kbps.m3u8', '.m3u8');
+                try {
+                  if (hls) {
+                    hls.loadSource(masterUrl);
+                    shouldRecover = true;
+                    shouldShowError = false;
+                    console.log("🔄 Fallback to master playlist:", masterUrl);
+                    return;
+                  }
+                } catch (e) {
+                  console.error("Failed to fallback to master playlist:", e);
+                }
+              }
+            }
             
             switch (data.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
