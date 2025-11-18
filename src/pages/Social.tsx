@@ -20,6 +20,7 @@ import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
 
 import { chatApi, ChatMessageDTO } from "@/services/api/chatApi";
 import { useMusic } from "@/contexts/MusicContext";
+import type { Song } from "@/contexts/MusicContext";
 import { watchChatMessages, type FirebaseMessage } from "@/services/firebase/chat";
 
 import { NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
@@ -32,7 +33,7 @@ import {
 } from "lucide-react";
 
 import type { CollabInviteDTO, Message, Friend, ApiFriendDTO, ApiPendingDTO } from "@/types/social";
-import { parseIncomingContent } from "@/utils/socialUtils";
+import { parseIncomingContent, DEFAULT_ARTIST_NAME } from "@/utils/socialUtils";
 import { ChatArea } from "@/components/social/ChatArea";
 import { FriendsPanel } from "@/components/social/FriendsPanel";
 import { FriendRequestsList } from "@/components/social/FriendRequestsList";
@@ -50,6 +51,108 @@ type SocialTab = "chat" | "friends";
 
 const normalizeSocialTab = (value?: string | null): SocialTab =>
   (value || "").toLowerCase() === "friends" ? "friends" : "chat";
+
+const coerceToNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const resolveSongNumericId = (song: Song | null | undefined): number | null => {
+  if (!song) return null;
+  const candidates: unknown[] = [
+    song.id,
+    (song as { songId?: unknown }).songId,
+    (song as { SongId?: unknown }).SongId,
+    (song as { song?: { id?: unknown } }).song?.id,
+  ];
+  for (const candidate of candidates) {
+    const parsed = coerceToNumber(candidate);
+    if (parsed != null) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const resolveSongTitle = (song: Song | null | undefined): string => {
+  if (!song) return "";
+  const candidates = [
+    song.songName,
+    (song as { name?: string }).name,
+    (song as { title?: string }).title,
+    (song as { songTitle?: string }).songTitle,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  return "";
+};
+
+const resolveSongArtist = (song: Song | null | undefined): string => {
+  if (!song) return "";
+  const names: string[] = [];
+  const addName = (value: unknown) => {
+    if (!value) return;
+    if (typeof value === "string" && value.trim().length > 0) {
+      names.push(value.trim());
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(addName);
+      return;
+    }
+    if (typeof value === "object") {
+      const maybeName = (value as { name?: unknown }).name;
+      if (typeof maybeName === "string" && maybeName.trim().length > 0) {
+        names.push(maybeName.trim());
+      }
+    }
+  };
+
+  addName(song.artist);
+  addName((song as { artistName?: unknown }).artistName);
+  addName((song as { artists?: unknown }).artists);
+  addName((song as { artistNames?: unknown }).artistNames);
+
+  const unique = Array.from(new Set(names.filter((name) => name.length > 0)));
+  return unique.join(", ");
+};
+
+const CHAT_HISTORY_POLL_INTERVAL_MS = 1200;
+
+const getMessageSortKey = (msg: Message): number => {
+  if (typeof msg.sentAt === "number" && Number.isFinite(msg.sentAt)) {
+    return msg.sentAt;
+  }
+  if (typeof msg.id === "string") {
+    const numericId = Number(msg.id);
+    if (Number.isFinite(numericId)) return numericId;
+    const digits = msg.id.match(/\d+/g);
+    if (digits?.length) {
+      const last = Number(digits[digits.length - 1]);
+      if (Number.isFinite(last)) return last;
+    }
+  }
+  return 0;
+};
+
+const sortMessagesChronologically = (messages: Message[]): Message[] => {
+  return [...messages].sort((a, b) => {
+    const diff = getMessageSortKey(a) - getMessageSortKey(b);
+    if (diff !== 0) return diff;
+    return String(a.id).localeCompare(String(b.id));
+  });
+};
 
 
 
@@ -90,6 +193,8 @@ const Social = () => {
   }, [searchParams]);
 
   const [friends, setFriends] = useState<Friend[]>([]);
+
+  const friendsRef = useRef<Friend[]>([]);
 
   const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
 
@@ -170,6 +275,10 @@ const Social = () => {
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
   const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    friendsRef.current = friends;
+  }, [friends]);
 
 
 
@@ -452,7 +561,9 @@ const Social = () => {
 
             const newOnlineStatus = !!p.online;
 
-            console.log('[Social] ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ MATCH! Updating friend', friendId, 'from', f.isOnline, 'to', newOnlineStatus);
+            if (f.isOnline !== newOnlineStatus) {
+              console.log('[Social] Updating friend presence', friendId, 'from', f.isOnline, 'to', newOnlineStatus);
+            }
 
             return { ...f, isOnline: newOnlineStatus };
 
@@ -686,28 +797,9 @@ const Social = () => {
           if (!unique.has(m.id)) unique.set(m.id, m);
         });
         
-        const toSortKey = (msg: Message): number => {
-          if (typeof msg.sentAt === 'number' && Number.isFinite(msg.sentAt)) {
-            return msg.sentAt;
-          }
-          if (typeof msg.id === 'string') {
-            const numericId = Number(msg.id);
-            if (Number.isFinite(numericId)) return numericId;
-            const digits = msg.id.match(/\d+/g);
-            if (digits?.length) {
-              const last = Number(digits[digits.length - 1]);
-              if (Number.isFinite(last)) return last;
-            }
-          }
-          return 0;
-        };
         return {
           ...prev,
-          [selectedChat]: Array.from(unique.values()).sort((a, b) => {
-            const diff = toSortKey(a) - toSortKey(b);
-            if (diff !== 0) return diff;
-            return String(a.id).localeCompare(String(b.id));
-          }),
+          [selectedChat]: sortMessagesChronologically(Array.from(unique.values())),
         };
       });
 
@@ -896,39 +988,73 @@ const Social = () => {
 
 
 
-  // Load chat history for selected friend
-
+  // Poll chat history as a fallback when Firebase listeners lag
   useEffect(() => {
+    if (!meId || !selectedChat) return;
 
-    (async () => {
+    let cancelled = false;
 
-      if (!meId || !selectedChat) return;
-
-      try {
-
-        const history = await chatApi.getHistory(meId, Number(selectedChat));
-
-        const normalizedHistory = history.map((h) => ({
-
-          ...h,
-
-          contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
-
-        }));
-
-        const mapped = normalizedHistory
-          .map(h => parseIncomingContent(h, friends))
-          .sort((a, b) => {
-            const aKey = typeof a.sentAt === 'number' && Number.isFinite(a.sentAt) ? a.sentAt : Number(a.id) || 0;
-            const bKey = typeof b.sentAt === 'number' && Number.isFinite(b.sentAt) ? b.sentAt : Number(b.id) || 0;
-            return aKey - bKey;
+    const mergeHistory = (historyMessages: Message[]) => {
+      setChatByFriend(prev => {
+        const existing = prev[selectedChat] || [];
+        const historyIds = new Set(historyMessages.map(m => m.id));
+        const merged = [...historyMessages];
+        existing.forEach(msg => {
+          if (msg.id?.startsWith('temp-') && !historyIds.has(msg.id)) {
+            merged.push(msg);
+          }
+        });
+        const sortedMerged = sortMessagesChronologically(merged);
+        const unchanged =
+          existing.length === sortedMerged.length &&
+          existing.every((msg, idx) => {
+            const next = sortedMerged[idx];
+            if (!next) return false;
+            if (msg.id !== next.id) return false;
+            if (msg.content !== next.content) return false;
+            if (msg.type !== next.type) return false;
+            const msgSongId = msg.songData?.id ?? null;
+            const nextSongId = next.songData?.id ?? null;
+            if (msgSongId !== nextSongId) return false;
+            return true;
           });
-        setChatByFriend(prev => ({ ...prev, [selectedChat]: mapped }));
+        if (unchanged) return prev;
+        return { ...prev, [selectedChat]: sortedMerged };
+      });
+    };
 
-      } catch { void 0; }
+    const fetchHistory = async (reason: 'initial' | 'poll') => {
+      try {
+        const history = await chatApi.getHistory(meId, Number(selectedChat));
+        const normalizedHistory = history.map((h) => ({
+          ...h,
+          contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
+        }));
+        const mapped = sortMessagesChronologically(
+          normalizedHistory.map(h => parseIncomingContent(h, friendsRef.current))
+        );
+        if (!cancelled) {
+          mergeHistory(mapped);
+        }
+      } catch (error) {
+        if (reason === 'initial') {
+          console.error('[Social] Failed to load chat history:', error);
+        } else {
+          console.warn('[Social] Chat history poll failed:', error);
+        }
+      }
+    };
 
-    })();
+    void fetchHistory('initial');
 
+    const intervalId = window.setInterval(() => {
+      void fetchHistory('poll');
+    }, CHAT_HISTORY_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, [meId, selectedChat]);
 
 
@@ -1036,67 +1162,84 @@ const Social = () => {
     if (!currentSong || !selectedChat || !meId) return;
 
     const receiverId = Number(selectedChat);
+    const now = Date.now();
+    const tempId = `temp-share-${now}`;
+    const numericSongId = resolveSongNumericId(currentSong);
+    const songTitle = resolveSongTitle(currentSong) || "Shared song";
+    const songArtist = resolveSongArtist(currentSong) || DEFAULT_ARTIST_NAME;
+    const payloadId =
+      numericSongId ??
+      (currentSong.id && currentSong.id.trim().length > 0 ? currentSong.id : now);
 
-    const content = `SONG:${JSON.stringify({ id: currentSong.id, title: currentSong.title || '', artist: currentSong.artist || '' })}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      sender: "You",
+      content: "Shared a song",
+      timestamp: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sentAt: now,
+      type: "song",
+      songData: { id: payloadId, title: songTitle, artist: songArtist }
+    };
+
+    setChatByFriend(prev => ({
+      ...prev,
+      [selectedChat]: [...(prev[selectedChat] || []), optimisticMsg]
+    }));
 
     try {
+      if (numericSongId != null) {
+        const result = await chatApi.shareSong(meId, receiverId, numericSongId);
+        const normalizedResult = {
+          ...result,
+          contentPlain:
+            result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined)
+        };
+        const parsed = parseIncomingContent(normalizedResult as ChatMessageDTO, friends);
+        setChatByFriend(prev => {
+          const existing = prev[selectedChat] || [];
+          const replaced = existing.map(m => (m.id === tempId ? parsed : m));
+          const hasParsed = replaced.some(m => m.id === parsed.id);
+          return {
+            ...prev,
+            [selectedChat]: hasParsed ? replaced : [...replaced, parsed]
+          };
+        });
+        return;
+      }
 
-      const result = await sendMessage(meId, receiverId, content);
-      // Optimistic update vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi ID tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡m, sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ khi Firebase broadcast message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t
-      const now = Date.now();
-      const tempId = `temp-share-${now}`;
-      const optimisticMsg: Message = { 
-        id: tempId, 
-        sender: 'You', 
-        content: 'Shared a song', 
-        timestamp: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
-        sentAt: now,
-        type: 'song', 
-        songData: { id: currentSong.id, title: currentSong.title || '', artist: currentSong.artist || '' } 
+      const fallbackPayload = {
+        id: payloadId,
+        title: songTitle,
+        artist: songArtist
       };
-      setChatByFriend(prev => {
-        const existing = prev[selectedChat] || [];
-        // Check xem ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ message nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â y chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh duplicate)
-        const alreadyExists = existing.some(m => 
-          m.type === 'song' && 
-          m.songData?.id === currentSong.id && 
-          m.sender === 'You' &&
-          m.timestamp === optimisticMsg.timestamp
-        );
-        if (alreadyExists) return prev;
-        return { ...prev, [selectedChat]: [...existing, optimisticMsg] };
-      });
-      
-      // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u sendMessage trÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t, thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ optimistic message
+      const content = `SONG:${JSON.stringify(fallbackPayload)}`;
+      const result = await sendMessage(meId, receiverId, content);
+
       if (result && typeof result === "object" && "id" in result) {
         const normalizedResult = {
           ...result,
-          contentPlain: result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined),
+          contentPlain:
+            result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined)
         };
         const parsed = parseIncomingContent(normalizedResult as ChatMessageDTO, friends);
-        setChatByFriend(prev => ({
-          ...prev,
-          [selectedChat]: prev[selectedChat]?.map(m => 
-            m.id === tempId ? parsed : m
-          ).filter((m, idx, arr) => {
-            // Remove duplicate nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³
-            return idx === arr.findIndex(ms => ms.id === m.id);
-          }) || []
-        }));
+        setChatByFriend(prev => {
+          const existing = prev[selectedChat] || [];
+          return {
+            ...prev,
+            [selectedChat]: existing.map(m => (m.id === tempId ? parsed : m))
+          };
+        });
       }
     } catch (e) {
-
+      console.error('[Social] Failed to share song:', e);
       toast.error('Failed to share song');
-
-      // Remove optimistic message on error
       setChatByFriend(prev => ({
         ...prev,
-        [selectedChat]: prev[selectedChat]?.filter(m => !m.id.startsWith('temp-share-')) || []
+        [selectedChat]: prev[selectedChat]?.filter(m => m.id !== tempId) || []
       }));
     }
 
   };
-
 
 
   const handleSharePlaylistLink = async () => {
@@ -1533,3 +1676,4 @@ const Social = () => {
 
 
 export default Social;
+

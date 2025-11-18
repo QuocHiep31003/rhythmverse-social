@@ -3,6 +3,16 @@ import { setUserOnline, setUserOffline, pingPresence, watchUserPresence, watchMu
 import { watchChatMessages, sendMessage, type FirebaseMessage } from '@/services/firebase/chat';
 import { watchNotifications, NotificationDTO } from '@/services/firebase/notifications';
 
+// Để tránh spam presence ping, FE không được ping quá dày.
+// Backend thường có heartbeat window ~30s, nên đặt tối thiểu 10s.
+const MIN_PING_INTERVAL_MS = 10000;
+const DEFAULT_PING_INTERVAL_MS = 15000;
+const envPingIntervalRaw = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_PRESENCE_PING_INTERVAL_MS;
+const parsedEnvPing = envPingIntervalRaw ? Number(envPingIntervalRaw) : NaN;
+const PRESENCE_PING_INTERVAL_MS = Number.isFinite(parsedEnvPing)
+  ? Math.max(parsedEnvPing, MIN_PING_INTERVAL_MS)
+  : DEFAULT_PING_INTERVAL_MS;
+
 type UseFirebaseRealtimeOptions = {
   onPresence?: (presence: { userId: number; online: boolean }) => void;
   onNotification?: (notification: NotificationDTO) => void;
@@ -64,7 +74,8 @@ export default function useFirebaseRealtime(
         console.log('[Firebase Realtime] Heartbeat ping');
         lastPingTimeRef.current = Date.now();
         void pingPresence(userId);
-      }, 15000); // 15 giây - Messenger-style heartbeat
+      }, PRESENCE_PING_INTERVAL_MS); // default 15 gi�y - Messenger-style heartbeat
+      console.log('[Firebase Realtime] Heartbeat interval (ms):', PRESENCE_PING_INTERVAL_MS);
     } else {
       // Nếu userId không đổi, chỉ cập nhật presence listeners nếu cần
       console.log('[Firebase Realtime] UserId unchanged, updating listeners if needed');
@@ -161,7 +172,6 @@ export default function useFirebaseRealtime(
         unsubscribeNotifRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]); // Chỉ phụ thuộc vào userId, các options được lưu trong refs để tránh re-render
 
   // Separate useEffect để watch presence khi friends thay đổi
@@ -230,4 +240,5 @@ export default function useFirebaseRealtime(
     isConnected: !!userId
   };
 }
+
 
