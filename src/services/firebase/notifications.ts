@@ -1,4 +1,4 @@
-import { ref, onValue, query, orderByKey, limitToLast, off } from 'firebase/database';
+import { ref, onValue, query, orderByKey, limitToLast } from 'firebase/database';
 import { database } from '@/config/firebase-config';
 
 export interface NotificationDTO {
@@ -28,7 +28,7 @@ export const watchNotifications = (
     limitToLast(50)
   );
   
-  onValue(notificationsQuery, (snapshot) => {
+  const unsubscribe = onValue(notificationsQuery, (snapshot) => {
     const notifications: NotificationDTO[] = [];
     let count = 0;
     snapshot.forEach((childSnapshot) => {
@@ -57,7 +57,7 @@ export const watchNotifications = (
   
   return () => {
     console.log('[Firebase Notifications] Unsubscribing from user:', userId);
-    off(notificationsRef);
+    unsubscribe();
   };
 };
 

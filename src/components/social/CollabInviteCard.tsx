@@ -1,7 +1,10 @@
+import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Music } from "lucide-react";
 import type { CollabInviteDTO } from "@/types/social";
 import { extractArtistNames, formatDurationLabel, DEFAULT_ARTIST_NAME } from "@/utils/socialUtils";
+import { createSlug } from "@/utils/playlistUtils";
 
 export const CollabPlaylistPreview = ({ playlist }: { playlist?: CollabInviteDTO["playlist"] }) => {
   if (!playlist) {
@@ -28,9 +31,6 @@ export const CollabPlaylistPreview = ({ playlist }: { playlist?: CollabInviteDTO
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
             <span>Visibility: {playlist.visibility || "Unknown"}</span>
             <span>{totalSongs} {totalSongs === 1 ? "song" : "songs"}</span>
-            {playlist.songLimit != null && (
-              <span>Limit {playlist.songLimit}</span>
-            )}
           </div>
         </div>
       </div>
@@ -88,7 +88,19 @@ export const CollabInviteCard = ({
   onAccept: (id: number) => void;
   onReject: (id: number) => void;
 }) => {
+  const navigate = useNavigate();
   const playlistName = invite.playlist?.name || invite.playlistName || `Playlist #${invite.playlistId}`;
+  const playlistId = invite.playlist?.id ?? invite.playlistId;
+
+  const handleViewPlaylist = useCallback(() => {
+    if (playlistId != null) {
+      const slug = createSlug(playlistName || "playlist", playlistId);
+      navigate(`/playlist/${slug}`);
+    } else {
+      onToggle(invite.id);
+    }
+  }, [invite.id, navigate, onToggle, playlistId, playlistName]);
+
   return (
     <div className="rounded-2xl border border-border/20 bg-muted/10 p-4 space-y-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -109,8 +121,8 @@ export const CollabInviteCard = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" onClick={() => onToggle(invite.id)}>
-            {expanded ? "Hide preview" : "View playlist"}
+          <Button variant="secondary" size="sm" onClick={handleViewPlaylist}>
+            View playlist
           </Button>
           <Button size="sm" variant="hero" onClick={() => onAccept(invite.id)}>
             Accept

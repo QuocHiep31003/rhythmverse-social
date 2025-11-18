@@ -1,4 +1,4 @@
-import { ref, onValue, query, orderByChild, limitToLast, off } from 'firebase/database';
+import { ref, onValue, query, orderByChild, limitToLast } from 'firebase/database';
 import { database } from '@/config/firebase-config';
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from '@/services/api/config';
 import type { SharedContentDTO, SharedContentType } from '@/services/api/chatApi';
@@ -63,7 +63,7 @@ export const watchChatMessages = (
     limitToLast(50)
   );
   
-  onValue(
+  const unsubscribe = onValue(
     messagesQuery,
     (snapshot) => {
       console.log('[Firebase Chat] Received snapshot for room:', chatRoomKey, snapshot.exists());
@@ -101,7 +101,7 @@ export const watchChatMessages = (
   
   return () => {
     console.log('[Firebase Chat] Unsubscribing from room:', chatRoomKey);
-    off(messagesRef);
+    unsubscribe();
   };
 };
 
