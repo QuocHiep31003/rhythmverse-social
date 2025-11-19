@@ -623,6 +623,17 @@ export const songsApi = {
     const region = "ap-southeast-1";
     return `https://${bucketName}.s3.${region}.amazonaws.com/stream/${uuid}/${uuid}.m3u8`;
   },
+
+  // Lấy danh sách bài hát gợi ý dựa trên bài hát hiện tại
+  getRecommendations: async (songId: string | number, limit: number = 10): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/${songId}/recommendations?limit=${limit}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+      return [];
+    }
+  },
 };
 
 export default songsApi;

@@ -27,13 +27,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
+import { cn, handleImageError } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
 import { getAuthToken } from "@/services/api";
+import { mapToPlayerSong } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 import Hls from "hls.js";
 
 interface LyricLine {
@@ -55,6 +57,8 @@ const MusicPlayer = () => {
     setRepeatMode,
     queue,
     playSong,
+    setQueue,
+    addToQueue,
   } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsRef = useRef<HTMLDivElement>(null);
@@ -73,7 +77,10 @@ const MusicPlayer = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
-  const [playlistTab, setPlaylistTab] = useState<"queue" | "suggested">("queue");
+  const [suggestedSongs, setSuggestedSongs] = useState<typeof queue>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [autoPlaySuggestions, setAutoPlaySuggestions] = useState(true);
+  const loadedSuggestionsForSongId = useRef<string | number | null>(null);
   const isPlayingRef = useRef(isPlaying);
   const cleanupCallbacks = useRef<(() => void)[]>([]);
   const hlsInstanceRef = useRef<Hls | null>(null);
@@ -155,6 +162,52 @@ const MusicPlayer = () => {
       audioRef.current.currentTime = time;
       setProgress([(time / audioRef.current.duration) * 100]);
     }
+  };
+
+  const handleToggleAutoSuggestions = (checked: boolean) => {
+    setAutoPlaySuggestions(checked);
+    toast({
+      title: checked ? "Đã bật gợi ý tự động" : "Đã tắt gợi ý tự động",
+      description: checked
+        ? "Khi hết danh sách phát sẽ phát tiếp các gợi ý"
+        : "Khi hết danh sách phát sẽ dừng lại",
+      duration: 2500,
+    });
+  };
+
+  const startSuggestionsPlayback = () => {
+    if (!autoPlaySuggestions) {
+      console.warn("Auto suggestions disabled");
+      return false;
+    }
+    if (suggestedSongs.length === 0) {
+      console.warn("No suggested songs available");
+      return false;
+    }
+    // Thêm bài đầu tiên từ danh sách gợi ý vào queue và phát
+    const nextSong = suggestedSongs[0];
+    console.log("🎧 Adding suggested song to queue:", nextSong.songName || nextSong.name);
+    addToQueue(nextSong);
+    playSong(nextSong);
+    return true;
+  };
+
+  const hasNextQueueSong = () => {
+    if (queue.length === 0 || !currentSong) {
+      return queue.length > 0;
+    }
+    const currentIndex = queue.findIndex((s) => s.id === currentSong.id);
+    return currentIndex >= 0 && currentIndex < queue.length - 1;
+  };
+
+  const handleNextClick = () => {
+    if (!hasNextQueueSong()) {
+      if (!startSuggestionsPlayback()) {
+        console.warn("No more songs to play");
+      }
+      return;
+    }
+    playNext();
   };
 
   // Load new song - professional handling with proper state management
@@ -430,7 +483,7 @@ const MusicPlayer = () => {
                     description: "Failed to recover from stream error. Trying next song...",
                     variant: "destructive",
                   });
-                  setTimeout(() => playNext(), 1000);
+                  setTimeout(() => handleNextClick(), 1000);
                 } else {
                   console.log("Recovery successful, audio is playing");
                 }
@@ -503,7 +556,7 @@ const MusicPlayer = () => {
             variant: "destructive",
           });
           loadErrorTimeout = setTimeout(() => {
-            playNext();
+            handleNextClick();
           }, 2000);
         }
       };
@@ -659,12 +712,11 @@ const MusicPlayer = () => {
       } else {
         // Play next song (works for both "all" and "off" modes)
         console.log("Playing next song");
-        // Kiểm tra queue trước khi chuyển bài
-        if (queue.length === 0) {
-          console.warn("Queue is empty, cannot play next song");
-          return;
+        if (hasNextQueueSong()) {
+          playNext();
+        } else if (!startSuggestionsPlayback()) {
+          console.warn("No songs left in queue or suggestions");
         }
-        playNext();
       }
     };
 
@@ -705,11 +757,11 @@ const MusicPlayer = () => {
             audio.play().catch(err => console.error("Repeat play error:", err));
           } else {
             console.log("Auto-playing next song");
-            if (queue.length === 0) {
-              console.warn("Queue is empty, cannot auto-play next");
-              return;
+            if (hasNextQueueSong()) {
+              playNext();
+            } else if (!startSuggestionsPlayback()) {
+              console.warn("No songs left to auto-play");
             }
-            playNext();
           }
           return;
         }
@@ -740,11 +792,11 @@ const MusicPlayer = () => {
             audio.play().catch(err => console.error("Repeat play error:", err));
           } else {
             console.log("Auto-playing next song (loop detected), queue length:", queue.length);
-            if (queue.length === 0) {
-              console.warn("Queue is empty, cannot auto-play next");
-              return;
+            if (hasNextQueueSong()) {
+              playNext();
+            } else if (!startSuggestionsPlayback()) {
+              console.warn("No songs left to auto-play");
             }
-            playNext();
           }
         }
       }
@@ -772,7 +824,7 @@ const MusicPlayer = () => {
               variant: "destructive",
             });
             // Try next song on fatal error
-            setTimeout(() => playNext(), 1000);
+            setTimeout(() => handleNextClick(), 1000);
           } else {
             console.warn("Recoverable audio error (ignored):", errorCode);
           }
@@ -879,12 +931,23 @@ const MusicPlayer = () => {
   const toggleMute = () => setIsMuted(!isMuted);
 
   const handleShuffleToggle = () => {
+    const newShuffleState = !isShuffled;
     toggleShuffle();
+    // Auto tắt gợi ý khi bật shuffle
+    if (newShuffleState && autoPlaySuggestions) {
+      setAutoPlaySuggestions(false);
+      toast({
+        title: "Shuffle on",
+        description: "Gợi ý tự động đã tắt khi bật shuffle",
+        duration: 2000,
+      });
+      return;
+    }
     toast({
-      title: isShuffled ? "Shuffle off" : "Shuffle on",
-      description: isShuffled
-        ? "Playing songs in order"
-        : "Playing songs in random order",
+      title: newShuffleState ? "Shuffle on" : "Shuffle off",
+      description: newShuffleState
+        ? "Playing songs in random order"
+        : "Playing songs in order",
       duration: 2000,
     });
   };
@@ -931,6 +994,10 @@ const MusicPlayer = () => {
     const nextModeName = modeNames[(currentIndex + 1) % modes.length];
 
     setRepeatMode(nextMode);
+    // Auto tắt gợi ý khi bật repeat (one hoặc all)
+    if (nextMode !== "off" && autoPlaySuggestions) {
+      setAutoPlaySuggestions(false);
+    }
     toast({
       title: nextModeName,
       description:
@@ -947,8 +1014,51 @@ const MusicPlayer = () => {
     if (!currentSong) {
       setShowLyrics(false);
       setIsExpanded(false);
+      setSuggestedSongs([]);
     }
   }, [currentSong]);
+
+  // Load suggested songs (50 max) whenever current song changes
+  useEffect(() => {
+    if (!currentSong) {
+      setSuggestedSongs([]);
+      loadedSuggestionsForSongId.current = null;
+      return;
+    }
+
+    const currentSongId = currentSong.id;
+    if (loadedSuggestionsForSongId.current === currentSongId) {
+      return;
+    }
+
+    let isMounted = true;
+    const loadSuggestions = async () => {
+      setIsLoadingSuggestions(true);
+      try {
+        const songId = typeof currentSongId === "string" ? Number(currentSongId) : currentSongId;
+        const recommendations = await songsApi.getRecommendations(songId, 50);
+        const formattedSongs = recommendations.map((s) => mapToPlayerSong(s));
+        if (isMounted) {
+          setSuggestedSongs(formattedSongs);
+          loadedSuggestionsForSongId.current = currentSongId;
+        }
+      } catch (error) {
+        console.error("Error loading suggestions:", error);
+        if (isMounted) {
+          setSuggestedSongs([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingSuggestions(false);
+        }
+      }
+    };
+
+    loadSuggestions();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentSong?.id]);
 
   if (location.pathname === "/login" || !currentSong) {
     return null;
@@ -1066,12 +1176,8 @@ const MusicPlayer = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => {
-                    console.log("Next clicked, queue length:", queue.length, "currentSong:", currentSong?.id);
-                    console.log("Queue songs:", queue.map(s => ({ id: s.id, name: s.songName || s.name })));
-                    playNext();
-                  }}
-                  disabled={queue.length === 0}
+                  onClick={handleNextClick}
+                  disabled={!hasNextQueueSong() && (!autoPlaySuggestions || suggestedSongs.length === 0)}
                 >
                   <SkipForward className="w-4 h-4" />
                 </Button>
@@ -1258,7 +1364,12 @@ const MusicPlayer = () => {
                     <Play className="w-6 h-6" />
                   )}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={playNext}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleNextClick}
+                  disabled={!hasNextQueueSong() && (!autoPlaySuggestions || suggestedSongs.length === 0)}
+                >
                   <SkipForward className="w-6 h-6" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={cycleRepeat}>
@@ -1378,50 +1489,30 @@ const MusicPlayer = () => {
               </Button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-border/40 bg-background/50">
-              <button
-                onClick={() => setPlaylistTab("queue")}
-                className={cn(
-                  "flex-1 px-4 py-3 text-sm font-medium transition-colors",
-                  playlistTab === "queue"
-                    ? "text-primary border-b-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Đẩy vào ({queue.length})
-              </button>
-              <button
-                onClick={() => setPlaylistTab("suggested")}
-                className={cn(
-                  "flex-1 px-4 py-3 text-sm font-medium transition-colors",
-                  playlistTab === "suggested"
-                    ? "text-primary border-b-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Gợi ý
-              </button>
-            </div>
-
             {/* Playlist Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {playlistTab === "queue" ? (
-                queue.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <div className="flex-1 overflow-y-auto p-4 space-y-8">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Các bài đang ở trong hàng chờ</p>
+                    <h4 className="text-lg font-semibold text-foreground">Hàng chờ hiện tại ({queue.length})</h4>
+                  </div>
+                </div>
+                {queue.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center py-12">
                     <Music className="w-12 h-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">Danh sách phát trống</p>
                     <p className="text-sm text-muted-foreground mt-2">
-                      Phát nhạc từ các trang như Trending để thêm vào danh sách
+                      Thêm bài hát hoặc bật gợi ý tự động để tiếp tục nghe nhạc
                     </p>
                   </div>
                 ) : (
-                  queue.map((song, index) => (
+                  queue.map((song) => (
                     <div
                       key={song.id}
                       onClick={() => {
                         playSong(song);
-                        setShowPlaylist(false);
+                        // Không đóng panel khi click bài hát
                       }}
                       className={cn(
                         "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
@@ -1465,16 +1556,95 @@ const MusicPlayer = () => {
                       </div>
                     </div>
                   ))
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                  <Music className="w-12 h-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Chức năng gợi ý đang phát triển</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Sẽ có các bài hát gợi ý dựa trên bài hát hiện tại
-                  </p>
+                )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="text-lg font-bold text-foreground">
+                      Tự động phát
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Danh sách bài hát gợi ý
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto-suggestions-switch"
+                    checked={autoPlaySuggestions}
+                    onCheckedChange={handleToggleAutoSuggestions}
+                  />
                 </div>
-              )}
+
+                {!autoPlaySuggestions ? null : isLoadingSuggestions ? (
+                  <div className="flex flex-col items-center justify-center text-center py-12">
+                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+                    <p className="text-muted-foreground">Đang tải gợi ý...</p>
+                  </div>
+                ) : suggestedSongs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center py-12">
+                    <Music className="w-12 h-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Không có gợi ý phù hợp</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Thử chọn bài hát khác để hệ thống phân tích lại
+                    </p>
+                  </div>
+                ) : (
+                  suggestedSongs
+                    .filter(song => !queue.some(q => q.id === song.id))
+                    .slice(0, 50)
+                    .map((song) => (
+                    <div
+                      key={song.id}
+                      onClick={() => {
+                        // Khi click vào bài gợi ý, thêm vào queue và phát (không đóng panel)
+                        addToQueue(song);
+                        playSong(song);
+                      }}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
+                        currentSong?.id === song.id && "bg-primary/10 border border-primary/20"
+                      )}
+                    >
+                      <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
+                        {song.cover ? (
+                          <img
+                            src={song.cover}
+                            alt={song.songName || song.name || "Unknown Song"}
+                            onError={handleImageError}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                            <Music className="w-6 h-6 text-white" />
+                          </div>
+                        )}
+                        {currentSong?.id === song.id && isPlaying && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={cn(
+                            "text-sm font-medium truncate",
+                            currentSong?.id === song.id && "text-primary"
+                          )}
+                        >
+                          {song.songName || song.name || "Unknown Song"}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {typeof song.artist === "string" ? song.artist : song.artist || "Unknown Artist"}
+                        </p>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex-shrink-0">
+                        {formatTime(song.duration || 0)}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>

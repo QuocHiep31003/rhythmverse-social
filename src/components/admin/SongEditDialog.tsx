@@ -899,7 +899,11 @@ export const SongEditDialog = ({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={handleAddContributor} size="sm">
+                    <Button 
+                      onClick={handleAddContributor} 
+                      size="sm"
+                      className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90"
+                    >
                       Thêm
                     </Button>
                     <Button

@@ -52,11 +52,17 @@ const SearchResults = () => {
   const fetchSearchResults = async (queryParam) => {
     if (!queryParam.trim()) return;
     setLoading(true);
-    const data = await searchApi.getAll(queryParam);
-    setSearchResults(data);
-    setDetailedResults({ songs: [], artists: [], albums: [] });
-    console.log(data)
-    setLoading(false);
+    try {
+      const data = await searchApi.getAll(queryParam);
+      setSearchResults(data || { songs: [], artists: [], albums: [] });
+      setDetailedResults({ songs: [], artists: [], albums: [] });
+      console.log(data);
+    } catch (error) {
+      console.error('Error fetching search results:', error);
+      setSearchResults({ songs: [], artists: [], albums: [] });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFilterChange = async (filterId: string) => {
@@ -235,7 +241,7 @@ const SearchResults = () => {
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold text-foreground truncate">{song.name}</p>
                               <p className="text-sm text-muted-foreground truncate">
-                                {song.artists?.map(a => a.name).join(", ")}
+                                {song.artists || "Unknown Artist"}
                               </p>
                             </div>
                           </div>
@@ -334,7 +340,7 @@ const SearchResults = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate text-foreground">{song.name || song.songName || "Unknown Song"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                      <p className="text-xs text-muted-foreground truncate">{song.artists || "Unknown Artist"}</p>
                     </div>
                     <span className="text-xs font-medium text-primary">{song.trend}</span>
                   </div>

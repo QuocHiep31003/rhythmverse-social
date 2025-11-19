@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,15 @@ import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import { genresApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+
+const SORT_OPTIONS = [
+  { label: "Tên A-Z", value: "name,asc" },
+  { label: "Tên Z-A", value: "name,desc" },
+  { label: "Mới tạo", value: "createdAt,desc" },
+  { label: "Cũ nhất", value: "createdAt,asc" },
+  { label: "Chỉnh sửa gần nhất", value: "updatedAt,desc" },
+  { label: "Lâu chưa chỉnh sửa", value: "updatedAt,asc" },
+];
 
 const AdminGenres = () => {
   const navigate = useNavigate();
@@ -25,6 +34,7 @@ const AdminGenres = () => {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [sortOption, setSortOption] = useState<string>(SORT_OPTIONS[0].value);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatDateTime = (value?: string) => {
@@ -54,12 +64,12 @@ const AdminGenres = () => {
 
   useEffect(() => {
     loadGenres();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, sortOption]);
 
   const loadGenres = async () => {
     try {
       setLoading(true);
-      const data = await genresApi.getAll({ page: currentPage, size: pageSize, sort: "name,asc", search: searchQuery || undefined });
+      const data = await genresApi.getAll({ page: currentPage, size: pageSize, sort: sortOption, search: searchQuery || undefined });
       setGenres(data.content || []); setTotalPages(data.totalPages || 0); setTotalElements(data.totalElements || 0);
     } catch (error) { toast({ title: "Lỗi", description: "Không thể tải danh sách thể loại", variant: "destructive" }); }
     finally { setLoading(false); }
@@ -138,9 +148,24 @@ const AdminGenres = () => {
         </div>
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background" /></div>
-                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background" /></div>
+                  <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={sortOption}
+                    onChange={(e) => { setSortOption(e.target.value); setCurrentPage(0); }}
+                    className="bg-background border border-border rounded-md px-3 py-2 text-sm min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
