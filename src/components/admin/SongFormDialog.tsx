@@ -316,6 +316,7 @@ export const SongFormDialog = ({
     const normalizedData: SongFormValues & { file?: File } = {
       ...data,
       artistIds: artistUnion,
+      file: selectedFile || undefined,
     };
     
     // Convert genreScores and moodScores from Map<number, string> to Map<number, number>

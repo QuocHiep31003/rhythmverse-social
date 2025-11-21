@@ -143,8 +143,23 @@ const AdminSongs = () => {
     try {
       if (formMode === "create") {
         // Create song without genreIds and moodIds first, then add them with scores
-        const { genreIds, moodIds, ...songData } = data;
-        const createdSong = await songsApi.create(songData);
+        const { genreIds, moodIds, file, ...songData } = data;
+        let createdSong: Song | undefined;
+
+        if (file) {
+          createdSong = await songsApi.createWithFile({
+            ...songData,
+            genreIds,
+            moodIds,
+            file,
+          });
+        } else {
+          createdSong = await songsApi.create({
+            ...songData,
+            genreIds,
+            moodIds,
+          });
+        }
         
         // Add genres with scores after song is created
         if (createdSong && createdSong.id && genreIds && genreIds.length > 0) {
