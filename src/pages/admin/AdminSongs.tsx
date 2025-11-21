@@ -146,20 +146,21 @@ const AdminSongs = () => {
         const { genreIds, moodIds, file, ...songData } = data;
         let createdSong: Song | undefined;
 
-        if (file) {
-          createdSong = await songsApi.createWithFile({
-            ...songData,
-            genreIds,
-            moodIds,
-            file,
+        if (!file) {
+          toast({
+            title: "Thiếu file audio",
+            description: "Vui lòng chọn file nhạc trước khi tạo bài hát mới.",
+            variant: "destructive",
           });
-        } else {
-          createdSong = await songsApi.create({
-            ...songData,
-            genreIds,
-            moodIds,
-          });
+          return;
         }
+
+        createdSong = await songsApi.createWithFile({
+          ...songData,
+          genreIds,
+          moodIds,
+          file,
+        });
         
         // Add genres with scores after song is created
         if (createdSong && createdSong.id && genreIds && genreIds.length > 0) {

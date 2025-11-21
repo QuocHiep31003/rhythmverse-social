@@ -131,6 +131,7 @@ export const SongFormDialog = ({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
+  const [fileError, setFileError] = useState<string | null>(null);
   const [activeContributorPopover, setActiveContributorPopover] = useState<ContributorField | null>(null);
 
   const form = useForm<SongFormValues>({
@@ -275,6 +276,9 @@ export const SongFormDialog = ({
   const handleFileChange = async (file: File | undefined) => {
     if (!file) {
       setSelectedFile(null);
+      if (mode === "create") {
+        setFileError("Vui lòng chọn file audio để tạo bài hát");
+      }
       return;
     }
     
@@ -288,6 +292,7 @@ export const SongFormDialog = ({
       
       // Store file - will be uploaded to S3 via backend API when form is submitted
       setSelectedFile(file);
+      setFileError(null);
       setUploadProgress(100);
       setTimeout(() => {
         setUploadProgress(0);
@@ -312,6 +317,11 @@ export const SongFormDialog = ({
   };
 
   const handleSubmit = (data: SongFormValues) => {
+    if (mode === "create" && !selectedFile) {
+      setFileError("Vui lòng chọn file audio trước khi lưu");
+      return;
+    }
+
     const artistUnion = collectArtistIds(data);
     const normalizedData: SongFormValues & { file?: File } = {
       ...data,
@@ -493,6 +503,9 @@ export const SongFormDialog = ({
                                   File đã chọn: {selectedFile.name}
                                 </span>
                               </div>
+                            )}
+                            {fileError && (
+                              <p className="text-sm text-destructive">{fileError}</p>
                             )}
                           </div>
                         </FormControl>
