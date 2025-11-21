@@ -25,12 +25,12 @@ const COUNTRIES = [
 const DEBUT_YEARS = Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => (new Date().getFullYear() - i).toString());
 
 const SORT_OPTIONS = [
-  { label: "Tên A-Z", value: "name,asc" },
-  { label: "Tên Z-A", value: "name,desc" },
-  { label: "Mới tạo", value: "createdAt,desc" },
-  { label: "Cũ nhất", value: "createdAt,asc" },
-  { label: "Chỉnh sửa gần nhất", value: "updatedAt,desc" },
-  { label: "Lâu chưa chỉnh sửa", value: "updatedAt,asc" },
+  { label: "Name (A-Z)", value: "name,asc" },
+  { label: "Name (Z-A)", value: "name,desc" },
+  { label: "Date created (Newest)", value: "createdAt,desc" },
+  { label: "Date created (Oldest)", value: "createdAt,asc" },
+  { label: "Date modified (Newest)", value: "updatedAt,desc" },
+  { label: "Date modified (Oldest)", value: "updatedAt,asc" },
 ];
 
 const AdminArtists = () => {

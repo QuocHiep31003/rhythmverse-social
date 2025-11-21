@@ -7,6 +7,13 @@ import { mockSongs, mockUsers } from "@/data/mockData";
 import { dashboardApi } from "@/services/api/dashboardApi";
 import type { DashboardStatsResponse, DashboardMetricDTO, TimeSeriesPointDTO } from "@/types/dashboard";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
@@ -33,19 +40,24 @@ const formatNumber = (value?: number) => {
   return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toString();
 };
 
+type DatasetType = "songs" | "playlists" | "plays" | "users";
+type PeriodType = "daily" | "weekly" | "monthly" | "yearly";
+
 const AdminHome = () => {
   const [summary, setSummary] = useState<DashboardStatsResponse | null>(null);
   const [startDate, setStartDate] = useState(last30Iso);
   const [endDate, setEndDate] = useState(todayIso);
+  const [period, setPeriod] = useState<PeriodType>("daily");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDataset, setSelectedDataset] = useState<DatasetType>("songs");
 
   const fetchSummary = useCallback(
-    async (start: string, end: string) => {
+    async (start: string, end: string, periodValue: PeriodType) => {
       try {
         setLoading(true);
         setError(null);
-        const data = await dashboardApi.getSummary({ startDate: start, endDate: end });
+        const data = await dashboardApi.getSummary({ startDate: start, endDate: end, period: periodValue });
         setSummary(data);
       } catch (err) {
         console.error("[Dashboard] load failed", err);
@@ -58,38 +70,38 @@ const AdminHome = () => {
   );
 
   useEffect(() => {
-    fetchSummary(last30Iso, todayIso);
-  }, [fetchSummary]);
+    fetchSummary(last30Iso, todayIso, period);
+  }, [fetchSummary, period]);
 
   const metricCards = useMemo(
     () => [
-      {
+    {
         title: "Bài hát",
         metric: summary?.songs,
-        icon: Music,
+      icon: Music,
         color: "text-[hsl(var(--admin-primary))]",
-      },
-      {
-        title: "Playlists",
+        datasetType: "songs" as DatasetType,
+    },
+    {
+      title: "Playlists",
         metric: summary?.playlists,
-        icon: ListMusic,
+      icon: ListMusic,
         color: "text-[hsl(var(--primary))]",
-      },
-      {
-        title: "Lượt phát",
+        datasetType: "playlists" as DatasetType,
+    },
+    {
+      title: "Lượt phát",
         metric: summary?.plays,
-        icon: TrendingUp,
+      icon: TrendingUp,
         color: "text-[hsl(var(--admin-accent))]",
+        datasetType: "plays" as DatasetType,
       },
       {
-        title: "Người dùng (mock)",
-        metric: {
-          total: mockUsers.length,
-          inRange: Math.round(mockUsers.length * 0.12),
-          outsideRange: Math.round(mockUsers.length * 0.88),
-        },
+        title: "Người dùng",
+        metric: summary?.users,
         icon: Users,
         color: "text-[hsl(var(--admin-secondary))]",
+        datasetType: "users" as DatasetType,
       },
     ],
     [summary]
@@ -103,64 +115,140 @@ const AdminHome = () => {
         new Date(point.date).toLocaleDateString("vi-VN", { day: "2-digit", month: "short" })
       ) ?? [];
 
+    const getDatasetConfig = (type: DatasetType) => {
+      switch (type) {
+        case "songs":
+          return {
+            label: "Bài hát mới",
+            data: buildSeries(summary?.songSeries),
+            borderColor: "hsl(262, 83%, 58%)",
+            backgroundColor: "hsla(262, 83%, 58%, 0.15)",
+            pointBackgroundColor: "hsl(262, 83%, 58%)",
+            pointHoverBackgroundColor: "hsl(262, 83%, 65%)",
+            shadowColor: "hsla(262, 83%, 58%, 0.3)",
+          };
+        case "playlists":
+          return {
+            label: "Playlist mới",
+            data: buildSeries(summary?.playlistSeries),
+            borderColor: "hsl(195, 100%, 65%)",
+            backgroundColor: "hsla(195, 100%, 65%, 0.15)",
+            pointBackgroundColor: "hsl(195, 100%, 65%)",
+            pointHoverBackgroundColor: "hsl(195, 100%, 72%)",
+            shadowColor: "hsla(195, 100%, 65%, 0.3)",
+          };
+        case "plays":
+          return {
+            label: "Lượt phát",
+            data: buildSeries(summary?.playSeries),
+            borderColor: "hsl(280, 100%, 65%)",
+            backgroundColor: "hsla(280, 100%, 65%, 0.15)",
+            pointBackgroundColor: "hsl(280, 100%, 65%)",
+            pointHoverBackgroundColor: "hsl(280, 100%, 72%)",
+            shadowColor: "hsla(280, 100%, 65%, 0.3)",
+          };
+        case "users":
+          return {
+            label: "Người dùng mới",
+            data: buildSeries(summary?.userSeries),
+            borderColor: "hsl(142, 76%, 36%)",
+            backgroundColor: "hsla(142, 76%, 36%, 0.15)",
+            pointBackgroundColor: "hsl(142, 76%, 36%)",
+            pointHoverBackgroundColor: "hsl(142, 76%, 42%)",
+            shadowColor: "hsla(142, 76%, 36%, 0.3)",
+          };
+      }
+    };
+
+    const config = getDatasetConfig(selectedDataset);
+
     return {
       labels,
       datasets: [
         {
-          label: "Bài hát mới",
-          data: buildSeries(summary?.songSeries),
-          borderColor: "hsl(var(--admin-primary))",
-          backgroundColor: "hsla(var(--admin-primary),0.2)",
+          ...config,
+          borderWidth: 2.5,
           tension: 0.4,
           fill: true,
-          pointRadius: 3,
-        },
-        {
-          label: "Playlist mới",
-          data: buildSeries(summary?.playlistSeries),
-          borderColor: "hsl(var(--admin-secondary))",
-          backgroundColor: "hsla(var(--admin-secondary),0.2)",
-          tension: 0.4,
-          fill: true,
-          pointRadius: 3,
-        },
-        {
-          label: "Lượt phát",
-          data: buildSeries(summary?.playSeries),
-          borderColor: "hsl(var(--admin-accent))",
-          backgroundColor: "hsla(var(--admin-accent),0.15)",
-          tension: 0.4,
-          fill: true,
-          pointRadius: 3,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          pointBorderColor: "#ffffff",
+          pointBorderWidth: 2.5,
+          pointHoverBorderColor: "#ffffff",
+          pointHoverBorderWidth: 3,
+          shadowOffsetX: 0,
+          shadowOffsetY: 2,
+          shadowBlur: 8,
         },
       ],
     };
-  }, [summary]);
+  }, [summary, selectedDataset]);
 
   const chartOptions = useMemo(
     () => ({
       responsive: true,
       maintainAspectRatio: false,
+      animation: {
+        duration: 1000,
+        easing: "easeInOutQuart" as const,
+      },
+      interaction: {
+        intersect: false,
+        mode: "index" as const,
+      },
       plugins: {
         legend: {
-          position: "top" as const,
-          labels: { color: "hsl(var(--foreground))" },
+          display: false,
         },
         tooltip: {
+          backgroundColor: "hsla(220, 26%, 10%, 0.95)",
+          titleColor: "hsl(var(--foreground))",
+          bodyColor: "hsl(var(--foreground))",
+          borderColor: "hsl(var(--border))",
+          borderWidth: 1,
+          padding: 12,
+          cornerRadius: 8,
+          displayColors: true,
           callbacks: {
-            label: (context: any) => `${context.dataset.label}: ${context.parsed.y}`,
+            label: (context: any) => {
+              const label = context.dataset.label || "";
+              const value = context.parsed.y;
+              return `${label}: ${value.toLocaleString("vi-VN")}`;
+            },
+            title: (context: any) => {
+              return context[0].label;
+            },
           },
         },
       },
       scales: {
         x: {
-          ticks: { color: "hsl(var(--muted-foreground))" },
-          grid: { color: "hsla(var(--border),0.4)" },
+          ticks: {
+            color: "hsl(var(--muted-foreground))",
+            font: {
+              size: 11,
+            },
+          },
+          grid: {
+            color: "hsla(var(--border), 0.2)",
+            drawBorder: false,
+          },
         },
         y: {
           beginAtZero: true,
-          ticks: { color: "hsl(var(--muted-foreground))" },
-          grid: { color: "hsla(var(--border),0.4)" },
+          ticks: {
+            color: "hsl(var(--muted-foreground))",
+            font: {
+              size: 11,
+            },
+            callback: function (value: any) {
+              return value.toLocaleString("vi-VN");
+            },
+          },
+          grid: {
+            color: "hsla(var(--border), 0.2)",
+            drawBorder: false,
+          },
         },
       },
     }),
@@ -172,13 +260,27 @@ const AdminHome = () => {
       setError("Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc");
       return;
     }
-    fetchSummary(startDate, endDate);
+    fetchSummary(startDate, endDate, period);
   };
 
-  const renderMetric = (title: string, metric?: DashboardMetricDTO, Icon?: typeof Users, color?: string) => (
+  const renderMetric = (
+    title: string, 
+    metric?: DashboardMetricDTO, 
+    Icon?: typeof Users, 
+    color?: string,
+    datasetType?: DatasetType | null,
+    isSelected?: boolean
+  ) => (
     <Card
       key={title}
-      className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--admin-primary))]"
+      onClick={() => datasetType && setSelectedDataset(datasetType)}
+      className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-all duration-300 ${
+        datasetType 
+          ? `cursor-pointer hover:shadow-lg hover:border-[hsl(var(--admin-primary))] ${
+              isSelected ? "border-[hsl(var(--admin-primary))] shadow-lg ring-2 ring-[hsl(var(--admin-primary))] ring-opacity-20" : ""
+            }`
+          : "hover:shadow-lg"
+      }`}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-foreground">{title}</CardTitle>
@@ -187,7 +289,7 @@ const AdminHome = () => {
       <CardContent>
         <div className="text-2xl font-bold text-foreground">{formatNumber(metric?.total)}</div>
         <p className="text-xs text-muted-foreground">
-          +{formatNumber(metric?.inRange)} trong giai đoạn &bull; {formatNumber(metric?.outsideRange)} trước đó
+          +{formatNumber(metric?.newInPeriod ?? metric?.inRange)} trong giai đoạn &bull; {formatNumber(metric?.oldOutOfPeriod ?? metric?.outsideRange)} trước đó
         </p>
       </CardContent>
     </Card>
@@ -200,27 +302,6 @@ const AdminHome = () => {
           <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Dashboard</h1>
           <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            type="date"
-            value={startDate}
-            max={endDate}
-            onChange={(e) => setStartDate(e.target.value)}
-          />
-          <Input
-            type="date"
-            value={endDate}
-            min={startDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
-          <Button variant="outline" onClick={() => fetchSummary(startDate, endDate)} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Làm mới
-          </Button>
-          <Button onClick={handleApplyFilter} disabled={loading}>
-            Áp dụng
-          </Button>
-        </div>
       </div>
 
       {error && (
@@ -230,22 +311,64 @@ const AdminHome = () => {
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {metricCards.map((stat) => renderMetric(stat.title, stat.metric, stat.icon, stat.color))}
+        {metricCards.map((stat) => renderMetric(stat.title, stat.metric, stat.icon, stat.color, stat.datasetType, stat.datasetType === selectedDataset))}
       </div>
 
-      <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-        <CardHeader>
-          <CardTitle className="text-foreground">Biểu đồ tăng trưởng</CardTitle>
-          <CardDescription>
-            Tổng quan bài hát, playlist và lượt phát từ{" "}
-            {summary?.startDate} đến {summary?.endDate}
-          </CardDescription>
+      <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-lg hover:shadow-xl transition-shadow duration-300">
+        <CardHeader className="pb-4">
+          <div className="flex flex-col gap-4">
+            <div>
+              <CardTitle className="text-foreground text-xl font-semibold">Biểu đồ tăng trưởng</CardTitle>
+              <CardDescription className="text-sm mt-1">
+                {selectedDataset === "songs" && "Thống kê bài hát mới"}
+                {selectedDataset === "playlists" && "Thống kê playlist mới"}
+                {selectedDataset === "plays" && "Thống kê lượt phát"}
+                {selectedDataset === "users" && "Thống kê người dùng mới"}
+              </CardDescription>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <Input
+                type="date"
+                value={startDate}
+                max={endDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full sm:w-auto"
+              />
+              <Input
+                type="date"
+                value={endDate}
+                min={startDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full sm:w-auto"
+              />
+              <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
+                <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="Select period" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Theo ngày</SelectItem>
+                  <SelectItem value="weekly">Theo tuần</SelectItem>
+                  <SelectItem value="monthly">Theo tháng</SelectItem>
+                  <SelectItem value="yearly">Theo năm</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={() => fetchSummary(startDate, endDate, period)} disabled={loading} size="sm">
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                Làm mới
+              </Button>
+              <Button onClick={handleApplyFilter} disabled={loading} size="sm">
+                Áp dụng
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="h-[360px]">
+        <CardContent className="h-[400px] px-6 pb-6">
           {loading ? (
-            <Skeleton className="h-full w-full" />
+            <Skeleton className="h-full w-full rounded-lg" />
           ) : (
-            <Line options={chartOptions} data={chartData} />
+            <div className="h-full w-full">
+              <Line options={chartOptions} data={chartData} />
+            </div>
           )}
         </CardContent>
       </Card>

@@ -155,7 +155,7 @@ const AdminUsers = () => {
         Email: user.email,
         Phone: user.phone || '',
         Address: user.address || '',
-        Roles: (user.roles?.includes('ADMIN') || user.roleId === 2) ? 'ADMIN' : 'USER',
+        Roles: isAdmin(user) ? 'ADMIN' : 'USER',
       }));
 
       // Create worksheet
@@ -256,6 +256,35 @@ const AdminUsers = () => {
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
+  };
+
+  // Helper function to determine if user is admin
+  const isAdmin = (user: any): boolean => {
+    // Check multiple possible fields for role
+    const role = user.role || user.roleName || '';
+    const roleId = user.roleId;
+    const roles = user.roles;
+    
+    // Check role string (case insensitive)
+    if (typeof role === 'string') {
+      return role.toUpperCase() === 'ADMIN';
+    }
+    
+    // Check roleId (2 = ADMIN, 1 = USER)
+    if (typeof roleId === 'number') {
+      return roleId === 2;
+    }
+    
+    // Check roles array
+    if (Array.isArray(roles)) {
+      return roles.some((r: any) => 
+        (typeof r === 'string' && r.toUpperCase() === 'ADMIN') ||
+        (typeof r === 'object' && r?.name?.toUpperCase() === 'ADMIN')
+      );
+    }
+    
+    // Default to USER
+    return false;
   };
 
   const filteredUsers = users.filter((user) =>
@@ -417,13 +446,16 @@ const AdminUsers = () => {
                       </td>
                       <td className="w-32 p-3">
                         <div className="flex items-center gap-2">
-                          <Badge 
-                            variant={(user.roles?.includes("ADMIN") || user.roleId === 2) ? "default" : "secondary"}
-                            className="gap-1"
-                          >
-                            {(user.roles?.includes("ADMIN") || user.roleId === 2) && <Shield className="w-3 h-3" />}
-                            {(user.roles?.includes("ADMIN") || user.roleId === 2) ? 'ADMIN' : 'USER'}
-                          </Badge>
+                          {isAdmin(user) ? (
+                            <Badge variant="default" className="gap-1 bg-blue-600 hover:bg-blue-700">
+                              <Shield className="w-3 h-3" />
+                              ADMIN
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1">
+                              USER
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="w-32 text-right p-3">
@@ -459,9 +491,9 @@ const AdminUsers = () => {
       {totalPages > 0 && (
         <div className="flex items-center justify-between pt-4 flex-shrink-0">
           <div className="text-sm text-muted-foreground">
-            Hiển thị <span className="font-semibold text-foreground">{currentPage * pageSize + 1}</span> đến{' '}
-            <span className="font-semibold text-foreground">{Math.min((currentPage + 1) * pageSize, totalElements)}</span> trong tổng{' '}
-            <span className="font-semibold text-foreground">{totalElements}</span> người dùng
+            Showing <span className="font-semibold text-foreground">{currentPage * pageSize + 1}</span> to{' '}
+            <span className="font-semibold text-foreground">{Math.min((currentPage + 1) * pageSize, totalElements)}</span> of{' '}
+            <span className="font-semibold text-foreground">{totalElements}</span> users
           </div>
           
           <div className="flex items-center gap-1">
@@ -525,7 +557,7 @@ const AdminUsers = () => {
           name: selectedUser.name,
           email: selectedUser.email,
           // Đúng: 1 là user, 2 là admin
-          role: (selectedUser.roleId === 2 || selectedUser.roles?.includes('ADMIN')) ? 'admin' : 'user',
+          role: isAdmin(selectedUser) ? 'admin' : 'user',
           avatar: selectedUser.avatar || '',
           phone: selectedUser.phone || '',
           address: selectedUser.address || '',

@@ -12,12 +12,12 @@ import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
 const SORT_OPTIONS = [
-  { label: "Tên A-Z", value: "name,asc" },
-  { label: "Tên Z-A", value: "name,desc" },
-  { label: "Mới tạo", value: "createdAt,desc" },
-  { label: "Cũ nhất", value: "createdAt,asc" },
-  { label: "Chỉnh sửa gần nhất", value: "updatedAt,desc" },
-  { label: "Lâu chưa chỉnh sửa", value: "updatedAt,asc" },
+  { label: "Name (A-Z)", value: "name,asc" },
+  { label: "Name (Z-A)", value: "name,desc" },
+  { label: "Date created (Newest)", value: "createdAt,desc" },
+  { label: "Date created (Oldest)", value: "createdAt,asc" },
+  { label: "Date modified (Newest)", value: "updatedAt,desc" },
+  { label: "Date modified (Oldest)", value: "updatedAt,asc" },
 ];
 
 const AdminGenres = () => {
@@ -150,8 +150,8 @@ const AdminGenres = () => {
             <CardHeader className="flex-shrink-0">
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm thể loại..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background" /></div>
-                  <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+                  <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search genres..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background" /></div>
+                  <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <select
@@ -175,10 +175,10 @@ const AdminGenres = () => {
                 <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div>
               ) : (
                 <>
-                  {/* Fixed Header */}
-                  <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
-                    <table className="w-full table-fixed">
-                      <thead>
+                  {/* Scrollable Table with Sticky Header */}
+                  <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
+                    <table className="w-full table-fixed border-collapse">
+                      <thead className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b-2 border-[hsl(var(--admin-border))]">
                         <tr>
                           <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
@@ -189,17 +189,11 @@ const AdminGenres = () => {
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                         </tr>
                       </thead>
-                    </table>
-                  </div>
-                  
-                  {/* Scrollable Body */}
-                  <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
-                    <table className="w-full table-fixed">
                       <tbody>
                         {genres.map((genre, index) => (
-                              <tr key={genre.id} className="border-b border-border hover:bg-muted/50">
+                          <tr key={genre.id} className="border-b border-border hover:bg-muted/50">
                             <td className="w-16 p-3 text-center align-top">{currentPage * pageSize + index + 1}</td>
-                            <td className="p-3 text-left align-top">
+                            <td className="w-1/4 p-3 text-left align-top">
                               <div className="flex flex-col gap-1">
                                 <span className="font-medium">{genre.name}</span>
                                 {renderStatusBadge(genre.status)}
@@ -250,7 +244,7 @@ const AdminGenres = () => {
           {/* Pagination outside of scrollable area */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">Hiển thị {genres.length} trên tổng số {totalElements} thể loại</div>
+              <div className="text-sm text-muted-foreground">Showing {genres.length} of {totalElements} genres</div>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronsLeft className="w-4 h-4" /></Button>
                 <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronLeft className="w-4 h-4" /></Button>

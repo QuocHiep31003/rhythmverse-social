@@ -6,12 +6,37 @@ export const API_BASE_URL = "http://localhost:8080/api";
 // Auth helpers for API requests
 export const getAuthToken = (): string | null => {
   try {
+    if (typeof window !== 'undefined') {
+      // Ưu tiên adminToken nếu đang ở trang admin
+      const isAdminPage = window.location.pathname.startsWith('/admin');
+      if (isAdminPage) {
+        return localStorage.getItem('adminToken') || localStorage.getItem('token');
+      }
+      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+    }
+    return null;
+  } catch {
+    try {
+      const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+      if (isAdminPage) {
+        return localStorage.getItem('adminToken') || localStorage.getItem('token');
+      }
+      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+    } catch {
+      return null;
+    }
+  }
+};
+
+// Helper để lấy admin token (ưu tiên adminToken)
+export const getAdminToken = (): string | null => {
+  try {
     return typeof window !== 'undefined'
-      ? (localStorage.getItem('token') || localStorage.getItem('adminToken'))
+      ? (localStorage.getItem('adminToken') || localStorage.getItem('token'))
       : null;
   } catch {
     try {
-      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+      return localStorage.getItem('adminToken') || localStorage.getItem('token');
     } catch {
       return null;
     }

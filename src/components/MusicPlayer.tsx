@@ -33,6 +33,7 @@ import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
+import { authApi } from "@/services/api/authApi";
 import { getAuthToken } from "@/services/api";
 import { mapToPlayerSong } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -75,6 +76,7 @@ const MusicPlayer = () => {
   const [hasReportedListen, setHasReportedListen] = useState(false);
   const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [suggestedSongs, setSuggestedSongs] = useState<typeof queue>([]);
@@ -89,6 +91,22 @@ const MusicPlayer = () => {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  // Load current user ID from token
+  useEffect(() => {
+    const loadUserId = async () => {
+      try {
+        const user = await authApi.me();
+        if (user?.id) {
+          setCurrentUserId(user.id);
+        }
+      } catch (error) {
+        console.warn("Failed to load user ID for listening history:", error);
+        setCurrentUserId(null);
+      }
+    };
+    loadUserId();
+  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -713,7 +731,7 @@ const MusicPlayer = () => {
         // Play next song (works for both "all" and "off" modes)
         console.log("Playing next song");
         if (hasNextQueueSong()) {
-          playNext();
+        playNext();
         } else if (!startSuggestionsPlayback()) {
           console.warn("No songs left in queue or suggestions");
         }
@@ -758,7 +776,7 @@ const MusicPlayer = () => {
           } else {
             console.log("Auto-playing next song");
             if (hasNextQueueSong()) {
-              playNext();
+            playNext();
             } else if (!startSuggestionsPlayback()) {
               console.warn("No songs left to auto-play");
             }
@@ -793,7 +811,7 @@ const MusicPlayer = () => {
           } else {
             console.log("Auto-playing next song (loop detected), queue length:", queue.length);
             if (hasNextQueueSong()) {
-              playNext();
+            playNext();
             } else if (!startSuggestionsPlayback()) {
               console.warn("No songs left to auto-play");
             }
@@ -886,23 +904,22 @@ const MusicPlayer = () => {
     }
   };
 
-  // Record listening history and increment play count when 30 seconds have been played
+  // Record listening history when user has listened for at least 30 seconds AND reached the end of the song
+  // This ensures we only count 1 play per song when user listens to the full duration
   useEffect(() => {
-    if (!currentSong || hasReportedListen || !audioRef.current) return;
+    if (!currentSong || hasReportedListen || !audioRef.current || !currentUserId) return;
 
     const duration = audioRef.current.duration;
+    const isEnded = audioRef.current.ended || (duration && currentTime >= duration - 1); // Allow 1 second tolerance
 
-    // Only record if we have valid duration and currentTime has reached 30 seconds
-    if (duration && !isNaN(duration) && currentTime >= 30 && currentTime > 0) {
+    // Record if: user has listened at least 30 seconds AND reached the end of the song
+    if (duration && !isNaN(duration) && currentTime >= 30 && isEnded) {
       const songIdForApi = isNaN(Number(currentSong.id)) ? currentSong.id : Number(currentSong.id);
-      console.log(`🎵 Recording listen: ${currentSong.songName || currentSong.name || "Unknown Song"} (ID: ${currentSong.id}, Coerced: ${songIdForApi}, Type: ${typeof songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
+      console.log(`🎵 Recording listen: ${currentSong.songName || currentSong.name || "Unknown Song"} (ID: ${currentSong.id}, UserID: ${currentUserId}, Coerced: ${songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s - Full play)`);
 
-      // Record listening history
-      listeningHistoryApi
-        .recordListen({
-          userId: 1, // TODO: Get from auth context
-          songId: songIdForApi,
-        })
+      // Record listening history via backend API (backend will extract userId from token)
+      songsApi
+        .recordPlayback(songIdForApi, currentUserId)
         .then(() => {
           console.log("✅ Listening history recorded successfully");
           setHasReportedListen(true);
@@ -936,7 +953,7 @@ const MusicPlayer = () => {
     // Auto tắt gợi ý khi bật shuffle
     if (newShuffleState && autoPlaySuggestions) {
       setAutoPlaySuggestions(false);
-      toast({
+    toast({
         title: "Shuffle on",
         description: "Gợi ý tự động đã tắt khi bật shuffle",
         duration: 2000,
@@ -1514,7 +1531,7 @@ const MusicPlayer = () => {
                         playSong(song);
                         // Không đóng panel khi click bài hát
                       }}
-                      className={cn(
+                className={cn(
                         "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
                         currentSong?.id === song.id && "bg-primary/10 border border-primary/20"
                       )}
@@ -1540,7 +1557,7 @@ const MusicPlayer = () => {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p
-                          className={cn(
+                className={cn(
                             "text-sm font-medium truncate",
                             currentSong?.id === song.id && "text-primary"
                           )}
@@ -1557,7 +1574,7 @@ const MusicPlayer = () => {
                     </div>
                   ))
                 )}
-              </div>
+            </div>
 
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -1644,7 +1661,7 @@ const MusicPlayer = () => {
                     </div>
                   ))
                 )}
-              </div>
+                </div>
             </div>
           </div>
         </div>

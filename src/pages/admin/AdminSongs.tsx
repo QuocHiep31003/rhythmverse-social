@@ -440,7 +440,7 @@ const AdminSongs = () => {
                       <SelectValue placeholder="All status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tất cả</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
                       {statusOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -460,15 +460,17 @@ const AdminSongs = () => {
                     }}
                   >
                     <SelectTrigger className="w-56">
-                      <SelectValue placeholder="Sắp xếp" />
+                      <SelectValue placeholder="Sort" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="name,asc">Tên A-Z</SelectItem>
-                      <SelectItem value="name,desc">Tên Z-A</SelectItem>
-                      <SelectItem value="releaseYear,desc">Năm phát hành: Mới nhất</SelectItem>
-                      <SelectItem value="releaseYear,asc">Năm phát hành: Cũ nhất</SelectItem>
-                      <SelectItem value="updatedAt,desc">Cập nhật: Mới nhất</SelectItem>
-                      <SelectItem value="updatedAt,asc">Cập nhật: Cũ nhất</SelectItem>
+                      <SelectItem value="name,asc">Name (A-Z)</SelectItem>
+                      <SelectItem value="name,desc">Name (Z-A)</SelectItem>
+                      <SelectItem value="createdAt,desc">Date created (Newest)</SelectItem>
+                      <SelectItem value="createdAt,asc">Date created (Oldest)</SelectItem>
+                      <SelectItem value="releaseYear,desc">Release year (Newest)</SelectItem>
+                      <SelectItem value="releaseYear,asc">Release year (Oldest)</SelectItem>
+                      <SelectItem value="updatedAt,desc">Date modified (Newest)</SelectItem>
+                      <SelectItem value="updatedAt,asc">Date modified (Oldest)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -587,7 +589,7 @@ const AdminSongs = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 flex-shrink-0">
             <div className="text-sm text-muted-foreground">
-              Hiển thị {songsList.length} trên tổng số {totalElements} bài hát
+              Showing {songsList.length} of {totalElements} songs
             </div>
             <div className="flex items-center gap-1">
               <Button
