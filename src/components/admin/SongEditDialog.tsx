@@ -57,6 +57,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { songsApi, artistsApi, genresApi, moodsApi, songContributorApi, songGenreApi, songMoodApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
+import { API_BASE_URL, fetchWithAuth } from "@/services/api/config";
 import type { SongContributor } from "@/services/api/songContributorApi";
 import type { SongGenre } from "@/services/api/songGenreApi";
 import type { SongMood } from "@/services/api/songMoodApi";
@@ -157,6 +158,8 @@ export const SongEditDialog = ({
   const [genreSearch, setGenreSearch] = useState("");
   const [moodSearch, setMoodSearch] = useState("");
   const [artistPickerOpen, setArtistPickerOpen] = useState(false);
+  const [fingerprintStatus, setFingerprintStatus] = useState<number | null>(null);
+  const [checkingFingerprint, setCheckingFingerprint] = useState(false);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
   const [moodPickerOpen, setMoodPickerOpen] = useState(false);
   const [isSavingGenre, setIsSavingGenre] = useState(false);
@@ -739,6 +742,120 @@ export const SongEditDialog = ({
                         disabled 
                         className="bg-muted"
                       />
+                    </FormItem>
+
+                    {/* ACR ID with Check button */}
+                    <FormItem>
+                      <FormLabel>ACR ID (Fingerprint)</FormLabel>
+                      <div className="flex gap-2">
+                        <Input 
+                          value={songData?.acrId || ""} 
+                          disabled 
+                          className="bg-muted flex-1"
+                          placeholder="Chưa có ACR ID"
+                        />
+                        {songData?.acrId && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              if (!songData?.acrId) return;
+                              setCheckingFingerprint(true);
+                              try {
+                                const url = `${API_BASE_URL}/songs/test/acr/check?acr_id=${encodeURIComponent(songData.acrId)}`;
+                                const response = await fetchWithAuth(url, {
+                                  method: 'GET',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                });
+                                
+                                if (!response.ok) {
+                                  const errorText = await response.text();
+                                  throw new Error(errorText || `HTTP ${response.status}`);
+                                }
+                                
+                                const data = await response.json();
+                                if (data.success) {
+                                  setFingerprintStatus(data.state);
+                                  if (data.state === 1) {
+                                    toast({
+                                      title: "✅ Fingerprint Ready",
+                                      description: "Fingerprint đã sẵn sàng",
+                                    });
+                                  } else if (data.state === 0) {
+                                    toast({
+                                      title: "⏳ Đang xử lý",
+                                      description: "Fingerprint đang được xử lý",
+                                    });
+                                  } else if (data.state === -1) {
+                                    toast({
+                                      title: "❌ Lỗi",
+                                      description: "Fingerprint gặp lỗi",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } else {
+                                  toast({
+                                    title: "Lỗi",
+                                    description: data.message || data.error || "Không thể kiểm tra fingerprint",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (error) {
+                                console.error("[SongEditDialog] Check fingerprint error:", error);
+                                const errorMessage = error instanceof Error ? error.message : "Không thể kiểm tra fingerprint. Vui lòng thử lại.";
+                                toast({
+                                  title: "Lỗi",
+                                  description: errorMessage,
+                                  variant: "destructive",
+                                });
+                              } finally {
+                                setCheckingFingerprint(false);
+                              }
+                            }}
+                            disabled={checkingFingerprint || !songData?.acrId}
+                          >
+                            {checkingFingerprint ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Đang check...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-4 h-4 mr-2" />
+                                Check
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                      {fingerprintStatus !== null && (
+                        <div className="mt-2">
+                          {fingerprintStatus === 1 ? (
+                            <div className="flex items-center gap-2 text-green-600 font-semibold">
+                              <span className="text-xl">✅</span>
+                              <span>Ready - Fingerprint đã sẵn sàng</span>
+                            </div>
+                          ) : fingerprintStatus === 0 ? (
+                            <div className="flex items-center gap-2 text-yellow-600">
+                              <span className="text-xl">⏳</span>
+                              <span>Đang xử lý (Processing)</span>
+                            </div>
+                          ) : fingerprintStatus === -1 || fingerprintStatus === -999 ? (
+                            <div className="flex items-center gap-2 text-red-600">
+                              <span className="text-xl">❌</span>
+                              <span>Lỗi (Error) - Fingerprint đang hư</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-red-600">
+                              <span className="text-xl">❌</span>
+                              <span>Lỗi - Unknown status ({fingerprintStatus})</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </FormItem>
 
                     {/* Created At - Read only */}

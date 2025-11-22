@@ -42,7 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1024,7 +1024,26 @@ export const SongFormDialog = ({
               </div>
             </Tabs>
 
-            <DialogFooter className="mt-2">
+            {mode === "create" && (
+              <Alert className="mt-4 border-dashed border-[hsl(var(--admin-border))] bg-muted/40">
+                <div className="flex items-start gap-3">
+                  <Loader2
+                    className={`h-4 w-4 mt-1 text-[hsl(var(--admin-active))] ${isLoading ? "animate-spin" : ""}`}
+                  />
+                  <div className="space-y-1 text-sm">
+                    <AlertTitle>Upload & đồng bộ audio</AlertTitle>
+                    <AlertDescription>
+                      Quá trình tải file lên S3, tạo HLS và đăng ký ACRCloud có thể mất 1–2 phút.
+                      {isLoading
+                        ? " Vui lòng giữ cửa sổ này mở cho đến khi hoàn tất."
+                        : " Nhấn “Tạo” và chờ quá trình hoàn tất."}
+                    </AlertDescription>
+                  </div>
+                </div>
+              </Alert>
+            )}
+
+            <DialogFooter className="mt-4">
               <Button
                 type="button"
                 variant="outline"

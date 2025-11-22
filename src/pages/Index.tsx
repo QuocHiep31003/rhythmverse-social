@@ -73,8 +73,8 @@ const CustomChartTooltip = ({ active, payload, label, songs }) => {
   const hours = generateRecentHours();
   const timeIdx = hours.findIndex((h) => h === label);
   if (timeIdx < 0) return null;
-  const mockRanks = [ [3,2,3,2,1,1,1,1], [2,1,1,1,2,3,2,2], [1,3,2,3,3,2,3,3] ];
-  const songTopIds = [mockRanks[0][timeIdx]-1, mockRanks[1][timeIdx]-1, mockRanks[2][timeIdx]-1];
+  const mockRanks = [[3, 2, 3, 2, 1, 1, 1, 1], [2, 1, 1, 1, 2, 3, 2, 2], [1, 3, 2, 3, 3, 2, 3, 3]];
+  const songTopIds = [mockRanks[0][timeIdx] - 1, mockRanks[1][timeIdx] - 1, mockRanks[2][timeIdx] - 1];
   const topSongs = songTopIds.map(i => songs?.[i]);
   const thisSong = topSongs[chartIndex];
 
@@ -90,15 +90,15 @@ const CustomChartTooltip = ({ active, payload, label, songs }) => {
         <img src={thisSong.albumImageUrl} alt={thisSong.songName} className="w-10 h-10 rounded object-cover border-2" style={{ borderColor: color }} />
       )}
       <div className="flex-1 min-w-0">
-        <div className="truncate max-w-[130px] font-semibold text-base" style={{color}}>{thisSong?.songName}</div>
+        <div className="truncate max-w-[130px] font-semibold text-base" style={{ color }}>{thisSong?.songName}</div>
         <div className="text-xs text-muted-foreground truncate max-w-[130px]">{thisSong?.artists?.map(a => a.name).join(", ")}</div>
         <div className="flex gap-1 mt-1 text-xs whitespace-nowrap select-none">
           {scores.map((s, i) => (
-            <span key={i} style={i===chartIndex ? { color, fontWeight: 700 } : {}}>{s}</span>
+            <span key={i} style={i === chartIndex ? { color, fontWeight: 700 } : {}}>{s}</span>
           ))}
         </div>
       </div>
-      <div className="text-right ml-2 font-bold text-lg select-none" style={{color}}>
+      <div className="text-right ml-2 font-bold text-lg select-none" style={{ color }}>
         {percent !== null ? `${percent}%` : ''}
       </div>
     </div>
@@ -383,16 +383,21 @@ const Index = () => {
             <div className="mb-10 flex flex-col gap-6 items-stretch">
               {/* Chart Top 3 biến động + HotToday Top 10 Section - Gộp chung 1 phần */}
               <div className="bg-gradient-glass rounded-xl p-4 w-full">
-                <h3 className="font-semibold mb-2 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-primary" /> Hot Today
-                </h3>
+                <div className="font-semibold mb-2 flex items-center justify-between gap-2">
+                  <h3 className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-primary" /> Hot Today
+                  </h3>
+                  <Button size="sm" variant="outline" className="px-3 py-1 text-xs font-normal" onClick={() => navigate('/top100')}>
+                    See more
+                  </Button>
+                </div>
                 {isLoadingTop3Chart ? (
                   <div className="w-full">
                     <Skeleton className="w-full h-[220px] rounded-lg" />
                   </div>
                 ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={chartData}>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={chartData}>
                       <XAxis
                         dataKey="time"
                         interval={0}
@@ -401,192 +406,183 @@ const Index = () => {
                         tick={{ fontSize: 10 }}
                         padding={{ left: 0, right: 0 }}
                       />
-                    <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
+                      <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
                       <Tooltip content={({ active, payload, label }) => (
                         <CustomTop3ChartTooltip active={active} payload={payload} label={label} />
                       )} cursor={{ stroke: '#9ca3af', strokeDasharray: '3 3' }} />
-                    {top3History.lines.map((line) => (
-                      <Line
-                        key={line.songId}
-                        type="monotone"
-                        dataKey={line.songName || line.songId}
-                        stroke={line.color}
-                        strokeWidth={3}
-                        dot={{ r: 2, stroke: line.color, fill: '#fff' }}
-                        activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
-                        onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
-                        onMouseLeave={() => setHoveredKey(null)}
-                        isAnimationActive={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
+                      {top3History.lines.map((line) => (
+                        <Line
+                          key={line.songId}
+                          type="monotone"
+                          dataKey={line.songName || line.songId}
+                          stroke={line.color}
+                          strokeWidth={3}
+                          dot={{ r: 2, stroke: line.color, fill: '#fff' }}
+                          activeDot={{ r: 6, stroke: line.color, fill: '#fff', strokeWidth: 2 }}
+                          onMouseEnter={() => setHoveredKey(String(line.songName || line.songId))}
+                          onMouseLeave={() => setHoveredKey(null)}
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
                 )}
-                
+
                 {/* === HotToday Top 10 Section === */}
                 {(isLoadingHotToday || hotToday.length > 0) && (
                   <>
-                    <div className="flex items-center gap-2 mt-4 mb-2 justify-between">
-                      <div className="flex items-center gap-2">
-                        <Star className="w-5 h-5 text-yellow-400" />
-                      </div>
-                      <Button size="sm" variant="outline" className="px-3 py-1 text-xs font-normal" onClick={() => navigate('/top100')}>
-                        See more
-                      </Button>
-                    </div>
-                  <div className="flex flex-col gap-2">
-                    {isLoadingHotToday ? (
-                      Array.from({ length: 10 }).map((_, i) => (
-                        <div key={i} className="flex items-center gap-4 p-3">
-                          <Skeleton className="w-12 h-6" />
-                          <Skeleton className="w-12 h-12 rounded-lg" />
-                          <div className="flex-1 space-y-2">
-                            <Skeleton className="h-4 w-1/2" />
-                            <Skeleton className="h-3 w-1/3" />
+                    <div className="flex flex-col gap-2 mt-4">
+                      {isLoadingHotToday ? (
+                        Array.from({ length: 10 }).map((_, i) => (
+                          <div key={i} className="flex items-center gap-4 p-3">
+                            <Skeleton className="w-12 h-6" />
+                            <Skeleton className="w-12 h-12 rounded-lg" />
+                            <div className="flex-1 space-y-2">
+                              <Skeleton className="h-4 w-1/2" />
+                              <Skeleton className="h-3 w-1/3" />
+                            </div>
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      hotToday.slice(0, 10).map((song, idx) => (
-                      <div
-                        key={song.songId || idx}
-                        className="flex items-center gap-4 p-3 rounded-lg transition-colors group hover:bg-muted/30"
-                      >
-                          {/* Rank number + change indicator (fixed widths for perfect alignment) */}
-                          <div className="flex items-center w-20">
-                            <span className={`w-10 text-right text-sm font-semibold 
+                        ))
+                      ) : (
+                        hotToday.slice(0, 10).map((song, idx) => (
+                          <div
+                            key={song.songId || idx}
+                            className="flex items-center gap-4 p-3 rounded-lg transition-colors group hover:bg-muted/30"
+                          >
+                            {/* Rank number + change indicator (fixed widths for perfect alignment) */}
+                            <div className="flex items-center w-20">
+                              <span className={`w-10 text-right text-sm font-semibold 
                             ${idx === 0 ? 'text-yellow-500' :
-                              idx === 1 ? 'text-sky-400' :
-                                idx === 2 ? 'text-pink-400' :
-                                  'text-muted-foreground'
-                            }`}>
-                            #{idx + 1}
-                          </span>
-                            <span className="w-10 flex items-center justify-center">
-                              {renderHotTodayChange(song as unknown as Rankable)}
-                            </span>
-                        </div>
+                                  idx === 1 ? 'text-sky-400' :
+                                    idx === 2 ? 'text-pink-400' :
+                                      'text-muted-foreground'
+                                }`}>
+                                #{idx + 1}
+                              </span>
+                              <span className="w-10 flex items-center justify-center">
+                                {renderHotTodayChange(song as unknown as Rankable)}
+                              </span>
+                            </div>
 
-                        {/* Cover & Play */}
-                        <div className="relative group/cover cursor-pointer" onClick={async () => {
-                          try {
-                            const full = await songsApi.getById(String(song.songId));
-                            if (full) {
-                                const mapped = mapToPlayerSong(full);
-                                setQueue([mapped]);
-                                playSong(mapped);
-                            }
-                            } catch (_e) { void 0; }
-                        }}>
-                          <div className="w-12 h-12 rounded-lg overflow-hidden shadow border bg-muted flex items-center justify-center">
-                            <img src={song.albumImageUrl} alt={song.songName} className="w-full h-full object-cover" />
-                          </div>
-                          <button
-                            className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center"
-                              onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped = mapToPlayerSong(full); setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
-                          >
-                            <Play className="w-4 h-4 text-white" />
-                          </button>
-                        </div>
+                            {/* Cover & Play */}
+                            <div className="relative group/cover cursor-pointer" onClick={async () => {
+                              try {
+                                const full = await songsApi.getById(String(song.songId));
+                                if (full) {
+                                  const mapped = mapToPlayerSong(full);
+                                  setQueue([mapped]);
+                                  playSong(mapped);
+                                }
+                              } catch (_e) { void 0; }
+                            }}>
+                              <div className="w-12 h-12 rounded-lg overflow-hidden shadow border bg-muted flex items-center justify-center">
+                                <img src={song.albumImageUrl} alt={song.songName} className="w-full h-full object-cover" />
+                              </div>
+                              <button
+                                className="absolute inset-0 w-12 h-12 rounded-full bg-primary/80 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center"
+                                onClick={async e => { e.stopPropagation(); try { const full = await songsApi.getById(String(song.songId)); if (full) { const mapped = mapToPlayerSong(full); setQueue([mapped]); playSong(mapped); } } catch (_e) { void 0; } }}
+                              >
+                                <Play className="w-4 h-4 text-white" />
+                              </button>
+                            </div>
 
-                        {/* Song Name */}
-                        <div className="flex-1 min-w-0 cursor-pointer" onClick={async () => {
-                          try {
-                            const full = await songsApi.getById(String(song.songId));
-                            if (full) {
-                                const mapped = mapToPlayerSong(full);
-                                setQueue([mapped]);
-                                playSong(mapped);
-                            }
-                            } catch (_e) { void 0; }
-                        }}>
-                          <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
-                        </div>
+                            {/* Song Name */}
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={async () => {
+                              try {
+                                const full = await songsApi.getById(String(song.songId));
+                                if (full) {
+                                  const mapped = mapToPlayerSong(full);
+                                  setQueue([mapped]);
+                                  playSong(mapped);
+                                }
+                              } catch (_e) { void 0; }
+                            }}>
+                              <h4 className="font-medium truncate transition-colors group-hover:text-primary">{song.songName}</h4>
+                            </div>
 
-                        {/* Artists Column */}
-                        <div className="hidden md:block min-w-[150px] max-w-[200px]">
-                          <p className="text-sm text-muted-foreground truncate">
-                            {Array.isArray(song.artists) && song.artists.length > 0
-                              ? song.artists.map((a) => a?.name).filter(Boolean).join(", ")
-                              : "Unknown Artist"}
-                          </p>
-                        </div>
+                            {/* Artists Column */}
+                            <div className="hidden md:block min-w-[150px] max-w-[300px]">
+                              <p className="text-sm text-muted-foreg  round truncate">
+                                {song?.artists ||
+                                  "Unknown Artist"}
+                              </p>
+                            </div>
 
-                        {/* Actions Column */}
-                        <div className="flex items-center gap-2">
-                          {/* Heart Button */}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              // TODO: Implement add to favorites
-                              console.log("Add to favorites:", song.songId);
-                            }}
-                          >
-                            <Heart className="w-4 h-4" />
-                          </Button>
-
-                          {/* More Options Menu */}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+                            {/* Actions Column */}
+                            <div className="flex items-center gap-2">
+                              {/* Heart Button */}
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  // TODO: Implement add to favorites
+                                  console.log("Add to favorites:", song.songId);
+                                }}
                               >
-                                <MoreVertical className="w-4 h-4" />
+                                <Heart className="w-4 h-4" />
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-56">
-                              <DropdownMenuItem onClick={async (e) => {
-                                e.stopPropagation();
-                                try {
-                                  const full = await songsApi.getById(String(song.songId));
-                                  if (full) {
-                                    const mapped = mapToPlayerSong(full);
-                                    addToQueue(mapped);
-                                  }
-                                } catch (_e) { void 0; }
-                              }}>
-                                <Plus className="w-4 h-4 mr-2" />
-                                Thêm vào danh sách đang phát
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: Implement add to playlist
-                                console.log("Add to playlist:", song.songId);
-                              }}>
-                                <ListPlus className="w-4 h-4 mr-2" />
-                                Thêm vào playlist
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: Implement share with friends
-                                console.log("Share with friends:", song.songId);
-                              }}>
-                                <Users className="w-4 h-4 mr-2" />
-                                Chia sẻ với bạn bè
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => {
-                                e.stopPropagation();
-                                const url = `${window.location.origin}/song/${song.songId}`;
-                                navigator.clipboard.writeText(url);
-                                // TODO: Show toast notification
-                              }}>
-                                <Copy className="w-4 h-4 mr-2" />
-                                Sao chép liên kết
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                      ))
-                    )}
-                  </div>
+
+                              {/* More Options Menu */}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                  <DropdownMenuItem onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      const full = await songsApi.getById(String(song.songId));
+                                      if (full) {
+                                        const mapped = mapToPlayerSong(full);
+                                        addToQueue(mapped);
+                                      }
+                                    } catch (_e) { void 0; }
+                                  }}>
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    Thêm vào danh sách đang phát
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    // TODO: Implement add to playlist
+                                    console.log("Add to playlist:", song.songId);
+                                  }}>
+                                    <ListPlus className="w-4 h-4 mr-2" />
+                                    Thêm vào playlist
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    // TODO: Implement share with friends
+                                    console.log("Share with friends:", song.songId);
+                                  }}>
+                                    <Users className="w-4 h-4 mr-2" />
+                                    Chia sẻ với bạn bè
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    const url = `${window.location.origin}/song/${song.songId}`;
+                                    navigator.clipboard.writeText(url);
+                                    // TODO: Show toast notification
+                                  }}>
+                                    <Copy className="w-4 h-4 mr-2" />
+                                    Sao chép liên kết
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </>
                 )}
               </div>

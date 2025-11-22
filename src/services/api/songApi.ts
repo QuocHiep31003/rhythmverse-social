@@ -37,6 +37,8 @@ export interface Song {
   status?: 'ACTIVE' | 'INACTIVE' | string;
   createdAt?: string;
   updatedAt?: string;
+  acrId?: string; // ACR Cloud fingerprint ID
+  fingerprintStatus?: number; // 0: processing, 1: Ready, -1: Error
   // Các field từ TrendingSong có thể có
   songId?: number;
   songName?: string; // Một số API trả về songName thay vì name

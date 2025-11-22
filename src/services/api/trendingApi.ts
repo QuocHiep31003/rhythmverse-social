@@ -26,7 +26,7 @@ export interface TrendingSong {
     playCount: number;
     duration: string;
     albumImageUrl: string;
-    artists: SimpleDTO[];
+    artists: string
     genres: SimpleDTO[];
     snapshotCreatedAt: string; // ISO date string
 }

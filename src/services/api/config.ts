@@ -61,9 +61,31 @@ export const getRefreshToken = (): string | null => {
 // Set tokens in storage
 export const setTokens = (token: string, refreshToken?: string) => {
   try {
-    localStorage.setItem('token', token);
-    if (refreshToken) {
-      localStorage.setItem('refreshToken', refreshToken);
+    // Kiểm tra xem đang ở admin page hay không
+    const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    
+    if (isAdminPage) {
+      // Lưu vào adminToken và adminRefreshToken nếu đang ở admin page
+      localStorage.setItem('adminToken', token);
+      if (refreshToken) {
+        localStorage.setItem('adminRefreshToken', refreshToken);
+      }
+    } else {
+      // Lưu vào token và refreshToken cho user thường
+      localStorage.setItem('token', token);
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
+    }
+    
+    // Cũng lưu vào sessionStorage để đồng bộ
+    try {
+      sessionStorage.setItem('token', token);
+      if (refreshToken) {
+        sessionStorage.setItem('refreshToken', refreshToken);
+      }
+    } catch (e) {
+      // Ignore sessionStorage errors
     }
   } catch (error) {
     console.error('Failed to save tokens:', error);
@@ -163,11 +185,13 @@ apiClient.interceptors.response.use(
       }
 
       try {
+        console.log('[apiClient] Token expired, refreshing token...');
         // Import authApi dynamically to avoid circular dependency
         const { authApi } = await import('./authApi');
         const response = await authApi.refreshToken(refreshToken);
 
         if (response.token && response.refreshToken) {
+          console.log('[apiClient] Token refreshed successfully');
           // Lưu tokens mới
           setTokens(response.token, response.refreshToken);
 
@@ -179,18 +203,22 @@ apiClient.interceptors.response.use(
           isRefreshing = false;
 
           // Retry original request với token mới
+          console.log('[apiClient] Retrying original request with new token');
           return apiClient(originalRequest);
         } else {
+          console.error('[apiClient] Invalid refresh response:', response);
           throw new Error('Invalid response from refresh token endpoint');
         }
       } catch (refreshError) {
+        console.error('[apiClient] Refresh token failed:', refreshError);
         isRefreshing = false;
         clearTokens();
         processQueue(refreshError, null);
         
         // Redirect to login
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          const isAdminPage = window.location.pathname.startsWith('/admin');
+          window.location.href = isAdminPage ? '/admin/login' : '/login';
         }
         
         return Promise.reject(refreshError);

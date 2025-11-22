@@ -142,6 +142,14 @@ const AdminSongs = () => {
     setIsSubmitting(true);
     try {
       if (formMode === "create") {
+        toast({
+          title: "Đang tải lên và xử lý audio",
+          description: "Upload lên S3, tạo HLS và đồng bộ ACR có thể mất 1-2 phút. Vui lòng giữ trang này mở.",
+          duration: 60000,
+        });
+      }
+
+      if (formMode === "create") {
         // Create song without genreIds and moodIds first, then add them with scores
         const { genreIds, moodIds, file, ...songData } = data;
         let createdSong: Song | undefined;
