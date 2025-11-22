@@ -2,6 +2,8 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 export interface Song {
   id: string;
+  name?: string;
+  title?: string;
   songName?: string; // Alternative field from API
   artist: string;
   album: string;

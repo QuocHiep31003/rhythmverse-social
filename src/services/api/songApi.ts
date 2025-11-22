@@ -18,6 +18,7 @@ export interface Song {
   playCount?: number;
   duration?: string | number; // BE trả về string format "3:45"
   cover?: string;
+  audioUrl?: string | null;
   album?: string | { name: string };
   albumId?: number;
   albumName?: string; // Từ một số API response

@@ -24,6 +24,8 @@ interface ChatAreaProps {
   currentSong: any;
   loadingFriends: boolean;
   meId?: number;
+  isFriendTyping?: boolean;
+  onReact?: (message: Message, emoji: string) => void;
 }
 
 export const ChatArea = ({
@@ -42,9 +44,12 @@ export const ChatArea = ({
   loadingFriends,
   meId,
   unreadByFriend = {},
+  isFriendTyping = false,
+  onReact,
 }: ChatAreaProps) => {
   const chatContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const selectedFriend = friends.find((f) => f.id === selectedChat);
 
   // Scroll to bottom function - force scroll
   const scrollToBottom = () => {
@@ -80,6 +85,38 @@ export const ChatArea = ({
       setTimeout(scrollToBottom, 200);
     }
   }, [selectedChat, messages]);
+
+  const getLastMessagePreview = (friendId: string, fallbackHandle: string) => {
+    const friendMessages = messages[friendId] || [];
+    if (!friendMessages.length) {
+      return fallbackHandle || "Bắt đầu trò chuyện";
+    }
+    const lastMessage = friendMessages[friendMessages.length - 1];
+
+    if (lastMessage.type === "song") {
+      const title = lastMessage.songData?.title || "một bài hát";
+      return `🎵 Đã chia sẻ ${title}`;
+    }
+    if (lastMessage.type === "playlist") {
+      const name = lastMessage.playlistData?.name || lastMessage.sharedPlaylist?.name || "playlist";
+      return `🎧 Đã chia sẻ ${name}`;
+    }
+    if (lastMessage.type === "album") {
+      const name = lastMessage.albumData?.name || lastMessage.sharedAlbum?.name || "album";
+      return `💿 Đã chia sẻ ${name}`;
+    }
+
+    const plain =
+      (lastMessage as Message & { contentPlain?: string }).contentPlain ??
+      lastMessage.content ??
+      "";
+    const trimmed = plain.trim();
+    const prefix =
+      lastMessage.sender?.toLowerCase() === "you" || lastMessage.sender?.toLowerCase() === "bạn"
+        ? "Bạn: "
+        : "";
+    return trimmed ? `${prefix}${trimmed}` : `${prefix}Đã gửi tin nhắn`;
+  };
 
   const renderFriendsList = () => {
     // Sắp xếp bạn bè theo tin nhắn mới nhất
@@ -136,7 +173,9 @@ export const ChatArea = ({
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate text-foreground">{friend.name}</p>
-              <p className="text-xs text-muted-foreground">{friend.username}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {getLastMessagePreview(friend.id, friend.username)}
+              </p>
             </div>
           </div>
         </div>
@@ -158,9 +197,24 @@ export const ChatArea = ({
 
     return (
       <>
-        {sortedMessages.map((message) => (
-          <MessageCard key={message.id} message={message} playSong={playSong} />
-        ))}
+        {sortedMessages.map((message) => {
+          const senderFriend = message.sender === "You" ? null : friends.find((f) => f.id === selectedChat);
+          return (
+            <MessageCard
+              key={message.id}
+              message={message}
+              playSong={playSong}
+              onReact={onReact}
+              senderAvatar={senderFriend?.avatar || null}
+            />
+          );
+        })}
+        {isFriendTyping && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground italic px-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" />
+            {(selectedFriend?.name || "Friend")} đang nhập...
+          </div>
+        )}
         <div ref={messagesEndRef} className="h-0 w-full shrink-0" aria-label="End of messages" />
       </>
     );
@@ -211,23 +265,26 @@ export const ChatArea = ({
               <div className="relative flex items-center gap-3">
                 <Avatar className="w-9 h-9">
                   <AvatarImage 
-                    src={friends.find((f) => f.id === selectedChat)?.avatar}
-                    alt={friends.find((f) => f.id === selectedChat)?.name || 'Friend'}
+                    src={selectedFriend?.avatar}
+                    alt={selectedFriend?.name || 'Friend'}
                   />
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                    {friends
-                      .find((f) => f.id === selectedChat)
-                      ?.name.split(" ")
+                    {selectedFriend?.name
+                      ?.split(" ")
                       .map((n) => n[0])
                       .join("")}
                   </AvatarFallback>
                 </Avatar>
                 <div>
                   <CardTitle className="text-[15px] font-semibold text-foreground tracking-wide">
-                    {friends.find((f) => f.id === selectedChat)?.name}
+                    {selectedFriend?.name}
                   </CardTitle>
                   <p className="text-[12px] text-muted-foreground">
-                    {friends.find((f) => f.id === selectedChat)?.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
+                    {isFriendTyping
+                      ? "Đang nhập..."
+                      : selectedFriend?.isOnline
+                      ? "Đang hoạt động"
+                      : "Ngoại tuyến"}
                   </p>
                 </div>
               </div>

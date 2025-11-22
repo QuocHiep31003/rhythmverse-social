@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { X, MessageCircle } from "lucide-react";
@@ -7,20 +7,15 @@ import { API_BASE_URL } from "@/services/api/config";
 import { useNavigate } from "react-router-dom";
 import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
 import { type NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
+import { subscribeChatBubble, type ChatBubblePayload } from "@/utils/chatBubbleBus";
 
-interface ChatMessage {
-  id: string;
-  from: string;
-  message: string;
-  avatar?: string;
-  timestamp: Date;
-}
+type ChatBubbleMessage = ChatBubblePayload & { timestamp: Date; id: string };
 
 const ChatBubble = () => {
-  const [newMessages, setNewMessages] = useState<ChatMessage[]>([]);
+  const [newMessages, setNewMessages] = useState<ChatBubbleMessage[]>([]);
   const navigate = useNavigate();
 
-  const pushAndAutohide = (message: ChatMessage) => {
+  const pushAndAutohide = (message: ChatBubbleMessage) => {
     setNewMessages(prev => [...prev, message]);
     setTimeout(() => {
       setNewMessages(prev => prev.filter(m => m.id !== message.id));
@@ -49,13 +44,29 @@ const ChatBubble = () => {
     return `${base}/${u}`;
   };
 
+  useEffect(() => {
+    const unsubscribe = subscribeChatBubble((payload) => {
+      const base: ChatBubbleMessage = {
+        id: payload.id ?? `bus-${Date.now()}`,
+        from: payload.from,
+        message: payload.message,
+        avatar: payload.avatar,
+        variant: payload.variant,
+        meta: payload.meta,
+        timestamp: new Date(),
+      };
+      pushAndAutohide(base);
+    });
+    return unsubscribe;
+  }, []);
+
   // Only show REAL notifications from Firebase
   useFirebaseRealtime(meId, {
     onNotification: (n: FBNotificationDTO) => {
       try {
         const from = n.senderName || 'Someone';
         const avatar = toAbsoluteUrl(n.senderAvatar ?? null);
-        const base: ChatMessage = { id: `${n.id || Date.now()}`, from, message: '', avatar, timestamp: new Date() };
+        const base: ChatBubbleMessage = { id: `${n.id || Date.now()}`, from, message: '', avatar, timestamp: new Date() };
         if (n?.type === 'MESSAGE') {
           base.id = `msg-${base.id}`;
           base.message = String(n.body || 'New message');
@@ -64,7 +75,7 @@ const ChatBubble = () => {
           const metadata = n.metadata as { playlistName?: string } | undefined;
           const pName = metadata?.playlistName || 'a playlist';
           base.id = `inv-${base.id}`;
-          base.message = `mời bạn cộng tác trên "${pName}"`;
+          base.message = `invited you to collaborate on "${pName}"`;
           pushAndAutohide(base);
         } else if (n?.type === 'SHARE') {
           const title = (n.metadata?.playlistName as string) || (n.metadata?.songName as string) || (n.metadata?.albumName as string) || n.title || 'Shared content';
@@ -96,6 +107,19 @@ const ChatBubble = () => {
 
   if (!isAuthed || newMessages.length === 0) return null;
 
+  const resolveVariant = (msg: ChatBubbleMessage) => {
+    switch (msg.variant) {
+      case 'success':
+        return "from-emerald-500/20 via-emerald-500/10 to-emerald-500/5 border-emerald-300/30 ring-emerald-400/20";
+      case 'warning':
+        return "from-amber-500/25 via-amber-500/15 to-amber-500/10 border-amber-300/40 ring-amber-400/20";
+      case 'error':
+        return "from-rose-500/25 via-rose-500/15 to-rose-500/10 border-rose-300/40 ring-rose-400/20";
+      default:
+        return "from-purple-500/15 via-fuchsia-500/10 to-indigo-500/10 border-purple-300/20 ring-purple-400/10";
+    }
+  };
+
   return (
     <div className="fixed bottom-32 right-3 z-40 space-y-2 pointer-events-none">
       {newMessages.slice(-1).map((message, index) => (
@@ -103,9 +127,10 @@ const ChatBubble = () => {
           key={message.id}
           className={cn(
             "pointer-events-auto rounded-2xl p-3 max-w-[280px]",
-            "bg-gradient-to-br from-purple-500/15 via-fuchsia-500/10 to-indigo-500/10",
+            "bg-gradient-to-br",
+            resolveVariant(message),
             "backdrop-blur-xl backdrop-saturate-150",
-            "border border-purple-300/20 ring-1 ring-purple-400/10",
+            "border ring-1",
             "shadow-[0_8px_30px_rgba(88,28,135,0.25)]",
             "animate-slide-in-right transition-all duration-300 hover:shadow-2xl hover:ring-purple-400/20"
           )}
@@ -131,7 +156,7 @@ const ChatBubble = () => {
                   <X className="h-3 w-3" />
                 </Button>
               </div>
-              <p className="text-xs text-purple-100/80 break-words">
+              <p className="text-xs text-purple-100/80 break-words line-clamp-2 overflow-hidden">
                 {message.message}
               </p>
             </div>

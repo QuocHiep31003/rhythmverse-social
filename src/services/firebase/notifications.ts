@@ -1,5 +1,5 @@
-import { ref, onValue, query, orderByKey, limitToLast } from 'firebase/database';
-import { database } from '@/config/firebase-config';
+import { ref, onValue, query, orderByKey, limitToLast, update } from 'firebase/database';
+import { firebaseDb } from '@/config/firebase-config';
 
 export interface NotificationDTO {
   id?: string; // Firebase key
@@ -18,7 +18,7 @@ export const watchNotifications = (
   userId: number,
   callback: (notifications: NotificationDTO[]) => void
 ) => {
-  const notificationsRef = ref(database, `notifications/${userId}`);
+  const notificationsRef = ref(firebaseDb, `notifications/${userId}`);
   
   console.log('[Firebase Notifications] Watching notifications for user:', userId);
   
@@ -61,3 +61,18 @@ export const watchNotifications = (
   };
 };
 
+export const markNotificationsAsRead = async (userId: number, notificationIds: string[]) => {
+  if (!notificationIds.length) return;
+  const updates: Record<string, boolean> = {};
+  notificationIds.forEach((id) => {
+    if (id) {
+      updates[`${id}/read`] = true;
+    }
+  });
+  if (!Object.keys(updates).length) return;
+  try {
+    await update(ref(firebaseDb, `notifications/${userId}`), updates);
+  } catch (error) {
+    console.error('[Firebase Notifications] Failed to mark as read', { userId, notificationIds, error });
+  }
+};
