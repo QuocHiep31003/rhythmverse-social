@@ -115,10 +115,19 @@ export const watchTyping = (
     (snapshot) => {
       const data = snapshot.exists() ? snapshot.val() : null;
       console.log('[Firebase Chat] Typing snapshot received:', { roomId, friendId, exists: snapshot.exists(), data });
-      callback(data);
+      if (data && typeof data === 'object') {
+        // Đảm bảo data có đúng format
+        const typingData = {
+          isTyping: Boolean(data.isTyping),
+          updatedAt: typeof data.updatedAt === 'number' ? data.updatedAt : undefined
+        };
+        callback(typingData);
+      } else {
+        callback(null);
+      }
     },
     (error) => {
-      console.error("[Firebase Chat] Error watching typing:", error);
+      console.warn("[Firebase Chat] Error watching typing:", error?.code || error?.message || error);
       callback(null);
     }
   );

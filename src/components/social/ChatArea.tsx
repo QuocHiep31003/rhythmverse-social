@@ -1,9 +1,10 @@
-import { useRef, useEffect, useLayoutEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+﻿import { useRef, useEffect, useLayoutEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, Search, Send, Music, Edit } from "lucide-react";
+import { MessageCircle, Search, Send, Music, Edit, Info, Smile } from "lucide-react";
+import Picker from "@emoji-mart/react";
+import data from "@emoji-mart/data";
 import type { Friend, Message } from "@/types/social";
 import { MessageCard } from "@/components/social/MessageCard";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ interface ChatAreaProps {
   meId?: number;
   isFriendTyping?: boolean;
   onReact?: (message: Message, emoji: string) => void;
+  onDelete?: (message: Message) => void;
 }
 
 export const ChatArea = ({
@@ -46,10 +48,23 @@ export const ChatArea = ({
   unreadByFriend = {},
   isFriendTyping = false,
   onReact,
+  onDelete,
 }: ChatAreaProps) => {
   const chatContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedFriend = friends.find((f) => f.id === selectedChat);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  
+  // Debug typing status
+  useEffect(() => {
+    if (selectedChat) {
+      console.log('[ChatArea] Typing status:', { 
+        selectedChat, 
+        isFriendTyping,
+        friendName: selectedFriend?.name 
+      });
+    }
+  }, [selectedChat, isFriendTyping, selectedFriend]);
 
   // Scroll to bottom function - force scroll
   const scrollToBottom = () => {
@@ -144,42 +159,53 @@ export const ChatArea = ({
     });
     
     return (
-      <div className="space-y-2">
-        {sortedFriends.map((friend) => (
+      <div className="space-y-0.5">
+        {sortedFriends.map((friend) => {
+          const friendMessages = messages[friend.id] || [];
+          const lastMessage = friendMessages.length > 0 ? friendMessages[friendMessages.length - 1] : null;
+          const lastMessageTime = lastMessage?.timestamp || '';
+          
+          return (
         <div
           key={friend.id}
           className={cn(
-            "p-3 rounded-xl cursor-pointer border transition-all duration-200 flex flex-col gap-2 bg-muted/40 dark:bg-muted/20 hover:bg-muted/60 dark:hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary/60",
-            selectedChat === friend.id && "bg-primary/10 border-primary/40 shadow-sm hover:bg-primary/15"
+            "px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 flex items-center gap-3 hover:bg-muted/50 focus-visible:outline-none",
+            selectedChat === friend.id && "bg-primary/10 hover:bg-primary/15 border-l-2 border-primary"
           )}
           onClick={() => onFriendSelect(friend.id)}
         >
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <Avatar className="w-10 h-10">
-                <AvatarImage src={friend.avatar} alt={friend.name} />
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                  {friend.name.split(' ').map(n => n[0]).join('')}
-                </AvatarFallback>
-              </Avatar>
-              {friend.isOnline && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-card" />
-              )}
-              {unreadByFriend[friend.id] > 0 && (
-                <div className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center">
-                  {unreadByFriend[friend.id] > 99 ? '99+' : unreadByFriend[friend.id]}
+              <div className="relative flex-shrink-0">
+                <Avatar className="w-12 h-12">
+                  <AvatarImage src={friend.avatar} alt={friend.name} />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                    {friend.name.split(' ').map(n => n[0]).join('')}
+                  </AvatarFallback>
+                </Avatar>
+                {friend.isOnline && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <p className="font-semibold text-sm truncate text-foreground">{friend.name}</p>
+                  {lastMessageTime && (
+                    <span className="text-[11px] text-muted-foreground flex-shrink-0">{lastMessageTime}</span>
+                  )}
                 </div>
-              )}
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground truncate flex-1">
+                    {getLastMessagePreview(friend.id, friend.username)}
+                  </p>
+                  {unreadByFriend[friend.id] > 0 && (
+                    <div className="flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
+                      {unreadByFriend[friend.id] > 99 ? "99+" : unreadByFriend[friend.id]}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-medium truncate text-foreground">{friend.name}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {getLastMessagePreview(friend.id, friend.username)}
-              </p>
-            </div>
-          </div>
-        </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -197,73 +223,81 @@ export const ChatArea = ({
 
     return (
       <>
-        {sortedMessages.map((message) => {
+        {sortedMessages.map((message, index) => {
           const senderFriend = message.sender === "You" ? null : friends.find((f) => f.id === selectedChat);
+          const previousMessage = index > 0 ? sortedMessages[index - 1] : null;
           return (
             <MessageCard
               key={message.id}
               message={message}
               playSong={playSong}
               onReact={onReact}
+              onDelete={onDelete}
               senderAvatar={senderFriend?.avatar || null}
+              meId={meId}
+              previousMessage={previousMessage}
             />
           );
         })}
-        {isFriendTyping && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground italic px-2">
-            <span className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" aria-hidden="true" />
-            {(selectedFriend?.name || "Friend")} đang nhập...
-          </div>
-        )}
         <div ref={messagesEndRef} className="h-0 w-full shrink-0" aria-label="End of messages" />
       </>
     );
   };
 
   return (
-    <div className="grid lg:grid-cols-3 gap-6 min-h-[420px] max-h-[calc(100vh-220px)] overflow-hidden text-foreground">
-      {/* Friends List */}
-      <Card 
-        className="lg:col-span-1 border-border/80 bg-card/90 dark:bg-card/70 shadow-sm backdrop-blur-sm transition-colors"
-      >
-        <CardHeader className="border-b border-border/70 bg-card/95 dark:bg-card/70">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
-            <MessageCircle className="w-5 h-5 text-primary" />
-            Messages
-          </CardTitle>
+    <div className="grid lg:grid-cols-[360px_1fr] gap-0 h-[calc(100vh-200px)] overflow-hidden text-foreground bg-background">
+      {/* Left Panel */}
+      <div className="hidden lg:flex flex-col border-r border-border/50 bg-background dark:bg-background">
+        {/* Header with title and icons */}
+        <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-background">
+          <h2 className="text-xl font-semibold text-foreground">Đoạn chat</h2>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
+              <Search className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Search bar */}
+        <div className="px-4 py-3 border-b border-border/50">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 text-muted-foreground/70 -translate-y-1/2" />
             <Input
-              placeholder="Search conversations..."
-              className="pl-10 bg-muted/50 dark:bg-muted/30 border border-border/70 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/40"
+              placeholder="Tìm kiếm cuộc trò chuyện"
+              className="pl-10 h-9 bg-muted/40 dark:bg-muted/20 border-0 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
             />
           </div>
-        </CardHeader>
-        <CardContent className="p-4 overflow-y-auto scrollbar-custom">
+        </div>
+        
+        {/* Tabs */}
+        <div className="px-4 py-2 border-b border-border/50 flex items-center gap-1 bg-background">
+          <Button variant="ghost" size="sm" className="h-8 px-3 text-sm font-medium rounded-lg bg-primary/10 text-primary">
+            Tất cả
+          </Button>
+        </div>
+        
+        {/* Chat list */}
+        <div className="flex-1 overflow-y-auto scrollbar-custom p-2">
           {loadingFriends ? (
-            <p className="text-sm text-muted-foreground">Loading friends...</p>
+            <p className="text-sm text-muted-foreground px-4 py-8 text-center">Loading friends...</p>
           ) : friends.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
+            <p className="text-sm text-muted-foreground px-4 py-8 text-center">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
           ) : (
             renderFriendsList()
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Chat Area */}
-      <Card 
-        className="lg:col-span-2 flex flex-col relative overflow-hidden rounded-3xl border border-border/70 shadow-lg shadow-primary/5 bg-card/95 dark:bg-card/70 min-h-[480px] lg:h-[calc(100vh-240px)] lg:max-h-[calc(100vh-240px)] transition-colors"
-      >
+      {/* Right Panel - Chat Area */}
+      <div className="flex flex-col relative overflow-hidden bg-background">
         {selectedChat ? (
           <>
-            {/* Header */}
-            <CardHeader 
-              className="p-4 border-b border-border/70 relative z-10 bg-card/95 dark:bg-card/70"
-            >
-              <div className="relative flex items-center gap-3">
-                <Avatar className="w-9 h-9">
+            {/* Header - Messenger style */}
+            <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-background">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Avatar className="w-10 h-10 flex-shrink-0">
                   <AvatarImage 
                     src={selectedFriend?.avatar}
                     alt={selectedFriend?.name || 'Friend'}
@@ -275,75 +309,134 @@ export const ChatArea = ({
                       .join("")}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <CardTitle className="text-[15px] font-semibold text-foreground tracking-wide">
-                    {selectedFriend?.name}
-                  </CardTitle>
-                  <p className="text-[12px] text-muted-foreground">
-                    {isFriendTyping
-                      ? "Đang nhập..."
-                      : selectedFriend?.isOnline
-                      ? "Đang hoạt động"
-                      : "Ngoại tuyến"}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[15px] font-semibold text-foreground truncate">
+                      {selectedFriend?.name}
+                    </h3>
+                    {selectedFriend?.isOnline && (
+                      <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedFriend?.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
                   </p>
                 </div>
               </div>
-            </CardHeader>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
+                  <Info className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
 
             {/* Message content */}
-            <CardContent
+            <div
               ref={chatContentRef}
-              className="flex-1 min-h-0 p-4 overflow-y-auto scrollbar-hide bg-gradient-to-b from-background/80 via-card/80 to-background/70 dark:from-background/40 dark:via-card/40 dark:to-background/50"
+              className="flex-1 min-h-0 overflow-y-auto scrollbar-hide bg-background/40 dark:bg-background/20 relative"
             >
-              <div className="flex flex-col space-y-4 min-h-full">
+              <div className="flex flex-col min-h-full px-2.5 sm:px-3 py-3 pb-4">
                 {renderMessages()}
               </div>
-            </CardContent>
+            </div>
+
+            {/* Typing indicator - above input */}
+            {isFriendTyping && (
+              <div className="px-4 py-2 border-t border-border/50 bg-background/95 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-1 duration-200">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-typing" style={{ animationDelay: '0ms' }} />
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-typing" style={{ animationDelay: '200ms' }} />
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-typing" style={{ animationDelay: '400ms' }} />
+                  </div>
+                  <span className="text-primary font-medium animate-pulse">
+                    {selectedFriend?.name || "Friend"} đang nhập...
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Input bar */}
-            <div className="p-4 border-t border-border/70 sticky bottom-0 left-0 right-0 z-10 bg-card/90 dark:bg-card/70 backdrop-blur">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="relative flex-1">
-                  <Edit className="absolute left-4 top-1/2 h-4 w-4 text-muted-foreground/70 -translate-y-1/2" />
+            <div className="px-4 py-3 border-t border-border/50 bg-background relative">
+              <div className="flex items-center gap-2">
+                {/* Left icons */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {currentSong && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 rounded-full hover:bg-muted/50"
+                      onClick={onShareCurrentSong}
+                    >
+                      <Music className="w-5 h-5" />
+                    </Button>
+                  )}
+                </div>
+                
+                {/* Input field */}
+                <div className="flex-1 relative">
                   <Input
-                    placeholder="Type a message..."
+                    placeholder="Nhập tin nhắn..."
                     value={newMessage}
                     onChange={(e) => onMessageChange(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && onSendMessage()}
-                    className="w-full pl-11 h-12 rounded-full bg-muted/40 dark:bg-muted/30 border border-border/60 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-primary/40"
+                    className="w-full pl-4 pr-12 h-10 rounded-full bg-muted/50 dark:bg-muted/30 border-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
                   />
+                  {newMessage.trim() && (
+                    <Button
+                      variant="default"
+                      size="icon"
+                      onClick={onSendMessage}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  variant="default"
-                  size="icon"
-                  onClick={onSendMessage}
-                  className="h-12 w-12 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-md shadow-primary/20 transition"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-                {currentSong && (
+                
+                {/* Right quick reactions */}
+                <div className="flex items-center gap-1 flex-shrink-0 relative">
                   <Button
-                    variant="outline"
-                    size="sm"
-                    className="sm:ml-2 rounded-full border border-border/70 text-sm font-medium text-foreground bg-muted/30 hover:bg-muted/50"
-                    onClick={onShareCurrentSong}
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-full hover:bg-muted/50"
+                    onClick={() => setEmojiPickerOpen((prev) => !prev)}
+                    aria-label="Chèn emoji"
                   >
-                    <Music className="w-4 h-4 mr-2" /> Share current song
+                    <Smile className="w-5 h-5" />
                   </Button>
-                )}
+                  {emojiPickerOpen && (
+                    <div className="absolute bottom-full right-0 mb-2 z-50">
+                      <Picker
+                        data={data}
+                        onEmojiSelect={(emoji: any) => {
+                          const native = emoji?.native;
+                          if (native) {
+                            onMessageChange(`${newMessage}${native}`);
+                          }
+                          setEmojiPickerOpen(false);
+                        }}
+                        theme="auto"
+                        previewPosition="none"
+                        skinTonePosition="none"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center bg-background">
             <div className="text-center">
-              <MessageCircle className="w-14 h-14 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-base font-semibold mb-1 text-foreground">Chọn một cuộc trò chuyện</h3>
+              <MessageCircle className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2 text-foreground">Chọn một cuộc trò chuyện</h3>
               <p className="text-sm text-muted-foreground">Hãy chọn bạn bè để bắt đầu nhắn tin</p>
             </div>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 };
+

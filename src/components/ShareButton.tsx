@@ -62,7 +62,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOp
     };
     
     if (open) {
-      loadFriends();
+    loadFriends();
     }
   }, [open, meId]);
 
@@ -230,19 +230,19 @@ const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOp
       }}
     >
       {controlledOpen === undefined && (
-        <DialogTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(true);
-            }}
-          >
-            <Share2 className="w-4 h-4" />
-          </Button>
-        </DialogTrigger>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+        >
+          <Share2 className="w-4 h-4" />
+        </Button>
+      </DialogTrigger>
       )}
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto scrollbar-custom">
         <DialogHeader>

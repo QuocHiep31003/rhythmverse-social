@@ -41,6 +41,7 @@ import {
   markNotificationsAsRead,
 } from "@/services/firebase/notifications";
 import { CHAT_TAB_OPENED_EVENT } from "@/utils/chatEvents";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
 import {
   premiumSubscriptionApi,
@@ -83,6 +84,9 @@ const TopBar = () => {
       return false;
     }
   });
+
+  // Firebase authentication state
+  const { firebaseReady } = useFirebaseAuth(currentUserId);
 
   const navigate = useNavigate();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -296,13 +300,10 @@ const TopBar = () => {
 
   /** ================= FIREBASE NOTIFS ================= **/
   useEffect(() => {
-    const raw = localStorage.getItem("userId");
-    const userId = raw ? Number(raw) : null;
-    if (!userId) return;
-    setCurrentUserId(userId);
+    if (!currentUserId) return;
 
     const unsubscribe = watchNotifications(
-      userId,
+      currentUserId,
       (notifications: NotificationDTO[]) => {
         const messageNotifs = notifications.filter((n) => n.type === "MESSAGE");
         const alertNotifs = notifications.filter((n) => n.type !== "MESSAGE");
@@ -314,32 +315,47 @@ const TopBar = () => {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
-    if (!notifOpen || !currentUserId) return;
+    if (!notifOpen || !currentUserId || !firebaseReady) return;
     const unreadIds = alertNotifications
       .filter((n) => !n.read && n.id)
       .map((n) => String(n.id));
-    void markNotificationsAsRead(currentUserId, unreadIds);
-  }, [notifOpen, currentUserId, alertNotifications]);
+    if (unreadIds.length > 0) {
+      // Cập nhật local state ngay lập tức: đánh dấu tất cả alert notifications là đã đọc
+      setAlertNotifications((prev) =>
+        prev.map((n) => (unreadIds.includes(String(n.id)) ? { ...n, read: true } : n))
+      );
+      setUnreadAlertCount(0); // Optimistic update
+      // Đánh dấu đã đọc trong Firebase (chỉ khi Firebase auth đã sẵn sàng)
+      void markNotificationsAsRead(currentUserId, unreadIds);
+    }
+  }, [notifOpen, currentUserId, firebaseReady, alertNotifications]);
 
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || !firebaseReady) return;
     const handler = () => {
       const unreadIds = messageNotifications
         .filter((n) => !n.read && n.id)
         .map((n) => String(n.id));
       if (unreadIds.length) {
+        // Cập nhật local state ngay lập tức: đánh dấu tất cả message notifications là đã đọc
+        setMessageNotifications((prev) =>
+          prev.map((n) => (unreadIds.includes(String(n.id)) ? { ...n, read: true } : n))
+        );
+        setUnreadMsgCount(0); // Optimistic update
+        // Đánh dấu đã đọc trong Firebase (chỉ khi Firebase auth đã sẵn sàng)
         void markNotificationsAsRead(currentUserId, unreadIds);
+      } else {
+        setUnreadMsgCount(0);
       }
-      setUnreadMsgCount(0);
     };
     window.addEventListener(CHAT_TAB_OPENED_EVENT, handler);
     return () => {
       window.removeEventListener(CHAT_TAB_OPENED_EVENT, handler);
     };
-  }, [currentUserId, messageNotifications]);
+  }, [currentUserId, firebaseReady, messageNotifications]);
 
   /** ================= LOGOUT ================= **/
   const handleLogout = () => {
