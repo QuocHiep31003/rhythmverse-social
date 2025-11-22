@@ -243,4 +243,20 @@ export const chatApi = {
       throw new Error(errorMsg);
     }
   },
+  deleteMessage: async (messageId: number, userId: number): Promise<{ messageId: number; deleted: boolean }> => {
+    console.log('[chatApi] Deleting message:', { messageId, userId });
+    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}?userId=${userId}`, {
+      method: "DELETE",
+      headers: buildJsonHeaders(),
+    });
+    console.log('[chatApi] Delete message response:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error('[chatApi] Delete message error:', errorMsg);
+      throw new Error(errorMsg);
+    }
+    const result = await res.json();
+    console.log('[chatApi] Delete message success:', result);
+    return result;
+  },
 };

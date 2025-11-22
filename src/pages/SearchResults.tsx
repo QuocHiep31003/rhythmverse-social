@@ -62,7 +62,7 @@ const SearchResults = () => {
       }
       // Set new timeout for debounce
       const timeout = setTimeout(() => {
-        fetchSearchResults(queryParam);
+      fetchSearchResults(queryParam);
       }, 300); // 300ms debounce
       setSearchTimeout(timeout);
     }
@@ -78,13 +78,13 @@ const SearchResults = () => {
     if (!queryParam.trim()) return;
     setLoading(true);
     try {
-      const data = await searchApi.getAll(queryParam);
-      setSearchResults(data);
-      setDetailedResults({ songs: [], artists: [], albums: [] });
+    const data = await searchApi.getAll(queryParam);
+    setSearchResults(data);
+    setDetailedResults({ songs: [], artists: [], albums: [] });
     } catch (error) {
       console.error("Search error:", error);
     } finally {
-      setLoading(false);
+    setLoading(false);
     }
   }, []);
 
@@ -252,21 +252,21 @@ const SearchResults = () => {
                             className="flex items-center gap-4 p-3 hover:bg-muted/50 group cursor-pointer rounded-lg transition-colors"
                           >
                             <div className="flex items-center gap-2 flex-1 min-w-0" onClick={() => handlePlaySong(song)}>
-                              <span className="w-6 text-sm text-muted-foreground text-center group-hover:hidden">
-                                {index + 1}
-                              </span>
-                              <div className="w-6 flex justify-center opacity-0 group-hover:opacity-100">
-                                <Play className="w-4 h-4 text-foreground" />
-                              </div>
-                              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
-                                <img src={song.urlImageAlbum || "/placeholder.svg"} alt={song.name} className="w-full h-full object-cover" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-foreground truncate">{song.name}</p>
-                                <p className="text-sm text-muted-foreground truncate">
-                                  {song.artists?.map(a => a.name).join(", ")}
-                                </p>
-                              </div>
+                            <span className="w-6 text-sm text-muted-foreground text-center group-hover:hidden">
+                              {index + 1}
+                            </span>
+                            <div className="w-6 flex justify-center opacity-0 group-hover:opacity-100">
+                              <Play className="w-4 h-4 text-foreground" />
+                            </div>
+                            <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                              <img src={song.urlImageAlbum || "/placeholder.svg"} alt={song.name} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-foreground truncate">{song.name}</p>
+                              <p className="text-sm text-muted-foreground truncate">
+                                {song.artists?.map(a => a.name).join(", ")}
+                              </p>
+                            </div>
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

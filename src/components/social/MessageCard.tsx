@@ -11,6 +11,7 @@ import { createSlug } from "@/utils/playlistUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { mapToPlayerSong } from "@/lib/utils";
 import { API_BASE_URL } from "@/services/api/config";
+import { MoreVertical, Smile } from "lucide-react";
 
 const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😭", "🔥"];
 
@@ -18,11 +19,14 @@ interface MessageCardProps {
   message: Message;
   playSong: (song: Song) => void;
   onReact?: (message: Message, emoji: string) => void;
+  onDelete?: (message: Message) => void;
   reactionOptions?: string[];
   senderAvatar?: string | null;
+  meId?: number;
+  previousMessage?: Message | null;
 }
 
-export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFAULT_REACTIONS, senderAvatar }: MessageCardProps) => {
+export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOptions = DEFAULT_REACTIONS, senderAvatar, meId, previousMessage }: MessageCardProps) => {
   const { setQueue } = useMusic();
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistDTO | null>(null);
   const [albumInfo, setAlbumInfo] = useState<{ id: number; name: string; coverUrl?: string | null; artist?: unknown; releaseYear?: number; songs?: unknown[] } | null>(null);
@@ -32,7 +36,93 @@ export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFA
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const parseTimestampMs = (msg?: Message | null) => {
+    if (!msg) return null;
+    if (typeof msg.sentAt === "number" && Number.isFinite(msg.sentAt)) return msg.sentAt;
+    const parsed = Date.parse(msg.timestamp);
+    if (!Number.isNaN(parsed)) return parsed;
+    const numericId = Number(msg.id);
+    return Number.isFinite(numericId) ? numericId : null;
+  };
 
+  const currentTimeMs = parseTimestampMs(message);
+  const previousTimeMs = parseTimestampMs(previousMessage);
+  const timeDiffMs =
+    currentTimeMs !== null && previousTimeMs !== null
+      ? Math.abs(currentTimeMs - previousTimeMs)
+      : null;
+  const hasTimeGap = previousMessage === null || (timeDiffMs !== null && timeDiffMs >= 5 * 60 * 1000);
+
+  // Chỉ hiện timestamp khi hover (ẩn mặc định)
+  const showTimestamp = isHovered;
+
+  const reactionButton = (
+    <div className="relative">
+      <button
+        type="button"
+        className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all"
+        aria-label="Add reaction"
+        onClick={() => setEmojiPickerOpen((prev) => !prev)}
+      >
+        <Smile className="w-4 h-4" />
+      </button>
+      <div
+        className={`absolute bottom-full mb-2 ${
+          isSentByMe ? "right-0" : "left-0"
+        } ${emojiPickerOpen ? "flex" : "hidden"} gap-1.5 bg-background/98 dark:bg-background/95 border border-border/60 rounded-full px-2 py-1.5 shadow-xl z-40 backdrop-blur-sm`}
+      >
+        {reactionOptions.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+                        className="text-xl transition-transform p-1 hover:bg-muted/40 rounded-full"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          onReact?.(message, emoji);
+                          setEmojiPickerOpen(false);
+                        }}
+                        aria-label={`React with ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const visibilityClasses = emojiPickerOpen
+    ? "opacity-100 pointer-events-auto"
+    : "opacity-0 pointer-events-none group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
+
+  const actionButtonsSent = (
+    <div
+      className={`flex items-center gap-1 min-w-[96px] justify-end ${visibilityClasses}`}
+    >
+      {onDelete && (
+        <button
+          type="button"
+          className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all"
+          aria-label="More options"
+          onClick={() => {
+            if (window.confirm("Bạn có chắc muốn xóa tin nhắn này?")) {
+              onDelete(message);
+            }
+          }}
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      )}
+      {onReact && reactionButton}
+    </div>
+  );
+
+  const actionButtonsReceived = onReact ? (
+    <div
+      className={`flex items-center gap-1 min-w-[44px] justify-start ${visibilityClasses}`}
+    >
+      {reactionButton}
+    </div>
+  ) : null;
   useEffect(() => {
     if (typeof window === "undefined") return;
     const detectTouch = () => {
@@ -392,8 +482,10 @@ export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFA
 
     return (
       <div
-        className={`px-4 py-2 rounded-lg break-words w-full min-w-0 whitespace-pre-wrap ${
-          isSentByMe ? "bg-primary text-primary-foreground" : "bg-muted/20"
+        className={`px-3 py-1.5 rounded-2xl break-words w-full min-w-0 whitespace-pre-wrap text-sm leading-relaxed ${
+          isSentByMe 
+            ? "bg-primary text-primary-foreground rounded-tr-sm" 
+            : "bg-muted/70 dark:bg-muted/50 rounded-tl-sm"
         }`}
       >
         {(() => {
@@ -416,34 +508,40 @@ export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFA
   if (!contentNode) return null;
 
   return (
-    <div className={`flex items-end gap-2 ${isSentByMe ? "justify-end" : "justify-start"} mb-2`}>
-      {/* Avatar for received messages */}
-      {!isSentByMe && (
-        <Avatar className="w-8 h-8 flex-shrink-0">
-          <AvatarImage src={senderAvatar || undefined} alt={message.sender} />
-          <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-            {message.sender?.charAt(0) || "?"}
-          </AvatarFallback>
-        </Avatar>
+    <>
+      {hasTimeGap && (
+        <div className="flex justify-center my-3">
+          <span className="px-3 py-1 text-[11px] text-muted-foreground/80 bg-muted/30 dark:bg-muted/20 rounded-full">
+            {message.timestamp}
+          </span>
+        </div>
       )}
-      
-      {/* Message bubble and actions */}
       <div
-        className="flex items-end gap-2 relative"
+        className={`group flex items-start gap-2 ${isSentByMe ? "justify-end" : "justify-start"} mb-2`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => {
           setIsHovered(false);
-          setEmojiPickerOpen(false);
         }}
       >
-        <div className={`max-w-md space-y-1 ${isSentByMe ? 'mr-2' : ''} relative`}>
-          <div className="relative w-full pb-6 min-h-0 overflow-visible">
+        {isSentByMe && actionButtonsSent}
+
+        {!isSentByMe && (
+          <Avatar className="w-8 h-8 flex-shrink-0 self-start">
+            <AvatarImage src={senderAvatar || undefined} alt={message.sender} />
+            <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+              {message.sender?.charAt(0) || "?"}
+            </AvatarFallback>
+          </Avatar>
+        )}
+
+        <div className={`max-w-[80%] sm:max-w-lg space-y-0.5 ${isSentByMe ? "mr-0" : "ml-0"} relative`}>
+          <div className="relative w-full pb-5 min-h-0 overflow-visible">
             {contentNode}
             {message.reactions && message.reactions.length > 0 && (
               <div
                 className={`absolute bottom-0 ${
                   isSentByMe ? "right-0" : "left-0"
-                } flex items-center gap-1 rounded-full bg-background/90 dark:bg-background/80 border border-border/50 px-2 py-0.5 shadow-sm z-20 flex-wrap max-w-[calc(100%-4px)]`}
+                } flex items-center gap-1 rounded-full bg-background/95 dark:bg-background/90 border border-border/40 px-2 py-0.5 shadow-sm z-20 flex-wrap max-w-[calc(100%-4px)]`}
               >
                 {message.reactions.map((reaction) => {
                   const decodedEmoji = decodeUnicodeEscapes(reaction.emoji);
@@ -462,59 +560,19 @@ export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFA
               </div>
             )}
           </div>
-          <p
-            className={`text-xs text-muted-foreground/60 ${
-              isSentByMe ? "text-right" : ""
-            }`}
-          >
-            {message.timestamp}
-          </p>
+          {showTimestamp && (
+            <p
+              className={`text-[10px] text-muted-foreground/50 transition-opacity duration-200 ${
+                isHovered ? "opacity-100" : "opacity-0"
+              } ${isSentByMe ? "text-right" : "text-left"}`}
+            >
+              {message.timestamp}
+            </p>
+          )}
         </div>
-        
-        {/* Action button: only reaction */}
-        {onReact && (
-          <div
-            className={`relative flex items-center transition-opacity ${
-              isTouchDevice || isHovered || emojiPickerOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-            }`}
-          >
-            <button
-              type="button"
-              className="flex items-center justify-center w-8 h-8 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all"
-              aria-label="Add reaction"
-              onMouseEnter={() => setEmojiPickerOpen(true)}
-              onClick={() => setEmojiPickerOpen((prev) => !prev)}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-            <div
-              className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 ${
-                emojiPickerOpen ? "flex" : "hidden"
-              } gap-1.5 bg-background/98 dark:bg-background/95 border border-border/60 rounded-full px-2 py-1.5 shadow-xl z-20 backdrop-blur-sm`}
-            >
-              {reactionOptions.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  className="text-xl hover:scale-125 active:scale-110 transition-transform p-1 hover:bg-muted/40 rounded-full"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onReact?.(message, emoji);
-                  }}
-                  aria-label={`React with ${emoji}`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
+        {!isSentByMe && actionButtonsReceived}
       </div>
-    </div>
+    </>
   );
 };
-
-
-

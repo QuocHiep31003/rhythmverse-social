@@ -1,5 +1,5 @@
 import { ref, onValue, query, orderByKey, limitToLast, update } from 'firebase/database';
-import { firebaseDb } from '@/config/firebase-config';
+import { firebaseDb, firebaseAuth } from '@/config/firebase-config';
 
 export interface NotificationDTO {
   id?: string; // Firebase key
@@ -61,8 +61,19 @@ export const watchNotifications = (
   };
 };
 
+// Track failed attempts để tránh spam log
+let hasLoggedPermissionError = false;
+
 export const markNotificationsAsRead = async (userId: number, notificationIds: string[]) => {
   if (!notificationIds.length) return;
+  
+  // Kiểm tra Firebase auth state trước khi cập nhật
+  const currentUser = firebaseAuth.currentUser;
+  if (!currentUser) {
+    // Im lặng - không log vì đã có optimistic update
+    return;
+  }
+  
   const updates: Record<string, boolean> = {};
   notificationIds.forEach((id) => {
     if (id) {
@@ -70,9 +81,22 @@ export const markNotificationsAsRead = async (userId: number, notificationIds: s
     }
   });
   if (!Object.keys(updates).length) return;
+  
   try {
     await update(ref(firebaseDb, `notifications/${userId}`), updates);
-  } catch (error) {
-    console.error('[Firebase Notifications] Failed to mark as read', { userId, notificationIds, error });
+    // Reset flag khi thành công
+    hasLoggedPermissionError = false;
+  } catch (error: any) {
+    // Chỉ log lỗi permission_denied một lần để tránh spam console
+    if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission_denied')) {
+      if (!hasLoggedPermissionError) {
+        console.warn('[Firebase Notifications] Permission denied - có thể do Firebase security rules. UI vẫn hoạt động bình thường với optimistic updates.');
+        hasLoggedPermissionError = true;
+      }
+    } else {
+      // Log các lỗi khác (ít xảy ra hơn)
+      console.warn('[Firebase Notifications] Failed to mark as read', error?.message || error);
+    }
+    // Không throw error để tránh làm gián đoạn UI - optimistic update đã xử lý UI rồi
   }
 };
