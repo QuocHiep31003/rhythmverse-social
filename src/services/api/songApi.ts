@@ -616,6 +616,17 @@ export const songsApi = {
     const response = await apiClient.get(`/songs/${songId}/stream-url`);
     return response.data;
   },
+  
+  // Get playback URL from stream session (for shared songs)
+  getPlaybackUrl: async (songId: number | string): Promise<{ playbackUrl: string }> => {
+    try {
+      const response = await apiClient.post(`/stream/${songId}/session`);
+      return response.data;
+    } catch (error) {
+      console.error("Error getting playback URL:", error);
+      throw error;
+    }
+  },
 
   // Build S3 stream URL directly from uuid (used cho debug hoặc test)
   getS3StreamUrl: (uuid: string | undefined | null): string | null => {

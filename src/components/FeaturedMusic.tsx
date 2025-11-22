@@ -13,17 +13,39 @@ import {
   Music,
   Sparkles,
   Zap,
+  MoreHorizontal,
+  ListPlus,
+  Users,
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { mockSongs } from "@/data/mockData";
 import { Song } from "@/contexts/MusicContext";
 import { handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 const FeaturedMusic = () => {
   const { playSong, setQueue } = useMusic();
   const [activeCategory, setActiveCategory] = useState("trending");
   const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
+    id: string | number;
+    name: string;
+    cover?: string;
+  } | null>(null);
+  const [shareSong, setShareSong] = useState<{
+    id: string | number;
+    title: string;
+    url: string;
+  } | null>(null);
 
   // toggle helper
   const toggleSelection = (
@@ -204,9 +226,43 @@ const FeaturedMusic = () => {
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                       <Heart className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSongForPlaylist({
+                              id: song.id,
+                              name: song.name || song.songName || "Unknown Song",
+                              cover: song.cover,
+                            });
+                            setAddToPlaylistOpen(true);
+                          }}
+                        >
+                          <ListPlus className="w-4 h-4 mr-2" />
+                          Thêm vào playlist
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShareSong({
+                              id: song.id,
+                              title: song.name || song.songName || "Unknown Song",
+                              url: `${window.location.origin}/song/${song.id}`,
+                            });
+                          }}
+                        >
+                          <Users className="w-4 h-4 mr-2" />
+                          Chia sẻ với bạn bè
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
                       <Share2 className="w-4 h-4" />
                     </Button>
@@ -217,6 +273,30 @@ const FeaturedMusic = () => {
           ))}
         </div>
       </div>
+      
+      {selectedSongForPlaylist && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongForPlaylist.id}
+          songTitle={selectedSongForPlaylist.name}
+          songCover={selectedSongForPlaylist.cover}
+        />
+      )}
+      {shareSong && (
+        <ShareButton
+          key={`share-${shareSong.id}-${Date.now()}`}
+          title={shareSong.title}
+          type="song"
+          url={shareSong.url}
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setShareSong(null);
+            }
+          }}
+        />
+      )}
     </section>
   );
 };

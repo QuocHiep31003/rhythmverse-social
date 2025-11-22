@@ -21,6 +21,7 @@ import {
   ArrowUp,
   ArrowDown,
   Minus,
+  MoreHorizontal,
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import type { Song as PlayerSong } from "@/contexts/MusicContext";
@@ -33,6 +34,16 @@ import { getTrendingComparison, TrendingSong, callHotTodayTrending } from "@/ser
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import React from "react"; // (đảm bảo đã import cho JSX trong tooltip)
 import { Skeleton } from "@/components/ui/skeleton";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import ShareButton from "@/components/ShareButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { ListPlus, Users } from "lucide-react";
 
 // Helper tạo 8 mốc giờ (3 tiếng 1 mốc) dạng "HH:00"
 function generateRecentHours() {
@@ -100,6 +111,17 @@ const Index = () => {
   // Dữ liệu từ API thực tế - Hot Month (Monthly Trending)
   const [topHitsMonth, setTopHitsMonth] = useState([]);
   const aiPicks = mockSongs.slice(0, 3);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
+    id: string | number;
+    name: string;
+    cover?: string;
+  } | null>(null);
+  const [shareSong, setShareSong] = useState<{
+    id: string | number;
+    title: string;
+    url: string;
+  } | null>(null);
 
   // Danh sách Editor's albums
   const editorsChoice = [
@@ -494,8 +516,46 @@ const Index = () => {
                         {/* Extra info hidden for now */}
                         <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground" />
 
-                        {/* Actions hidden for now */}
-                        <div className="flex items-center gap-1" />
+                        {/* Actions */}
+                        <div className="flex items-center gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSongForPlaylist({
+                                    id: song.songId || song.id || idx,
+                                    name: song.songName || "Unknown Song",
+                                    cover: song.albumImageUrl || song.cover,
+                                  });
+                                  setAddToPlaylistOpen(true);
+                                }}
+                              >
+                                <ListPlus className="w-4 h-4 mr-2" />
+                                Thêm vào playlist
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShareSong({
+                                    id: song.songId || song.id || idx,
+                                    title: song.songName || "Unknown Song",
+                                    url: `${window.location.origin}/song/${song.songId || song.id || idx}`,
+                                  });
+                                }}
+                              >
+                                <Users className="w-4 h-4 mr-2" />
+                                Chia sẻ với bạn bè
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                       ))
                     )}
@@ -572,6 +632,30 @@ const Index = () => {
 
       <Footer />
       {isMobile && <MobileNotifications />}
+      
+      {selectedSongForPlaylist && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongForPlaylist.id}
+          songTitle={selectedSongForPlaylist.name}
+          songCover={selectedSongForPlaylist.cover}
+        />
+      )}
+      {shareSong && (
+        <ShareButton
+          key={`share-${shareSong.id}-${Date.now()}`}
+          title={shareSong.title}
+          type="song"
+          url={shareSong.url}
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setShareSong(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
