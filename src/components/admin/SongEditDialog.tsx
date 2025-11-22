@@ -885,7 +885,7 @@ export const SongEditDialog = ({
                     <FormControl>
                       <Input
                         type="file"
-                        accept="audio/*"
+                        accept="audio/mpeg,.mp3"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           setSelectedFile(file || null);

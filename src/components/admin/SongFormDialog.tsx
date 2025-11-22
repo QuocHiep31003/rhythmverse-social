@@ -470,7 +470,7 @@ export const SongFormDialog = ({
                             <div className="space-y-2">
                               <Input
                                 type="file"
-                                accept="audio/*"
+                                accept="audio/mpeg,.mp3"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   handleFileChange(file);
