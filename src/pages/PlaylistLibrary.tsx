@@ -590,13 +590,49 @@ const PlaylistLibrary = () => {
     if (!selected) return;
     try {
       setIsSubmitting(true);
+      console.log("[PlaylistLibrary] Attempting to delete playlist:", selected.id);
+      
+      // Lấy thông tin playlist để xóa tất cả bài hát trước
+      try {
+        const playlistDetail = await playlistsApi.getById(selected.id);
+        if (playlistDetail && playlistDetail.songs && playlistDetail.songs.length > 0) {
+          // Xóa tất cả bài hát trong playlist trước
+          console.log(`[PlaylistLibrary] Removing ${playlistDetail.songs.length} songs from playlist before deletion`);
+          for (const song of playlistDetail.songs) {
+            try {
+              await playlistsApi.removeSong(selected.id, song.id);
+            } catch (songError) {
+              console.warn(`[PlaylistLibrary] Failed to remove song ${song.id}:`, songError);
+            }
+          }
+        }
+      } catch (detailError) {
+        console.warn("[PlaylistLibrary] Could not fetch playlist details, proceeding with deletion:", detailError);
+      }
+      
+      // Sau đó mới xóa playlist
       await playlistsApi.delete(selected.id);
       toast({ title: "Deleted", description: "Playlist removed" });
       setDeleteOpen(false);
       setPlaylists((prev) => prev.filter((p) => p.id !== selected.id));
-    } catch {
-      toast({ title: "Error", description: "Failed to delete playlist", variant: "destructive" });
-    } finally { setIsSubmitting(false); }
+      setSelected(null);
+    } catch (error: any) {
+      console.error("[PlaylistLibrary] Failed to delete playlist:", error);
+      let errorMessage = error?.message || error?.toString() || "Failed to delete playlist";
+      
+      // Cải thiện thông báo lỗi cho foreign key constraint
+      if (errorMessage.includes("foreign key constraint") || errorMessage.includes("still referenced")) {
+        errorMessage = "Không thể xóa playlist vì vẫn còn bài hát trong playlist. Vui lòng xóa tất cả bài hát trước.";
+      }
+      
+      toast({ 
+        title: "Error", 
+        description: errorMessage,
+        variant: "destructive" 
+      });
+    } finally { 
+      setIsSubmitting(false); 
+    }
   };
 
   const toggleSelectFriend = (id: number) => setSelectedFriendIds((prev) => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);

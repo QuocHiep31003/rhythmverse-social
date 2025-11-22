@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon } from "lucide-react";
+import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
@@ -16,7 +16,9 @@ import Footer from "@/components/Footer";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { songsApi } from "@/services/api/songApi";
+import { songMoodApi } from "@/services/api/songMoodApi";
 import { buildJsonHeaders, API_BASE_URL } from "@/services/api";
+import { mapToPlayerSong } from "@/lib/utils";
 import { friendsApi } from "@/services/api/friendsApi";
 import { uploadImage } from "@/config/cloudinary";
 import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
@@ -28,6 +30,7 @@ import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromR
 import { parseCollaboratorRole, normalizeCollaborators } from "@/utils/collaboratorUtils";
 import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -65,6 +68,10 @@ const PlaylistDetail = () => {
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [removingCollaboratorId, setRemovingCollaboratorId] = useState<number | null>(null);
+  const [recommendedSongs, setRecommendedSongs] = useState<SearchSongResult[]>([]);
+  const [loadingRecommended, setLoadingRecommended] = useState(false);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{ id: number; name: string; urlImageAlbum?: string } | null>(null);
   const [permissions, setPermissions] = useState<{
     canView: boolean;
     canEdit: boolean;
@@ -222,6 +229,136 @@ const PlaylistDetail = () => {
     return entries;
   }, [playlist, collaborators, friends, toAbsoluteUrl]);
 
+  // Load recommended songs based on playlist content
+  // Ưu tiên: Genre > Mood > Artist
+  // Tối ưu: Giảm số lượng API calls và chạy song song
+  useEffect(() => {
+    const loadRecommended = async () => {
+      if (!playlist || playlist.songs.length === 0) {
+        setRecommendedSongs([]);
+        return;
+      }
+      
+      setLoadingRecommended(true);
+      try {
+        const playlistSongIds = new Set(playlist.songs.map(s => String(s.id)));
+        const recommended: SearchSongResult[] = [];
+        
+        // Thu thập genres, moods, và artists từ các bài hát trong playlist
+        // Chỉ lấy từ 2-3 bài hát đầu tiên để giảm API calls
+        const songsToCheck = playlist.songs.slice(0, 3);
+        const songDetailPromises = songsToCheck.map(async (song) => {
+          try {
+            const songId = Number(song.id);
+            if (isNaN(songId)) return null;
+            
+            // Chỉ lấy songDetail, bỏ qua moods để giảm API calls
+            const songDetail = await songsApi.getById(String(songId)).catch(() => null);
+            return songDetail;
+          } catch (error) {
+            return null;
+          }
+        });
+        
+        const songDetails = (await Promise.all(songDetailPromises)).filter(Boolean);
+        
+        const genreIds = new Set<number>();
+        const moodIds = new Set<number>();
+        const artistIds = new Set<number>();
+        
+        songDetails.forEach((songDetail: any) => {
+          if (!songDetail) return;
+          
+          // Thu thập genreIds
+          if (songDetail.genreIds && Array.isArray(songDetail.genreIds)) {
+            songDetail.genreIds.slice(0, 1).forEach((id: number) => genreIds.add(id));
+          }
+          if (songDetail.genres && Array.isArray(songDetail.genres)) {
+            songDetail.genres.slice(0, 1).forEach((g: { id?: number }) => {
+              if (g.id) genreIds.add(g.id);
+            });
+          }
+          
+          // Thu thập artistIds
+          if (songDetail.artistIds && Array.isArray(songDetail.artistIds)) {
+            songDetail.artistIds.slice(0, 1).forEach((id: number) => artistIds.add(id));
+          }
+        });
+        
+        // Chạy song song các API calls để tăng tốc
+        const recommendationPromises: Promise<SearchSongResult[]>[] = [];
+        
+        // Ưu tiên 1: Tìm bài hát theo Genre (chỉ lấy 1 genre đầu tiên)
+        if (genreIds.size > 0) {
+          const genreId = Array.from(genreIds)[0];
+          recommendationPromises.push(
+            songsApi.getAll({ genreId, size: 8, page: 0 })
+              .then(res => {
+                const content = res.content || [];
+                return content.filter(
+                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+                ) as SearchSongResult[];
+              })
+              .catch(() => [] as SearchSongResult[])
+          );
+        }
+        
+        // Ưu tiên 2: Tìm bài hát theo Artist (chỉ lấy 1 artist đầu tiên)
+        if (artistIds.size > 0 && recommended.length < 4) {
+          const artistId = Array.from(artistIds)[0];
+          recommendationPromises.push(
+            songsApi.getAll({ artistId, size: 8, page: 0 })
+              .then(res => {
+                const content = res.content || [];
+                return content.filter(
+                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+                ) as SearchSongResult[];
+              })
+              .catch(() => [] as SearchSongResult[])
+          );
+        }
+        
+        // Fallback: Bài hát phổ biến
+        recommendationPromises.push(
+          songsApi.getAll({ size: 8, page: 0 })
+            .then(res => {
+              const content = res.content || [];
+              return content.filter(
+                (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+              ) as SearchSongResult[];
+            })
+            .catch(() => [] as SearchSongResult[])
+        );
+        
+        // Chạy tất cả song song
+        const results = await Promise.all(recommendationPromises);
+        
+        // Gộp kết quả và loại bỏ trùng lặp
+        const allSongs: SearchSongResult[] = [];
+        for (const result of results) {
+          for (const song of result) {
+            if (!allSongs.some(s => String(s.id) === String(song.id))) {
+              allSongs.push(song);
+              if (allSongs.length >= 4) break;
+            }
+          }
+          if (allSongs.length >= 4) break;
+        }
+        
+        setRecommendedSongs(allSongs.slice(0, 4));
+      } catch (error) {
+        console.error("Failed to load recommended songs:", error);
+        setRecommendedSongs([]);
+      } finally {
+        setLoadingRecommended(false);
+      }
+    };
+    
+    if (playlist) {
+      loadRecommended();
+    }
+  }, [playlist]);
+
   useEffect(() => {
     const load = async () => {
       if (!slug) return;
@@ -252,8 +389,7 @@ const PlaylistDetail = () => {
         //       duration: toSeconds(s.duration),
         //     }))
         //   : [];
-        const playlistFallbackCover = data.coverUrl || extendedData.urlImagePlaylist || null;
-        const mappedSongs = mapSongsFromResponse(data.songs, playlistFallbackCover);
+        const mappedSongs = mapSongsFromResponse(data.songs);
 
 
         const ownerId = data.ownerId ?? data.owner?.id;
@@ -276,11 +412,12 @@ const PlaylistDetail = () => {
           ?? (data as { ownerAvatar?: string | null }).ownerAvatar
           ?? null;
 
+        const playlistCover = data.coverUrl || extendedData.urlImagePlaylist || null;
         setPlaylist({
           id: data.id,
           title: data.name,
           description: data.description || '',
-          cover: playlistFallbackCover,
+          cover: playlistCover,
           ownerName,
           ownerAvatar,
           ownerId,
@@ -349,7 +486,6 @@ const PlaylistDetail = () => {
   useEffect(() => {
     const songs = playlist?.songs ?? [];
     if (!songs.length) return;
-    const playlistCover = playlist?.cover ?? null;
     const missing = songs.filter(
       (song) => !isValidImageValue(song.cover) && !fetchedSongCoverIdsRef.current.has(song.id),
     );
@@ -365,7 +501,7 @@ const PlaylistDetail = () => {
             try {
               const detail = await songsApi.getById(String(song.id));
               if (!detail) return null;
-              const detailCover = resolveSongCover(detail as unknown as SearchSongResult & { songId?: number }, playlistCover);
+              const detailCover = resolveSongCover(detail as unknown as SearchSongResult & { songId?: number });
               const detailAddedAt =
                 (detail as { addedAt?: string; createdAt?: string; updatedAt?: string }).addedAt ??
                 (detail as { createdAt?: string; updatedAt?: string }).createdAt ??
@@ -634,7 +770,6 @@ const PlaylistDetail = () => {
         ? song.id
         : Number((song as { songId?: number }).songId);
     if (!Number.isFinite(songId)) return;
-    const fallbackCover = playlist.cover ?? null;
     const previousSnapshot = playlist ? { ...playlist, songs: [...playlist.songs] } : null;
     const optimisticAddedAt = new Date().toISOString();
     // Lấy avatar của current user từ friends list hoặc từ localStorage
@@ -646,16 +781,67 @@ const PlaylistDetail = () => {
       }
     }
     
+    // Lấy thông tin đầy đủ từ API để có duration chính xác
+    let songDetail: any = null;
+    let songDuration = 0;
+    try {
+      songDetail = await songsApi.getById(String(songId));
+      if (songDetail) {
+        songDuration = toSeconds(songDetail.duration);
+      }
+    } catch (error) {
+      console.warn("Failed to fetch song detail for duration, using fallback:", error);
+      // Fallback: sử dụng duration từ song nếu có
+      songDuration = toSeconds(song.duration);
+    }
+    
+    // Xử lý artist tương tự như trong mapSongsFromResponse
+    let artistName = 'Unknown';
+    if (songDetail) {
+      // Ưu tiên lấy từ songDetail
+      if (Array.isArray(songDetail.artists) && songDetail.artists.length > 0) {
+        const names = songDetail.artists.map((a: any) => {
+          if (typeof a === 'string') return a;
+          if (a && typeof a === 'object' && 'name' in a) return a.name;
+          return null;
+        }).filter((name): name is string => Boolean(name));
+        if (names.length > 0) {
+          artistName = names.join(', ');
+        }
+      }
+      if (artistName === 'Unknown' && songDetail.artistNames && Array.isArray(songDetail.artistNames)) {
+        artistName = songDetail.artistNames.join(', ');
+      }
+    }
+    
+    // Fallback về song nếu chưa có
+    if (artistName === 'Unknown') {
+      if (Array.isArray(song.artists) && song.artists.length > 0) {
+        const names = song.artists.map((a) => {
+          if (typeof a === 'string') return a;
+          if (a && typeof a === 'object' && 'name' in a) return a.name;
+          return null;
+        }).filter((name): name is string => Boolean(name));
+        if (names.length > 0) {
+          artistName = names.join(', ');
+        }
+      }
+      if (artistName === 'Unknown') {
+        artistName = (song as { artist?: string }).artist ?? 
+                     (song as { artistName?: string }).artistName ??
+                     (song as { artistsName?: string }).artistsName ??
+                     'Unknown';
+      }
+    }
+    
     const optimisticSong: Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null } = {
       id: String(songId),
-      title: song.name,
-      artist: Array.isArray(song.artists) && song.artists.length
-        ? song.artists.map((a) => a.name).filter(Boolean).join(', ')
-        : 'Unknown',
-      album: song.album?.name || '',
-      cover: resolveSongCover(song as SearchSongResult & { songId?: number }, fallbackCover),
-      audioUrl: song.audioUrl || '',
-      duration: toSeconds(song.duration),
+      title: songDetail?.name || songDetail?.title || song.name,
+      artist: artistName,
+      album: songDetail?.album?.name || (typeof songDetail?.album === 'string' ? songDetail.album : '') || song.album?.name || '',
+      cover: resolveSongCover(songDetail || song as SearchSongResult & { songId?: number }),
+      audioUrl: songDetail?.audioUrl || songDetail?.audio || songDetail?.url || song.audioUrl || '',
+      duration: songDuration,
       addedAt: optimisticAddedAt,
       addedBy: 'You',
       addedById: meId,
@@ -681,7 +867,7 @@ const PlaylistDetail = () => {
       toast({ title: 'Added', description: 'Song added to playlist' });
       const updated = await playlistsApi.getById(playlist.id);
       const extendedUpdated = updated as ExtendedPlaylistDTO;
-      const mappedSongs = mapSongsFromResponse(updated.songs, updated.coverUrl || extendedUpdated.urlImagePlaylist || fallbackCover);
+      const mappedSongs = mapSongsFromResponse(updated.songs);
       setPlaylist((prev) => prev ? {
         ...prev,
         cover: updated.coverUrl || extendedUpdated.urlImagePlaylist || prev.cover,
@@ -999,7 +1185,9 @@ const PlaylistDetail = () => {
                 return src ? (
                   <img src={src} alt={playlist?.title} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full bg-muted" />
+                  <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
+                    <Music className="w-24 h-24 text-white/80" />
+                  </div>
                 );
               })()}
               {isEditing && (
@@ -1400,6 +1588,100 @@ const PlaylistDetail = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Recommended Section */}
+        {recommendedSongs.length > 0 && (
+          <Card className="bg-card/50 border-border/50 mt-8">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Recommended</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Based on what's in this playlist
+                  </p>
+                </div>
+                <Button variant="ghost" size="sm">
+                  Find more
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                {loadingRecommended ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  </div>
+                ) : (
+                  recommendedSongs.map((song) => {
+                    // Sử dụng mapToPlayerSong để lấy artist name chính xác
+                    const mapped = mapToPlayerSong(song);
+                    const artistNames = mapped.artist !== "Unknown" ? mapped.artist : "Unknown Artist";
+                    const albumName = song.album?.name || (song as { albumName?: string }).albumName || song.name || "";
+                    
+                    return (
+                      <div
+                        key={song.id}
+                        className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group cursor-pointer"
+                        onClick={async () => {
+                          try {
+                            const songId = Number(song.id);
+                            if (isNaN(songId)) return;
+                            const fullSong = await songsApi.getById(String(songId));
+                            if (fullSong) {
+                              const mapped = mapToPlayerSong(fullSong);
+                              setQueue([mapped]);
+                              playSong(mapped);
+                            }
+                          } catch (error) {
+                            console.error("Failed to play song:", error);
+                            toast({
+                              title: "Lỗi",
+                              description: "Không thể phát bài hát này",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                      >
+                        <Avatar className="w-12 h-12 rounded-lg flex-shrink-0">
+                          <AvatarImage src={song.urlImageAlbum || undefined} alt={song.name} />
+                          <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-lg">
+                            {(song.name || "?").charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium truncate">{song.name}</h4>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {artistNames}
+                          </p>
+                        </div>
+                        
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-muted-foreground truncate">
+                            {albumName || "Unknown Album"}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addSongToPlaylist(song);
+                            }}
+                            disabled={addingSongIds.includes(Number(song.id))}
+                          >
+                            {addingSongIds.includes(Number(song.id)) ? 'Adding...' : 'Add'}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
       <DeleteConfirmDialog
         open={deleteOpen}
@@ -1413,6 +1695,17 @@ const PlaylistDetail = () => {
         })()}
       />
       <Footer />
+      
+      {selectedSongForPlaylist && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongForPlaylist.id}
+          songTitle={selectedSongForPlaylist.name}
+          songCover={selectedSongForPlaylist.urlImageAlbum}
+        />
+      )}
+      
       <style>{`
       .bar { display:inline-block; width:2px; height:8px; background:${isPlaying ? 'hsl(var(--primary))' : 'transparent'}; animation:${isPlaying ? 'ev 1s ease-in-out infinite' : 'none'}; }
       .bar.delay-100{animation-delay:.12s}
@@ -1424,3 +1717,4 @@ const PlaylistDetail = () => {
 };
 
 export default PlaylistDetail;
+

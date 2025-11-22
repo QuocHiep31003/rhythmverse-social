@@ -24,10 +24,15 @@ interface ShareButtonProps {
   url?: string;
   playlistId?: number; // when type === 'playlist'
   albumId?: number; // when type === 'album'
+  open?: boolean; // Controlled open state
+  onOpenChange?: (open: boolean) => void; // Controlled open change handler
+  triggerOpen?: boolean; // Trigger to open dialog programmatically
 }
 
-const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps) => {
-  const [open, setOpen] = useState(false);
+const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOpen, onOpenChange: controlledOnOpenChange, triggerOpen }: ShareButtonProps) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange || setInternalOpen;
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [friends, setFriends] = useState<{ id: string; name: string; avatar?: string | null }[]>([]);
@@ -39,6 +44,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
     return Number.isFinite(n) ? n : undefined;
   }, [typeof window !== 'undefined' ? localStorage.getItem('userId') : undefined]);
 
+  // Load friends when dialog opens or when meId changes
   useEffect(() => {
     const loadFriends = async () => {
       if (!meId) return;
@@ -51,11 +57,22 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
         }));
         setFriends(mapped);
       } catch (e) {
-        // swallow
+        console.error("Failed to load friends:", e);
       }
     };
-    loadFriends();
-  }, [meId]);
+    
+    if (open) {
+      loadFriends();
+    }
+  }, [open, meId]);
+
+  // Trigger open when triggerOpen prop changes
+  useEffect(() => {
+    if (triggerOpen) {
+      setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerOpen]);
 
   const filteredFriends = friends.filter(friend => friend.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -212,19 +229,21 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
         if (!value) resetForm();
       }}
     >
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen(true);
-          }}
-        >
-          <Share2 className="w-4 h-4" />
-        </Button>
-      </DialogTrigger>
+      {controlledOpen === undefined && (
+        <DialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(true);
+            }}
+          >
+            <Share2 className="w-4 h-4" />
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto scrollbar-custom">
         <DialogHeader>
           <DialogTitle>Share {type}</DialogTitle>
@@ -302,6 +321,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
 };
 
 export default ShareButton;
+export { ShareButton };
 
 
 

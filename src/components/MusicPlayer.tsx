@@ -19,6 +19,7 @@ import {
   Copy,
   X,
   Menu,
+  MoreHorizontal,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,6 +36,8 @@ import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
 import { getAuthToken } from "@/services/api";
 import Hls from "hls.js";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import ShareButton from "@/components/ShareButton";
 
 interface LyricLine {
   time: number;
@@ -73,6 +76,8 @@ const MusicPlayer = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [shareSong, setShareSong] = useState<{ id: string | number; title: string; url: string } | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"queue" | "suggested">("queue");
   const isPlayingRef = useRef(isPlaying);
   const cleanupCallbacks = useRef<(() => void)[]>([]);
@@ -235,7 +240,6 @@ const MusicPlayer = () => {
             // Vì đây là VOD playlist (có #EXT-X-ENDLIST), không phải live stream
             // Hls.js sẽ tự động detect VOD và không reload playlist
             // Giảm số lần retry để tránh load thêm khi hết segment
-            maxMaxLoadingDelay: 4, // Giảm max loading delay
             maxLoadingDelay: 2, // Giảm loading delay
             manifestLoadingTimeOut: 10000, // 10s timeout cho manifest
             manifestLoadingMaxRetry: 2, // Chỉ retry 2 lần cho manifest
@@ -902,24 +906,24 @@ const MusicPlayer = () => {
 
     switch (type) {
       case "friends":
-        toast({
-          title: "Share with friends",
-          description: `Sharing "${currentSong.songName || currentSong.name || "Unknown Song"}" with your friends`,
+        setShareSong({
+          id: currentSong.id,
+          title: currentSong.songName || currentSong.name || "Unknown Song",
+          url: `${window.location.origin}/song/${currentSong.id}`,
         });
         break;
       case "playlist":
-        toast({
-          title: "Add to playlist",
-          description: `Adding "${currentSong.songName || currentSong.name || "Unknown Song"}" to your playlist`,
-        });
+        setAddToPlaylistOpen(true);
         break;
-      case "copy":
-        navigator.clipboard.writeText(`${window.location.origin}/song/${currentSong.id}`);
+      case "copy": {
+        const songUrl = `${window.location.origin}/song/${currentSong.id}`;
+        navigator.clipboard.writeText(songUrl);
         toast({
           title: "Link copied!",
           description: "Song link copied to clipboard",
         });
         break;
+      }
     }
   };
 
@@ -1129,17 +1133,18 @@ const MusicPlayer = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Share2 className="w-4 h-4" />
+                    <MoreHorizontal className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuItem onClick={() => handleShare("friends")}>
-                    <Users className="w-4 h-4 mr-2" />
-                    Share with friends
-                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleShare("playlist")}>
                     <ListPlus className="w-4 h-4 mr-2" />
-                    Add to playlist
+                    Thêm vào playlist
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleShare("friends")}>
+                    <Users className="w-4 h-4 mr-2" />
+                    Chia sẻ với bạn bè
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => handleShare("copy")}>
@@ -1478,6 +1483,32 @@ const MusicPlayer = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {currentSong && (
+        <>
+          <AddToPlaylistDialog
+            open={addToPlaylistOpen}
+            onOpenChange={setAddToPlaylistOpen}
+            songId={currentSong.id}
+            songTitle={currentSong.songName || currentSong.name || "Unknown Song"}
+            songCover={currentSong.cover}
+          />
+          {shareSong && (
+            <ShareButton
+              key={`share-${shareSong.id}`}
+              title={shareSong.title}
+              type="song"
+              url={shareSong.url}
+              open={true}
+              onOpenChange={(isOpen) => {
+                if (!isOpen) {
+                  setShareSong(null);
+                }
+              }}
+            />
+          )}
+        </>
       )}
     </>
   );

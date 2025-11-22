@@ -9,6 +9,8 @@ import { SharedPlaylistCard, SharedAlbumCard, SharedSongCard } from "./SharedCon
 import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME, decodeUnicodeEscapes } from "@/utils/socialUtils";
 import { createSlug } from "@/utils/playlistUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { mapToPlayerSong } from "@/lib/utils";
+import { API_BASE_URL } from "@/services/api/config";
 
 const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😭", "🔥"];
 
@@ -21,6 +23,7 @@ interface MessageCardProps {
 }
 
 export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFAULT_REACTIONS, senderAvatar }: MessageCardProps) => {
+  const { setQueue } = useMusic();
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistDTO | null>(null);
   const [albumInfo, setAlbumInfo] = useState<{ id: number; name: string; coverUrl?: string | null; artist?: unknown; releaseYear?: number; songs?: unknown[] } | null>(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
@@ -101,7 +104,7 @@ export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFA
             id: song?.id ?? song?.songId,
             name: song?.name || song?.title || "",
             artists: extractArtistNames(song?.artists ?? song?.artistNames),
-            coverUrl: song?.urlImageAlbum ?? song?.coverUrl ?? song?.cover ?? playlistInfo.coverUrl ?? undefined,
+            coverUrl: song?.urlImageAlbum ?? song?.coverUrl ?? song?.cover ?? undefined,
             durationLabel: formatDurationLabel(song?.duration ?? song?.length ?? song?.durationMs),
           }))
         : [];
@@ -238,56 +241,120 @@ export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFA
   }, [linkFromContent, message.sharedSong?.id, songPreview?.id, message.songData?.id]);
 
   const handlePlaySong = async () => {
-    if (!songPreview) return;
+    if (!songPreview) {
+      console.warn("[MessageCard] No songPreview available");
+      toast.error("Song not playable");
+      return;
+    }
+    
     try {
-      if (songPreview.audioUrl) {
-        const playable: Song = {
-          id: String(songPreview.id ?? songPreview.name ?? Date.now()),
-          title: songPreview.name || "Shared song",
-          artist: songPreview.artists.join(", ") || DEFAULT_ARTIST_NAME,
-          album: "",
-          duration: 0,
-          cover: songPreview.coverUrl ?? "",
-          audioUrl: songPreview.audioUrl,
-        };
-        playSong(playable);
-        return;
+      // Thử nhiều cách để lấy songId
+      let songId: number | undefined;
+      
+      // Ưu tiên 1: từ songPreview.id
+      if (songPreview.id) {
+        if (typeof songPreview.id === "number") {
+          songId = songPreview.id;
+        } else if (typeof songPreview.id === "string") {
+          const parsed = Number(songPreview.id);
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            songId = parsed;
+          }
+        }
       }
-      const songId =
-        songPreview.id ??
-        (typeof message.songData?.id === "number"
-          ? message.songData.id
-          : typeof message.songData?.id === "string"
-          ? Number(message.songData.id)
-          : undefined);
+      
+      // Ưu tiên 2: từ message.songData.id
+      if (!songId && message.songData?.id) {
+        if (typeof message.songData.id === "number") {
+          songId = message.songData.id;
+        } else if (typeof message.songData.id === "string") {
+          const parsed = Number(message.songData.id);
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            songId = parsed;
+          }
+        }
+      }
+      
+      // Ưu tiên 3: từ message.sharedSong?.id
+      if (!songId && message.sharedSong?.id) {
+        if (typeof message.sharedSong.id === "number") {
+          songId = message.sharedSong.id;
+        } else if (typeof message.sharedSong.id === "string") {
+          const parsed = Number(message.sharedSong.id);
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            songId = parsed;
+          }
+        }
+      }
+      
       if (!songId) {
-        toast.error("Song not playable");
+        console.warn("[MessageCard] Could not determine songId", { songPreview, message: message.songData, sharedSong: message.sharedSong });
+        toast.error("Song not playable: Missing song ID");
         return;
       }
+      
+      console.log("[MessageCard] Attempting to play song with ID:", songId);
+      
+      // Lấy thông tin bài hát từ API
       const detail = await songsApi.getById(String(songId));
-      if (!detail || !detail.audioUrl) {
-        toast.error("Song not playable");
+      
+      if (!detail) {
+        console.warn("[MessageCard] Song detail not found for ID:", songId);
+        toast.error("Song not playable: Song not found");
         return;
       }
+      
+      console.log("[MessageCard] Song detail retrieved:", { id: detail.id, hasAudioUrl: !!detail.audioUrl });
+      
+      // Lấy playback URL từ stream session API (cho shared songs)
+      let playbackUrl: string | null = null;
+      try {
+        const streamSession = await songsApi.getPlaybackUrl(songId);
+        playbackUrl = streamSession.playbackUrl;
+        console.log("[MessageCard] Playback URL retrieved:", playbackUrl);
+      } catch (streamError) {
+        console.warn("[MessageCard] Failed to get playback URL, trying fallback:", streamError);
+        // Fallback: thử lấy từ song detail
+        playbackUrl = detail.audioUrl || detail.audio || detail.url || null;
+      }
+      
+      // Nếu vẫn không có, thử getStreamUrl
+      if (!playbackUrl) {
+        try {
+          const streamData = await songsApi.getStreamUrl(songId);
+          playbackUrl = streamData.streamUrl;
+          console.log("[MessageCard] Stream URL retrieved:", playbackUrl);
+        } catch (streamError2) {
+          console.warn("[MessageCard] Failed to get stream URL:", streamError2);
+        }
+      }
+      
+      if (!playbackUrl) {
+        console.warn("[MessageCard] No playback URL available for song:", { detail });
+        toast.error("Song not playable: No audio URL");
+        return;
+      }
+      
+      // Sử dụng mapToPlayerSong để đảm bảo format đúng
+      const mapped = mapToPlayerSong(detail);
+      
+      // Convert PlayerSong sang Song format cho MusicContext
       const playable: Song = {
-        id: String(detail.id),
-        title: detail.title || detail.name,
-        artist:
-          (Array.isArray(detail.artistNames) && detail.artistNames.length
-            ? detail.artistNames.join(", ")
-            : Array.isArray(detail.artists) && detail.artists[0]?.name) ||
-          songPreview.artists.join(", ") ||
-          DEFAULT_ARTIST_NAME,
-        album:
-          typeof detail.album === "string"
-            ? detail.album
-            : detail.album?.name || "",
-        duration: typeof detail.duration === "number" ? detail.duration : 0,
-        cover: detail.cover || songPreview.coverUrl || "",
-        audioUrl: detail.audioUrl || "",
+        id: mapped.id,
+        name: mapped.songName,
+        songName: mapped.songName,
+        artist: mapped.artist,
+        album: mapped.album,
+        duration: mapped.duration,
+        cover: mapped.cover,
+        audioUrl: playbackUrl,
       };
+      
+      console.log("[MessageCard] Playing song:", playable);
+      setQueue([playable]);
       playSong(playable);
-    } catch {
+    } catch (error) {
+      console.error("[MessageCard] Failed to play song:", error);
       toast.error("Failed to play song");
     }
   };

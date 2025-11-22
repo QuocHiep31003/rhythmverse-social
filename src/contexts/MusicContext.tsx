@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 
 export interface Song {
   id: string;
@@ -49,7 +49,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   };
   
   // Wrapper cho setQueue để log và đảm bảo state được update
-  const setQueueWithLog = (songs: Song[]) => {
+  // Memoize để tránh infinite loop khi được dùng trong dependency arrays
+  const setQueueWithLog = useCallback((songs: Song[]) => {
     console.log("[MusicContext] setQueue called with", songs.length, "songs");
     console.log("[MusicContext] Song IDs:", songs.map(s => s.id));
     if (songs.length === 0) {
@@ -60,7 +61,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
     setTimeout(() => {
       console.log("[MusicContext] Queue state after setQueue:", songs.length, "songs");
     }, 0);
-  };
+  }, []);
 
   const togglePlay = () => {
     setIsPlaying(!isPlaying);

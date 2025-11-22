@@ -265,10 +265,22 @@ export const playlistsApi = {
   },
 
   delete: async (id: number | string) => {
-    const res = await fetch(`${API_BASE_URL}/playlists/${id}`, {
+    // Đảm bảo id là số hợp lệ
+    const playlistId = typeof id === "string" ? Number(id) : id;
+    if (!playlistId || isNaN(playlistId) || !isFinite(playlistId)) {
+      throw new Error("Invalid playlist ID");
+    }
+    
+    const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
       method: "DELETE",
       headers: buildJsonHeaders(),
     });
+    
+    // Handle 400 Bad Request
+    if (res.status === 400) {
+      const errorText = await parseErrorResponse(res);
+      throw new Error(errorText || "Cannot delete playlist: Invalid request");
+    }
     
     // Handle 401 Unauthorized - missing JWT token
     if (res.status === 401) {
@@ -290,7 +302,10 @@ export const playlistsApi = {
       );
     }
     
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    if (!res.ok) {
+      const errorText = await parseErrorResponse(res);
+      throw new Error(errorText || `Failed to delete playlist: ${res.status} ${res.statusText}`);
+    }
     return { success: true } as const;
   },
 
