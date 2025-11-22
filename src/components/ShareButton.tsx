@@ -13,12 +13,10 @@ import { Badge } from "@/components/ui/badge";
 import { Share2, Send, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { friendsApi } from "@/services/api/friendsApi";
-import { API_BASE_URL, buildAuthHeaders, parseErrorResponse } from "@/services/api/config";
 import { chatApi } from "@/services/api/chatApi";
 import { parseSlug } from "@/utils/playlistUtils";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
-import { sendMessage as sendChatMessage } from "@/services/firebase/chat";
 
 interface ShareButtonProps {
   title: string;
@@ -162,7 +160,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
           );
           sharedOk = true;
         } catch (err: any) {
-          // Fallback: gửi tin nhắn Firebase chứa link nếu API share lỗi (ví dụ BE 500)
+          // Fallback: send a plain link if the share API fails
           try {
             const link =
               type === 'playlist'
@@ -170,19 +168,19 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
                 : type === 'album'
                 ? (url || `${window.location.origin}/album/${resourceId}`)
                 : (url || `${window.location.origin}/song/${resourceId}`);
-            await sendChatMessage(meId, receiverId, `${type.toUpperCase()}_LINK:${link}`);
-            toast.warning("Đã gửi link thay cho chia sẻ trực tiếp", {
+            await chatApi.sendMessage(meId, receiverId, `${type.toUpperCase()}_LINK:${link}`);
+            toast.warning("Sent link instead of direct share", {
               description: typeof err?.message === 'string' ? err.message : undefined,
             });
           } catch (fbErr) {
-            throw err; // giữ nguyên lỗi gốc để hiển thị ở ngoài
+            throw err; // if link sending also fails, bubble up the original error
           }
         }
 
         const note = message.trim();
         if (note) {
           try {
-            await sendChatMessage(meId, receiverId, note);
+            await chatApi.sendMessage(meId, receiverId, note);
           } catch (err) {
             console.error("Failed to send accompanying message", err);
             if (sharedOk) {
@@ -192,6 +190,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
             }
           }
         }
+
       }
 
       resetForm();
@@ -303,3 +302,6 @@ const ShareButton = ({ title, type, url, playlistId, albumId }: ShareButtonProps
 };
 
 export default ShareButton;
+
+
+

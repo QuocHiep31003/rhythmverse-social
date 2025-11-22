@@ -45,7 +45,52 @@ export const formatDurationLabel = (input: unknown): string | null => {
   return null;
 };
 
+export const decodeUnicodeEscapes = (input: unknown): string => {
+  if (typeof input !== "string") {
+    return typeof input === "number" ? String(input) : "";
+  }
+  if (!input.includes("\\u")) {
+    return input;
+  }
+  const replaceBraced = input.replace(/\\u\{([0-9A-Fa-f]+)\}/g, (_, hex: string) => {
+    try {
+      return String.fromCodePoint(parseInt(hex, 16));
+    } catch {
+      return `\\u{${hex}}`;
+    }
+  });
+  return replaceBraced.replace(/\\u([0-9A-Fa-f]{4})/g, (_, hex: string) => {
+    try {
+      return String.fromCharCode(parseInt(hex, 16));
+    } catch {
+      return `\\u${hex}`;
+    }
+  });
+};
+
 export function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Message {
+  const backendId = (() => {
+    const maybeMessageId = (m as { messageId?: number | string | null | undefined }).messageId;
+    if (typeof maybeMessageId === "number" && Number.isFinite(maybeMessageId)) return maybeMessageId;
+    if (typeof maybeMessageId === "string" && maybeMessageId.trim().length > 0) {
+      const parsed = Number(maybeMessageId);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    if (typeof m.id === "number" && Number.isFinite(m.id)) return m.id;
+    if (typeof m.id === "string" && m.id.trim().length > 0) {
+      const parsed = Number(m.id);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  })();
+  const resolvedId = (() => {
+    if (typeof m.id === "string" && m.id.length > 0) return m.id;
+    if (typeof m.id === "number" && Number.isFinite(m.id)) return String(m.id);
+    const fallback = (m as { firebaseKey?: string | null })?.firebaseKey;
+    if (fallback) return fallback;
+    if (backendId != null) return String(backendId);
+    return String(Date.now());
+  })();
   let type: "text" | "song" | "playlist" | "album" = "text";
   let songData: { id?: string | number; title: string; artist: string } | undefined = undefined;
   let playlistData: { id: number; name: string; coverUrl?: string | null; songCount?: number; owner?: string } | undefined = undefined;
@@ -54,7 +99,7 @@ export function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Mess
   let sharedAlbum: SharedAlbumMessageData | undefined;
   let sharedSong: SharedSongMessageData | undefined;
   const rawContent = m.contentPlain ?? m.content ?? "";
-  let content = typeof rawContent === "string" ? rawContent : "";
+  let content = typeof rawContent === "string" ? decodeUnicodeEscapes(rawContent) : "";
 
   const sharedTypeRaw = m.sharedContentType ?? undefined;
   const sharedContent: SharedContentDTO | undefined = m.sharedContent ?? undefined;
@@ -267,7 +312,8 @@ export function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Mess
   const timestamp = new Date(sentAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return {
-    id: String(m.id),
+    id: resolvedId,
+    backendId,
     sender,
     content,
     timestamp,

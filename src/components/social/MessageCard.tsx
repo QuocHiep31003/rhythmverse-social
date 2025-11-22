@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { playlistsApi, PlaylistDTO } from "@/services/api/playlistApi";
 import { albumsApi } from "@/services/api/albumApi";
@@ -6,15 +6,59 @@ import { songsApi } from "@/services/api/songApi";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import type { Message, SharedPlaylistMessageData, SharedAlbumMessageData, SharedSongMessageData } from "@/types/social";
 import { SharedPlaylistCard, SharedAlbumCard, SharedSongCard } from "./SharedContentCards";
-import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME } from "@/utils/socialUtils";
+import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME, decodeUnicodeEscapes } from "@/utils/socialUtils";
 import { createSlug } from "@/utils/playlistUtils";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
-export const MessageCard = ({ message, playSong }: { message: Message; playSong: (song: Song) => void }) => {
+const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😭", "🔥"];
+
+interface MessageCardProps {
+  message: Message;
+  playSong: (song: Song) => void;
+  onReact?: (message: Message, emoji: string) => void;
+  reactionOptions?: string[];
+  senderAvatar?: string | null;
+}
+
+export const MessageCard = ({ message, playSong, onReact, reactionOptions = DEFAULT_REACTIONS, senderAvatar }: MessageCardProps) => {
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistDTO | null>(null);
   const [albumInfo, setAlbumInfo] = useState<{ id: number; name: string; coverUrl?: string | null; artist?: unknown; releaseYear?: number; songs?: unknown[] } | null>(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
   const [loadingAlbum, setLoadingAlbum] = useState(false);
   const isSentByMe = message.sender === "You";
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const detectTouch = () => {
+      try {
+        return (
+          "ontouchstart" in window ||
+          navigator.maxTouchPoints > 0 ||
+          window.matchMedia("(pointer: coarse)").matches
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    const update = () => setIsTouchDevice(detectTouch());
+    update();
+
+    let mql: MediaQueryList | null = null;
+    try {
+      mql = window.matchMedia("(pointer: coarse)");
+      const listener = (event: MediaQueryListEvent) => setIsTouchDevice(event.matches);
+      mql.addEventListener("change", listener);
+      return () => {
+        mql?.removeEventListener("change", listener);
+      };
+    } catch {
+      return;
+    }
+  }, []);
 
   useEffect(() => {
     if (message.type !== "playlist") return;
@@ -281,19 +325,21 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
 
     return (
       <div
-        className={`px-4 py-2 rounded-lg ${
+        className={`px-4 py-2 rounded-lg break-words w-full min-w-0 whitespace-pre-wrap ${
           isSentByMe ? "bg-primary text-primary-foreground" : "bg-muted/20"
         }`}
       >
         {(() => {
-          const txt = String(message.content || "");
+          const txt = decodeUnicodeEscapes(message.content);
           const isUrl = /^https?:\/\//i.test(txt);
           return isUrl ? (
             <a href={txt} target="_blank" rel="noreferrer" className="text-sm underline break-all">
               {txt}
             </a>
           ) : (
-            <p className="text-sm break-words whitespace-pre-wrap">{txt}</p>
+            <p className="text-sm break-words whitespace-pre-wrap w-full leading-relaxed">
+              {txt}
+            </p>
           );
         })()}
       </div>
@@ -303,18 +349,105 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
   if (!contentNode) return null;
 
   return (
-    <div className={`flex ${isSentByMe ? "justify-end" : "justify-start"}`}>
-      <div className="max-w-xs lg:max-w-md space-y-1">
-        {contentNode}
-        <p
-          className={`text-xs text-muted-foreground/80 ${
-            isSentByMe ? "text-right" : ""
-          }`}
-        >
-          {message.timestamp}
-        </p>
+    <div className={`flex items-end gap-2 ${isSentByMe ? "justify-end" : "justify-start"} mb-2`}>
+      {/* Avatar for received messages */}
+      {!isSentByMe && (
+        <Avatar className="w-8 h-8 flex-shrink-0">
+          <AvatarImage src={senderAvatar || undefined} alt={message.sender} />
+          <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+            {message.sender?.charAt(0) || "?"}
+          </AvatarFallback>
+        </Avatar>
+      )}
+      
+      {/* Message bubble and actions */}
+      <div
+        className="flex items-end gap-2 relative"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          setEmojiPickerOpen(false);
+        }}
+      >
+        <div className={`max-w-md space-y-1 ${isSentByMe ? 'mr-2' : ''} relative`}>
+          <div className="relative w-full pb-6 min-h-0 overflow-visible">
+            {contentNode}
+            {message.reactions && message.reactions.length > 0 && (
+              <div
+                className={`absolute bottom-0 ${
+                  isSentByMe ? "right-0" : "left-0"
+                } flex items-center gap-1 rounded-full bg-background/90 dark:bg-background/80 border border-border/50 px-2 py-0.5 shadow-sm z-20 flex-wrap max-w-[calc(100%-4px)]`}
+              >
+                {message.reactions.map((reaction) => {
+                  const decodedEmoji = decodeUnicodeEscapes(reaction.emoji);
+                  return (
+                    <div
+                      key={`${reaction.emoji}-${reaction.count}`}
+                      className={`flex items-center gap-1 text-xs flex-shrink-0 ${
+                        reaction.reactedByMe ? "text-primary font-semibold" : "text-foreground"
+                      }`}
+                    >
+                      <span>{decodedEmoji}</span>
+                      {reaction.count > 1 && <span>{reaction.count}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <p
+            className={`text-xs text-muted-foreground/60 ${
+              isSentByMe ? "text-right" : ""
+            }`}
+          >
+            {message.timestamp}
+          </p>
+        </div>
+        
+        {/* Action button: only reaction */}
+        {onReact && (
+          <div
+            className={`relative flex items-center transition-opacity ${
+              isTouchDevice || isHovered || emojiPickerOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+            }`}
+          >
+            <button
+              type="button"
+              className="flex items-center justify-center w-8 h-8 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all"
+              aria-label="Add reaction"
+              onMouseEnter={() => setEmojiPickerOpen(true)}
+              onClick={() => setEmojiPickerOpen((prev) => !prev)}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            <div
+              className={`absolute bottom-full mb-2 left-1/2 -translate-x-1/2 ${
+                emojiPickerOpen ? "flex" : "hidden"
+              } gap-1.5 bg-background/98 dark:bg-background/95 border border-border/60 rounded-full px-2 py-1.5 shadow-xl z-20 backdrop-blur-sm`}
+            >
+              {reactionOptions.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="text-xl hover:scale-125 active:scale-110 transition-transform p-1 hover:bg-muted/40 rounded-full"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onReact?.(message, emoji);
+                  }}
+                  aria-label={`React with ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 };
+
+
 

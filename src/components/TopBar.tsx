@@ -38,7 +38,9 @@ import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import {
   watchNotifications,
   NotificationDTO,
+  markNotificationsAsRead,
 } from "@/services/firebase/notifications";
+import { CHAT_TAB_OPENED_EVENT } from "@/utils/chatEvents";
 
 import {
   premiumSubscriptionApi,
@@ -59,6 +61,9 @@ const TopBar = () => {
   const [inviteCount, setInviteCount] = useState<number>(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const [unreadAlertCount, setUnreadAlertCount] = useState<number>(0);
+  const [messageNotifications, setMessageNotifications] = useState<NotificationDTO[]>([]);
+  const [alertNotifications, setAlertNotifications] = useState<NotificationDTO[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
@@ -212,6 +217,9 @@ const TopBar = () => {
         const me = await authApi.me();
         if (me) {
           setIsAuthenticated(true);
+          if (typeof me?.id === "number") {
+            setCurrentUserId(me.id);
+          }
           setProfileName(me?.name || me?.username || "");
           setProfileEmail(me?.email || "");
           setProfileAvatar(me?.avatar || "");
@@ -291,24 +299,47 @@ const TopBar = () => {
     const raw = localStorage.getItem("userId");
     const userId = raw ? Number(raw) : null;
     if (!userId) return;
+    setCurrentUserId(userId);
 
     const unsubscribe = watchNotifications(
       userId,
       (notifications: NotificationDTO[]) => {
-        const unreadMsg = notifications.filter(
-          (n) => n.type === "MESSAGE" && !n.read
-        ).length;
-        const unreadAlert = notifications.filter(
-          (n) => n.type !== "MESSAGE" && !n.read
-        ).length;
-
-        setUnreadMsgCount(unreadMsg);
-        setUnreadAlertCount(unreadAlert);
+        const messageNotifs = notifications.filter((n) => n.type === "MESSAGE");
+        const alertNotifs = notifications.filter((n) => n.type !== "MESSAGE");
+        setMessageNotifications(messageNotifs);
+        setAlertNotifications(alertNotifs);
+        setUnreadMsgCount(messageNotifs.filter((n) => !n.read).length);
+        setUnreadAlertCount(alertNotifs.filter((n) => !n.read).length);
       }
     );
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!notifOpen || !currentUserId) return;
+    const unreadIds = alertNotifications
+      .filter((n) => !n.read && n.id)
+      .map((n) => String(n.id));
+    void markNotificationsAsRead(currentUserId, unreadIds);
+  }, [notifOpen, currentUserId, alertNotifications]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    const handler = () => {
+      const unreadIds = messageNotifications
+        .filter((n) => !n.read && n.id)
+        .map((n) => String(n.id));
+      if (unreadIds.length) {
+        void markNotificationsAsRead(currentUserId, unreadIds);
+      }
+      setUnreadMsgCount(0);
+    };
+    window.addEventListener(CHAT_TAB_OPENED_EVENT, handler);
+    return () => {
+      window.removeEventListener(CHAT_TAB_OPENED_EVENT, handler);
+    };
+  }, [currentUserId, messageNotifications]);
 
   /** ================= LOGOUT ================= **/
   const handleLogout = () => {

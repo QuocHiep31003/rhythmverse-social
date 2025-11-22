@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { setUserOnline, setUserOffline, pingPresence, watchUserPresence, watchMultipleUsersPresence } from '@/services/firebase/presence';
-import { watchChatMessages, sendMessage, type FirebaseMessage } from '@/services/firebase/chat';
 import { watchNotifications, NotificationDTO } from '@/services/firebase/notifications';
 
 // Để tránh spam presence ping, FE không được ping quá dày.
@@ -16,7 +15,6 @@ const PRESENCE_PING_INTERVAL_MS = Number.isFinite(parsedEnvPing)
 type UseFirebaseRealtimeOptions = {
   onPresence?: (presence: { userId: number; online: boolean }) => void;
   onNotification?: (notification: NotificationDTO) => void;
-  onMessage?: (message: FirebaseMessage) => void;
   friends?: number[];
 };
 
@@ -26,7 +24,6 @@ export default function useFirebaseRealtime(
 ) {
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribePresenceRef = useRef<(() => void)[]>([]);
-  const unsubscribeChatRef = useRef<(() => void)[]>([]);
   const unsubscribeNotifRef = useRef<(() => void) | null>(null);
   const shownNotificationsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef<boolean>(true);
@@ -74,7 +71,7 @@ export default function useFirebaseRealtime(
         console.log('[Firebase Realtime] Heartbeat ping');
         lastPingTimeRef.current = Date.now();
         void pingPresence(userId);
-      }, PRESENCE_PING_INTERVAL_MS); // default 15 gi�y - Messenger-style heartbeat
+      }, PRESENCE_PING_INTERVAL_MS); // default 15s heartbeat
       console.log('[Firebase Realtime] Heartbeat interval (ms):', PRESENCE_PING_INTERVAL_MS);
     } else {
       // Nếu userId không đổi, chỉ cập nhật presence listeners nếu cần
@@ -165,8 +162,6 @@ export default function useFirebaseRealtime(
       }
       unsubscribePresenceRef.current.forEach(unsub => unsub());
       unsubscribePresenceRef.current = [];
-      unsubscribeChatRef.current.forEach(unsub => unsub());
-      unsubscribeChatRef.current = [];
       if (unsubscribeNotifRef.current) {
         unsubscribeNotifRef.current();
         unsubscribeNotifRef.current = null;
@@ -214,31 +209,7 @@ export default function useFirebaseRealtime(
     };
   }, [userId, friendsKey]); // Re-run khi friends thay đổi (so sánh bằng JSON.stringify)
 
-  // Function để watch chat với một friend cụ thể
-  const watchChatWithFriend = (friendId: number, onNewMessage: (msg: FirebaseMessage) => void) => {
-    if (!userId) return () => {};
-    
-    const unsubscribe = watchChatMessages(userId, friendId, (messages) => {
-      // Chỉ trigger callback cho message mới nhất nếu cần
-      if (messages.length > 0 && options?.onMessage) {
-        const latest = messages[messages.length - 1];
-        if (latest.senderId !== userId) {
-          options.onMessage(latest);
-        }
-      }
-    });
-    
-    unsubscribeChatRef.current.push(unsubscribe);
-    return unsubscribe;
-  };
-
   return {
-    sendMessage: (senderId: number, receiverId: number, content: string) => {
-      return sendMessage(senderId, receiverId, content);
-    },
-    watchChatWithFriend,
     isConnected: !!userId
   };
 }
-
-
