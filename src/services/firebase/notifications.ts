@@ -1,5 +1,5 @@
-import { ref, onValue, query, orderByKey, limitToLast, update } from 'firebase/database';
-import { firebaseDb, firebaseAuth } from '@/config/firebase-config';
+import { ref, onValue, query, orderByKey, limitToLast } from 'firebase/database';
+import { firebaseDb } from '@/config/firebase-config';
 
 export interface NotificationDTO {
   id?: string; // Firebase key
@@ -32,14 +32,32 @@ export const watchNotifications = (
     const notifications: NotificationDTO[] = [];
     let count = 0;
     snapshot.forEach((childSnapshot) => {
-      notifications.push({
+      const notification = {
         id: childSnapshot.key,
         ...childSnapshot.val()
-      } as NotificationDTO);
+      } as NotificationDTO;
+      notifications.push(notification);
       count++;
       return false; // Continue iteration
     });
     console.log('[Firebase Notifications] Snapshot received for user:', userId, 'exists:', snapshot.exists(), 'count:', count);
+    
+    // Log tất cả notification types để debug
+    const notificationTypes = notifications.map(n => ({ 
+      id: n.id, 
+      type: n.type, 
+      read: n.read,
+      senderName: n.senderName 
+    }));
+    const unreadNotifications = notifications.filter(n => !n.read);
+    const unreadTypes = unreadNotifications.map(n => n.type);
+    console.log('[Firebase Notifications] Notification types:', {
+      total: notifications.length,
+      unread: unreadNotifications.length,
+      unreadTypes: unreadTypes,
+      sample: notificationTypes.slice(0, 5) // Chỉ log 5 cái đầu để không spam
+    });
+    
     // Sort by timestamp (newest first)
     notifications.sort((a, b) => {
       const timeA = a.createdAt || a.id || 0;
@@ -61,42 +79,14 @@ export const watchNotifications = (
   };
 };
 
-// Track failed attempts để tránh spam log
-let hasLoggedPermissionError = false;
-
-export const markNotificationsAsRead = async (userId: number, notificationIds: string[]) => {
-  if (!notificationIds.length) return;
-  
-  // Kiểm tra Firebase auth state trước khi cập nhật
-  const currentUser = firebaseAuth.currentUser;
-  if (!currentUser) {
-    // Im lặng - không log vì đã có optimistic update
-    return;
-  }
-  
-  const updates: Record<string, boolean> = {};
-  notificationIds.forEach((id) => {
-    if (id) {
-      updates[`${id}/read`] = true;
-    }
-  });
-  if (!Object.keys(updates).length) return;
-  
-  try {
-    await update(ref(firebaseDb, `notifications/${userId}`), updates);
-    // Reset flag khi thành công
-    hasLoggedPermissionError = false;
-  } catch (error: any) {
-    // Chỉ log lỗi permission_denied một lần để tránh spam console
-    if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission_denied')) {
-      if (!hasLoggedPermissionError) {
-        console.warn('[Firebase Notifications] Permission denied - có thể do Firebase security rules. UI vẫn hoạt động bình thường với optimistic updates.');
-        hasLoggedPermissionError = true;
-      }
-    } else {
-      // Log các lỗi khác (ít xảy ra hơn)
-      console.warn('[Firebase Notifications] Failed to mark as read', error?.message || error);
-    }
-    // Không throw error để tránh làm gián đoạn UI - optimistic update đã xử lý UI rồi
-  }
-};
+/**
+ * ⚠️ DEPRECATED: markNotificationsAsRead đã được di chuyển sang notificationsApi.ts
+ * 
+ * FE KHÔNG được tự động update notifications trong Firebase.
+ * Tất cả thay đổi notification (mark as read) phải qua backend API.
+ * 
+ * Sử dụng: import { markNotificationsAsRead } from '@/services/api/notificationsApi';
+ * 
+ * Backend sẽ mirror vào Firebase sau khi mark as read.
+ * FE chỉ đọc từ Firebase để nhận updates realtime.
+ */

@@ -94,7 +94,19 @@ export default function useFirebaseRealtime(
       unsubscribeNotifRef.current = watchNotifications(userId, (notifications) => {
         // Bỏ qua lần load đầu tiên (chỉ show notifications mới sau đó)
         if (isInitialLoadRef.current) {
-          // Đánh dấu tất cả notifications hiện tại là đã xem
+          // Đánh dấu tất cả notifications hiện tại là đã xem (để không show lại khi reload)
+          const unreadOnInitialLoad = notifications.filter(n => !n.read);
+          console.log('[Firebase Realtime] Initial load:', {
+            total: notifications.length,
+            unread: unreadOnInitialLoad.length,
+            unreadTypes: unreadOnInitialLoad.map(n => n.type),
+            unreadDetails: unreadOnInitialLoad.slice(0, 5).map(n => ({
+              id: n.id,
+              type: n.type,
+              senderName: n.senderName
+            }))
+          });
+          
           notifications.forEach(n => {
             if (n.id) {
               shownNotificationsRef.current.add(String(n.id));
@@ -105,7 +117,7 @@ export default function useFirebaseRealtime(
           return;
         }
 
-        // Chỉ lấy notifications mới (chưa từng show)
+        // Lấy notifications mới (chưa từng show) - chỉ show notification được tạo SAU khi user vào trang
         const unread = notifications.filter(n => {
           if (!n.id) return false;
           const id = String(n.id);
@@ -113,14 +125,43 @@ export default function useFirebaseRealtime(
           return !n.read && !shownNotificationsRef.current.has(id);
         });
 
-        // Show notification mới nhất và đánh dấu đã show
-        if (unread.length > 0) {
-          const newest = unread[0]; // Đã sort newest first trong watchNotifications
-          if (newest.id) {
-            shownNotificationsRef.current.add(String(newest.id));
-            console.log('[Firebase Realtime] Showing new notification:', newest.id);
-            optionsRef.current?.onNotification?.(newest);
+        // Log chi tiết để debug
+        const unreadDetails = unread.map(n => ({
+          id: n.id,
+          type: n.type,
+          read: n.read,
+          senderName: n.senderName,
+          body: n.body?.substring(0, 50)
+        }));
+        const allUnread = notifications.filter(n => !n.read);
+        
+        console.log('[Firebase Realtime] Filtered unread notifications:', {
+          total: notifications.length,
+          allUnreadCount: allUnread.length,
+          allUnreadTypes: allUnread.map(n => n.type),
+          newUnreadCount: unread.length,
+          newUnreadDetails: unreadDetails,
+          shownCount: shownNotificationsRef.current.size
+        });
+
+        // Show TẤT CẢ unread notifications mới (không chỉ mới nhất)
+        // Điều này đảm bảo user nhận được tất cả notifications (friend request, collab invite, etc.)
+        unread.forEach((notification) => {
+          if (notification.id) {
+            shownNotificationsRef.current.add(String(notification.id));
+            console.log('[Firebase Realtime] Showing notification:', {
+              id: notification.id,
+              type: notification.type,
+              senderName: notification.senderName,
+              body: notification.body,
+              read: notification.read
+            });
+            optionsRef.current?.onNotification?.(notification);
           }
+        });
+
+        if (unread.length === 0) {
+          console.log('[Firebase Realtime] No new unread notifications to show');
         }
       });
     }

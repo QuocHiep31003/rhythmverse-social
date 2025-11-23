@@ -20,7 +20,7 @@ import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { chatApi, ChatMessageDTO } from "@/services/api/chatApi";
 import { useMusic } from "@/contexts/MusicContext";
 import type { Song } from "@/contexts/MusicContext";
-import { watchChatMessages, type FirebaseMessage, watchTyping, watchReactions, watchMessageIndex, getChatRoomKey } from "@/services/firebase/chat";
+import { watchChatMessages, type FirebaseMessage, watchTyping, watchReactions, watchMessageIndex, getChatRoomKey, watchAllRoomUnreadCounts } from "@/services/firebase/chat";
 
 import { NotificationDTO as FBNotificationDTO, watchNotifications } from "@/services/firebase/notifications";
 import {
@@ -66,8 +66,6 @@ const coerceToNumber = (value: unknown): number | null => {
   }
   return null;
 };
-
-const CHAT_HISTORY_POLL_INTERVAL_MS = 15_000;
 
 // Type for window extension to track pending chat refreshes
 declare global {
@@ -167,6 +165,9 @@ const sortMessagesChronologically = (messages: Message[]): Message[] => {
 
 const Social = () => {
 
+  // Track if selectedChat was set by user click (true) or auto-select (false)
+  const isUserSelectedRef = useRef<boolean>(false);
+  
   const [selectedChat, setSelectedChat] = useState<string | null>(() => {
     try {
       return localStorage.getItem('lastChatFriendId');
@@ -221,6 +222,10 @@ const Social = () => {
   const typingStatusRef = useRef<{ roomId: string | null; active: boolean }>({ roomId: null, active: false });
   const typingStartTimeoutRef = useRef<number | null>(null);
   const typingStopTimeoutRef = useRef<number | null>(null);
+  const mergeFirebaseMessagesRef = useRef<((friendKey: string, firebaseMessages: FirebaseMessage[]) => void) | null>(null);
+  const typingDebounceTimeoutRef = useRef<number | null>(null);
+  const loadedHistoryRef = useRef<Set<string>>(new Set()); // ✅ Track đã load history cho từng chat
+  const lastMarkedMessageIdRef = useRef<Record<string, string>>({}); // ✅ Track tin nhắn cuối cùng đã mark as read cho mỗi chat
 
   const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
 
@@ -309,36 +314,8 @@ const Social = () => {
   // Track unread counts for chats and notifications.
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
-  
-  // Load unreadByFriend from localStorage on mount
-  const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>(() => {
-    if (typeof window === 'undefined') return {};
-    try {
-      const stored = localStorage.getItem('unreadByFriend');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        console.log('[Social] Loaded unreadByFriend from localStorage:', parsed);
-        return parsed;
-      }
-    } catch (e) {
-      console.warn('[Social] Failed to load unreadByFriend from localStorage:', e);
-    }
-    return {};
-  });
-  
-  // Save unreadByFriend to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('unreadByFriend', JSON.stringify(unreadByFriend));
-      console.log('[Social] Saved unreadByFriend to localStorage:', unreadByFriend);
-    } catch (e) {
-      console.warn('[Social] Failed to save unreadByFriend to localStorage:', e);
-    }
-  }, [unreadByFriend]);
-  
-  // Track message IDs that have already been counted to avoid double counting
-  const countedMessageIdsRef = useRef<Set<string>>(new Set());
+  // unreadByFriend: key = friendId (string), value = unread count (number)
+  const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>({});
 
   useEffect(() => {
     friendsRef.current = friends;
@@ -387,18 +364,34 @@ const Social = () => {
       if (!meId || friendKey == null) return;
       const friendId = Number(friendKey);
       if (!Number.isFinite(friendId)) return;
+      
+      // 🔴 DEBUG: Log mỗi lần markConversationAsRead được gọi
+      console.log('🔴 [DEBUG] markConversationAsRead called:', { meId, friendId, friendKey });
+      console.trace('🔴 [DEBUG] Call stack:');
+      
       const cacheKey = `${meId}-${friendId}`;
       const now = Date.now();
       const last = lastReadRef.current[cacheKey];
-      if (last && now - last < 1000) return;
+      if (last && now - last < 1000) {
+        console.log('⏭️ [DEBUG] Skipping mark as read (throttled, last call was', now - last, 'ms ago)');
+        return;
+      }
       lastReadRef.current[cacheKey] = now;
+      
+      console.log('✅ [DEBUG] Calling markConversationRead API...');
       chatApi
         .markConversationRead(meId, friendId)
-        .catch((error) => console.warn("[Social] Failed to mark conversation as read", error));
+        .then(() => {
+          console.log('✅ [DEBUG] markConversationRead API completed successfully');
+        })
+        .catch((error) => {
+          console.warn("[Social] Failed to mark conversation as read", error);
+        });
     },
     [meId]
   );
 
+  // Store mergeFirebaseMessages in ref to avoid re-subscribing Firebase listeners
   const mergeFirebaseMessages = useCallback(
     (friendKey: string, firebaseMessages: FirebaseMessage[]) => {
       const parsed = firebaseMessages.map((firebaseMessage) => {
@@ -462,6 +455,7 @@ const Social = () => {
                   ...h,
                   contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
                 }));
+                
                 const mapped = normalizedHistory.map((h) => parseIncomingContent(h, friendsRef.current.length ? friendsRef.current : friends));
                 setChatByFriend((prev) => {
                   const existing = prev[friendKey] || [];
@@ -587,92 +581,19 @@ const Social = () => {
           return prev;
         }
 
-        // Đếm tin nhắn chưa đọc từ Firebase messages
-        // Chỉ đếm tin nhắn mới thực sự (không phải khi reload)
-        const isInitialLoad = previous.length === 0;
-        
-        if (!isInitialLoad) {
-          const previousIds = new Set(previous.map(m => String(m.id)));
-          const previousBackendIds = new Set(
-            previous
-              .filter(m => m.backendId)
-              .map(m => String(m.backendId))
-          );
-          
-          // Tìm tin nhắn mới: không có trong previous (theo ID hoặc backendId)
-          const newMessages = sorted.filter(m => {
-            const hasId = previousIds.has(String(m.id));
-            const hasBackendId = m.backendId && previousBackendIds.has(String(m.backendId));
-            return !hasId && !hasBackendId;
-          });
-          
-          // Chỉ đếm nếu không đang xem chat này
-          const isViewingThisChat = activeTab === "chat" && selectedChat === friendKey;
-          
-          if (newMessages.length > 0 && !isViewingThisChat) {
-            // Đếm tin nhắn chưa đọc từ người khác, tránh đếm trùng
-            const unreadNewMessages = newMessages.filter(m => {
-              const isFromOther = m.sender !== "You";
-              // Kiểm tra read status nếu có (từ Firebase message)
-              const isUnread = m.read === false || m.read === undefined;
-              // Kiểm tra xem message này đã được đếm chưa
-              const messageKey = m.id || (m.backendId ? String(m.backendId) : null);
-              const alreadyCounted = messageKey ? countedMessageIdsRef.current.has(`${friendKey}:${messageKey}`) : false;
-              return isFromOther && isUnread && !alreadyCounted;
-            });
-
-            if (unreadNewMessages.length > 0) {
-              // Đánh dấu các message đã được đếm
-              unreadNewMessages.forEach(m => {
-                const messageKey = m.id || (m.backendId ? String(m.backendId) : null);
-                if (messageKey) {
-                  countedMessageIdsRef.current.add(`${friendKey}:${messageKey}`);
-                }
-              });
-              
-              console.log('[Social] New unread messages detected from Firebase:', { 
-                friendKey, 
-                count: unreadNewMessages.length,
-                totalNew: newMessages.length,
-                messages: unreadNewMessages.map(m => ({ 
-                  id: m.id, 
-                  backendId: m.backendId,
-                  sender: m.sender, 
-                  read: m.read,
-                  sentAt: m.sentAt 
-                }))
-              });
-              setUnreadByFriend((prev) => {
-                const current = prev[friendKey] || 0;
-                const newCount = current + unreadNewMessages.length;
-                console.log('[Social] Updating unread count from Firebase:', { friendKey, current, newCount });
-                return { ...prev, [friendKey]: newCount };
-              });
-            }
-          }
-        }
-
         return { ...prev, [friendKey]: sorted };
       });
 
-      if (activeTab === "chat" && selectedChat === friendKey) {
-        setUnreadByFriend((prev) => {
-          if (!prev[friendKey] || prev[friendKey] === 0) return prev;
-          // Xóa các message IDs đã đếm cho friend này khi reset unread count
-          const keysToDelete: string[] = [];
-          countedMessageIdsRef.current.forEach(key => {
-            if (key.startsWith(`${friendKey}:`)) {
-              keysToDelete.push(key);
-            }
-          });
-          keysToDelete.forEach(key => countedMessageIdsRef.current.delete(key));
-          return { ...prev, [friendKey]: 0 };
-        });
-        markConversationAsRead(friendKey);
-      }
+      // Note: Unread count is managed by Firebase listener, not here
+      // When user views chat, markConversationAsRead will trigger backend to update Firebase
     },
     [activeTab, selectedChat, markConversationAsRead, friends, meId]
   );
+
+  // Store mergeFirebaseMessages in ref to avoid re-subscribing Firebase listeners
+  useEffect(() => {
+    mergeFirebaseMessagesRef.current = mergeFirebaseMessages;
+  }, [mergeFirebaseMessages]);
 
   useEffect(() => {
     if (!selectedChat) return;
@@ -682,13 +603,19 @@ const Social = () => {
     }
   }, [friends, selectedChat]);
 
+  // Only auto-select a friend when first entering chat tab (selectedChat is null)
+  // Do NOT auto-switch when user is already chatting with someone
+  // Do NOT mark as read when auto-selecting - only mark when user explicitly clicks
   useEffect(() => {
     if (activeTab !== "chat") return;
+    // If user already has a selected chat, don't auto-switch
     if (selectedChat && friends.some((friend) => friend.id === selectedChat)) {
       return;
     }
     if (!friends.length) return;
 
+    // Only auto-select when selectedChat is null (first time entering chat tab)
+    // Use setSelectedChat directly (not handleFriendSelect) to avoid auto-marking as read
     const unreadCandidates = friends
       .filter((friend) => (unreadByFriend[friend.id] || 0) > 0)
       .sort((a, b) => {
@@ -703,24 +630,77 @@ const Social = () => {
 
     const fallback = friends[0];
     const nextFriend = unreadCandidates[0] || recentCandidates[0] || fallback;
-    if (nextFriend && nextFriend.id !== selectedChat) {
+    if (nextFriend) {
+      // Direct setSelectedChat - do NOT call handleFriendSelect to avoid auto-marking as read
+      isUserSelectedRef.current = false; // Mark as auto-selected
       setSelectedChat(nextFriend.id);
     }
   }, [activeTab, friends, selectedChat, unreadByFriend, getLastActivityTimestamp]);
 
-  useEffect(() => {
-    if (activeTab !== "chat" || !selectedChat) return;
-    setUnreadByFriend((prev) => {
-      if (!prev[selectedChat] || prev[selectedChat] === 0) return prev;
-      return { ...prev, [selectedChat]: 0 };
-    });
-    markConversationAsRead(selectedChat);
-  }, [activeTab, selectedChat, markConversationAsRead]);
+  // Handle friend selection - mark as read when user explicitly clicks on a friend
+  const handleFriendSelect = useCallback((friendId: string) => {
+    console.log('👆 [DEBUG] handleFriendSelect called (user clicked on friend):', friendId);
+    isUserSelectedRef.current = true; // Mark as user-selected
+    setSelectedChat(friendId);
+    // Mark as read when user clicks on a friend (not automatically when entering social page)
+    console.log('👆 [DEBUG] Calling markConversationAsRead from handleFriendSelect...');
+    markConversationAsRead(friendId);
+  }, [markConversationAsRead]);
 
   useEffect(() => {
     if (activeTab !== "chat" || !selectedChat) return;
     emitChatTabOpened({ friendId: selectedChat });
   }, [activeTab, selectedChat]);
+
+  // ✅ Mark conversation as read khi user đang xem chat (selectedChat thay đổi)
+  useEffect(() => {
+    if (!meId || !selectedChat || activeTab !== "chat") return;
+    
+    // Mark as read khi user vào chat (có thể là click hoặc auto-select)
+    // Delay nhỏ để đảm bảo chat đã load xong
+    const timeoutId = setTimeout(() => {
+      console.log('👁️ [Social] User is viewing chat, marking as read:', selectedChat);
+      markConversationAsRead(selectedChat);
+    }, 500); // Delay 500ms để đảm bảo chat đã render
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [meId, selectedChat, activeTab, markConversationAsRead]);
+
+  // ✅ Mark as read khi có tin nhắn mới đến trong chat đang xem
+  useEffect(() => {
+    if (!meId || !selectedChat || activeTab !== "chat") return;
+    
+    const messages = chatByFriend[selectedChat] || [];
+    if (messages.length === 0) return;
+    
+    // Lấy tin nhắn mới nhất
+    const latestMessage = messages[messages.length - 1];
+    const latestMessageId = latestMessage?.id;
+    
+    // Check xem tin nhắn này đã được mark chưa
+    const lastMarkedId = lastMarkedMessageIdRef.current[selectedChat];
+    if (lastMarkedId === latestMessageId) {
+      // Đã mark rồi, không cần mark lại
+      return;
+    }
+    
+    // Nếu tin nhắn mới nhất không phải từ user hiện tại (từ friend) → mark as read
+    if (latestMessage && latestMessage.sender !== 'You' && latestMessageId) {
+      // Debounce để tránh mark quá nhiều lần
+      const timeoutId = setTimeout(() => {
+        console.log('👁️ [Social] New message received in active chat, marking as read:', selectedChat, 'messageId:', latestMessageId);
+        markConversationAsRead(selectedChat);
+        // ✅ Mark tin nhắn này đã được mark
+        lastMarkedMessageIdRef.current[selectedChat] = latestMessageId;
+      }, 1000); // Delay 1s để tránh mark quá nhiều khi có nhiều tin nhắn liên tiếp
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [meId, selectedChat, activeTab, chatByFriend, markConversationAsRead]);
 
   // Normalize relative URLs from API to absolute
   const toAbsoluteUrl = (u?: string | null): string | null => {
@@ -820,7 +800,16 @@ const Social = () => {
 
       setFriends(mapped);
 
-      if (mapped.length > 0) setSelectedChat((prev) => prev ?? mapped[0].id);
+      if (mapped.length > 0) {
+        const firstFriend = mapped[0].id;
+        setSelectedChat((prev) => {
+          if (prev === null) {
+            isUserSelectedRef.current = false; // Mark as auto-selected
+            return firstFriend;
+          }
+          return prev;
+        });
+      }
 
     } catch (e) {
 
@@ -975,7 +964,131 @@ const Social = () => {
 
   const friendIds = useMemo(() => friends.map(f => Number(f.id)).sort((a, b) => a - b), [friendsIdsString]);
 
-  // Không cần khôi phục từ notifications nữa vì đã lưu vào localStorage
+  // Load initial unread counts từ API khi component mount
+  useEffect(() => {
+    if (!meId) return;
+    
+    let cancelled = false;
+    
+    const loadInitialUnreadCounts = async () => {
+      try {
+        const data = await chatApi.getUnreadCounts(meId);
+        if (cancelled) return;
+        
+        // Convert roomKey (e.g., "2_5") to friendId
+        // roomKey format: "minId_maxId", cần tìm friendId là maxId hoặc minId (không phải meId)
+        const unreadByFriendMap: Record<string, number> = {};
+        
+        Object.entries(data.unreadCounts).forEach(([roomKey, count]) => {
+          const [minId, maxId] = roomKey.split('_').map(Number);
+          // Tìm friendId (không phải meId)
+          const friendId = minId === meId ? maxId : minId;
+          if (friendId && friendId !== meId && count > 0) {
+            unreadByFriendMap[String(friendId)] = count;
+          }
+        });
+        
+        console.log('[Social] Loaded initial unread counts from API:', { 
+          unreadCounts: data.unreadCounts, 
+          unreadByFriendMap,
+          totalUnread: data.totalUnread 
+        });
+        
+        setUnreadByFriend(unreadByFriendMap);
+        setUnreadMessagesCount(data.totalUnread);
+      } catch (error) {
+        console.warn('[Social] Failed to load initial unread counts from API:', error);
+        // Fallback: set empty (Firebase listener will update)
+        setUnreadByFriend({});
+        setUnreadMessagesCount(0);
+      }
+    };
+    
+    void loadInitialUnreadCounts();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [meId]);
+
+  // Listen Firebase realtime unread counts (with API polling fallback if Firebase fails)
+  useEffect(() => {
+    if (!meId || !firebaseReady) return;
+    
+    console.log('[Social] Setting up Firebase unread counts listener for user:', meId);
+    
+    let pollInterval: number | null = null;
+    
+    // ✅ Track Firebase realtime activity - nếu có update thì không cần poll
+    let lastFirebaseUpdateRef = Date.now();
+    
+    const unsubscribe = watchAllRoomUnreadCounts(meId, (unreadCounts, totalUnread) => {
+      lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
+      
+      // Convert roomKey to friendId
+      const unreadByFriendMap: Record<string, number> = {};
+      
+      Object.entries(unreadCounts).forEach(([roomKey, count]) => {
+        const [minId, maxId] = roomKey.split('_').map(Number);
+        // Tìm friendId (không phải meId)
+        const friendId = minId === meId ? maxId : minId;
+        if (friendId && friendId !== meId && count > 0) {
+          unreadByFriendMap[String(friendId)] = count;
+        }
+      });
+      
+      console.log('[Social] Firebase unread counts updated:', { 
+        unreadCounts, 
+        unreadByFriendMap,
+        totalUnread 
+      });
+      
+      setUnreadByFriend(unreadByFriendMap);
+      setUnreadMessagesCount(totalUnread);
+    });
+    
+    // ✅ Fallback: Poll API chỉ khi Firebase không update trong 30s (realtime fail)
+    // This ensures unread counts are still updated even if Firebase rooms/ path is not setup
+    const pollUnreadCounts = async () => {
+      const timeSinceLastFirebaseUpdate = Date.now() - lastFirebaseUpdateRef;
+      
+      // Nếu Firebase đã update trong 30s gần đây → không cần poll
+      if (timeSinceLastFirebaseUpdate < 30000) {
+        console.log('[Social] Skipping poll - Firebase updated recently:', timeSinceLastFirebaseUpdate, 'ms ago');
+        return;
+      }
+      
+      try {
+        const data = await chatApi.getUnreadCounts(meId);
+        const unreadByFriendMap: Record<string, number> = {};
+        
+        Object.entries(data.unreadCounts).forEach(([roomKey, count]) => {
+          const [minId, maxId] = roomKey.split('_').map(Number);
+          const friendId = minId === meId ? maxId : minId;
+          if (friendId && friendId !== meId && count > 0) {
+            unreadByFriendMap[String(friendId)] = count;
+          }
+        });
+        
+        console.log('[Social] Polled unread count from API (Firebase fallback):', data.totalUnread);
+        setUnreadByFriend(unreadByFriendMap);
+        setUnreadMessagesCount(data.totalUnread);
+      } catch (error) {
+        console.warn('[Social] Failed to poll unread counts from API:', error);
+      }
+    };
+    
+    // ✅ Poll mỗi 30s (thay vì 10s) - chỉ poll khi Firebase không hoạt động
+    pollInterval = window.setInterval(pollUnreadCounts, 30000);
+    
+    return () => {
+      console.log('[Social] Cleaning up Firebase unread counts listener');
+      unsubscribe();
+      if (pollInterval !== null) {
+        window.clearInterval(pollInterval);
+      }
+    };
+  }, [meId, firebaseReady]);
 
   useFirebaseRealtime(realtimeUserId, {
 
@@ -1016,6 +1129,13 @@ const Social = () => {
     },
 
     onNotification: (n: FBNotificationDTO) => {
+      console.log('🔔 [DEBUG] Notification received:', { 
+        type: n?.type, 
+        senderId: n?.senderId, 
+        senderName: n?.senderName,
+        body: n?.body,
+        read: n?.read 
+      });
 
       if (!n.read) {
         setUnreadNotificationsCount(prev => prev + 1);
@@ -1113,12 +1233,22 @@ const Social = () => {
           loadCollabInvites().catch(() => { void 0; });
 
         } else if (n?.type === 'FRIEND_REQUEST') {
+          console.log('🔔 [DEBUG] FRIEND_REQUEST notification received:', {
+            senderId: n.senderId,
+            senderName: n.senderName,
+            body: n.body
+          });
 
           pushBubble(`${n.senderName || 'Someone'} sent you a friend request`, "info");
 
           loadPending().catch(() => { void 0; });
 
         } else if (n?.type === 'FRIEND_REQUEST_ACCEPTED') {
+          console.log('🔔 [DEBUG] FRIEND_REQUEST_ACCEPTED notification received:', {
+            senderId: n.senderId,
+            senderName: n.senderName,
+            body: n.body
+          });
 
           pushBubble(`${n.senderName || 'Someone'} accepted your friend request`, "success");
 
@@ -1156,7 +1286,10 @@ const Social = () => {
       const friendNumericId = Number(friendId);
       if (!Number.isFinite(friendNumericId)) return;
       const unsubscribe = watchChatMessages(meId, friendNumericId, (messages) => {
-        mergeFirebaseMessages(friendId, messages);
+        // Use ref to avoid re-subscribing when mergeFirebaseMessages changes
+        if (mergeFirebaseMessagesRef.current) {
+          mergeFirebaseMessagesRef.current(friendId, messages);
+        }
       });
       chatWatchersRef.current[friendId] = unsubscribe;
     });
@@ -1165,7 +1298,7 @@ const Social = () => {
       Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
       chatWatchersRef.current = {};
     };
-  }, [meId, firebaseReady, friendsIdsString, mergeFirebaseMessages]);
+  }, [meId, firebaseReady, friendsIdsString]); // ✅ Removed mergeFirebaseMessages from dependencies
 
   useEffect(() => {
     if (!meId || !firebaseReady) {
@@ -1232,6 +1365,7 @@ const Social = () => {
     };
   }, [meId, firebaseReady, friendsIdsString]);
 
+  // Cleanup typing when selectedChat changes or component unmounts
   useEffect(() => {
     if (!meId || !firebaseReady || !selectedChat) {
       if (typingStartTimeoutRef.current) {
@@ -1252,6 +1386,30 @@ const Social = () => {
       return;
     }
 
+    // Cleanup on selectedChat change
+    return () => {
+      if (typingStartTimeoutRef.current) {
+        clearTimeout(typingStartTimeoutRef.current);
+        typingStartTimeoutRef.current = null;
+      }
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
+      if (typingStatusRef.current.active && typingStatusRef.current.roomId) {
+        const roomId = typingStatusRef.current.roomId;
+        typingStatusRef.current = { roomId: null, active: false };
+        if (meId) {
+          void chatApi.typingStop(roomId, meId).catch(() => {});
+        }
+      }
+    };
+  }, [meId, firebaseReady, selectedChat]);
+
+  // Handle typing indicator with debounce (separate from newMessage useEffect)
+  useEffect(() => {
+    if (!meId || !firebaseReady || !selectedChat) return;
+
     const friendNumericId = Number(selectedChat);
     if (!Number.isFinite(friendNumericId)) return;
     const roomId = getChatRoomKey(meId, friendNumericId);
@@ -1270,12 +1428,15 @@ const Social = () => {
       }
     };
 
+    // Clear previous debounce
+    if (typingDebounceTimeoutRef.current) {
+      clearTimeout(typingDebounceTimeoutRef.current);
+      typingDebounceTimeoutRef.current = null;
+    }
+
     if (trimmed.length > 0) {
-      // Debounce 300ms before starting typing
-      if (typingStartTimeoutRef.current) {
-        clearTimeout(typingStartTimeoutRef.current);
-      }
-      typingStartTimeoutRef.current = window.setTimeout(() => {
+      // Debounce 400ms before starting typing
+      typingDebounceTimeoutRef.current = window.setTimeout(() => {
         if (!typingStatusRef.current.active || typingStatusRef.current.roomId !== roomId) {
           typingStatusRef.current = { roomId, active: true };
           if (meId && firebaseReady) {
@@ -1285,18 +1446,19 @@ const Social = () => {
             });
           }
         }
-        typingStartTimeoutRef.current = null;
-      }, 300);
+        typingDebounceTimeoutRef.current = null;
+      }, 400); // ✅ Debounce 400ms to prevent spam
       
-      // Clear stop timeout when user is typing
+      // Auto stop after 2s of no typing
       if (typingStopTimeoutRef.current) {
         clearTimeout(typingStopTimeoutRef.current);
       }
       typingStopTimeoutRef.current = window.setTimeout(() => {
         stopTyping();
         typingStopTimeoutRef.current = null;
-      }, 1000); // 1 giây sau khi ngưng nhập
+      }, 2000); // ✅ 2 giây sau khi ngưng nhập
     } else {
+      // Input is empty, stop typing immediately
       if (typingStopTimeoutRef.current) {
         clearTimeout(typingStopTimeoutRef.current);
         typingStopTimeoutRef.current = null;
@@ -1305,15 +1467,14 @@ const Social = () => {
     }
 
     return () => {
-      if (typingStartTimeoutRef.current) {
-        clearTimeout(typingStartTimeoutRef.current);
-        typingStartTimeoutRef.current = null;
+      if (typingDebounceTimeoutRef.current) {
+        clearTimeout(typingDebounceTimeoutRef.current);
+        typingDebounceTimeoutRef.current = null;
       }
       if (typingStopTimeoutRef.current) {
         clearTimeout(typingStopTimeoutRef.current);
         typingStopTimeoutRef.current = null;
       }
-      stopTyping();
     };
   }, [meId, firebaseReady, selectedChat, newMessage]);
 
@@ -1621,10 +1782,8 @@ const Social = () => {
     [meId, selectedChat, reactionsByMessage, pushBubble]
   );
 
-  useEffect(() => {
-    const total = Object.values(unreadByFriend).reduce((a, b) => a + (b || 0), 0);
-    setUnreadMessagesCount(total);
-  }, [unreadByFriend]);
+  // Note: unreadMessagesCount is now managed by Firebase listener (watchAllRoomUnreadCounts)
+  // No need to calculate from unreadByFriend
 
 
 
@@ -1797,9 +1956,22 @@ const Social = () => {
 
 
 
-  // Poll chat history as a fallback when Firebase listeners lag
+  // ✅ Load chat history only once when selectedChat changes (no polling - Firebase handles realtime)
   useEffect(() => {
-    if (!meId || !selectedChat) return;
+    if (!meId || !selectedChat || activeTab !== 'chat') {
+      // Reset loaded history khi không có selectedChat
+      if (!selectedChat) {
+        loadedHistoryRef.current.clear();
+      }
+      return;
+    }
+
+    // ✅ Check đã load history cho chat này chưa
+    const historyKey = `${meId}-${selectedChat}`;
+    if (loadedHistoryRef.current.has(historyKey)) {
+      console.log('📖 [Social] History already loaded for this chat, skipping:', historyKey);
+      return;
+    }
 
     let cancelled = false;
 
@@ -1874,47 +2046,42 @@ const Social = () => {
           });
         if (unchanged) return prev;
         
-        
         return { ...prev, [selectedChat]: sortedMerged };
       });
     };
 
-    const fetchHistory = async (reason: 'initial' | 'poll') => {
+    const fetchHistory = async () => {
       try {
+        console.log('📖 [Social] Loading chat history (initial load only):', { meId, selectedChat });
         const history = await chatApi.getHistory(meId, Number(selectedChat));
+        console.log('📖 [Social] Chat history loaded:', { count: history.length, selectedChat });
         const normalizedHistory = history.map((h) => ({
           ...h,
           contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
         }));
+        
         const mapped = sortMessagesChronologically(
           normalizedHistory.map(h => parseIncomingContent(h, friendsRef.current))
         );
         if (!cancelled) {
           mergeHistory(mapped);
-          if (activeTab === 'chat') {
-            markConversationAsRead(selectedChat);
-          }
+          // ✅ Mark đã load history cho chat này
+          loadedHistoryRef.current.add(historyKey);
+          // ✅ NOTE: markConversationAsRead is NOT called here - only when user explicitly clicks on a friend
+          console.log('📖 [Social] History merged, NOT marking as read (only mark when user clicks)');
         }
       } catch (error) {
-        if (reason === 'initial') {
-          console.error('[Social] Failed to load chat history:', error);
-        } else {
-          console.warn('[Social] Chat history poll failed:', error);
-        }
+        console.error('[Social] Failed to load chat history:', error);
+        // Không mark là đã load nếu lỗi, để có thể retry
       }
     };
 
-    void fetchHistory('initial');
-
-    const intervalId = window.setInterval(() => {
-      void fetchHistory('poll');
-    }, CHAT_HISTORY_POLL_INTERVAL_MS);
+    void fetchHistory();
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
     };
-  }, [meId, selectedChat, activeTab, markConversationAsRead]);
+  }, [meId, selectedChat, activeTab]); // ✅ Removed messageIndexByRoom from dependencies - chỉ load khi selectedChat thay đổi
 
 
 
@@ -2018,26 +2185,22 @@ const Social = () => {
 
   const isSelectedFriendTyping = selectedChat ? !!typingByFriend[selectedChat] : false;
   
-  // Debug typing status
-  useEffect(() => {
-    if (selectedChat) {
-      console.log('[Social] Typing status check:', { 
-        selectedChat, 
-        isTyping: typingByFriend[selectedChat],
-        allTyping: typingByFriend 
-      });
-    }
-  }, [selectedChat, typingByFriend]);
+  // ✅ Removed debug typing status useEffect - gây spam log
 
-  // Merge reactions into messages for selected chat
+  // ✅ Merge reactions into messages for selected chat - chỉ merge khi reactionsByMessage thay đổi
   const messagesWithReactions = useMemo(() => {
     if (!selectedChat) return chatByFriend;
     const messages = chatByFriend[selectedChat] || [];
-    console.log('[Social] Merging reactions:', { 
-      messagesCount: messages.length, 
-      reactionsKeys: Object.keys(reactionsByMessage),
-      reactionsByMessage 
-    });
+    
+    // ✅ Chỉ log khi có thay đổi thực sự (không log mỗi lần render)
+    const hasReactions = Object.keys(reactionsByMessage).length > 0;
+    if (hasReactions && messages.length > 0) {
+      console.log('[Social] Merging reactions (snapshot changed):', { 
+        messagesCount: messages.length, 
+        reactionsKeys: Object.keys(reactionsByMessage).length
+      });
+    }
+    
     return {
       ...chatByFriend,
       [selectedChat]: messages.map((msg) => {
@@ -2060,17 +2223,6 @@ const Social = () => {
           reactions = reactionsByMessage[msgId] || [];
         }
         
-        if (reactions.length > 0) {
-          console.log('[Social] Merged reactions for message:', { 
-            msgId, 
-            firebaseKey, 
-            messageIdKey, 
-            messageIdNum,
-            reactions,
-            sender: msg.sender,
-            allReactionKeys: Object.keys(reactionsByMessage)
-          });
-        }
         return { ...msg, reactions: reactions.length > 0 ? reactions : undefined };
       }),
     };
@@ -2533,7 +2685,7 @@ const Social = () => {
                 unreadByFriend={unreadByFriend}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
-                onFriendSelect={setSelectedChat}
+                onFriendSelect={handleFriendSelect}
                 newMessage={newMessage}
                 onMessageChange={setNewMessage}
                 onSendMessage={handleSendMessage}
