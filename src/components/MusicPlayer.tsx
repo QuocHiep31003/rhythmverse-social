@@ -265,23 +265,28 @@ const MusicPlayer = () => {
 
     const loadStreamUrl = async () => {
       try {
-        // Gọi BE lấy CloudFront signed URL trực tiếp (TTL 60s)
-        const { streamUrl, uuid } = await songsApi.getStreamUrl(currentSong.id);
-        let finalStreamUrl = streamUrl;
+        // Dùng proxy endpoint để backend tự generate signed URL cho mỗi request
+        // Proxy sẽ handle cả manifest và segments với signed URLs riêng
+        const { uuid } = await songsApi.getStreamUrl(currentSong.id);
         
-        if (!finalStreamUrl) {
-          throw new Error("No stream URL available");
+        if (!uuid) {
+          throw new Error("No UUID available for streaming");
         }
 
-        // Backend đã trả về CloudFront signed URL trực tiếp cho _128kbps.m3u8
-        // Không cần append filename nữa, dùng trực tiếp
-        const finalStreamUrlAbsolute = finalStreamUrl.startsWith("http")
-          ? finalStreamUrl
-          : `${window.location.origin}${finalStreamUrl}`;
+        // Dùng proxy endpoint thay vì CloudFront signed URL trực tiếp
+        // Proxy sẽ tự generate signed URL cho manifest và tất cả segments
+        // HLS.js sẽ tự động resolve relative segment URLs relative to playlist URL
+        const proxyBaseUrl = `/api/songs/${currentSong.id}/stream-proxy`;
+        // Request variant playlist trực tiếp (HLS.js sẽ tự load segments từ đây)
+        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${uuid}_128kbps.m3u8`;
 
-        console.log("Using CloudFront signed URL (TTL 60s):", finalStreamUrlAbsolute);
+        console.log("Using proxy endpoint for HLS streaming:", finalStreamUrlAbsolute);
+        console.log("HLS.js will automatically resolve segment URLs relative to this playlist");
 
         if (Hls.isSupported()) {
+          // Lấy token để gửi kèm request
+          const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+          
           hls = new Hls({
             enableWorker: true,
             lowLatencyMode: false,
@@ -305,8 +310,13 @@ const MusicPlayer = () => {
             fragLoadingTimeOut: 20000, // 20s timeout cho fragment
             fragLoadingMaxRetry: 3, // Retry 3 lần cho fragment (ít hơn mặc định)
             fragLoadingRetryDelay: 1000, // Delay 1s giữa các retry
-            xhrSetup: (xhr) => {
+            xhrSetup: (xhr, url) => {
               xhr.withCredentials = true;
+              // QUAN TRỌNG: Thêm Authorization header vào tất cả HLS requests để bảo mật
+              // Token được lấy từ closure scope (đã được lấy ở trên)
+              if (token) {
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+              }
             },
           });
           
@@ -532,7 +542,7 @@ const MusicPlayer = () => {
           };
 
           audio.addEventListener("loadedmetadata", safariMetadataListener);
-          audio.src = finalStreamUrl;
+          audio.src = finalStreamUrlAbsolute; // Dùng absolute URL cho Safari
           audio.load();
         } else {
           setIsLoading(false);
