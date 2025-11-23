@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   DropdownMenuContent,
@@ -27,6 +27,16 @@ const typeMeta: Record<
     label: "Lời mời cộng tác",
     icon: Users,
     badge: "border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-100",
+  },
+  INVITE_ACCEPTED: {
+    label: "Chấp nhận cộng tác",
+    icon: CheckCircle2,
+    badge: "border-green-500/30 bg-green-500/12 text-green-700 dark:text-green-100",
+  },
+  INVITE_REJECTED: {
+    label: "Từ chối cộng tác",
+    icon: Users,
+    badge: "border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-100",
   },
   SHARE: {
     label: "Chia sẻ",
@@ -101,7 +111,15 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
       return "đã chấp nhận lời mời kết bạn";
     case "INVITE": {
       const playlistName = meta?.playlistName || "một playlist";
-      return `mời bạn cộng tác trên “${playlistName}”`;
+      return `mời bạn cộng tác trên "${playlistName}"`;
+    }
+    case "INVITE_ACCEPTED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      return `đã chấp nhận lời mời cộng tác trên "${playlistName}"`;
+    }
+    case "INVITE_REJECTED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      return `đã từ chối lời mời cộng tác trên "${playlistName}"`;
     }
     case "SHARE": {
       const title =
@@ -122,8 +140,10 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
 interface Props { onClose?: () => void }
 
 const NotificationsDropdown = ({ onClose }: Props) => {
+  // ✅ Persist notifications trong state để không mất khi chuyển trang
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const navigate = useNavigate();
+  const itemsRef = useRef<NotificationDTO[]>([]); // ✅ Ref để persist
 
   const meId = useMemo(() => {
     try {
@@ -138,13 +158,40 @@ const NotificationsDropdown = ({ onClose }: Props) => {
   useEffect(() => {
     if (!meId) return;
     const unsub = watchNotifications(meId, (list) => {
+      // Chỉ filter MESSAGE, giữ lại TẤT CẢ notifications khác (kể cả trùng)
       const safe = (Array.isArray(list) ? list : []).filter((n) => n.type !== "MESSAGE");
+      
+      // ✅ Debug: Log friend request notifications
+      const friendRequests = safe.filter(n => n.type === 'FRIEND_REQUEST');
+      const invites = safe.filter(n => n.type === 'INVITE');
+      console.log('[NotificationsDropdown] Notifications loaded:', {
+        total: safe.length,
+        friendRequests: friendRequests.length,
+        invites: invites.length,
+        friendRequestDetails: friendRequests.slice(0, 5).map(n => ({
+          id: n.id,
+          type: n.type,
+          read: n.read,
+          senderName: n.senderName,
+          createdAt: n.createdAt
+        }))
+      });
+      
+      // ✅ Update cả state và ref để persist - HIỂN THỊ TẤT CẢ, KHÔNG DEDUPLICATE
       setItems(safe);
+      itemsRef.current = safe;
     });
     return () => {
       try { unsub(); } catch { /* noop */ }
     };
   }, [meId]);
+  
+  // ✅ Restore từ ref khi component mount lại (khi quay lại từ trang khác)
+  useEffect(() => {
+    if (itemsRef.current.length > 0 && items.length === 0) {
+      setItems(itemsRef.current);
+    }
+  }, [items.length]);
 
   const visible = items.slice(0, MAX_DROPDOWN_ITEMS);
 
@@ -185,6 +232,24 @@ const NotificationsDropdown = ({ onClose }: Props) => {
           >
             Mở lời mời
           </Button>
+        );
+      case "INVITE_ACCEPTED":
+        return (
+          <Badge
+            variant="secondary"
+            className="rounded-full border border-green-500/40 bg-green-500/12 text-green-700 dark:text-green-200 h-6"
+          >
+            Đã chấp nhận
+          </Badge>
+        );
+      case "INVITE_REJECTED":
+        return (
+          <Badge
+            variant="secondary"
+            className="rounded-full border border-red-500/40 bg-red-500/12 text-red-700 dark:text-red-200 h-6"
+          >
+            Đã từ chối
+          </Badge>
         );
       case "SHARE":
         return (
@@ -240,24 +305,30 @@ const NotificationsDropdown = ({ onClose }: Props) => {
                   onClick={() => {
                     // Navigate to the relevant place when possible
                     const t = n.type;
-                    const meta = (n.metadata || {}) as Record<string, unknown>;
+                    const meta = (n.metadata || {}) as { playlistId?: number; roomId?: string; [key: string]: unknown };
+                    onClose?.();
+                    
+                    // Navigate ngay lập tức, không delay
                     if (t === 'FRIEND_REQUEST' || t === 'FRIEND_REQUEST_ACCEPTED') {
-                      onClose?.();
                       navigate('/social?tab=friends');
                       return;
                     }
-                    if (t === 'INVITE') {
-                      onClose?.();
+                    if (t === 'INVITE' || t === 'INVITE_ACCEPTED' || t === 'INVITE_REJECTED') {
+                      // Navigate đến social với tab friends, có thể thêm expand invite nếu cần
                       navigate('/social?tab=friends');
                       return;
                     }
                     if (t === 'SHARE') {
-                      onClose?.();
-                      // Best effort: send user to social hub where shares are surfaced
-                      navigate('/social');
+                      // Navigate đến chat nếu có roomId
+                      if (meta?.roomId) {
+                        navigate(`/social?chat=${meta.roomId}`);
+                      } else {
+                        navigate('/social');
+                      }
                       return;
                     }
-                    onClose?.();
+                    // Default: navigate đến social
+                    navigate('/social');
                   }}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onClose?.(); navigate('/social'); } }}
                   className={cn(
