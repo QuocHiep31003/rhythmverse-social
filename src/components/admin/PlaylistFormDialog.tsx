@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { uploadImage } from "@/config/cloudinary";
+import { useFeatureLimit } from "@/hooks/useFeatureLimit";
+import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const playlistFormSchema = z.object({
   name: z.string().min(1, "TÃªn playlist khÃ´ng Ä‘Æ°á»£c trá»‘ng").max(200),
@@ -40,6 +43,14 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
   const [allSongs, setAllSongs] = useState<Song[]>([]);
   const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
   const [songSearch, setSongSearch] = useState("");
+  const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // Feature limit hook (only for create mode)
+  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+    featureName: FeatureName.PLAYLIST_CREATE,
+    autoCheck: mode === "create",
+    onLimitReached: () => setShowLimitModal(true),
+  });
 
   const form = useForm<PlaylistFormValues>({
     resolver: zodResolver(playlistFormSchema),
@@ -103,7 +114,22 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
     form.setValue("songIds", current.includes(id) ? current.filter(x => x !== id) : [...current, id]);
   };
 
-  const handleSubmit = (values: PlaylistFormValues) => {
+  const handleSubmit = async (values: PlaylistFormValues) => {
+    // Check feature limit only for create mode
+    if (mode === "create" && !canUse) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    // Use feature (increment usage count) only for create mode
+    if (mode === "create") {
+      const success = await useFeature();
+      if (!success) {
+        setShowLimitModal(true);
+        return;
+      }
+    }
+
     onSubmit({ ...values, songIds: (values.songIds || []).map(Number) });
   };
 
@@ -226,12 +252,32 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
             )} />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Há»§y</Button>
-              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90">{isLoading ? "Äang lÆ°u..." : mode === "create" ? "Táº¡o playlist" : "Cáº­p nháº­t"}</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading || isCheckingLimit} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Hủy</Button>
+              <Button 
+                type="submit" 
+                disabled={isLoading || isCheckingLimit || (mode === "create" && !canUse)} 
+                className="bg-primary hover:bg-primary/90"
+              >
+                {isLoading ? "Đang lưu..." : isCheckingLimit ? "Đang kiểm tra..." : mode === "create" ? "Tạo playlist" : "Cập nhật"}
+                {mode === "create" && !isPremium && remaining > 0 && (
+                  <span className="ml-2 text-xs opacity-75">({remaining} lượt còn lại)</span>
+                )}
+              </Button>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
+
+      {mode === "create" && (
+        <FeatureLimitModal
+          open={showLimitModal}
+          onOpenChange={setShowLimitModal}
+          featureName={FeatureName.PLAYLIST_CREATE}
+          featureDisplayName="Create Playlist"
+          remaining={remaining}
+          limit={3}
+        />
+      )}
     </Dialog>
   );
 };

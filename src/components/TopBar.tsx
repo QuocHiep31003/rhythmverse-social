@@ -46,6 +46,9 @@ import {
 } from "@/services/api/premiumSubscriptionApi";
 
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
+import { useFeatureLimit } from "@/hooks/useFeatureLimit";
+import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const TopBar = () => {
   const [searchText, setSearchText] = useState("");
@@ -68,6 +71,14 @@ const TopBar = () => {
   const [profilePlanLabel, setProfilePlanLabel] = useState<string>("");
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // Feature limit hook for AI Search
+  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+    featureName: FeatureName.AI_SEARCH,
+    autoCheck: true,
+    onLimitReached: () => setShowLimitModal(true),
+  });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
@@ -166,10 +177,24 @@ const TopBar = () => {
       return;
     }
 
+    // Check feature limit
+    if (!canUse) {
+      setShowLimitModal(true);
+      return;
+    }
+
     setIsRecognizing(true);
     setError("");
 
     try {
+      // Use feature (increment usage count)
+      const success = await useFeature();
+      if (!success) {
+        setShowLimitModal(true);
+        setIsRecognizing(false);
+        return;
+      }
+
       const result = await arcApi.recognizeMusic(audioBlob);
       navigate("/music-recognition-result", {
         state: {
@@ -244,12 +269,22 @@ const TopBar = () => {
 
               if (active) {
                 setProfileIsPremium(true);
-                setProfilePlanLabel(
+                let rawPlanLabel =
                   subscription.planName ||
                     subscription.planCode ||
                     (me as any)?.plan ||
-                    "Premium"
-                );
+                    "Premium";
+                
+                // Convert Vietnamese plan names to English
+                const planLabel = rawPlanLabel
+                  ?.replace(/Premium\s*1\s*tháng/gi, "Premium Monthly")
+                  ?.replace(/Premium\s*3\s*tháng/gi, "Premium Quarterly")
+                  ?.replace(/Premium\s*1\s*năm/gi, "Premium Yearly")
+                  ?.replace(/Premium\s*tháng/gi, "Premium Monthly")
+                  ?.replace(/Premium\s*năm/gi, "Premium Yearly")
+                  || "Premium";
+                
+                setProfilePlanLabel(planLabel);
               }
             }
           } catch (e) {
@@ -451,7 +486,7 @@ const TopBar = () => {
 
                       <Button
                         onClick={handleRecognize}
-                        disabled={isRecognizing}
+                        disabled={isRecognizing || isCheckingLimit || !canUse}
                         className="w-full"
                       >
                         {isRecognizing ? (
@@ -459,10 +494,18 @@ const TopBar = () => {
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             Recognizing...
                           </>
+                        ) : isCheckingLimit ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Checking...
+                          </>
                         ) : (
                           <>
                             <Search className="h-4 w-4 mr-2" />
                             Recognize Music
+                            {!isPremium && remaining === 0 && (
+                              <span className="ml-2 text-xs opacity-75">(Premium only)</span>
+                            )}
                           </>
                         )}
                       </Button>
@@ -589,6 +632,15 @@ const TopBar = () => {
           )}
         </div>
       </div>
+
+      <FeatureLimitModal
+        open={showLimitModal}
+        onOpenChange={setShowLimitModal}
+        featureName={FeatureName.AI_SEARCH}
+        featureDisplayName="AI Search"
+        remaining={remaining}
+        limit={0}
+      />
     </header>
   );
 };

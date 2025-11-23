@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { paymentApi } from "@/services/api/paymentApi";
 import { exchangeRateApi } from "@/services/api/exchangeRateApi";
+import { userApi } from "@/services/api/userApi";
 import { useToast } from "@/hooks/use-toast";
 
 const Premium = () => {
@@ -30,42 +31,51 @@ const Premium = () => {
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [isLoadingRate, setIsLoadingRate] = useState(true);
+  const [userId, setUserId] = useState<number | null>(null);
   const { toast } = useToast();
 
   const features = {
     free: [
-      { icon: Music, text: "Nghe nhạc cơ bản", included: true },
-      { icon: Volume2, text: "Chất lượng âm thanh tiêu chuẩn", included: true },
-      { icon: Heart, text: "Tạo danh sách phát", included: true },
-      { icon: Users, text: "Tính năng xã hội cơ bản", included: true },
-      { icon: Download, text: "Tải xuống ngoại tuyến", included: false },
-      { icon: BarChart3, text: "Phân tích nâng cao", included: false },
-      { icon: MessageCircle, text: "Hỗ trợ ưu tiên", included: false },
-      { icon: Trophy, text: "Sự kiện độc quyền", included: false },
-      { icon: Zap, text: "Tìm kiếm bằng AI", included: false },
-      { icon: Sparkles, text: "Chủ đề tuỳ chỉnh", included: false }
+      { icon: Music, text: "Basic music streaming", included: true },
+      { icon: Volume2, text: "Standard audio quality", included: true },
+      { icon: Heart, text: "Create playlists", included: true },
+      { icon: Users, text: "Basic social features", included: true },
+      { icon: Download, text: "Offline downloads", included: false },
+      { icon: BarChart3, text: "Advanced analytics", included: false },
+      { icon: MessageCircle, text: "Priority support", included: false },
+      { icon: Trophy, text: "Exclusive events", included: false },
+      { icon: Zap, text: "AI search", included: false },
+      { icon: Sparkles, text: "Custom themes", included: false }
     ],
     premium: [
-      { icon: Music, text: "Nghe nhạc không giới hạn", included: true },
-      { icon: Volume2, text: "Âm thanh chất lượng cao (320kbps)", included: true },
-      { icon: Heart, text: "Không giới hạn playlist & album", included: true },
-      { icon: Users, text: "Đầy đủ tính năng xã hội", included: true },
-      { icon: Download, text: "Tải xuống ngoại tuyến không giới hạn", included: true },
-      { icon: BarChart3, text: "Phân tích thói quen nghe nhạc", included: true },
-      { icon: MessageCircle, text: "Hỗ trợ 24/7", included: true },
-      { icon: Trophy, text: "Nội dung & sự kiện độc quyền", included: true },
-      { icon: Zap, text: "Tìm kiếm giai điệu & lời bằng AI", included: true },
-      { icon: Sparkles, text: "Chủ đề & hồ sơ tuỳ chỉnh", included: true }
+      { icon: Music, text: "Unlimited music streaming", included: true },
+      { icon: Volume2, text: "High-quality audio (320kbps)", included: true },
+      { icon: Heart, text: "Unlimited playlists & albums", included: true },
+      { icon: Users, text: "Full social features", included: true },
+      { icon: Download, text: "Unlimited offline downloads", included: true },
+      { icon: BarChart3, text: "Listening habit analytics", included: true },
+      { icon: MessageCircle, text: "24/7 support", included: true },
+      { icon: Trophy, text: "Exclusive content & events", included: true },
+      { icon: Zap, text: "AI melody & lyrics search", included: true },
+      { icon: Sparkles, text: "Custom themes & profiles", included: true }
     ]
   };
 
-  // Lấy tỉ giá khi component mount
+  // Lấy tỉ giá và user info khi component mount
   useEffect(() => {
-    const fetchExchangeRate = async () => {
+    const fetchData = async () => {
       try {
         setIsLoadingRate(true);
         const rate = await exchangeRateApi.getUSDtoVND();
         setExchangeRate(rate);
+        
+        // Lấy userId
+        try {
+          const user = await userApi.getCurrentProfile();
+          setUserId(user.id || null);
+        } catch (userError) {
+          console.warn('Failed to fetch user profile:', userError);
+        }
       } catch (error) {
         console.error('Error fetching exchange rate:', error);
         // Dùng tỉ giá mặc định nếu có lỗi
@@ -75,7 +85,7 @@ const Premium = () => {
       }
     };
 
-    fetchExchangeRate();
+    fetchData();
   }, []);
 
   // Tính toán giá VNĐ dựa trên tỉ giá (reactive với exchangeRate)
@@ -101,33 +111,33 @@ const Premium = () => {
   const benefits = [
     {
       icon: Download,
-      title: "Tải xuống không giới hạn",
-      description: "Tải bất kỳ bài hát nào để nghe ngoại tuyến, lý tưởng khi di chuyển"
+      title: "Unlimited Downloads",
+      description: "Download any song to listen offline, perfect for on-the-go"
     },
     {
       icon: Volume2,
-      title: "Âm thanh chất lượng cao",
-      description: "Phát nhạc 320kbps trong trẻo cho trải nghiệm tốt nhất"
+      title: "High-Quality Audio",
+      description: "Stream music at crystal-clear 320kbps for the best experience"
     },
     {
       icon: Zap,
-      title: "Tìm kiếm bằng AI",
-      description: "Tìm bài hát bằng giai điệu hoặc một phần lời với AI"
+      title: "AI-Powered Search",
+      description: "Find songs by melody or partial lyrics with AI"
     },
     {
       icon: BarChart3,
-      title: "Phân tích thói quen nghe",
-      description: "Hiểu sâu sở thích âm nhạc và khám phá xu hướng mới"
+      title: "Listening Analytics",
+      description: "Deep insights into your music preferences and discover new trends"
     },
     {
       icon: Users,
-      title: "Tính năng xã hội",
-      description: "Chia sẻ nhạc, tạo playlist chung và tham gia cộng đồng"
+      title: "Social Features",
+      description: "Share music, create collaborative playlists, and join the community"
     },
     {
       icon: Trophy,
-      title: "Nội dung độc quyền",
-      description: "Tham gia sự kiện, nghe phát hành sớm và nội dung nghệ sĩ"
+      title: "Exclusive Content",
+      description: "Join events, early releases, and exclusive artist content"
     }
   ];
 
@@ -139,15 +149,20 @@ const Premium = () => {
       
       // Kiểm tra plan và amountVND
       if (!plan || !plan.amountVND || plan.amountVND <= 0) {
-        throw new Error('Giá trị đơn hàng không hợp lệ. Vui lòng thử lại.');
+        throw new Error('Invalid order amount. Please try again.');
       }
       
-      const description = `Premium ${selectedPlan === "monthly" ? "Tháng" : "Năm"}`;
+      // Format description chuyên nghiệp: User ID + Plan
+      const planName = selectedPlan === "monthly" ? "Monthly" : "Yearly";
+      const description = userId 
+        ? `Premium ${planName} - User ID: ${userId}`
+        : `Premium ${planName} Subscription`;
       
       console.log('Creating order with:', {
         amount: plan.amountVND,
         description: description,
-        plan: selectedPlan
+        plan: selectedPlan,
+        userId: userId
       });
       
       // Tạo đơn hàng
@@ -163,14 +178,14 @@ const Premium = () => {
       if (result?.checkoutUrl) {
         window.location.href = result.checkoutUrl;
       } else {
-        throw new Error('Không nhận được link thanh toán từ server');
+        throw new Error('Failed to receive payment link from server');
       }
     } catch (error) {
       console.error('Error creating order:', error);
       setIsUpgrading(false);
       toast({
-        title: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Không thể tạo đơn hàng. Vui lòng thử lại.',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create order. Please try again.',
         variant: 'destructive',
       });
     }
@@ -183,10 +198,10 @@ const Premium = () => {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 bg-gradient-primary bg-clip-text text-transparent mb-4">
             <Crown className="w-8 h-8 text-primary" />
-            <h1 className="text-5xl font-bold">Khám phá Premium</h1>
+            <h1 className="text-5xl font-bold">Discover Premium</h1>
           </div>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Trải nghiệm âm nhạc trọn vẹn với tính năng nâng cao, chất lượng cao và nội dung độc quyền.
+            Experience music to the fullest with advanced features, high quality, and exclusive content.
           </p>
         </div>
 
@@ -200,107 +215,110 @@ const Premium = () => {
               onClick={() => setSelectedPlan("monthly")}
               className="rounded-md"
             >
-              Theo tháng
+              Monthly
             </Button>
             <Button
               variant={selectedPlan === "yearly" ? "default" : "ghost"}
               onClick={() => setSelectedPlan("yearly")}
               className="rounded-md"
             >
-              Theo năm
-              <Badge variant="secondary" className="ml-2">Tiết kiệm ~12%</Badge>
+              Yearly
+              <Badge variant="secondary" className="ml-2">Save ~12%</Badge>
             </Button>
           </div>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto mb-12">
+        <div className="flex justify-center mb-12">
+          <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full items-stretch [&>div]:w-full">
           {/* Free Plan */}
-          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-            <CardHeader className="text-center pb-8">
-              <CardTitle className="text-2xl">Gói Free</CardTitle>
-              <div className="text-4xl font-bold">$0</div>
-              <p className="text-muted-foreground">Phù hợp với người nghe cơ bản</p>
+          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 h-full flex flex-col">
+            <CardHeader className="text-center pb-8 flex flex-col !p-6 min-h-[200px]">
+              <CardTitle className="text-2xl mb-4">Free Plan</CardTitle>
+              <div className="text-4xl font-bold mb-2">$0</div>
+              <div className="h-5 mb-2"></div>
+              <p className="text-muted-foreground">Perfect for casual listeners</p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {features.free.map((feature, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  {feature.included ? (
-                    <Check className="w-5 h-5 text-green-500 shrink-0" />
-                  ) : (
-                    <X className="w-5 h-5 text-muted-foreground shrink-0" />
-                  )}
-                  <feature.icon className="w-4 h-4 shrink-0" />
-                  <span className={feature.included ? "" : "text-muted-foreground line-through"}>
-                    {feature.text}
-                  </span>
+            <CardContent className="flex-1 flex flex-col space-y-4 !p-6 !pt-0">
+              <div className="flex-1 flex flex-col justify-center items-center space-y-4">
+                <div className="w-full max-w-sm space-y-4">
+                  {features.free.map((feature, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      {feature.included ? (
+                        <Check className="w-5 h-5 text-green-500 shrink-0" />
+                      ) : (
+                        <X className="w-5 h-5 text-white shrink-0" />
+                      )}
+                      <feature.icon className="w-4 h-4 shrink-0" />
+                      <span className={feature.included ? "" : "text-muted-foreground"}>
+                        {feature.text}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              <Button variant="outline" className="w-full mt-6">
-                Gói hiện tại
+              </div>
+              <Button variant="outline" className="w-full mt-auto bg-muted/20 hover:bg-muted/30">
+                Current Plan
               </Button>
             </CardContent>
           </Card>
 
           {/* Premium Plan */}
-          <Card className="bg-gradient-primary/10 border-primary/20 relative overflow-hidden">
-            <div className="absolute top-0 right-0 bg-gradient-primary text-white px-4 py-1 rounded-bl-lg">
-              <span className="text-sm font-medium">Phổ biến nhất</span>
+          <Card className="bg-gradient-primary/10 border-primary/20 relative overflow-hidden h-full flex flex-col">
+            <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-1 rounded-bl-lg">
+              <span className="text-sm font-medium">Most Popular</span>
             </div>
-            <CardHeader className="text-center pb-8">
-              <CardTitle className="text-2xl flex items-center justify-center gap-2">
+            <CardHeader className="text-center pb-8 flex flex-col !p-6 min-h-[200px]">
+              <CardTitle className="text-2xl flex items-center justify-center gap-2 mb-4">
                 <Crown className="w-6 h-6 text-primary" />
-                Gói Premium
+                Premium Plan
               </CardTitle>
-              <div className="space-y-2">
+              <div className="space-y-2 mb-2">
                 <div className="text-4xl font-bold">
                   ${pricing[selectedPlan].price}
                   <span className="text-lg font-normal text-muted-foreground">
-                    /{selectedPlan === "monthly" ? "tháng" : "năm"}
+                    /{selectedPlan === "monthly" ? "month" : "year"}
                   </span>
                 </div>
-                {exchangeRate && !isLoadingRate && (
-                  <div className="text-sm text-muted-foreground">
-                    1 USD = {exchangeRate.toLocaleString('vi-VN')} VNĐ
-                  </div>
-                )}
-                {isLoadingRate && (
-                  <div className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Đang tải tỉ giá...</span>
-                  </div>
-                )}
                 {pricing[selectedPlan].originalPrice && (
                   <div className="text-sm text-muted-foreground line-through">
-                    Gốc ${pricing[selectedPlan].originalPrice}/năm
+                    Original ${pricing[selectedPlan].originalPrice}/year
                   </div>
                 )}
+                {!pricing[selectedPlan].originalPrice && (
+                  <div className="h-5"></div>
+                )}
               </div>
-              <p className="text-muted-foreground">Tất cả những gì bạn cần cho trải nghiệm âm nhạc tối ưu</p>
+              <p className="text-muted-foreground">Everything you need for the ultimate music experience</p>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {features.premium.map((feature, index) => (
-                <div key={index} className="flex items-center gap-3">
-                  <Check className="w-5 h-5 text-green-500 shrink-0" />
-                  <feature.icon className="w-4 h-4 shrink-0" />
-                  <span>{feature.text}</span>
+            <CardContent className="flex-1 flex flex-col space-y-4 !p-6 !pt-0">
+              <div className="flex-1 flex flex-col justify-center items-center space-y-4">
+                <div className="w-full max-w-sm space-y-4">
+                  {features.premium.map((feature, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <Check className="w-5 h-5 text-green-500 shrink-0" />
+                      <feature.icon className="w-4 h-4 shrink-0" />
+                      <span>{feature.text}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </div>
               <Button 
                 variant="hero" 
-                className="w-full mt-6" 
+                className="w-full mt-auto" 
                 onClick={handleUpgrade}
                 disabled={isUpgrading}
               >
-                {isUpgrading ? "Đang xử lý..." : "Nâng cấp lên Premium"}
+                {isUpgrading ? "Processing..." : "Upgrade to Premium"}
               </Button>
             </CardContent>
           </Card>
+          </div>
         </div>
 
         {/* Benefits Section */}
         <div className="mb-12">
-          <h2 className="text-3xl font-bold text-center mb-8">Vì sao nên chọn Premium?</h2>
+          <h2 className="text-3xl font-bold text-center mb-8">Why Choose Premium?</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {benefits.map((benefit, index) => (
               <Card key={index} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300">
@@ -320,24 +338,24 @@ const Premium = () => {
 
         {/* FAQ Section */}
         <div className="max-w-2xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-8">Câu hỏi thường gặp</h2>
+          <h2 className="text-3xl font-bold text-center mb-8">Frequently Asked Questions</h2>
           <div className="space-y-4">
             {[
               {
-                question: "Tôi có thể hủy bất cứ lúc nào không?",
-                answer: "Có. Bạn có thể hủy gói Premium bất cứ lúc nào và vẫn giữ quyền lợi đến hết chu kỳ thanh toán."
+                question: "Can I cancel anytime?",
+                answer: "Yes. You can cancel your Premium subscription anytime and still keep your benefits until the end of the billing cycle."
               },
               {
-                question: "Có dùng thử miễn phí không?",
-                answer: "Có! Người dùng mới được dùng thử Premium 30 ngày. Không cần thẻ để bắt đầu."
+                question: "Is there a free trial?",
+                answer: "Yes! New users get a 30-day Premium trial. No credit card required to start."
               },
               {
-                question: "Chất lượng âm thanh của Premium là gì?",
-                answer: "Premium phát nhạc chất lượng 320kbps, so với 128kbps ở gói Free."
+                question: "What is Premium audio quality?",
+                answer: "Premium streams music at 320kbps quality, compared to 128kbps on the Free plan."
               },
               {
-                question: "Tôi có thể dùng Premium trên nhiều thiết bị không?",
-                answer: "Có, bạn có thể sử dụng trên tối đa 5 thiết bị cùng lúc."
+                question: "Can I use Premium on multiple devices?",
+                answer: "Yes, you can use Premium on up to 5 devices simultaneously."
               }
             ].map((faq, index) => (
               <Card key={index} className="bg-gradient-glass backdrop-blur-sm border-white/10">
@@ -352,18 +370,18 @@ const Premium = () => {
 
         {/* CTA Section */}
         <div className="text-center mt-12 p-8 bg-gradient-primary/10 rounded-lg border border-primary/20">
-          <h2 className="text-2xl font-bold mb-4">Sẵn sàng nâng cấp trải nghiệm nghe nhạc?</h2>
-          <p className="text-muted-foreground mb-6">Tham gia cùng hàng triệu người dùng đã chọn Premium.</p>
+          <h2 className="text-2xl font-bold mb-4">Ready to upgrade your music experience?</h2>
+          <p className="text-muted-foreground mb-6">Join millions of users who have chosen Premium.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button variant="hero" size="lg" onClick={handleUpgrade} disabled={isUpgrading}>
-              {isUpgrading ? "Đang xử lý..." : "Bắt đầu hành trình Premium"}
+              {isUpgrading ? "Processing..." : "Start Your Premium Journey"}
             </Button>
             <Button 
               variant="outline" 
               size="lg" 
               onClick={() => navigate('/profile')}
             >
-              Xem lịch sử thanh toán
+              View Payment History
             </Button>
           </div>
         </div>

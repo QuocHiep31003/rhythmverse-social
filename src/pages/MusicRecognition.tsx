@@ -17,6 +17,9 @@ import {
   Music
 } from "lucide-react";
 import { arcApi } from "@/services/api";
+import { useFeatureLimit } from "@/hooks/useFeatureLimit";
+import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const MusicRecognition = () => {
   const navigate = useNavigate();
@@ -27,10 +30,18 @@ const MusicRecognition = () => {
   const [error, setError] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrlPreview, setAudioUrlPreview] = useState<string>("");
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Feature limit hook for AI Search
+  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+    featureName: FeatureName.AI_SEARCH,
+    autoCheck: true,
+    onLimitReached: () => setShowLimitModal(true),
+  });
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -109,10 +120,24 @@ const MusicRecognition = () => {
     return;
   }
 
+  // Check feature limit
+  if (!canUse) {
+    setShowLimitModal(true);
+    return;
+  }
+
   setIsLoading(true);
   setError("");
 
   try {
+    // Use feature (increment usage count)
+    const success = await useFeature();
+    if (!success) {
+      setShowLimitModal(true);
+      setIsLoading(false);
+      return;
+    }
+
     const result = await arcApi.recognizeMusic(audioBlob);
 
     // Check if result is valid and has actual data
@@ -259,7 +284,7 @@ const MusicRecognition = () => {
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
-                  disabled={isLoading || !audioUrl}
+                  disabled={isLoading || isCheckingLimit || !audioUrl || !canUse}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   size="lg"
                 >
@@ -268,8 +293,18 @@ const MusicRecognition = () => {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Recognizing...
                     </>
+                  ) : isCheckingLimit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Checking...
+                    </>
                   ) : (
-                    "Recognize Music"
+                    <>
+                      Recognize Music
+                      {!isPremium && remaining === 0 && (
+                        <span className="ml-2 text-xs opacity-75">(Premium only)</span>
+                      )}
+                    </>
                   )}
                 </Button>
                 
@@ -311,6 +346,15 @@ const MusicRecognition = () => {
           </Card>
         </div>
       </div>
+
+      <FeatureLimitModal
+        open={showLimitModal}
+        onOpenChange={setShowLimitModal}
+        featureName={FeatureName.AI_SEARCH}
+        featureDisplayName="AI Search"
+        remaining={remaining}
+        limit={0}
+      />
     </div>
   );
 };

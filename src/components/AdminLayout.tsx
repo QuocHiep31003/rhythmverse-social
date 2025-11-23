@@ -1,7 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Crown } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
@@ -49,6 +49,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { icon: Music, label: "Thể loại", path: "/admin/genres" },
     { icon: Heart, label: "Mood", path: "/admin/moods" },
     { icon: Users, label: "Người dùng", path: "/admin/users" },
+    { icon: Crown, label: "Premium Subscriptions", path: "/admin/premium-subscriptions" },
     { icon: TrendingUp, label: "Trending", path: "/admin/trending" },
     { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
   ];
