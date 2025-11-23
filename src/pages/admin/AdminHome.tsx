@@ -6,6 +6,7 @@ import { RefreshCw, Users, Music, ListMusic, TrendingUp } from "lucide-react";
 import { mockSongs, mockUsers } from "@/data/mockData";
 import { dashboardApi } from "@/services/api/dashboardApi";
 import type { DashboardStatsResponse, DashboardMetricDTO, TimeSeriesPointDTO } from "@/types/dashboard";
+import { useCountUp } from "@/hooks/useCountUp";
 import {
   Select,
   SelectContent,
@@ -263,37 +264,50 @@ const AdminHome = () => {
     fetchSummary(startDate, endDate, period);
   };
 
-  const renderMetric = (
-    title: string, 
-    metric?: DashboardMetricDTO, 
-    Icon?: typeof Users, 
-    color?: string,
-    datasetType?: DatasetType | null,
-    isSelected?: boolean
-  ) => (
-    <Card
-      key={title}
-      onClick={() => datasetType && setSelectedDataset(datasetType)}
-      className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-all duration-300 ${
-        datasetType 
-          ? `cursor-pointer hover:shadow-lg hover:border-[hsl(var(--admin-primary))] ${
-              isSelected ? "border-[hsl(var(--admin-primary))] shadow-lg ring-2 ring-[hsl(var(--admin-primary))] ring-opacity-20" : ""
-            }`
-          : "hover:shadow-lg"
-      }`}
-    >
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-foreground">{title}</CardTitle>
-        {Icon && <Icon className={`h-5 w-5 ${color}`} />}
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-foreground">{formatNumber(metric?.total)}</div>
-        <p className="text-xs text-muted-foreground">
-          +{formatNumber(metric?.newInPeriod ?? metric?.inRange)} trong giai đoạn &bull; {formatNumber(metric?.oldOutOfPeriod ?? metric?.outsideRange)} trước đó
-        </p>
-      </CardContent>
-    </Card>
-  );
+  // Component riêng để có thể dùng hooks
+  const MetricCard = ({
+    title,
+    metric,
+    Icon,
+    color,
+    datasetType,
+    isSelected,
+  }: {
+    title: string;
+    metric?: DashboardMetricDTO;
+    Icon?: typeof Users;
+    color?: string;
+    datasetType?: DatasetType | null;
+    isSelected?: boolean;
+  }) => {
+    const totalCount = useCountUp(metric?.total, { duration: 1500 });
+    const newCount = useCountUp(metric?.newInPeriod ?? metric?.inRange, { duration: 1500 });
+    const oldCount = useCountUp(metric?.oldOutOfPeriod ?? metric?.outsideRange, { duration: 1500 });
+
+    return (
+      <Card
+        onClick={() => datasetType && setSelectedDataset(datasetType)}
+        className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-all duration-300 ${
+          datasetType 
+            ? `cursor-pointer hover:shadow-lg hover:border-[hsl(var(--admin-primary))] ${
+                isSelected ? "border-[hsl(var(--admin-primary))] shadow-lg ring-2 ring-[hsl(var(--admin-primary))] ring-opacity-20" : ""
+              }`
+            : "hover:shadow-lg"
+        }`}
+      >
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-foreground">{title}</CardTitle>
+          {Icon && <Icon className={`h-5 w-5 ${color}`} />}
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold text-foreground">{formatNumber(totalCount.count)}</div>
+          <p className="text-xs text-muted-foreground">
+            +{formatNumber(newCount.count)} trong giai đoạn &bull; {formatNumber(oldCount.count)} trước đó
+          </p>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -311,7 +325,17 @@ const AdminHome = () => {
       )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {metricCards.map((stat) => renderMetric(stat.title, stat.metric, stat.icon, stat.color, stat.datasetType, stat.datasetType === selectedDataset))}
+        {metricCards.map((stat) => (
+          <MetricCard
+            key={stat.title}
+            title={stat.title}
+            metric={stat.metric}
+            Icon={stat.icon}
+            color={stat.color}
+            datasetType={stat.datasetType}
+            isSelected={stat.datasetType === selectedDataset}
+          />
+        ))}
       </div>
 
       <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-lg hover:shadow-xl transition-shadow duration-300">

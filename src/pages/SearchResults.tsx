@@ -62,33 +62,45 @@ const SearchResults = () => {
       }
       // Set new timeout for debounce
       const timeout = setTimeout(() => {
-      fetchSearchResults(queryParam);
+        fetchSearchResults(queryParam);
       }, 300); // 300ms debounce
       setSearchTimeout(timeout);
+      
+      return () => {
+        clearTimeout(timeout);
+      };
     }
-    
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
-  }, [queryParam]);
+  }, [queryParam, fetchSearchResults]);
   
   const fetchSearchResults = useCallback(async (queryParam: string) => {
     if (!queryParam.trim()) return;
     setLoading(true);
     try {
-      const data = await searchApi.getAll(queryParam);
-      setSearchResults(data || { songs: [], artists: [], albums: [] });
+      // Gọi API riêng biệt cho từng loại kết quả
+      const [songsResponse, artistsResponse, albumsResponse] = await Promise.all([
+        songsApi.getAll({ search: queryParam, size: 5, page: 0 }),
+        artistsApi.getAll({ search: queryParam, size: 4, page: 0 }),
+        albumsApi.getAll({ search: queryParam, size: 4, page: 0 }),
+      ]);
+
+      setSearchResults({
+        songs: songsResponse.content || [],
+        artists: artistsResponse.content || [],
+        albums: albumsResponse.content || [],
+      });
       setDetailedResults({ songs: [], artists: [], albums: [] });
-      console.log(data);
+      console.log('Search results:', {
+        songs: songsResponse.content?.length || 0,
+        artists: artistsResponse.content?.length || 0,
+        albums: albumsResponse.content?.length || 0,
+      });
     } catch (error) {
       console.error('Error fetching search results:', error);
       setSearchResults({ songs: [], artists: [], albums: [] });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleFilterChange = async (filterId: string) => {
     setActiveFilter(filterId);
@@ -264,9 +276,15 @@ const SearchResults = () => {
                               <img src={song.urlImageAlbum || "/placeholder.svg"} alt={song.name} className="w-full h-full object-cover" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-foreground truncate">{song.name}</p>
+                              <p className="font-semibold text-foreground truncate">{song.name || song.songName || "Unknown Song"}</p>
                               <p className="text-sm text-muted-foreground truncate">
-                                {song.artists || "Unknown Artist"}
+                                {typeof song.artists === 'string' 
+                                  ? song.artists 
+                                  : Array.isArray(song.artists) 
+                                    ? song.artists.map((a: { name?: string; id?: number } | string) => 
+                                        typeof a === 'string' ? a : a.name || String(a.id || '')
+                                      ).join(", ")
+                                    : song.artist || "Unknown Artist"}
                               </p>
                             </div>
                             </div>
@@ -388,7 +406,15 @@ const SearchResults = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate text-foreground">{song.name || song.songName || "Unknown Song"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{song.artists || "Unknown Artist"}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                                {typeof song.artists === 'string' 
+                                  ? song.artists 
+                                  : Array.isArray(song.artists) 
+                                    ? song.artists.map((a: { name?: string; id?: number } | string) => 
+                                        typeof a === 'string' ? a : a.name || String(a.id || '')
+                                      ).join(", ")
+                                    : song.artist || "Unknown Artist"}
+                      </p>
                     </div>
                     <span className="text-xs font-medium text-primary">{song.trend}</span>
                   </div>
