@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Play, Heart, MoreHorizontal, Users, Share2, Trash2, ListPlus } from "lucide-react";
+import { Play, Heart, MoreHorizontal, Users, ListPlus, X } from "lucide-react";
 import { Song } from "@/contexts/MusicContext";
 import { formatDateDisplay, msToMMSS, toSeconds } from "@/utils/playlistUtils";
 import { AddToPlaylistDialog } from "./AddToPlaylistDialog";
@@ -51,7 +51,9 @@ export const PlaylistSongItem = ({
     <>
     <div
       onClick={onPlay}
-      className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group cursor-pointer"
+      className={`flex items-center gap-4 p-3 rounded-lg transition-colors group cursor-pointer ${
+        isActive ? "bg-primary/10" : "hover:bg-muted/30"
+      }`}
     >
       <div className="w-8 text-center flex justify-center">
         {isActive ? (
@@ -65,7 +67,7 @@ export const PlaylistSongItem = ({
             <Play className="w-4 h-4" />
           )
         ) : (
-          <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
+          <span className="text-muted-foreground">{index + 1}</span>
         )}
       </div>
 
@@ -85,27 +87,22 @@ export const PlaylistSongItem = ({
         <p className="text-sm text-muted-foreground truncate">{song.album}</p>
       </div>
 
-      {/* Avatar và tên người thêm bài hát ở giữa */}
-      <div className="hidden md:flex items-center gap-2 min-w-0">
+      {/* Avatar người thêm bài hát - chỉ hiện avatar, hover mới hiện tên */}
+      <div className="hidden md:flex items-center justify-center min-w-0">
         {song.addedByAvatar || song.addedBy ? (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-2 min-w-0">
-                  <Avatar className="w-6 h-6 flex-shrink-0">
-                    {song.addedByAvatar ? (
-                      <AvatarImage src={song.addedByAvatar} alt={song.addedBy || "Added by"} />
-                    ) : null}
-                    <AvatarFallback className="bg-gradient-primary text-white text-[10px]">
-                      {song.addedBy 
-                        ? song.addedBy.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-                        : '?'}
-                    </AvatarFallback>
-                  </Avatar>
-                  {song.addedBy && (
-                    <span className="text-xs text-muted-foreground truncate">{song.addedBy}</span>
-                  )}
-                </div>
+                <Avatar className="w-6 h-6 flex-shrink-0 cursor-pointer">
+                  {song.addedByAvatar ? (
+                    <AvatarImage src={song.addedByAvatar} alt={song.addedBy || "Added by"} />
+                  ) : null}
+                  <AvatarFallback className="bg-gradient-primary text-white text-[10px]">
+                    {song.addedBy 
+                      ? song.addedBy.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                      : '?'}
+                  </AvatarFallback>
+                </Avatar>
               </TooltipTrigger>
               <TooltipContent>
                 <p>Thêm bởi {song.addedBy || "Unknown"}</p>
@@ -158,16 +155,6 @@ export const PlaylistSongItem = ({
               <ListPlus className="w-4 h-4 mr-2" />
               Thêm vào playlist
             </DropdownMenuItem>
-            {meId && isCollaborator && onHide && (
-              <DropdownMenuItem onClick={onHide}>
-                Ẩn bài hát này
-              </DropdownMenuItem>
-            )}
-            {canEdit && onCollab && (
-              <DropdownMenuItem onClick={onCollab}>
-                <Users className="w-4 h-4 mr-2" />Cộng tác
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={(e) => {
@@ -185,8 +172,15 @@ export const PlaylistSongItem = ({
             {canEdit && onRemove && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive" onClick={onRemove}>
-                  <Trash2 className="w-4 h-4 mr-2" />Xóa khỏi playlist
+                <DropdownMenuItem 
+                  className="text-destructive focus:text-destructive focus:bg-destructive/10" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove();
+                  }}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Xóa khỏi playlist
                 </DropdownMenuItem>
               </>
             )}

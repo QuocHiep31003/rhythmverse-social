@@ -12,6 +12,16 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { mapToPlayerSong } from "@/lib/utils";
 import { API_BASE_URL } from "@/services/api/config";
 import { MoreVertical, Smile } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😭", "🔥"];
 
@@ -36,6 +46,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const parseTimestampMs = (msg?: Message | null) => {
     if (!msg) return null;
     if (typeof msg.sentAt === "number" && Number.isFinite(msg.sentAt)) return msg.sentAt;
@@ -99,18 +110,40 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
       className={`flex items-center gap-1 min-w-[96px] justify-end ${visibilityClasses}`}
     >
       {onDelete && (
-        <button
-          type="button"
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all"
-          aria-label="More options"
-          onClick={() => {
-            if (window.confirm("Bạn có chắc muốn xóa tin nhắn này?")) {
-              onDelete(message);
-            }
-          }}
-        >
-          <MoreVertical className="w-4 h-4" />
-        </button>
+        <>
+          <button
+            type="button"
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all"
+            aria-label="More options"
+            onClick={() => {
+              setDeleteDialogOpen(true);
+            }}
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Xóa tin nhắn</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Bạn có chắc muốn xóa tin nhắn này? Hành động này không thể hoàn tác.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Hủy</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => {
+                    onDelete(message);
+                    setDeleteDialogOpen(false);
+                  }}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  Xóa
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
       )}
       {onReact && reactionButton}
     </div>
