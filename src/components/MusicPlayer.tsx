@@ -1061,9 +1061,53 @@ const MusicPlayer = () => {
     if (!currentSong) {
       setShowLyrics(false);
       setIsExpanded(false);
+      setShowPlaylist(false);
       setSuggestedSongs([]);
     }
   }, [currentSong]);
+
+  // Close all overlays on Escape key (global handler)
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isExpanded) {
+          setIsExpanded(false);
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (showLyrics) {
+          setShowLyrics(false);
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (showPlaylist) {
+          setShowPlaylist(false);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    };
+    
+    // Only add listener if any overlay is open
+    if (isExpanded || showLyrics || showPlaylist) {
+      window.addEventListener('keydown', handleEscape, true);
+      return () => window.removeEventListener('keydown', handleEscape, true);
+    }
+  }, [isExpanded, showLyrics, showPlaylist]);
+
+  // Safety: Force close all overlays if they're stuck open without currentSong
+  useEffect(() => {
+    if (!currentSong) {
+      // Small delay to ensure state updates
+      const timer = setTimeout(() => {
+        if (isExpanded || showLyrics || showPlaylist) {
+          console.warn("[MusicPlayer] Force closing stuck overlays - no current song");
+          setIsExpanded(false);
+          setShowLyrics(false);
+          setShowPlaylist(false);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentSong, isExpanded, showLyrics, showPlaylist]);
 
   // Load suggested songs (50 max) whenever current song changes
   useEffect(() => {
@@ -1331,7 +1375,12 @@ const MusicPlayer = () => {
 
       {/* Expanded Player */}
       {isExpanded && (
-        <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-lg flex flex-col">
+        <div 
+          className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-lg flex flex-col"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setIsExpanded(false);
+          }}
+        >
           {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-border/40">
             <h3 className="text-lg font-semibold">Now Playing</h3>
@@ -1465,8 +1514,14 @@ const MusicPlayer = () => {
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
           <div
-            className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/98 to-background backdrop-blur-md"
+            className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/98 to-background backdrop-blur-md cursor-pointer"
             onClick={() => setShowLyrics(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowLyrics(false);
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Close lyrics"
           />
 
           {/* Content panel */}
@@ -1523,8 +1578,11 @@ const MusicPlayer = () => {
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
           <div
-            className="absolute inset-0 bg-background/95 backdrop-blur-md"
+            className="absolute inset-0 bg-background/95 backdrop-blur-md cursor-pointer"
             onClick={() => setShowPlaylist(false)}
+            role="button"
+            tabIndex={0}
+            aria-label="Close playlist"
           />
 
           {/* Content panel */}
@@ -1713,7 +1771,7 @@ const MusicPlayer = () => {
               title={shareSong.title}
               type="song"
               url={shareSong.url}
-              open={true}
+              open={!!shareSong}
               onOpenChange={(isOpen) => {
                 if (!isOpen) {
                   setShareSong(null);

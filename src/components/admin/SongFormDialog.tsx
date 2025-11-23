@@ -812,7 +812,7 @@ export const SongFormDialog = ({
                                   <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
                                   <span className="truncate flex-1 min-w-0">{genre?.name || `ID: ${genreId}`}</span>
                                   <div className="flex items-center gap-2">
-                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <label className="text-xs font-medium text-[hsl(var(--admin-active-foreground))] opacity-80">Score:</label>
                                     <Input
                                       type="number"
                                       step="0.1"
@@ -824,7 +824,7 @@ export const SongFormDialog = ({
                                         newScores.set(genreId, e.target.value);
                                         setGenreScores(newScores);
                                       }}
-                                      className="w-20 h-8 text-xs"
+                                      className="w-20 h-8 text-xs font-semibold bg-background text-foreground border-border focus:border-[hsl(var(--admin-active))] focus:ring-[hsl(var(--admin-active))]"
                                       placeholder="1.0"
                                     />
                                   </div>
@@ -981,7 +981,7 @@ export const SongFormDialog = ({
                                   <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
                                   <span className="truncate flex-1 min-w-0">{mood?.name || `ID: ${moodId}`}</span>
                                   <div className="flex items-center gap-2">
-                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <label className="text-xs font-medium text-[hsl(var(--admin-active-foreground))] opacity-80">Score:</label>
                                     <Input
                                       type="number"
                                       step="0.1"
@@ -993,7 +993,7 @@ export const SongFormDialog = ({
                                         newScores.set(moodId, e.target.value);
                                         setMoodScores(newScores);
                                       }}
-                                      className="w-20 h-8 text-xs"
+                                      className="w-20 h-8 text-xs font-semibold bg-background text-foreground border-border focus:border-[hsl(var(--admin-active))] focus:ring-[hsl(var(--admin-active))]"
                                       placeholder="1.0"
                                     />
                                   </div>
