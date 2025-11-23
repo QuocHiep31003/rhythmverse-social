@@ -652,20 +652,13 @@ const Social = () => {
     emitChatTabOpened({ friendId: selectedChat });
   }, [activeTab, selectedChat]);
 
-  // ✅ Mark conversation as read khi user đang xem chat (selectedChat thay đổi)
+  // ✅ Mark conversation as read ngay khi user vào chat (không delay để tránh unread tăng)
   useEffect(() => {
     if (!meId || !selectedChat || activeTab !== "chat") return;
     
-    // Mark as read khi user vào chat (có thể là click hoặc auto-select)
-    // Delay nhỏ để đảm bảo chat đã load xong
-    const timeoutId = setTimeout(() => {
-      console.log('👁️ [Social] User is viewing chat, marking as read:', selectedChat);
-      markConversationAsRead(selectedChat);
-    }, 500); // Delay 500ms để đảm bảo chat đã render
-    
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    // ✅ Mark as read ngay lập tức (không delay) để tránh unread count tăng
+    console.log('👁️ [Social] User is viewing chat, marking as read immediately:', selectedChat);
+    markConversationAsRead(selectedChat);
   }, [meId, selectedChat, activeTab, markConversationAsRead]);
 
   // ✅ Mark as read khi có tin nhắn mới đến trong chat đang xem
@@ -1040,8 +1033,30 @@ const Social = () => {
       console.log('[Social] Firebase unread counts updated:', { 
         unreadCounts, 
         unreadByFriendMap,
-        totalUnread 
+        totalUnread,
+        selectedChat: selectedChatRef.current
       });
+      
+      // ✅ Nếu đang xem chat với friend này → không cập nhật unread count (để tránh tăng)
+      const currentSelectedChat = selectedChatRef.current;
+      if (currentSelectedChat) {
+        const friendNumericId = Number(currentSelectedChat);
+        if (Number.isFinite(friendNumericId)) {
+          const roomId = getChatRoomKey(meId, friendNumericId);
+          const unreadForCurrentChat = unreadCounts[roomId] || 0;
+          if (unreadForCurrentChat > 0) {
+            console.log('[Social] User is viewing this chat, marking as read to prevent unread increase');
+            markConversationAsRead(currentSelectedChat);
+            // ✅ Trừ unread của chat đang xem khỏi total
+            const adjustedTotal = totalUnread - unreadForCurrentChat;
+            const adjustedUnreadByFriend = { ...unreadByFriendMap };
+            delete adjustedUnreadByFriend[currentSelectedChat];
+            setUnreadByFriend(adjustedUnreadByFriend);
+            setUnreadMessagesCount(Math.max(0, adjustedTotal));
+            return;
+          }
+        }
+      }
       
       setUnreadByFriend(unreadByFriendMap);
       setUnreadMessagesCount(totalUnread);
@@ -1227,10 +1242,21 @@ const Social = () => {
             }
 
         } else if (n?.type === 'INVITE') {
-
-          pushBubble(`${n.senderName || 'Someone'} invited you to collaborate on a playlist`, "info");
+          const playlistName = n?.metadata?.playlistName || n?.body?.match(/playlist[:\s]+([^,]+)/i)?.[1] || 'playlist';
+          pushBubble(`${n.senderName || 'Someone'} mời bạn cộng tác: ${playlistName}`, "info");
 
           loadCollabInvites().catch(() => { void 0; });
+          
+        } else if (n?.type === 'INVITE_ACCEPTED') {
+          const playlistName = n?.metadata?.playlistName || n?.body?.match(/playlist[:\s]+([^,]+)/i)?.[1] || 'playlist';
+          pushBubble(`${n.senderName || 'Someone'} đã chấp nhận lời mời cộng tác: ${playlistName}`, "success");
+          
+          // Refresh collaborators nếu đang ở trang playlist detail
+          window.dispatchEvent(new CustomEvent('app:collab-invite-accepted', { detail: { playlistId: n?.metadata?.playlistId } }));
+          
+        } else if (n?.type === 'INVITE_REJECTED') {
+          const playlistName = n?.metadata?.playlistName || n?.body?.match(/playlist[:\s]+([^,]+)/i)?.[1] || 'playlist';
+          pushBubble(`${n.senderName || 'Someone'} đã từ chối lời mời cộng tác: ${playlistName}`, "info");
 
         } else if (n?.type === 'FRIEND_REQUEST') {
           console.log('🔔 [DEBUG] FRIEND_REQUEST notification received:', {
@@ -1909,49 +1935,46 @@ const Social = () => {
 
 
   const handleAcceptCollabInvite = async (inviteId: number) => {
-
     try {
-
+      // Lấy thông tin invite trước khi accept để hiển thị message chi tiết
+      const invite = collabInvites.find(inv => inv.id === inviteId);
+      const playlistName = invite?.playlist?.name || invite?.playlistName || 'playlist';
+      
       await playlistCollabInvitesApi.accept(inviteId);
-
-      pushBubble('Collab invite accepted', 'success');
-
+      
+      pushBubble(`Đã chấp nhận lời mời cộng tác: ${playlistName}`, 'success');
+      
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
-
+      
       await loadCollabInvites();
-
+      
+      // Dispatch event để refresh collaborators trong PlaylistDetail
+      window.dispatchEvent(new CustomEvent('app:collab-invite-accepted', { detail: { inviteId, playlistId: invite?.playlistId } }));
     } catch (e: unknown) {
-
       const msg = e instanceof Error ? e.message : String(e);
-
-      pushBubble(msg || 'Unable to accept invite', 'error');
-
+      pushBubble(msg || 'Không thể chấp nhận lời mời', 'error');
     }
-
   };
 
 
 
   const handleRejectCollabInvite = async (inviteId: number) => {
-
     try {
-
+      // Lấy thông tin invite trước khi reject để hiển thị message chi tiết
+      const invite = collabInvites.find(inv => inv.id === inviteId);
+      const playlistName = invite?.playlist?.name || invite?.playlistName || 'playlist';
+      
       await playlistCollabInvitesApi.reject(inviteId);
-
-      pushBubble('Collab invite declined', 'info');
-
+      
+      pushBubble(`Đã từ chối lời mời cộng tác: ${playlistName}`, 'info');
+      
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
-
+      
       await loadCollabInvites();
-
     } catch (e: unknown) {
-
       const msg = e instanceof Error ? e.message : String(e);
-
-      pushBubble(msg || 'Unable to decline invite', 'error');
-
+      pushBubble(msg || 'Không thể từ chối lời mời', 'error');
     }
-
   };
 
 
@@ -2560,23 +2583,88 @@ const Social = () => {
       const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
       if (!me) throw new Error('Missing user id');
       const friend = friends.find(f => f.id === friendId);
-      if (!friend) return;
+      if (!friend) {
+        pushBubble('Friend not found', 'error');
+        return;
+      }
       const ok = window.confirm(`Unfriend ${friend.name}?`);
       if (!ok) return;
+      
+      // friendId parameter là string của friendUserId hoặc id
+      // friend.friendUserId là userId của friend (number)
+      // friend.relationshipId là relationshipId (number)
+      // API cần friendUserId (userId của friend), không phải relationshipId
       const friendUserId = friend.friendUserId ?? Number(friendId);
-      await friendsApi.remove(Number(me), Number(friendUserId), {
+      
+      if (!friendUserId || !Number.isFinite(friendUserId)) {
+        pushBubble('Invalid friend ID', 'error');
+        return;
+      }
+      
+      console.log('[Social] Unfriending:', {
+        me: Number(me),
+        friendId: friendId,
+        friendUserId: friendUserId,
+        relationshipId: friend.relationshipId,
+        friend: friend
+      });
+      
+      await friendsApi.remove(Number(me), friendUserId, {
         relationshipId: friend.relationshipId,
       });
+      
       await loadFriends();
       if (selectedChat === friendId) setSelectedChat(null);
       pushBubble('Friend removed', 'info');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
+      console.error('[Social] Unfriend error:', e);
       pushBubble(msg || 'Failed to remove friend', 'error');
     }
   };
 
 
+
+  if (loadingFriends && friends.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-dark">
+        <div className="container mx-auto px-4 py-8 pb-28">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-2 mb-6 gap-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="bg-card/50 border-border/50">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <Skeleton className="h-12 w-12 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card/50 border-border/50">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
 

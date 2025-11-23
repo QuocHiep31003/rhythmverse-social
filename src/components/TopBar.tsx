@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { Badge } from "@/components/ui/badge";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 
 import { arcApi, authApi } from "@/services/api";
@@ -102,10 +102,14 @@ const TopBar = () => {
   const { firebaseReady } = useFirebaseAuth(currentUserId);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // ✅ Check nếu đang ở social/chat page - không tăng unread count
+  const isOnSocialPage = location.pathname === '/social' || location.pathname.startsWith('/social');
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -399,6 +403,13 @@ const TopBar = () => {
       currentUserId,
       (unreadCounts, totalUnread) => {
         lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
+        
+        // ✅ Nếu đang ở social page → không cập nhật unread count (để tránh tăng khi đang xem)
+        if (isOnSocialPage) {
+          console.log('[TopBar] Skipping unread count update - user is on social page:', totalUnread);
+          return;
+        }
+        
         console.log('[TopBar] Chat unread counts updated from Firebase:', { unreadCounts, totalUnread });
         setUnreadMsgCount(totalUnread);
       }
@@ -434,7 +445,7 @@ const TopBar = () => {
         pollInterval = null;
       }
     };
-  }, [currentUserId, firebaseReady]);
+  }, [currentUserId, firebaseReady, isOnSocialPage]); // ✅ Re-run khi location thay đổi
 
   useEffect(() => {
     if (!notifOpen || !currentUserId || !firebaseReady) return;

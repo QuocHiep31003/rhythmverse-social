@@ -27,9 +27,10 @@ interface ShareButtonProps {
   open?: boolean; // Controlled open state
   onOpenChange?: (open: boolean) => void; // Controlled open change handler
   triggerOpen?: boolean; // Trigger to open dialog programmatically
+  isPrivate?: boolean; // If true, disable share button for private playlists
 }
 
-const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOpen, onOpenChange: controlledOnOpenChange, triggerOpen }: ShareButtonProps) => {
+const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOpen, onOpenChange: controlledOnOpenChange, triggerOpen, isPrivate }: ShareButtonProps) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = controlledOnOpenChange || setInternalOpen;
@@ -92,6 +93,10 @@ const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOp
 
   const handleShare = async () => {
     try {
+      if (isPrivate && type === 'playlist') {
+        toast.error("Không thể chia sẻ", { description: "Playlist này là private. Vui lòng đổi visibility sang Public hoặc Friends Only để chia sẻ." });
+        return;
+      }
       if (!meId) {
         toast.error("Unable to share", { description: "Missing sender information." });
         return;
@@ -235,12 +240,17 @@ const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOp
           variant="ghost"
           size="icon"
           className="h-8 w-8"
+          disabled={isPrivate}
           onClick={(e) => {
             e.stopPropagation();
+            if (isPrivate) {
+              toast.error("Không thể chia sẻ", { description: "Playlist này là private. Vui lòng đổi visibility sang Public hoặc Friends Only để chia sẻ." });
+              return;
+            }
             setOpen(true);
           }}
         >
-          <Share2 className="w-4 h-4" />
+          <Share2 className={`w-4 h-4 ${isPrivate ? 'opacity-50' : ''}`} />
         </Button>
       </DialogTrigger>
       )}

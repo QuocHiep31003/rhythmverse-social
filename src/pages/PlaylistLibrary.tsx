@@ -102,7 +102,8 @@ const PlaylistLibrary = () => {
                 coverUrl: p.coverUrl || null,
                 ownerId,
                 ownerName: p.ownerName ?? p.owner?.name,
-                ownerAvatar: p.ownerAvatar ?? null,
+                ownerAvatar: p.ownerAvatar ?? (p.owner as { avatar?: string | null })?.avatar ?? null,
+                // Note: Nếu ownerAvatar vẫn null, có thể cần fetch từ user API (sẽ làm sau nếu cần)
                 isOwner: ownerId === currentUserId,
                 isCollaborator: ownerId !== currentUserId,
                 role: (p as { role?: string | null }).role ?? null,
@@ -124,7 +125,7 @@ const PlaylistLibrary = () => {
             coverUrl: p.coverUrl || null,
             ownerId: p.ownerId ?? p.owner?.id ?? 0,
             ownerName: p.ownerName ?? p.owner?.name,
-            ownerAvatar: p.ownerAvatar ?? null,
+            ownerAvatar: p.ownerAvatar ?? (p.owner as { avatar?: string | null })?.avatar ?? null,
             isOwner: false,
             isCollaborator: false,
             role: null,

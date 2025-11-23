@@ -14,6 +14,7 @@ export interface PlaylistItem {
   updatedAt?: string | null;
   ownerId?: number;
   ownerName?: string;
+  ownerAvatar?: string | null;
   isOwner?: boolean;
   isCollaborator?: boolean;
   role?: CollaboratorRole;
