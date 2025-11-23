@@ -8,12 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music } from "lucide-react";
+import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { songsApi } from "@/services/api/songApi";
@@ -37,7 +47,7 @@ import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { playSong, setQueue, isPlaying, currentSong } = useMusic();
+  const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
 
   const [isLiked, setIsLiked] = useState(false);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
@@ -71,6 +81,9 @@ const PlaylistDetail = () => {
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [removingCollaboratorId, setRemovingCollaboratorId] = useState<number | null>(null);
+  const [removeCollabDialogOpen, setRemoveCollabDialogOpen] = useState(false);
+  const [pendingRemoveCollab, setPendingRemoveCollab] = useState<{ id: number; name?: string } | null>(null);
+  const [leaveCollabDialogOpen, setLeaveCollabDialogOpen] = useState(false);
   const [recommendedSongs, setRecommendedSongs] = useState<SearchSongResult[]>([]);
   const [loadingRecommended, setLoadingRecommended] = useState(false);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
@@ -282,7 +295,7 @@ const PlaylistDetail = () => {
   // Luôn hiện recommend (không chỉ khi playlist thay đổi)
   const loadRecommended = useCallback(async () => {
     if (!playlist) {
-      setRecommendedSongs([]);
+        setRecommendedSongs([]);
       setLoadingRecommended(false);
       return;
     }
@@ -299,8 +312,8 @@ const PlaylistDetail = () => {
       } finally {
         setLoadingRecommended(false);
       }
-      return;
-    }
+        return;
+      }
       
       setLoadingRecommended(true);
       try {
@@ -394,16 +407,16 @@ const PlaylistDetail = () => {
         if (genreIds.size > 0) {
           const genreIdArray = Array.from(genreIds).slice(0, 2);
           genreIdArray.forEach((genreId) => {
-            recommendationPromises.push(
+          recommendationPromises.push(
               songsApi.getWithoutAlbum({ genreId, size: 8 })
-                .then(res => {
-                  const content = res.content || [];
-                  return content.filter(
-                    (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                  ) as SearchSongResult[];
-                })
-                .catch(() => [] as SearchSongResult[])
-            );
+              .then(res => {
+                const content = res.content || [];
+                return content.filter(
+                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+                ) as SearchSongResult[];
+              })
+              .catch(() => [] as SearchSongResult[])
+          );
           });
         }
         
@@ -411,16 +424,16 @@ const PlaylistDetail = () => {
         if (artistIds.size > 0) {
           const artistIdArray = Array.from(artistIds).slice(0, 2);
           artistIdArray.forEach((artistId) => {
-            recommendationPromises.push(
-              songsApi.getAll({ artistId, size: 8, page: 0 })
-                .then(res => {
-                  const content = res.content || [];
-                  return content.filter(
-                    (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                  ) as SearchSongResult[];
-                })
-                .catch(() => [] as SearchSongResult[])
-            );
+          recommendationPromises.push(
+            songsApi.getAll({ artistId, size: 8, page: 0 })
+              .then(res => {
+                const content = res.content || [];
+                return content.filter(
+                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+                ) as SearchSongResult[];
+              })
+              .catch(() => [] as SearchSongResult[])
+          );
           });
         }
         
@@ -485,7 +498,7 @@ const PlaylistDetail = () => {
         setLoadingRecommended(false);
       }
   }, [playlist]);
-  
+    
   // Load recommend khi playlist thay đổi (kể cả khi không có bài hát)
   useEffect(() => {
     if (playlist) {
@@ -1154,11 +1167,17 @@ const PlaylistDetail = () => {
 
   const toggleSelectFriend = (fid: number) => setSelectedFriendIds((prev) => prev.includes(fid) ? prev.filter(x => x !== fid) : [...prev, fid]);
 
-  const handleRemoveCollaborator = async (collaboratorId: number, collaboratorName?: string) => {
+  const handleRemoveCollaborator = (collaboratorId: number, collaboratorName?: string) => {
     if (!playlist || !permissions.isOwner) return;
-    const confirmed = window.confirm(`Bạn có chắc muốn gỡ ${collaboratorName || "cộng tác viên này"} khỏi playlist?`);
-    if (!confirmed) return;
+    setPendingRemoveCollab({ id: collaboratorId, name: collaboratorName });
+    setRemoveCollabDialogOpen(true);
+  };
+
+  const confirmRemoveCollaborator = async () => {
+    if (!playlist || !pendingRemoveCollab) return;
+    const { id: collaboratorId, name: collaboratorName } = pendingRemoveCollab;
     setRemovingCollaboratorId(collaboratorId);
+    setRemoveCollabDialogOpen(false);
     try {
       await playlistCollaboratorsApi.remove(playlist.id, collaboratorId);
       toast({
@@ -1180,13 +1199,18 @@ const PlaylistDetail = () => {
       });
     } finally {
       setRemovingCollaboratorId(null);
+      setPendingRemoveCollab(null);
     }
   };
 
-  const handleLeaveCollaboration = async () => {
+  const handleLeaveCollaboration = () => {
     if (!playlist || typeof meId !== "number" || !Number.isFinite(meId)) return;
-    const confirmed = window.confirm("Bạn có chắc muốn rời khỏi playlist này?");
-    if (!confirmed) return;
+    setLeaveCollabDialogOpen(true);
+  };
+
+  const confirmLeaveCollaboration = async () => {
+    if (!playlist || typeof meId !== "number" || !Number.isFinite(meId)) return;
+    setLeaveCollabDialogOpen(false);
     setLeaveLoading(true);
     try {
       await playlistCollaboratorsApi.leave(playlist.id);
@@ -1390,13 +1414,18 @@ const PlaylistDetail = () => {
 
   const playAllSongs = () => {
     if (!playlist || !playlist.songs.length) return;
-    setQueue(playlist.songs);
-    playSong(playlist.songs[0]);
-    toast({
-      title: `Playing ${playlist?.title}`,
-      description: `${playlist?.songs.length} songs`,
-      duration: 3000,
-    });
+    if (isPlaying) {
+      togglePlay();
+    } else {
+      // Nếu đang có bài hát trong playlist đang phát, resume bài đó
+      if (currentSong && playlist.songs.find((s) => s.id === currentSong.id)) {
+        playSong(currentSong);
+      } else {
+        // Nếu không, play bài đầu tiên
+        setQueue(playlist.songs);
+        playSong(playlist.songs[0]);
+      }
+    }
   };
 
   const handlePlaySong = (song: Song) => {
@@ -1721,44 +1750,54 @@ const PlaylistDetail = () => {
                     );
                   })}
                   {collaboratorEntries.length > 5 && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="relative">
-                            <Avatar className="h-8 w-8 cursor-pointer border-2 border-background ring-2 ring-border/60 hover:scale-110 transition-transform">
-                              <AvatarFallback className="bg-muted text-muted-foreground text-xs font-semibold">
-                                +{collaboratorEntries.length - 5}
-                              </AvatarFallback>
-                            </Avatar>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" className="max-w-xs">
-                          <div className="space-y-1">
-                            {collaboratorEntries.slice(5).map((member) => {
-                              const initials = member.name
-                                .split(" ")
-                                .map((n) => n.charAt(0))
-                                .join("")
-                                .slice(0, 2)
-                                .toUpperCase();
-                              return (
-                                <div key={member.userId} className="flex items-center gap-2">
-                                  <Avatar className="h-6 w-6">
-                                    {member.avatar ? (
-                                      <AvatarImage src={member.avatar} alt={member.name} />
-                                    ) : null}
-                                    <AvatarFallback className="bg-gradient-primary text-white text-xs">
-                                      {initials}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <span className="text-sm">{member.name}</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <div className="relative">
+                          <Avatar className="h-8 w-8 cursor-pointer border-2 border-background ring-2 ring-border/60 hover:scale-110 transition-transform">
+                            <AvatarFallback className="bg-muted text-muted-foreground text-xs font-semibold">
+                              +{collaboratorEntries.length - 5}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3" side="bottom" align="start">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                          {collaboratorEntries.length - 5} more collaborator{collaboratorEntries.length - 5 > 1 ? 's' : ''}
+                        </p>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {collaboratorEntries.slice(5).map((member) => {
+                            const initials = member.name
+                              .split(" ")
+                              .map((n) => n.charAt(0))
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase();
+                            const ringClass =
+                              member.isOwner
+                                ? "ring-2 ring-primary/60"
+                                : member.role === CollaboratorRole.EDITOR
+                                  ? "ring-2 ring-emerald-500/60"
+                                  : "ring-2 ring-border/60";
+                            return (
+                              <div key={member.userId} className="flex items-center gap-2">
+                                <Avatar className={`h-8 w-8 ${ringClass}`}>
+                                  {member.avatar ? (
+                                    <AvatarImage src={member.avatar} alt={member.name} />
+                                  ) : null}
+                                  <AvatarFallback className="bg-gradient-primary text-white text-xs">
+                                    {initials}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{member.name}</p>
+                                  <p className="text-xs text-muted-foreground">{member.roleLabel}</p>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   )}
                 </div>
               </div>
@@ -1766,8 +1805,17 @@ const PlaylistDetail = () => {
 
             <div className="flex items-center gap-4">
               <Button size="lg" onClick={playAllSongs} className="bg-primary hover:bg-primary/90" disabled={!playlist || playlist.songs.length === 0}>
-                <Play className="w-5 h-5 mr-2" />
-                Play All
+                {isPlaying && currentSong && playlist?.songs.find((s) => s.id === currentSong.id) ? (
+                  <>
+                    <Pause className="w-5 h-5 mr-2" />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-2" />
+                    Play All
+                  </>
+                )}
               </Button>
 
               <Button
@@ -1844,9 +1892,9 @@ const PlaylistDetail = () => {
                                   ) : (
                                     <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
                                       <Music className="w-6 h-6 text-muted-foreground" />
-                                    </div>
+                              </div>
                                   )}
-                                </div>
+                            </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium truncate">{s.name || s.songName || 'Unknown Song'}</p>
                                   {artistNames && (
@@ -2071,6 +2119,51 @@ const PlaylistDetail = () => {
           return t ? `Bạn có chắc muốn xóa "${t}" khỏi playlist này?` : 'Bạn có chắc muốn xóa bài hát này khỏi playlist?';
         })()}
       />
+
+      {/* Dialog xác nhận gỡ collaborator */}
+      <AlertDialog open={removeCollabDialogOpen} onOpenChange={setRemoveCollabDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gỡ cộng tác viên</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn gỡ {pendingRemoveCollab?.name || "cộng tác viên này"} khỏi playlist? Họ sẽ không còn quyền truy cập vào playlist này.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removingCollaboratorId !== null}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemoveCollaborator}
+              disabled={removingCollaboratorId !== null}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {removingCollaboratorId !== null ? "Đang xóa..." : "Xác nhận"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog xác nhận rời khỏi collaboration */}
+      <AlertDialog open={leaveCollabDialogOpen} onOpenChange={setLeaveCollabDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rời khỏi playlist</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn rời khỏi playlist này? Bạn sẽ không còn là cộng tác viên và không thể truy cập playlist này nữa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={leaveLoading}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmLeaveCollaboration}
+              disabled={leaveLoading}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {leaveLoading ? "Đang rời..." : "Xác nhận"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Footer />
       
       {selectedSongForPlaylist && (

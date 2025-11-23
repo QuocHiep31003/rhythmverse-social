@@ -323,7 +323,7 @@ const NotificationsDropdown = ({ onClose }: Props) => {
                       if (meta?.roomId) {
                         navigate(`/social?chat=${meta.roomId}`);
                       } else {
-                        navigate('/social');
+                      navigate('/social');
                       }
                       return;
                     }

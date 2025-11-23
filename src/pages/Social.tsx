@@ -43,6 +43,16 @@ import { SocialInlineCard } from "@/components/social/SocialInlineCard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 // Realtime notification DTO from /user/queue/notifications
@@ -167,7 +177,7 @@ const Social = () => {
 
   // Track if selectedChat was set by user click (true) or auto-select (false)
   const isUserSelectedRef = useRef<boolean>(false);
-  
+
   const [selectedChat, setSelectedChat] = useState<string | null>(() => {
     try {
       return localStorage.getItem('lastChatFriendId');
@@ -307,6 +317,8 @@ const Social = () => {
   const [loadingCollabInvites, setLoadingCollabInvites] = useState<boolean>(false);
 
   const [expandedInviteId, setExpandedInviteId] = useState<number | null>(null);
+  const [unfriendDialogOpen, setUnfriendDialogOpen] = useState(false);
+  const [pendingUnfriend, setPendingUnfriend] = useState<{ friendId: string; friendName: string } | null>(null);
 
   // Invite link preview state
   // Legacy states removed
@@ -448,18 +460,18 @@ const Social = () => {
             }
             window.__chatRefreshPending[refreshKey] = true;
             // Fetch immediately, no setTimeout delay for better UX
-            chatApi
-              .getHistory(meId, friendNumericId)
-              .then((history) => {
-                const normalizedHistory = history.map((h) => ({
-                  ...h,
-                  contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
-                }));
+              chatApi
+                .getHistory(meId, friendNumericId)
+                .then((history) => {
+                  const normalizedHistory = history.map((h) => ({
+                    ...h,
+                    contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
+                  }));
                 
-                const mapped = normalizedHistory.map((h) => parseIncomingContent(h, friendsRef.current.length ? friendsRef.current : friends));
-                setChatByFriend((prev) => {
-                  const existing = prev[friendKey] || [];
-                  const historyIds = new Set(mapped.map((m) => String(m.id)));
+                  const mapped = normalizedHistory.map((h) => parseIncomingContent(h, friendsRef.current.length ? friendsRef.current : friends));
+                  setChatByFriend((prev) => {
+                    const existing = prev[friendKey] || [];
+                    const historyIds = new Set(mapped.map((m) => String(m.id)));
                   const historyByBackendId = new Map<number, Message>();
                   mapped.forEach((msg) => {
                     if (msg.backendId) {
@@ -505,28 +517,28 @@ const Social = () => {
                     }
                   });
                   
-                  // Keep temp messages that aren't in history yet
-                  existing.forEach((msg) => {
-                    if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
+                    // Keep temp messages that aren't in history yet
+                    existing.forEach((msg) => {
+                      if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
                       const alreadyAdded = updated.some(m => m.id === msg.id);
                       if (!alreadyAdded) {
                         updated.push(msg);
                       }
-                    }
-                  });
+                      }
+                    });
                   
                   return { ...prev, [friendKey]: sortMessagesChronologically(updated) };
+                  });
+                  if (window.__chatRefreshPending) {
+                    delete window.__chatRefreshPending[refreshKey];
+                  }
+                })
+                .catch((err) => {
+                  console.warn("[Social] Failed to refresh message history:", err);
+                  if (window.__chatRefreshPending) {
+                    delete window.__chatRefreshPending[refreshKey];
+                  }
                 });
-                if (window.__chatRefreshPending) {
-                  delete window.__chatRefreshPending[refreshKey];
-                }
-              })
-              .catch((err) => {
-                console.warn("[Social] Failed to refresh message history:", err);
-                if (window.__chatRefreshPending) {
-                  delete window.__chatRefreshPending[refreshKey];
-                }
-              });
           }
         }
       }
@@ -1450,7 +1462,7 @@ const Social = () => {
         console.log('[Social] Stopping typing indicator:', { roomId, meId });
         void chatApi.typingStop(roomId, meId).catch((error) => {
           console.warn("[Social] Failed to stop typing indicator", error?.message || error);
-        });
+      });
       }
     };
 
@@ -1458,7 +1470,7 @@ const Social = () => {
     if (typingDebounceTimeoutRef.current) {
       clearTimeout(typingDebounceTimeoutRef.current);
       typingDebounceTimeoutRef.current = null;
-    }
+      }
 
     if (trimmed.length > 0) {
       // Debounce 400ms before starting typing
@@ -1469,7 +1481,7 @@ const Social = () => {
             console.log('[Social] Starting typing indicator:', { roomId, meId });
             void chatApi.typingStart(roomId, meId).catch((error) => {
               console.warn("[Social] Failed to start typing indicator", error?.message || error);
-            });
+          });
           }
         }
         typingDebounceTimeoutRef.current = null;
@@ -1939,15 +1951,15 @@ const Social = () => {
       // Lấy thông tin invite trước khi accept để hiển thị message chi tiết
       const invite = collabInvites.find(inv => inv.id === inviteId);
       const playlistName = invite?.playlist?.name || invite?.playlistName || 'playlist';
-      
+
       await playlistCollabInvitesApi.accept(inviteId);
-      
+
       pushBubble(`Đã chấp nhận lời mời cộng tác: ${playlistName}`, 'success');
-      
+
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
-      
+
       await loadCollabInvites();
-      
+
       // Dispatch event để refresh collaborators trong PlaylistDetail
       window.dispatchEvent(new CustomEvent('app:collab-invite-accepted', { detail: { inviteId, playlistId: invite?.playlistId } }));
     } catch (e: unknown) {
@@ -1963,13 +1975,13 @@ const Social = () => {
       // Lấy thông tin invite trước khi reject để hiển thị message chi tiết
       const invite = collabInvites.find(inv => inv.id === inviteId);
       const playlistName = invite?.playlist?.name || invite?.playlistName || 'playlist';
-      
+
       await playlistCollabInvitesApi.reject(inviteId);
-      
+
       pushBubble(`Đã từ chối lời mời cộng tác: ${playlistName}`, 'info');
-      
+
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
-      
+
       await loadCollabInvites();
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -2094,7 +2106,7 @@ const Social = () => {
           console.log('📖 [Social] History merged, NOT marking as read (only mark when user clicks)');
         }
       } catch (error) {
-        console.error('[Social] Failed to load chat history:', error);
+          console.error('[Social] Failed to load chat history:', error);
         // Không mark là đã load nếu lỗi, để có thể retry
       }
     };
@@ -2207,7 +2219,7 @@ const Social = () => {
   };
 
   const isSelectedFriendTyping = selectedChat ? !!typingByFriend[selectedChat] : false;
-  
+
   // ✅ Removed debug typing status useEffect - gây spam log
 
   // ✅ Merge reactions into messages for selected chat - chỉ merge khi reactionsByMessage thay đổi
@@ -2578,7 +2590,26 @@ const Social = () => {
 
 
 
-  const handleUnfriend = async (friendId: string) => {
+  const handleUnfriend = (friendId: string) => {
+    const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+    if (!me) {
+      pushBubble('Missing user id', 'error');
+      return;
+    }
+    const friend = friends.find(f => f.id === friendId);
+    if (!friend) {
+      pushBubble('Friend not found', 'error');
+      return;
+    }
+    setPendingUnfriend({ friendId, friendName: friend.name });
+    setUnfriendDialogOpen(true);
+  };
+
+  const confirmUnfriend = async () => {
+    if (!pendingUnfriend) return;
+    const { friendId, friendName } = pendingUnfriend;
+    setUnfriendDialogOpen(false);
+    
     try {
       const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
       if (!me) throw new Error('Missing user id');
@@ -2587,8 +2618,6 @@ const Social = () => {
         pushBubble('Friend not found', 'error');
         return;
       }
-      const ok = window.confirm(`Unfriend ${friend.name}?`);
-      if (!ok) return;
       
       // friendId parameter là string của friendUserId hoặc id
       // friend.friendUserId là userId của friend (number)
@@ -2620,6 +2649,8 @@ const Social = () => {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[Social] Unfriend error:', e);
       pushBubble(msg || 'Failed to remove friend', 'error');
+    } finally {
+      setPendingUnfriend(null);
     }
   };
 
@@ -2811,7 +2842,10 @@ const Social = () => {
                 onRejectInvite={handleRejectCollabInvite}
                 onCreateInviteLink={handleCreateInviteLink}
                 onUnfriend={handleUnfriend}
-                onSelectChat={setSelectedChat}
+                onSelectChat={(friendId) => {
+                  setActiveTab("chat");
+                  setSelectedChat(friendId);
+                }}
               />
             </TabsContent>
 
@@ -2820,6 +2854,27 @@ const Social = () => {
         </div>
 
       </div>
+
+      {/* Dialog xác nhận unfriend */}
+      <AlertDialog open={unfriendDialogOpen} onOpenChange={setUnfriendDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hủy kết bạn</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn hủy kết bạn với {pendingUnfriend?.friendName || "người này"}? Hành động này sẽ xóa tất cả tin nhắn và lịch sử trò chuyện giữa hai bạn.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmUnfriend}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Xác nhận
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <style>{`
         /* Hide scrollbar */
