@@ -259,7 +259,7 @@ const MusicPlayer = () => {
 
     const loadStreamUrl = async () => {
       try {
-        // Gọi BE lấy CloudFront HLS URL (không ký, không proxy)
+        // Gọi BE lấy CloudFront signed URL trực tiếp (TTL 60s)
         const { streamUrl, uuid } = await songsApi.getStreamUrl(currentSong.id);
         let finalStreamUrl = streamUrl;
         
@@ -267,30 +267,13 @@ const MusicPlayer = () => {
           throw new Error("No stream URL available");
         }
 
-        // QUAN TRỌNG: Load bitrate playlist (_128kbps.m3u8) thay vì master playlist (.m3u8)
-        // Master playlist sẽ khiến HLS player auto-fallback và retry → load thêm segment
-        // Backend trả về URL dạng: /api/songs/{songId}/stream-proxy/
-        // Cần append filename vào cuối URL
-        let useBitratePlaylist = false;
-        if (uuid && !finalStreamUrl.includes('_128kbps.m3u8')) {
-          // Nếu URL kết thúc bằng / hoặc không có filename, append bitrate playlist
-          if (finalStreamUrl.endsWith('/') || !finalStreamUrl.endsWith('.m3u8')) {
-            // Append filename vào cuối URL
-            finalStreamUrl = finalStreamUrl.replace(/\/$/, '') + '/' + uuid + '_128kbps.m3u8';
-            useBitratePlaylist = true;
-          } else if (finalStreamUrl.endsWith('.m3u8') && !finalStreamUrl.includes('_128kbps')) {
-            // Nếu đã có .m3u8 nhưng không phải bitrate playlist, thay thế filename
-            finalStreamUrl = finalStreamUrl.replace(/[^/]+\.m3u8$/, `${uuid}_128kbps.m3u8`);
-            useBitratePlaylist = true;
-          }
-          console.log("🔄 Converted to bitrate playlist:", finalStreamUrl);
-        }
-
+        // Backend đã trả về CloudFront signed URL trực tiếp cho _128kbps.m3u8
+        // Không cần append filename nữa, dùng trực tiếp
         const finalStreamUrlAbsolute = finalStreamUrl.startsWith("http")
           ? finalStreamUrl
           : `${window.location.origin}${finalStreamUrl}`;
 
-        console.log("Using backend proxy HLS URL (bitrate playlist):", finalStreamUrlAbsolute);
+        console.log("Using CloudFront signed URL (TTL 60s):", finalStreamUrlAbsolute);
 
         if (Hls.isSupported()) {
           hls = new Hls({
@@ -422,11 +405,32 @@ const MusicPlayer = () => {
             let shouldShowError = true;
             let shouldRecover = false;
             
-            // QUAN TRỌNG: Nếu lỗi 404 (file không tồn tại), có thể là bitrate playlist chưa có
-            // Fallback về master playlist nếu đang dùng bitrate playlist
+            // QUAN TRỌNG: Nếu lỗi 404 (file không tồn tại), có thể là file đã bị xóa trên S3
+            // Check response code để xác định
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR && 
                 (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
-                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR)) {
+                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
+                 data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR)) {
+              const response = data.response;
+              // Nếu là 404 hoặc 403 (signed URL hết hạn hoặc file không tồn tại), file đã bị xóa
+              if (response && (response.code === 404 || response.status === 404 || 
+                               response.code === 403 || response.status === 403)) {
+                console.error("⚠️ Audio file not found (404/403), likely deleted from S3 or CloudFront cache expired");
+                setIsLoading(false);
+                toast({
+                  title: "Bài hát không khả dụng",
+                  description: "File audio đã bị xóa hoặc không còn khả dụng. Đang chuyển sang bài tiếp theo...",
+                  variant: "destructive",
+                  duration: 3000,
+                });
+                // Auto skip to next song
+                setTimeout(() => {
+                  handleNextClick();
+                }, 1000);
+                return; // Không thử recover nữa
+              }
+              
+              // Nếu là bitrate playlist chưa có, fallback về master playlist
               const currentUrl = hls?.url || '';
               if (currentUrl.includes('_128kbps.m3u8')) {
                 console.warn("⚠️ Bitrate playlist not found, falling back to master playlist");
@@ -533,14 +537,35 @@ const MusicPlayer = () => {
             variant: "destructive",
           });
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to start proxy stream:", error);
         setIsLoading(false);
-        toast({
-          title: "Playback error",
-          description: "Failed to get stream URL. Please try again.",
-          variant: "destructive",
-        });
+        
+        // Check if error is due to audio file not found on S3
+        const errorMessage = error?.response?.data?.error || error?.response?.data?.message || error?.message || "";
+        const isAudioNotFound = error?.response?.status === 404 || 
+                                errorMessage.includes("AUDIO_NOT_FOUND") ||
+                                errorMessage.includes("not found on S3") ||
+                                errorMessage.includes("may have been deleted");
+        
+        if (isAudioNotFound) {
+          toast({
+            title: "Bài hát không khả dụng",
+            description: "File audio đã bị xóa. Đang chuyển sang bài tiếp theo...",
+            variant: "destructive",
+            duration: 3000,
+          });
+          // Auto skip to next song after 1 second
+          setTimeout(() => {
+            handleNextClick();
+          }, 1000);
+        } else {
+          toast({
+            title: "Playback error",
+            description: "Failed to get stream URL. Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     };
 
