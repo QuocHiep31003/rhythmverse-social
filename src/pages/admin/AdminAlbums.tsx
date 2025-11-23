@@ -392,7 +392,7 @@ const AdminAlbums = () => {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    placeholder="Tìm kiếm album hoặc nghệ sĩ..."
+                    placeholder="Search albums or artists..."
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
@@ -402,7 +402,7 @@ const AdminAlbums = () => {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                  <span className="text-sm text-muted-foreground">Show:</span>
                   <select
                     value={pageSize}
                     onChange={(e) => {
@@ -416,7 +416,7 @@ const AdminAlbums = () => {
                     <option value={20}>20</option>
                     <option value={50}>50</option>
                   </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  <span className="text-sm text-muted-foreground">per page</span>
                 </div>
               </div>
 
@@ -436,7 +436,7 @@ const AdminAlbums = () => {
                     <SelectValue placeholder="Nghệ sĩ" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả nghệ sĩ</SelectItem>
+                    <SelectItem value="all">All artists</SelectItem>
                     {artists.map((a) => (
                       <SelectItem key={a.id} value={a.id.toString()}>
                         {a.name}
@@ -456,7 +456,7 @@ const AdminAlbums = () => {
                     <SelectValue placeholder="Năm" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tất cả năm</SelectItem>
+                    <SelectItem value="all">All years</SelectItem>
                     {availableYears.map((y) => (
                       <SelectItem key={y} value={y?.toString() || ""}>
                         {y}
@@ -473,19 +473,19 @@ const AdminAlbums = () => {
                   }}
                 >
                   <SelectTrigger className="w-[180px] bg-background/50">
-                    <SelectValue placeholder="Sắp xếp" />
+                    <SelectValue placeholder="Sort" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="name-asc">Tên A-Z</SelectItem>
-                    <SelectItem value="name-desc">Tên Z-A</SelectItem>
-                    <SelectItem value="date-newest">Mới nhất</SelectItem>
-                    <SelectItem value="date-oldest">Cũ nhất</SelectItem>
+                    <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                    <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                    <SelectItem value="date-newest">Release date (Newest)</SelectItem>
+                    <SelectItem value="date-oldest">Release date (Oldest)</SelectItem>
                   </SelectContent>
                 </Select>
 
                 {(filterArtist !== "all" || filterYear !== "all" || searchQuery || sortBy !== "name-asc") && (
                   <Button variant="ghost" size="sm" onClick={handleClearFilters}>
-                    Xóa bộ lọc
+                    Clear filters
                   </Button>
                 )}
               </div>
@@ -570,7 +570,7 @@ const AdminAlbums = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 flex-shrink-0">
             <div className="text-sm text-muted-foreground">
-              Hiển thị {albums.length} trên tổng {totalElements}
+              Showing {albums.length} of {totalElements} albums
             </div>
             <div className="flex items-center gap-1">
               <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]">

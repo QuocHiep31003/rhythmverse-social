@@ -25,7 +25,7 @@ import { mapToPlayerSong } from "@/lib/utils";
 const Top100 = () => {
   const [likedItems, setLikedItems] = useState<string[]>([]);
   const [topSongs, setTopSongs] = useState<any[]>([]);
-  const { playSong, setQueue } = useMusic();
+  const { playSong, setQueue, addToQueue, queue } = useMusic();
   const [isLoading, setIsLoading] = useState(true);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
@@ -179,6 +179,42 @@ const Top100 = () => {
       title: likedItems.includes(itemId) ? "Removed from favorites" : "Added to favorites",
       duration: 2000,
     });
+  };
+
+  const handleAddToQueue = (song: any) => {
+    const formattedSong = {
+      id: song.id,
+      name: song.name || song.songName,
+      songName: song.songName || song.name,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+      cover: song.cover,
+      audioUrl: song.audioUrl,
+      uuid: song.uuid,
+    };
+
+    // Kiểm tra xem bài hát đã có trong queue chưa
+    const existingIndex = queue.findIndex(s => String(s.id) === String(song.id));
+    
+    if (existingIndex >= 0) {
+      // Nếu đã có, remove và add lại ở cuối
+      const newQueue = queue.filter(s => String(s.id) !== String(song.id));
+      setQueue([...newQueue, formattedSong]);
+      toast({
+        title: "Đã di chuyển bài hát",
+        description: `${song.name || song.songName || "Bài hát"} đã được đưa ra sau cùng trong danh sách phát`,
+        duration: 2000,
+      });
+    } else {
+      // Nếu chưa có, add vào cuối
+      addToQueue(formattedSong);
+      toast({
+        title: "Đã thêm vào danh sách phát",
+        description: `${song.name || song.songName || "Bài hát"} đã được thêm vào cuối danh sách`,
+        duration: 2000,
+      });
+    }
   };
 
   return (

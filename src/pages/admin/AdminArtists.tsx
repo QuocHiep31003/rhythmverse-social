@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,15 @@ const COUNTRIES = [
 
 const DEBUT_YEARS = Array.from({ length: new Date().getFullYear() - 1949 }, (_, i) => (new Date().getFullYear() - i).toString());
 
+const SORT_OPTIONS = [
+  { label: "Name (A-Z)", value: "name,asc" },
+  { label: "Name (Z-A)", value: "name,desc" },
+  { label: "Date created (Newest)", value: "createdAt,desc" },
+  { label: "Date created (Oldest)", value: "createdAt,asc" },
+  { label: "Date modified (Newest)", value: "updatedAt,desc" },
+  { label: "Date modified (Oldest)", value: "updatedAt,asc" },
+];
+
 const AdminArtists = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,11 +49,12 @@ const AdminArtists = () => {
   const [totalElements, setTotalElements] = useState(0);
   const [countryFilter, setCountryFilter] = useState<string>("");
   const [debutYearFilter, setDebutYearFilter] = useState<string>("");
+  const [sortOption, setSortOption] = useState<string>(SORT_OPTIONS[0].value);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadArtists();
-  }, [currentPage, pageSize, searchQuery, countryFilter, debutYearFilter]);
+  }, [currentPage, pageSize, searchQuery, countryFilter, debutYearFilter, sortOption]);
 
   const loadArtists = async () => {
     try {
@@ -52,7 +62,7 @@ const AdminArtists = () => {
       const data = await artistsApi.getAll({
         page: currentPage,
         size: pageSize,
-        sort: "name,asc",
+        sort: sortOption,
         name: searchQuery || undefined,
         country: countryFilter || undefined,
         debutYear: debutYearFilter || undefined
@@ -167,6 +177,17 @@ const AdminArtists = () => {
                   <option value="">All Debut Years</option>
                   {DEBUT_YEARS.map((year) => (
                     <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+                <select
+                  value={sortOption}
+                  onChange={(e) => { setSortOption(e.target.value); setCurrentPage(0); }}
+                  className="bg-background border border-border rounded-md px-3 py-2 text-sm min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
               </div>

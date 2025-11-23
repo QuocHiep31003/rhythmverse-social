@@ -1,4 +1,4 @@
-import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse, API_BASE_URL, fetchWithAuth } from './config';
+import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse, API_BASE_URL, fetchWithAuth, parseErrorResponse } from './config';
 import { mockSongs } from '@/data/mockData';
 
 // Interface cho Song data - đồng bộ với BE SongDTO
@@ -38,6 +38,8 @@ export interface Song {
   status?: 'ACTIVE' | 'INACTIVE' | string;
   createdAt?: string;
   updatedAt?: string;
+  acrId?: string; // ACR Cloud fingerprint ID
+  fingerprintStatus?: number; // 0: processing, 1: Ready, -1: Error
   // Các field từ TrendingSong có thể có
   songId?: number;
   songName?: string; // Một số API trả về songName thay vì name
@@ -213,6 +215,46 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error creating song:", error);
+      throw error;
+    }
+  },
+
+  // Tạo song mới (kèm upload file audio)
+  createWithFile: async (data: SongCreateUpdateData & { file: File }): Promise<Song> => {
+    try {
+      const formData = new FormData();
+      formData.append("file", data.file);
+      formData.append("name", data.name);
+      formData.append("releaseYear", String(data.releaseYear));
+
+      if (data.duration) formData.append("duration", data.duration);
+
+      const appendList = (field: string, values?: number[]) => {
+        values?.forEach((value) => formData.append(field, String(value)));
+      };
+
+      appendList("genreIds", data.genreIds);
+      appendList("moodIds", data.moodIds);
+      appendList("performerIds", data.performerIds);
+      appendList("featIds", data.featIds);
+      appendList("composerIds", data.composerIds);
+      appendList("lyricistIds", data.lyricistIds);
+      appendList("producerIds", data.producerIds);
+      appendList("artistIds", data.artistIds);
+
+      const response = await fetchWithAuth(`${API_BASE_URL}/songs`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseErrorResponse(response));
+      }
+
+      const responseData = await response.json();
+      return responseData?.song ?? responseData;
+    } catch (error) {
+      console.error("Error creating song with file:", error);
       throw error;
     }
   },
@@ -634,6 +676,17 @@ export const songsApi = {
     const bucketName = "echoverse";
     const region = "ap-southeast-1";
     return `https://${bucketName}.s3.${region}.amazonaws.com/stream/${uuid}/${uuid}.m3u8`;
+  },
+
+  // Lấy danh sách bài hát gợi ý dựa trên bài hát hiện tại
+  getRecommendations: async (songId: string | number, limit: number = 10): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/${songId}/recommendations?limit=${limit}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching recommendations:", error);
+      return [];
+    }
   },
 };
 

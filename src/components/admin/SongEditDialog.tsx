@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Upload, Play, Plus, Trash2, Edit2, X, ChevronsUpDown, Check } from "lucide-react";
+import { Loader2, Upload, Play, Plus, Trash2, Edit2, X, ChevronsUpDown, Check, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -57,6 +57,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { songsApi, artistsApi, genresApi, moodsApi, songContributorApi, songGenreApi, songMoodApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
+import { API_BASE_URL, fetchWithAuth } from "@/services/api/config";
 import type { SongContributor } from "@/services/api/songContributorApi";
 import type { SongGenre } from "@/services/api/songGenreApi";
 import type { SongMood } from "@/services/api/songMoodApi";
@@ -102,7 +103,7 @@ interface SongEditDialogProps {
   onOpenChange: (open: boolean) => void;
   songId: number;
   onSuccess?: () => void;
-  initialTab?: "metadata" | "contributor" | "genre" | "mood";
+  initialTab?: "metadata" | "contributor" | "genre" | "mood" | "genre-mood";
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -138,7 +139,7 @@ export const SongEditDialog = ({
   const [allArtists, setAllArtists] = useState<{ id: number, name: string, avatar?: string }[]>([]);
   const [allGenres, setAllGenres] = useState<{ id: number, name: string }[]>([]);
   const [allMoods, setAllMoods] = useState<{ id: number, name: string }[]>([]);
-  const [activeTab, setActiveTab] = useState<"metadata" | "contributor" | "genre" | "mood">(initialTab);
+  const [activeTab, setActiveTab] = useState<"metadata" | "contributor" | "genre-mood">(initialTab === "genre" || initialTab === "mood" ? "genre-mood" : initialTab);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showAddContributor, setShowAddContributor] = useState(false);
@@ -154,7 +155,11 @@ export const SongEditDialog = ({
   const [genreScoreDraft, setGenreScoreDraft] = useState<string>("");
   const [editingMoodId, setEditingMoodId] = useState<number | null>(null);
   const [moodScoreDraft, setMoodScoreDraft] = useState<string>("");
+  const [genreSearch, setGenreSearch] = useState("");
+  const [moodSearch, setMoodSearch] = useState("");
   const [artistPickerOpen, setArtistPickerOpen] = useState(false);
+  const [fingerprintStatus, setFingerprintStatus] = useState<number | null>(null);
+  const [checkingFingerprint, setCheckingFingerprint] = useState(false);
   const [genrePickerOpen, setGenrePickerOpen] = useState(false);
   const [moodPickerOpen, setMoodPickerOpen] = useState(false);
   const [isSavingGenre, setIsSavingGenre] = useState(false);
@@ -187,6 +192,18 @@ export const SongEditDialog = ({
     () => (newGenreId ? allGenres.find((genre) => genre.id === newGenreId) : undefined),
     [allGenres, newGenreId]
   );
+  const filteredSongGenres = useMemo(() => {
+    if (!genreSearch.trim()) return songGenres;
+    const keyword = genreSearch.trim().toLowerCase();
+    return songGenres.filter((sg) => sg.genreName.toLowerCase().includes(keyword));
+  }, [songGenres, genreSearch]);
+
+  const filteredSongMoods = useMemo(() => {
+    if (!moodSearch.trim()) return songMoods;
+    const keyword = moodSearch.trim().toLowerCase();
+    return songMoods.filter((sm) => sm.moodName.toLowerCase().includes(keyword));
+  }, [songMoods, moodSearch]);
+
 
   const selectedMood = useMemo(
     () => (newMoodId ? allMoods.find((mood) => mood.id === newMoodId) : undefined),
@@ -237,6 +254,8 @@ export const SongEditDialog = ({
       setNewMoodId(null);
       setMoodPickerOpen(false);
       setNewMoodScore("1.0");
+      setGenreSearch("");
+      setMoodSearch("");
       setEditingGenreId(null);
       setGenreScoreDraft("");
       setEditingMoodId(null);
@@ -297,7 +316,7 @@ export const SongEditDialog = ({
   useEffect(() => {
     if (open && songId) {
       loadData();
-      setActiveTab(initialTab);
+      setActiveTab(initialTab === "genre" || initialTab === "mood" ? "genre-mood" : initialTab);
     }
   }, [open, songId, initialTab, loadData]);
 
@@ -419,7 +438,7 @@ export const SongEditDialog = ({
       console.error("Error adding genre:", error);
       toast({
         title: "Lỗi",
-        description: "Không thể thêm thể loại",
+        description: getErrorMessage(error, "Không thể thêm thể loại"),
         variant: "destructive",
       });
     } finally {
@@ -499,7 +518,7 @@ export const SongEditDialog = ({
       console.error("Error adding mood:", error);
       toast({
         title: "Lỗi",
-        description: "Không thể thêm mood",
+        description: getErrorMessage(error, "Không thể thêm mood"),
         variant: "destructive",
       });
     } finally {
@@ -593,15 +612,14 @@ export const SongEditDialog = ({
         <Tabs
           value={activeTab}
           onValueChange={(value) =>
-            setActiveTab(value as "metadata" | "contributor" | "genre" | "mood")
+            setActiveTab(value as "metadata" | "contributor" | "genre-mood")
           }
           className="flex-1 flex flex-col overflow-hidden"
         >
           <TabsList className="mx-6 mt-4 mb-0">
             <TabsTrigger value="metadata">Metadata</TabsTrigger>
             <TabsTrigger value="contributor">Contributor</TabsTrigger>
-            <TabsTrigger value="genre">Genre</TabsTrigger>
-            <TabsTrigger value="mood">Mood</TabsTrigger>
+            <TabsTrigger value="genre-mood">Genre và Mood</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -726,6 +744,120 @@ export const SongEditDialog = ({
                       />
                     </FormItem>
 
+                    {/* ACR ID with Check button */}
+                    <FormItem>
+                      <FormLabel>ACR ID (Fingerprint)</FormLabel>
+                      <div className="flex gap-2">
+                        <Input 
+                          value={songData?.acrId || ""} 
+                          disabled 
+                          className="bg-muted flex-1"
+                          placeholder="Chưa có ACR ID"
+                        />
+                        {songData?.acrId && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              if (!songData?.acrId) return;
+                              setCheckingFingerprint(true);
+                              try {
+                                const url = `${API_BASE_URL}/songs/test/acr/check?acr_id=${encodeURIComponent(songData.acrId)}`;
+                                const response = await fetchWithAuth(url, {
+                                  method: 'GET',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                  },
+                                });
+                                
+                                if (!response.ok) {
+                                  const errorText = await response.text();
+                                  throw new Error(errorText || `HTTP ${response.status}`);
+                                }
+                                
+                                const data = await response.json();
+                                if (data.success) {
+                                  setFingerprintStatus(data.state);
+                                  if (data.state === 1) {
+                                    toast({
+                                      title: "✅ Fingerprint Ready",
+                                      description: "Fingerprint đã sẵn sàng",
+                                    });
+                                  } else if (data.state === 0) {
+                                    toast({
+                                      title: "⏳ Đang xử lý",
+                                      description: "Fingerprint đang được xử lý",
+                                    });
+                                  } else if (data.state === -1) {
+                                    toast({
+                                      title: "❌ Lỗi",
+                                      description: "Fingerprint gặp lỗi",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } else {
+                                  toast({
+                                    title: "Lỗi",
+                                    description: data.message || data.error || "Không thể kiểm tra fingerprint",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } catch (error) {
+                                console.error("[SongEditDialog] Check fingerprint error:", error);
+                                const errorMessage = error instanceof Error ? error.message : "Không thể kiểm tra fingerprint. Vui lòng thử lại.";
+                                toast({
+                                  title: "Lỗi",
+                                  description: errorMessage,
+                                  variant: "destructive",
+                                });
+                              } finally {
+                                setCheckingFingerprint(false);
+                              }
+                            }}
+                            disabled={checkingFingerprint || !songData?.acrId}
+                          >
+                            {checkingFingerprint ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Đang check...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-4 h-4 mr-2" />
+                                Check
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                      {fingerprintStatus !== null && (
+                        <div className="mt-2">
+                          {fingerprintStatus === 1 ? (
+                            <div className="flex items-center gap-2 text-green-600 font-semibold">
+                              <span className="text-xl">✅</span>
+                              <span>Ready - Fingerprint đã sẵn sàng</span>
+                            </div>
+                          ) : fingerprintStatus === 0 ? (
+                            <div className="flex items-center gap-2 text-yellow-600">
+                              <span className="text-xl">⏳</span>
+                              <span>Đang xử lý (Processing)</span>
+                            </div>
+                          ) : fingerprintStatus === -1 || fingerprintStatus === -999 ? (
+                            <div className="flex items-center gap-2 text-red-600">
+                              <span className="text-xl">❌</span>
+                              <span>Lỗi (Error) - Fingerprint đang hư</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-red-600">
+                              <span className="text-xl">❌</span>
+                              <span>Lỗi - Unknown status ({fingerprintStatus})</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </FormItem>
+
                     {/* Created At - Read only */}
                     <FormItem>
                       <FormLabel>Ngày tạo</FormLabel>
@@ -753,7 +885,7 @@ export const SongEditDialog = ({
                     <FormControl>
                       <Input
                         type="file"
-                        accept="audio/*"
+                        accept="audio/mpeg,.mp3"
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           setSelectedFile(file || null);
@@ -803,8 +935,12 @@ export const SongEditDialog = ({
                     })
                   }
                   size="sm"
-                  className="gap-2"
-                  variant={showAddContributor ? "secondary" : "default"}
+                  className={cn(
+                    "gap-2",
+                    showAddContributor 
+                      ? "bg-muted text-muted-foreground hover:bg-muted/80"
+                      : "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90"
+                  )}
                 >
                   <Plus className="w-4 h-4" />
                   {showAddContributor ? "Đóng form" : "Thêm Contributor"}
@@ -880,7 +1016,11 @@ export const SongEditDialog = ({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={handleAddContributor} size="sm">
+                    <Button 
+                      onClick={handleAddContributor} 
+                      size="sm"
+                      className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90"
+                    >
                       Thêm
                     </Button>
                     <Button
@@ -970,9 +1110,22 @@ export const SongEditDialog = ({
               </div>
             </TabsContent>
 
-            {/* Genre Tab */}
-            <TabsContent value="genre" className="mt-4 space-y-4">
-              <h3 className="text-lg font-semibold">Genres</h3>
+            {/* Genre và Mood Tab */}
+            <TabsContent value="genre-mood" className="mt-4 space-y-6">
+              {/* Genre Section */}
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">Genres</h3>
+                  <div className="relative w-full max-w-xs">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm genre..."
+                      className="pl-9"
+                      value={genreSearch}
+                      onChange={(e) => setGenreSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
 
               <Table>
                 <TableHeader>
@@ -983,7 +1136,7 @@ export const SongEditDialog = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {songGenres.map((sg) => (
+                  {filteredSongGenres.map((sg) => (
                     <TableRow key={sg.id}>
                       <TableCell>{sg.genreName}</TableCell>
                       <TableCell>
@@ -1073,10 +1226,10 @@ export const SongEditDialog = ({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {songGenres.length === 0 && (
+                  {filteredSongGenres.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        Chưa có genre nào
+                        {songGenres.length === 0 ? "Chưa có genre nào" : "Không tìm thấy genre phù hợp"}
                       </TableCell>
                     </TableRow>
                   )}
@@ -1196,11 +1349,22 @@ export const SongEditDialog = ({
                   )}
                 </div>
               )}
-            </TabsContent>
+              </div>
 
-            {/* Mood Tab */}
-            <TabsContent value="mood" className="mt-4 space-y-4">
-              <h3 className="text-lg font-semibold">Moods</h3>
+              {/* Mood Section */}
+              <div className="space-y-4 border-t pt-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold">Moods</h3>
+                  <div className="relative w-full max-w-xs">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Tìm mood..."
+                      className="pl-9"
+                      value={moodSearch}
+                      onChange={(e) => setMoodSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
 
               <Table>
                 <TableHeader>
@@ -1211,7 +1375,7 @@ export const SongEditDialog = ({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {songMoods.map((sm) => (
+                  {filteredSongMoods.map((sm) => (
                     <TableRow key={sm.id}>
                       <TableCell>{sm.moodName}</TableCell>
                       <TableCell>
@@ -1301,15 +1465,37 @@ export const SongEditDialog = ({
                       </TableCell>
                     </TableRow>
                   ))}
-                  {songMoods.length === 0 && (
+                  {filteredSongMoods.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        Chưa có mood nào
+                        {songMoods.length === 0 ? "Chưa có mood nào" : "Không tìm thấy mood phù hợp"}
                       </TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+
+              {!showAddMood && (
+                <div className="flex justify-start">
+                  <Button
+                    onClick={() => {
+                      setShowAddMood(true);
+                      setNewMoodId(null);
+                      setNewMoodScore("1.0");
+                      setMoodPickerOpen(false);
+                    }}
+                    variant="default"
+                    className={cn(
+                      "gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90",
+                      "border border-[hsl(var(--admin-border))]"
+                    )}
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Thêm mood mới
+                  </Button>
+                </div>
+              )}
 
               {showAddMood && (
                 <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-muted/20 p-4">
@@ -1399,6 +1585,7 @@ export const SongEditDialog = ({
                   )}
                 </div>
               )}
+              </div>
             </TabsContent>
           </div>
         </Tabs>

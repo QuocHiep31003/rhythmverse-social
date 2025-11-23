@@ -28,13 +28,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
+import { cn, handleImageError } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
+import { authApi } from "@/services/api/authApi";
 import { getAuthToken } from "@/services/api";
+import { mapToPlayerSong } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 import Hls from "hls.js";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 import ShareButton from "@/components/ShareButton";
@@ -58,6 +61,8 @@ const MusicPlayer = () => {
     setRepeatMode,
     queue,
     playSong,
+    setQueue,
+    addToQueue,
   } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsRef = useRef<HTMLDivElement>(null);
@@ -74,8 +79,13 @@ const MusicPlayer = () => {
   const [hasReportedListen, setHasReportedListen] = useState(false);
   const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [suggestedSongs, setSuggestedSongs] = useState<typeof queue>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [autoPlaySuggestions, setAutoPlaySuggestions] = useState(true);
+  const loadedSuggestionsForSongId = useRef<string | number | null>(null);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [shareSong, setShareSong] = useState<{ id: string | number; title: string; url: string } | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"queue" | "suggested">("queue");
@@ -87,6 +97,22 @@ const MusicPlayer = () => {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  // Load current user ID from token
+  useEffect(() => {
+    const loadUserId = async () => {
+      try {
+        const user = await authApi.me();
+        if (user?.id) {
+          setCurrentUserId(user.id);
+        }
+      } catch (error) {
+        console.warn("Failed to load user ID for listening history:", error);
+        setCurrentUserId(null);
+      }
+    };
+    loadUserId();
+  }, []);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -162,6 +188,52 @@ const MusicPlayer = () => {
     }
   };
 
+  const handleToggleAutoSuggestions = (checked: boolean) => {
+    setAutoPlaySuggestions(checked);
+    toast({
+      title: checked ? "Đã bật gợi ý tự động" : "Đã tắt gợi ý tự động",
+      description: checked
+        ? "Khi hết danh sách phát sẽ phát tiếp các gợi ý"
+        : "Khi hết danh sách phát sẽ dừng lại",
+      duration: 2500,
+    });
+  };
+
+  const startSuggestionsPlayback = () => {
+    if (!autoPlaySuggestions) {
+      console.warn("Auto suggestions disabled");
+      return false;
+    }
+    if (suggestedSongs.length === 0) {
+      console.warn("No suggested songs available");
+      return false;
+    }
+    // Thêm bài đầu tiên từ danh sách gợi ý vào queue và phát
+    const nextSong = suggestedSongs[0];
+    console.log("🎧 Adding suggested song to queue:", nextSong.songName || nextSong.name);
+    addToQueue(nextSong);
+    playSong(nextSong);
+    return true;
+  };
+
+  const hasNextQueueSong = () => {
+    if (queue.length === 0 || !currentSong) {
+      return queue.length > 0;
+    }
+    const currentIndex = queue.findIndex((s) => s.id === currentSong.id);
+    return currentIndex >= 0 && currentIndex < queue.length - 1;
+  };
+
+  const handleNextClick = () => {
+    if (!hasNextQueueSong()) {
+      if (!startSuggestionsPlayback()) {
+        console.warn("No more songs to play");
+      }
+      return;
+    }
+    playNext();
+  };
+
   // Load new song - professional handling with proper state management
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
@@ -193,7 +265,7 @@ const MusicPlayer = () => {
 
     const loadStreamUrl = async () => {
       try {
-        // Gọi BE lấy CloudFront HLS URL (không ký, không proxy)
+        // Gọi BE lấy CloudFront signed URL trực tiếp (TTL 60s)
         const { streamUrl, uuid } = await songsApi.getStreamUrl(currentSong.id);
         let finalStreamUrl = streamUrl;
         
@@ -201,30 +273,13 @@ const MusicPlayer = () => {
           throw new Error("No stream URL available");
         }
 
-        // QUAN TRỌNG: Load bitrate playlist (_128kbps.m3u8) thay vì master playlist (.m3u8)
-        // Master playlist sẽ khiến HLS player auto-fallback và retry → load thêm segment
-        // Backend trả về URL dạng: /api/songs/{songId}/stream-proxy/
-        // Cần append filename vào cuối URL
-        let useBitratePlaylist = false;
-        if (uuid && !finalStreamUrl.includes('_128kbps.m3u8')) {
-          // Nếu URL kết thúc bằng / hoặc không có filename, append bitrate playlist
-          if (finalStreamUrl.endsWith('/') || !finalStreamUrl.endsWith('.m3u8')) {
-            // Append filename vào cuối URL
-            finalStreamUrl = finalStreamUrl.replace(/\/$/, '') + '/' + uuid + '_128kbps.m3u8';
-            useBitratePlaylist = true;
-          } else if (finalStreamUrl.endsWith('.m3u8') && !finalStreamUrl.includes('_128kbps')) {
-            // Nếu đã có .m3u8 nhưng không phải bitrate playlist, thay thế filename
-            finalStreamUrl = finalStreamUrl.replace(/[^/]+\.m3u8$/, `${uuid}_128kbps.m3u8`);
-            useBitratePlaylist = true;
-          }
-          console.log("🔄 Converted to bitrate playlist:", finalStreamUrl);
-        }
-
+        // Backend đã trả về CloudFront signed URL trực tiếp cho _128kbps.m3u8
+        // Không cần append filename nữa, dùng trực tiếp
         const finalStreamUrlAbsolute = finalStreamUrl.startsWith("http")
           ? finalStreamUrl
           : `${window.location.origin}${finalStreamUrl}`;
 
-        console.log("Using backend proxy HLS URL (bitrate playlist):", finalStreamUrlAbsolute);
+        console.log("Using CloudFront signed URL (TTL 60s):", finalStreamUrlAbsolute);
 
         if (Hls.isSupported()) {
           hls = new Hls({
@@ -355,11 +410,32 @@ const MusicPlayer = () => {
             let shouldShowError = true;
             let shouldRecover = false;
             
-            // QUAN TRỌNG: Nếu lỗi 404 (file không tồn tại), có thể là bitrate playlist chưa có
-            // Fallback về master playlist nếu đang dùng bitrate playlist
+            // QUAN TRỌNG: Nếu lỗi 404 (file không tồn tại), có thể là file đã bị xóa trên S3
+            // Check response code để xác định
             if (data.type === Hls.ErrorTypes.NETWORK_ERROR && 
                 (data.details === Hls.ErrorDetails.MANIFEST_LOAD_ERROR || 
-                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR)) {
+                 data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
+                 data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR)) {
+              const response = data.response;
+              // Nếu là 404 hoặc 403 (signed URL hết hạn hoặc file không tồn tại), file đã bị xóa
+              if (response && (response.code === 404 || response.status === 404 || 
+                               response.code === 403 || response.status === 403)) {
+                console.error("⚠️ Audio file not found (404/403), likely deleted from S3 or CloudFront cache expired");
+                setIsLoading(false);
+                toast({
+                  title: "Bài hát không khả dụng",
+                  description: "File audio đã bị xóa hoặc không còn khả dụng. Đang chuyển sang bài tiếp theo...",
+                  variant: "destructive",
+                  duration: 3000,
+                });
+                // Auto skip to next song
+                setTimeout(() => {
+                  handleNextClick();
+                }, 1000);
+                return; // Không thử recover nữa
+              }
+              
+              // Nếu là bitrate playlist chưa có, fallback về master playlist
               const currentUrl = hls?.url || '';
               if (currentUrl.includes('_128kbps.m3u8')) {
                 console.warn("⚠️ Bitrate playlist not found, falling back to master playlist");
@@ -434,7 +510,7 @@ const MusicPlayer = () => {
                     description: "Failed to recover from stream error. Trying next song...",
                     variant: "destructive",
                   });
-                  setTimeout(() => playNext(), 1000);
+                  setTimeout(() => handleNextClick(), 1000);
                 } else {
                   console.log("Recovery successful, audio is playing");
                 }
@@ -466,14 +542,35 @@ const MusicPlayer = () => {
             variant: "destructive",
           });
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to start proxy stream:", error);
         setIsLoading(false);
-        toast({
-          title: "Playback error",
-          description: "Failed to get stream URL. Please try again.",
-          variant: "destructive",
-        });
+        
+        // Check if error is due to audio file not found on S3
+        const errorMessage = error?.response?.data?.error || error?.response?.data?.message || error?.message || "";
+        const isAudioNotFound = error?.response?.status === 404 || 
+                                errorMessage.includes("AUDIO_NOT_FOUND") ||
+                                errorMessage.includes("not found on S3") ||
+                                errorMessage.includes("may have been deleted");
+        
+        if (isAudioNotFound) {
+          toast({
+            title: "Bài hát không khả dụng",
+            description: "File audio đã bị xóa. Đang chuyển sang bài tiếp theo...",
+            variant: "destructive",
+            duration: 3000,
+          });
+          // Auto skip to next song after 1 second
+          setTimeout(() => {
+            handleNextClick();
+          }, 1000);
+        } else {
+          toast({
+            title: "Playback error",
+            description: "Failed to get stream URL. Please try again.",
+            variant: "destructive",
+          });
+        }
       }
     };
 
@@ -507,7 +604,7 @@ const MusicPlayer = () => {
             variant: "destructive",
           });
           loadErrorTimeout = setTimeout(() => {
-            playNext();
+            handleNextClick();
           }, 2000);
         }
       };
@@ -663,12 +760,11 @@ const MusicPlayer = () => {
       } else {
         // Play next song (works for both "all" and "off" modes)
         console.log("Playing next song");
-        // Kiểm tra queue trước khi chuyển bài
-        if (queue.length === 0) {
-          console.warn("Queue is empty, cannot play next song");
-          return;
-        }
+        if (hasNextQueueSong()) {
         playNext();
+        } else if (!startSuggestionsPlayback()) {
+          console.warn("No songs left in queue or suggestions");
+        }
       }
     };
 
@@ -709,11 +805,11 @@ const MusicPlayer = () => {
             audio.play().catch(err => console.error("Repeat play error:", err));
           } else {
             console.log("Auto-playing next song");
-            if (queue.length === 0) {
-              console.warn("Queue is empty, cannot auto-play next");
-              return;
-            }
+            if (hasNextQueueSong()) {
             playNext();
+            } else if (!startSuggestionsPlayback()) {
+              console.warn("No songs left to auto-play");
+            }
           }
           return;
         }
@@ -744,11 +840,11 @@ const MusicPlayer = () => {
             audio.play().catch(err => console.error("Repeat play error:", err));
           } else {
             console.log("Auto-playing next song (loop detected), queue length:", queue.length);
-            if (queue.length === 0) {
-              console.warn("Queue is empty, cannot auto-play next");
-              return;
-            }
+            if (hasNextQueueSong()) {
             playNext();
+            } else if (!startSuggestionsPlayback()) {
+              console.warn("No songs left to auto-play");
+            }
           }
         }
       }
@@ -776,7 +872,7 @@ const MusicPlayer = () => {
               variant: "destructive",
             });
             // Try next song on fatal error
-            setTimeout(() => playNext(), 1000);
+            setTimeout(() => handleNextClick(), 1000);
           } else {
             console.warn("Recoverable audio error (ignored):", errorCode);
           }
@@ -838,23 +934,22 @@ const MusicPlayer = () => {
     }
   };
 
-  // Record listening history and increment play count when 30 seconds have been played
+  // Record listening history when user has listened for at least 30 seconds AND reached the end of the song
+  // This ensures we only count 1 play per song when user listens to the full duration
   useEffect(() => {
-    if (!currentSong || hasReportedListen || !audioRef.current) return;
+    if (!currentSong || hasReportedListen || !audioRef.current || !currentUserId) return;
 
     const duration = audioRef.current.duration;
+    const isEnded = audioRef.current.ended || (duration && currentTime >= duration - 1); // Allow 1 second tolerance
 
-    // Only record if we have valid duration and currentTime has reached 30 seconds
-    if (duration && !isNaN(duration) && currentTime >= 30 && currentTime > 0) {
+    // Record if: user has listened at least 30 seconds AND reached the end of the song
+    if (duration && !isNaN(duration) && currentTime >= 30 && isEnded) {
       const songIdForApi = isNaN(Number(currentSong.id)) ? currentSong.id : Number(currentSong.id);
-      console.log(`🎵 Recording listen: ${currentSong.songName || currentSong.name || "Unknown Song"} (ID: ${currentSong.id}, Coerced: ${songIdForApi}, Type: ${typeof songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s)`);
+      console.log(`🎵 Recording listen: ${currentSong.songName || currentSong.name || "Unknown Song"} (ID: ${currentSong.id}, UserID: ${currentUserId}, Coerced: ${songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s - Full play)`);
 
-      // Record listening history
-      listeningHistoryApi
-        .recordListen({
-          userId: 1, // TODO: Get from auth context
-          songId: songIdForApi,
-        })
+      // Record listening history via backend API (backend will extract userId from token)
+      songsApi
+        .recordPlayback(songIdForApi, currentUserId)
         .then(() => {
           console.log("✅ Listening history recorded successfully");
           setHasReportedListen(true);
@@ -883,12 +978,23 @@ const MusicPlayer = () => {
   const toggleMute = () => setIsMuted(!isMuted);
 
   const handleShuffleToggle = () => {
+    const newShuffleState = !isShuffled;
     toggleShuffle();
+    // Auto tắt gợi ý khi bật shuffle
+    if (newShuffleState && autoPlaySuggestions) {
+      setAutoPlaySuggestions(false);
     toast({
-      title: isShuffled ? "Shuffle off" : "Shuffle on",
-      description: isShuffled
-        ? "Playing songs in order"
-        : "Playing songs in random order",
+        title: "Shuffle on",
+        description: "Gợi ý tự động đã tắt khi bật shuffle",
+        duration: 2000,
+      });
+      return;
+    }
+    toast({
+      title: newShuffleState ? "Shuffle on" : "Shuffle off",
+      description: newShuffleState
+        ? "Playing songs in random order"
+        : "Playing songs in order",
       duration: 2000,
     });
   };
@@ -935,6 +1041,10 @@ const MusicPlayer = () => {
     const nextModeName = modeNames[(currentIndex + 1) % modes.length];
 
     setRepeatMode(nextMode);
+    // Auto tắt gợi ý khi bật repeat (one hoặc all)
+    if (nextMode !== "off" && autoPlaySuggestions) {
+      setAutoPlaySuggestions(false);
+    }
     toast({
       title: nextModeName,
       description:
@@ -951,8 +1061,51 @@ const MusicPlayer = () => {
     if (!currentSong) {
       setShowLyrics(false);
       setIsExpanded(false);
+      setSuggestedSongs([]);
     }
   }, [currentSong]);
+
+  // Load suggested songs (50 max) whenever current song changes
+  useEffect(() => {
+    if (!currentSong) {
+      setSuggestedSongs([]);
+      loadedSuggestionsForSongId.current = null;
+      return;
+    }
+
+    const currentSongId = currentSong.id;
+    if (loadedSuggestionsForSongId.current === currentSongId) {
+      return;
+    }
+
+    let isMounted = true;
+    const loadSuggestions = async () => {
+      setIsLoadingSuggestions(true);
+      try {
+        const songId = typeof currentSongId === "string" ? Number(currentSongId) : currentSongId;
+        const recommendations = await songsApi.getRecommendations(songId, 50);
+        const formattedSongs = recommendations.map((s) => mapToPlayerSong(s));
+        if (isMounted) {
+          setSuggestedSongs(formattedSongs);
+          loadedSuggestionsForSongId.current = currentSongId;
+        }
+      } catch (error) {
+        console.error("Error loading suggestions:", error);
+        if (isMounted) {
+          setSuggestedSongs([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingSuggestions(false);
+        }
+      }
+    };
+
+    loadSuggestions();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentSong?.id]);
 
   if (location.pathname === "/login" || !currentSong) {
     return null;
@@ -1070,12 +1223,8 @@ const MusicPlayer = () => {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => {
-                    console.log("Next clicked, queue length:", queue.length, "currentSong:", currentSong?.id);
-                    console.log("Queue songs:", queue.map(s => ({ id: s.id, name: s.songName || s.name })));
-                    playNext();
-                  }}
-                  disabled={queue.length === 0}
+                  onClick={handleNextClick}
+                  disabled={!hasNextQueueSong() && (!autoPlaySuggestions || suggestedSongs.length === 0)}
                 >
                   <SkipForward className="w-4 h-4" />
                 </Button>
@@ -1263,7 +1412,12 @@ const MusicPlayer = () => {
                     <Play className="w-6 h-6" />
                   )}
                 </Button>
-                <Button variant="ghost" size="icon" onClick={playNext}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleNextClick}
+                  disabled={!hasNextQueueSong() && (!autoPlaySuggestions || suggestedSongs.length === 0)}
+                >
                   <SkipForward className="w-6 h-6" />
                 </Button>
                 <Button variant="ghost" size="icon" onClick={cycleRepeat}>
@@ -1383,50 +1537,117 @@ const MusicPlayer = () => {
               </Button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex border-b border-border/40 bg-background/50">
-              <button
-                onClick={() => setPlaylistTab("queue")}
-                className={cn(
-                  "flex-1 px-4 py-3 text-sm font-medium transition-colors",
-                  playlistTab === "queue"
-                    ? "text-primary border-b-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Đẩy vào ({queue.length})
-              </button>
-              <button
-                onClick={() => setPlaylistTab("suggested")}
-                className={cn(
-                  "flex-1 px-4 py-3 text-sm font-medium transition-colors",
-                  playlistTab === "suggested"
-                    ? "text-primary border-b-2 border-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Gợi ý
-              </button>
-            </div>
-
             {/* Playlist Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {playlistTab === "queue" ? (
-                queue.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
+            <div className="flex-1 overflow-y-auto p-4 space-y-8">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Các bài đang ở trong hàng chờ</p>
+                    <h4 className="text-lg font-semibold text-foreground">Hàng chờ hiện tại ({queue.length})</h4>
+                  </div>
+                </div>
+                {queue.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center py-12">
                     <Music className="w-12 h-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">Danh sách phát trống</p>
                     <p className="text-sm text-muted-foreground mt-2">
-                      Phát nhạc từ các trang như Trending để thêm vào danh sách
+                      Thêm bài hát hoặc bật gợi ý tự động để tiếp tục nghe nhạc
                     </p>
                   </div>
                 ) : (
-                  queue.map((song, index) => (
+                  queue.map((song) => (
                     <div
                       key={song.id}
                       onClick={() => {
                         playSong(song);
-                        setShowPlaylist(false);
+                        // Không đóng panel khi click bài hát
+                      }}
+                className={cn(
+                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
+                        currentSong?.id === song.id && "bg-primary/10 border border-primary/20"
+                      )}
+                    >
+                      <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
+                        {song.cover ? (
+                          <img
+                            src={song.cover}
+                            alt={song.songName || song.name || "Unknown Song"}
+                            onError={handleImageError}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                            <Music className="w-6 h-6 text-white" />
+                          </div>
+                        )}
+                        {currentSong?.id === song.id && isPlaying && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                className={cn(
+                            "text-sm font-medium truncate",
+                            currentSong?.id === song.id && "text-primary"
+                          )}
+                        >
+                          {song.songName || song.name || "Unknown Song"}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {song.artist || "Unknown Artist"}
+                        </p>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex-shrink-0">
+                        {formatTime(song.duration || 0)}
+                      </div>
+                    </div>
+                  ))
+                )}
+            </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h4 className="text-lg font-bold text-foreground">
+                      Tự động phát
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Danh sách bài hát gợi ý
+                    </p>
+                  </div>
+                  <Switch
+                    id="auto-suggestions-switch"
+                    checked={autoPlaySuggestions}
+                    onCheckedChange={handleToggleAutoSuggestions}
+                  />
+                </div>
+
+                {!autoPlaySuggestions ? null : isLoadingSuggestions ? (
+                  <div className="flex flex-col items-center justify-center text-center py-12">
+                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
+                    <p className="text-muted-foreground">Đang tải gợi ý...</p>
+                  </div>
+                ) : suggestedSongs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-center py-12">
+                    <Music className="w-12 h-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Không có gợi ý phù hợp</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Thử chọn bài hát khác để hệ thống phân tích lại
+                    </p>
+                  </div>
+                ) : (
+                  suggestedSongs
+                    .filter(song => !queue.some(q => q.id === song.id))
+                    .slice(0, 50)
+                    .map((song) => (
+                    <div
+                      key={song.id}
+                      onClick={() => {
+                        // Khi click vào bài gợi ý, thêm vào queue và phát (không đóng panel)
+                        addToQueue(song);
+                        playSong(song);
                       }}
                       className={cn(
                         "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
@@ -1462,7 +1683,7 @@ const MusicPlayer = () => {
                           {song.songName || song.name || "Unknown Song"}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {song.artist || "Unknown Artist"}
+                          {typeof song.artist === "string" ? song.artist : song.artist || "Unknown Artist"}
                         </p>
                       </div>
                       <div className="text-xs text-muted-foreground flex-shrink-0">
@@ -1470,16 +1691,8 @@ const MusicPlayer = () => {
                       </div>
                     </div>
                   ))
-                )
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                  <Music className="w-12 h-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Chức năng gợi ý đang phát triển</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Sẽ có các bài hát gợi ý dựa trên bài hát hiện tại
-                  </p>
+                )}
                 </div>
-              )}
             </div>
           </div>
         </div>

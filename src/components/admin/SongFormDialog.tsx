@@ -42,7 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -131,6 +131,7 @@ export const SongFormDialog = ({
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
+  const [fileError, setFileError] = useState<string | null>(null);
   const [activeContributorPopover, setActiveContributorPopover] = useState<ContributorField | null>(null);
 
   const form = useForm<SongFormValues>({
@@ -275,6 +276,9 @@ export const SongFormDialog = ({
   const handleFileChange = async (file: File | undefined) => {
     if (!file) {
       setSelectedFile(null);
+      if (mode === "create") {
+        setFileError("Vui lòng chọn file audio để tạo bài hát");
+      }
       return;
     }
     
@@ -288,6 +292,7 @@ export const SongFormDialog = ({
       
       // Store file - will be uploaded to S3 via backend API when form is submitted
       setSelectedFile(file);
+      setFileError(null);
       setUploadProgress(100);
       setTimeout(() => {
         setUploadProgress(0);
@@ -312,10 +317,16 @@ export const SongFormDialog = ({
   };
 
   const handleSubmit = (data: SongFormValues) => {
+    if (mode === "create" && !selectedFile) {
+      setFileError("Vui lòng chọn file audio trước khi lưu");
+      return;
+    }
+
     const artistUnion = collectArtistIds(data);
     const normalizedData: SongFormValues & { file?: File } = {
       ...data,
       artistIds: artistUnion,
+      file: selectedFile || undefined,
     };
     
     // Convert genreScores and moodScores from Map<number, string> to Map<number, number>
@@ -459,7 +470,7 @@ export const SongFormDialog = ({
                             <div className="space-y-2">
                               <Input
                                 type="file"
-                                accept="audio/*"
+                                accept="audio/mpeg,.mp3"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   handleFileChange(file);
@@ -492,6 +503,9 @@ export const SongFormDialog = ({
                                   File đã chọn: {selectedFile.name}
                                 </span>
                               </div>
+                            )}
+                            {fileError && (
+                              <p className="text-sm text-destructive">{fileError}</p>
                             )}
                           </div>
                         </FormControl>
@@ -1010,7 +1024,26 @@ export const SongFormDialog = ({
               </div>
             </Tabs>
 
-            <DialogFooter className="mt-2">
+            {mode === "create" && (
+              <Alert className="mt-4 border-dashed border-[hsl(var(--admin-border))] bg-muted/40">
+                <div className="flex items-start gap-3">
+                  <Loader2
+                    className={`h-4 w-4 mt-1 text-[hsl(var(--admin-active))] ${isLoading ? "animate-spin" : ""}`}
+                  />
+                  <div className="space-y-1 text-sm">
+                    <AlertTitle>Upload & đồng bộ audio</AlertTitle>
+                    <AlertDescription>
+                      Quá trình tải file lên S3, tạo HLS và đăng ký ACRCloud có thể mất 1–2 phút.
+                      {isLoading
+                        ? " Vui lòng giữ cửa sổ này mở cho đến khi hoàn tất."
+                        : " Nhấn “Tạo” và chờ quá trình hoàn tất."}
+                    </AlertDescription>
+                  </div>
+                </div>
+              </Alert>
+            )}
+
+            <DialogFooter className="mt-4">
               <Button
                 type="button"
                 variant="outline"

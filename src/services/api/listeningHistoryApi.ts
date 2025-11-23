@@ -54,9 +54,9 @@ export const listeningHistoryApi = {
   /**
    * Get listening history for a specific user
    */
-  getByUser: async (userId: number): Promise<ListeningHistoryDTO[]> => {
+  getByUser: async (userId: number, page: number = 0, size: number = 100): Promise<ListeningHistoryDTO[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history/user/${userId}`, {
+      const response = await fetch(`${API_BASE_URL}/listening-history/user/${userId}?page=${page}&size=${size}&sort=listenedAt,desc`, {
         method: "GET",
         headers: buildJsonHeaders(),
       });
@@ -72,6 +72,7 @@ export const listeningHistoryApi = {
       }
 
       const data = await response.json();
+      // Backend trả về Page object với structure: { content: [], totalElements: number, ... }
       const list = Array.isArray(data) ? data : (data?.content ?? []);
       console.log("✅ Listening history fetched successfully:", list);
       return list;

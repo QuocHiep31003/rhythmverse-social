@@ -1,13 +1,22 @@
   import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { TrendingUp, Headphones, ArrowUp, ArrowDown, Sparkles, Minus, Play } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { TrendingUp, Headphones, ArrowUp, ArrowDown, Sparkles, Minus, Play, MoreVertical, Plus } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import Footer from "@/components/Footer";
 import Pagination from "@/components/Pagination";
 import { formatDuration, toSeconds } from "@/lib/utils";
 import { getTrendingComparison, TrendingSong, TrendStatus } from "@/services/api/trendingApi";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/hooks/use-toast";
 
 const TrendIcon = ({ status, className = "" }: { status: TrendStatus, className?: string }) => {
     switch (status) {
@@ -23,7 +32,7 @@ const TrendIcon = ({ status, className = "" }: { status: TrendStatus, className?
 };
 
 const TrendingMusic = () => {
-  const { playSong, setQueue } = useMusic();
+  const { playSong, setQueue, addToQueue, queue } = useMusic();
   const [allSongs, setAllSongs] = useState<TrendingSong[]>([]);
   const [filteredSongs, setFilteredSongs] = useState<TrendingSong[]>([]);
   const [displayedSongs, setDisplayedSongs] = useState<TrendingSong[]>([]);
@@ -105,6 +114,43 @@ const TrendingMusic = () => {
       }, 0);
     } else {
       console.warn("Song not found in queue:", song.songId, "Available IDs:", formattedQueue.map(s => s.id));
+    }
+  };
+
+  const handleAddToQueue = (song: TrendingSong) => {
+    const formattedSong = {
+      id: String(song.songId),
+      songName: song.songName,
+      name: song.songName,
+      title: song.songName,
+      artist: song.artists?.map(a => a.name).join(", ") || "Unknown",
+      album: song.albumName || "Unknown",
+      duration: toSeconds(song.duration),
+      cover: song.albumImageUrl,
+      audioUrl: song.audioUrl,
+      uuid: song.uuid,
+    };
+
+    // Kiểm tra xem bài hát đã có trong queue chưa
+    const existingIndex = queue.findIndex(s => String(s.id) === String(song.songId));
+    
+    if (existingIndex >= 0) {
+      // Nếu đã có, remove và add lại ở cuối
+      const newQueue = queue.filter(s => String(s.id) !== String(song.songId));
+      setQueue([...newQueue, formattedSong]);
+      toast({
+        title: "Đã di chuyển bài hát",
+        description: `${song.songName} đã được đưa ra sau cùng trong danh sách phát`,
+        duration: 2000,
+      });
+    } else {
+      // Nếu chưa có, add vào cuối
+      addToQueue(formattedSong);
+      toast({
+        title: "Đã thêm vào danh sách phát",
+        description: `${song.songName} đã được thêm vào cuối danh sách`,
+        duration: 2000,
+      });
     }
   };
 
@@ -201,6 +247,30 @@ const TrendingMusic = () => {
                     {/* Stats */}
                     <div className="hidden md:flex items-center gap-4 text-sm text-muted-foreground">
                       <span>{formatDuration(song.duration)}</span>
+                    </div>
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToQueue(song);
+                          }}>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Thêm vào danh sách đang phát
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 ))
