@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Play, Heart, MoreHorizontal, Users, Share2, Trash2 } from "lucide-react";
+import { Play, Heart, MoreHorizontal, Users, Share2, Trash2, ListPlus } from "lucide-react";
 import { Song } from "@/contexts/MusicContext";
 import { formatDateDisplay, msToMMSS, toSeconds } from "@/utils/playlistUtils";
+import { AddToPlaylistDialog } from "./AddToPlaylistDialog";
+import ShareButton from "@/components/ShareButton";
 
 interface PlaylistSongItemProps {
   song: Song & { addedBy?: string; addedAt?: string; addedByAvatar?: string | null; addedById?: number };
@@ -37,7 +40,15 @@ export const PlaylistSongItem = ({
   isCollaborator,
   meId,
 }: PlaylistSongItemProps) => {
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [shareSong, setShareSong] = useState<{
+    id: string | number;
+    title: string;
+    url: string;
+  } | null>(null);
+
   return (
+    <>
     <div
       onClick={onPlay}
       className="flex items-center gap-4 p-3 rounded-lg hover:bg-background/30 transition-colors group cursor-pointer"
@@ -59,8 +70,10 @@ export const PlaylistSongItem = ({
       </div>
 
       <Avatar className="w-12 h-12">
-        <AvatarImage src={song.cover} alt={song.title} />
-        <AvatarFallback>{song.title.charAt(0)}</AvatarFallback>
+        <AvatarImage src={song.cover || undefined} alt={song.title} />
+        <AvatarFallback className="bg-gradient-primary text-white">
+          {song.title ? song.title.charAt(0).toUpperCase() : '?'}
+        </AvatarFallback>
       </Avatar>
 
       <div className="flex-1 min-w-0">
@@ -140,7 +153,11 @@ export const PlaylistSongItem = ({
               <MoreHorizontal className="w-4 h-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem onClick={() => setAddToPlaylistOpen(true)}>
+              <ListPlus className="w-4 h-4 mr-2" />
+              Thêm vào playlist
+            </DropdownMenuItem>
             {meId && isCollaborator && onHide && (
               <DropdownMenuItem onClick={onHide}>
                 Ẩn bài hát này
@@ -151,8 +168,19 @@ export const PlaylistSongItem = ({
                 <Users className="w-4 h-4 mr-2" />Cộng tác
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => { try { navigator.clipboard.writeText(window.location.href); } catch { void 0; } }}>
-              <Share2 className="w-4 h-4 mr-2" />Chia sẻ
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                setShareSong({
+                  id: song.id,
+                  title: song.title || song.songName || "Unknown Song",
+                  url: `${window.location.origin}/song/${song.id}`,
+                });
+              }}
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Chia sẻ với bạn bè
             </DropdownMenuItem>
             {canEdit && onRemove && (
               <>
@@ -166,6 +194,29 @@ export const PlaylistSongItem = ({
         </DropdownMenu>
       </div>
     </div>
+
+    <AddToPlaylistDialog
+      open={addToPlaylistOpen}
+      onOpenChange={setAddToPlaylistOpen}
+      songId={Number(song.id)}
+      songTitle={song.title}
+      songCover={song.cover}
+    />
+    {shareSong && (
+      <ShareButton
+        key={`share-${shareSong.id}-${Date.now()}`}
+        title={shareSong.title}
+        type="song"
+        url={shareSong.url}
+        open={true}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setShareSong(null);
+          }
+        }}
+      />
+    )}
+    </>
   );
 };
 

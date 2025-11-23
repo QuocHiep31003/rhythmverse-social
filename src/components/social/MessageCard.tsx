@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { playlistsApi, PlaylistDTO } from "@/services/api/playlistApi";
 import { albumsApi } from "@/services/api/albumApi";
@@ -6,15 +6,152 @@ import { songsApi } from "@/services/api/songApi";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import type { Message, SharedPlaylistMessageData, SharedAlbumMessageData, SharedSongMessageData } from "@/types/social";
 import { SharedPlaylistCard, SharedAlbumCard, SharedSongCard } from "./SharedContentCards";
-import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME } from "@/utils/socialUtils";
+import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME, decodeUnicodeEscapes } from "@/utils/socialUtils";
 import { createSlug } from "@/utils/playlistUtils";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { mapToPlayerSong } from "@/lib/utils";
+import { API_BASE_URL } from "@/services/api/config";
+import { MoreVertical, Smile } from "lucide-react";
 
-export const MessageCard = ({ message, playSong }: { message: Message; playSong: (song: Song) => void }) => {
+const DEFAULT_REACTIONS = ["👍", "❤️", "😂", "😮", "😭", "🔥"];
+
+interface MessageCardProps {
+  message: Message;
+  playSong: (song: Song) => void;
+  onReact?: (message: Message, emoji: string) => void;
+  onDelete?: (message: Message) => void;
+  reactionOptions?: string[];
+  senderAvatar?: string | null;
+  meId?: number;
+  previousMessage?: Message | null;
+}
+
+export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOptions = DEFAULT_REACTIONS, senderAvatar, meId, previousMessage }: MessageCardProps) => {
+  const { setQueue } = useMusic();
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistDTO | null>(null);
   const [albumInfo, setAlbumInfo] = useState<{ id: number; name: string; coverUrl?: string | null; artist?: unknown; releaseYear?: number; songs?: unknown[] } | null>(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
   const [loadingAlbum, setLoadingAlbum] = useState(false);
   const isSentByMe = message.sender === "You";
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const parseTimestampMs = (msg?: Message | null) => {
+    if (!msg) return null;
+    if (typeof msg.sentAt === "number" && Number.isFinite(msg.sentAt)) return msg.sentAt;
+    const parsed = Date.parse(msg.timestamp);
+    if (!Number.isNaN(parsed)) return parsed;
+    const numericId = Number(msg.id);
+    return Number.isFinite(numericId) ? numericId : null;
+  };
+
+  const currentTimeMs = parseTimestampMs(message);
+  const previousTimeMs = parseTimestampMs(previousMessage);
+  const timeDiffMs =
+    currentTimeMs !== null && previousTimeMs !== null
+      ? Math.abs(currentTimeMs - previousTimeMs)
+      : null;
+  const hasTimeGap = previousMessage === null || (timeDiffMs !== null && timeDiffMs >= 5 * 60 * 1000);
+
+  // Chỉ hiện timestamp khi hover (ẩn mặc định)
+  const showTimestamp = isHovered;
+
+  const reactionButton = (
+    <div className="relative">
+      <button
+        type="button"
+        className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all"
+        aria-label="Add reaction"
+        onClick={() => setEmojiPickerOpen((prev) => !prev)}
+      >
+        <Smile className="w-4 h-4" />
+      </button>
+      <div
+        className={`absolute bottom-full mb-2 ${
+          isSentByMe ? "right-0" : "left-0"
+        } ${emojiPickerOpen ? "flex" : "hidden"} gap-1.5 bg-background/98 dark:bg-background/95 border border-border/60 rounded-full px-2 py-1.5 shadow-xl z-40 backdrop-blur-sm`}
+      >
+        {reactionOptions.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+                        className="text-xl transition-transform p-1 hover:bg-muted/40 rounded-full"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          onReact?.(message, emoji);
+                          setEmojiPickerOpen(false);
+                        }}
+                        aria-label={`React with ${emoji}`}
+                      >
+                        {emoji}
+                      </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const visibilityClasses = emojiPickerOpen
+    ? "opacity-100 pointer-events-auto"
+    : "opacity-0 pointer-events-none group-hover:opacity-100 group-focus-within:opacity-100 group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
+
+  const actionButtonsSent = (
+    <div
+      className={`flex items-center gap-1 min-w-[96px] justify-end ${visibilityClasses}`}
+    >
+      {onDelete && (
+        <button
+          type="button"
+          className="flex items-center justify-center w-8 h-8 rounded-full bg-muted/60 text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all"
+          aria-label="More options"
+          onClick={() => {
+            if (window.confirm("Bạn có chắc muốn xóa tin nhắn này?")) {
+              onDelete(message);
+            }
+          }}
+        >
+          <MoreVertical className="w-4 h-4" />
+        </button>
+      )}
+      {onReact && reactionButton}
+    </div>
+  );
+
+  const actionButtonsReceived = onReact ? (
+    <div
+      className={`flex items-center gap-1 min-w-[44px] justify-start ${visibilityClasses}`}
+    >
+      {reactionButton}
+    </div>
+  ) : null;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const detectTouch = () => {
+      try {
+        return (
+          "ontouchstart" in window ||
+          navigator.maxTouchPoints > 0 ||
+          window.matchMedia("(pointer: coarse)").matches
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    const update = () => setIsTouchDevice(detectTouch());
+    update();
+
+    let mql: MediaQueryList | null = null;
+    try {
+      mql = window.matchMedia("(pointer: coarse)");
+      const listener = (event: MediaQueryListEvent) => setIsTouchDevice(event.matches);
+      mql.addEventListener("change", listener);
+      return () => {
+        mql?.removeEventListener("change", listener);
+      };
+    } catch {
+      return;
+    }
+  }, []);
 
   useEffect(() => {
     if (message.type !== "playlist") return;
@@ -57,7 +194,7 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
             id: song?.id ?? song?.songId,
             name: song?.name || song?.title || "",
             artists: extractArtistNames(song?.artists ?? song?.artistNames),
-            coverUrl: song?.urlImageAlbum ?? song?.coverUrl ?? song?.cover ?? playlistInfo.coverUrl ?? undefined,
+            coverUrl: song?.urlImageAlbum ?? song?.coverUrl ?? song?.cover ?? undefined,
             durationLabel: formatDurationLabel(song?.duration ?? song?.length ?? song?.durationMs),
           }))
         : [];
@@ -194,56 +331,120 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
   }, [linkFromContent, message.sharedSong?.id, songPreview?.id, message.songData?.id]);
 
   const handlePlaySong = async () => {
-    if (!songPreview) return;
+    if (!songPreview) {
+      console.warn("[MessageCard] No songPreview available");
+      toast.error("Song not playable");
+      return;
+    }
+    
     try {
-      if (songPreview.audioUrl) {
-        const playable: Song = {
-          id: String(songPreview.id ?? songPreview.name ?? Date.now()),
-          title: songPreview.name || "Shared song",
-          artist: songPreview.artists.join(", ") || DEFAULT_ARTIST_NAME,
-          album: "",
-          duration: 0,
-          cover: songPreview.coverUrl ?? "",
-          audioUrl: songPreview.audioUrl,
-        };
-        playSong(playable);
-        return;
+      // Thử nhiều cách để lấy songId
+      let songId: number | undefined;
+      
+      // Ưu tiên 1: từ songPreview.id
+      if (songPreview.id) {
+        if (typeof songPreview.id === "number") {
+          songId = songPreview.id;
+        } else if (typeof songPreview.id === "string") {
+          const parsed = Number(songPreview.id);
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            songId = parsed;
+          }
+        }
       }
-      const songId =
-        songPreview.id ??
-        (typeof message.songData?.id === "number"
-          ? message.songData.id
-          : typeof message.songData?.id === "string"
-          ? Number(message.songData.id)
-          : undefined);
+      
+      // Ưu tiên 2: từ message.songData.id
+      if (!songId && message.songData?.id) {
+        if (typeof message.songData.id === "number") {
+          songId = message.songData.id;
+        } else if (typeof message.songData.id === "string") {
+          const parsed = Number(message.songData.id);
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            songId = parsed;
+          }
+        }
+      }
+      
+      // Ưu tiên 3: từ message.sharedSong?.id
+      if (!songId && message.sharedSong?.id) {
+        if (typeof message.sharedSong.id === "number") {
+          songId = message.sharedSong.id;
+        } else if (typeof message.sharedSong.id === "string") {
+          const parsed = Number(message.sharedSong.id);
+          if (!isNaN(parsed) && isFinite(parsed)) {
+            songId = parsed;
+          }
+        }
+      }
+      
       if (!songId) {
-        toast.error("Song not playable");
+        console.warn("[MessageCard] Could not determine songId", { songPreview, message: message.songData, sharedSong: message.sharedSong });
+        toast.error("Song not playable: Missing song ID");
         return;
       }
+      
+      console.log("[MessageCard] Attempting to play song with ID:", songId);
+      
+      // Lấy thông tin bài hát từ API
       const detail = await songsApi.getById(String(songId));
-      if (!detail || !detail.audioUrl) {
-        toast.error("Song not playable");
+      
+      if (!detail) {
+        console.warn("[MessageCard] Song detail not found for ID:", songId);
+        toast.error("Song not playable: Song not found");
         return;
       }
+      
+      console.log("[MessageCard] Song detail retrieved:", { id: detail.id, hasAudioUrl: !!detail.audioUrl });
+      
+      // Lấy playback URL từ stream session API (cho shared songs)
+      let playbackUrl: string | null = null;
+      try {
+        const streamSession = await songsApi.getPlaybackUrl(songId);
+        playbackUrl = streamSession.playbackUrl;
+        console.log("[MessageCard] Playback URL retrieved:", playbackUrl);
+      } catch (streamError) {
+        console.warn("[MessageCard] Failed to get playback URL, trying fallback:", streamError);
+        // Fallback: thử lấy từ song detail
+        playbackUrl = detail.audioUrl || detail.audio || detail.url || null;
+      }
+      
+      // Nếu vẫn không có, thử getStreamUrl
+      if (!playbackUrl) {
+        try {
+          const streamData = await songsApi.getStreamUrl(songId);
+          playbackUrl = streamData.streamUrl;
+          console.log("[MessageCard] Stream URL retrieved:", playbackUrl);
+        } catch (streamError2) {
+          console.warn("[MessageCard] Failed to get stream URL:", streamError2);
+        }
+      }
+      
+      if (!playbackUrl) {
+        console.warn("[MessageCard] No playback URL available for song:", { detail });
+        toast.error("Song not playable: No audio URL");
+        return;
+      }
+      
+      // Sử dụng mapToPlayerSong để đảm bảo format đúng
+      const mapped = mapToPlayerSong(detail);
+      
+      // Convert PlayerSong sang Song format cho MusicContext
       const playable: Song = {
-        id: String(detail.id),
-        title: detail.title || detail.name,
-        artist:
-          (Array.isArray(detail.artistNames) && detail.artistNames.length
-            ? detail.artistNames.join(", ")
-            : Array.isArray(detail.artists) && detail.artists[0]?.name) ||
-          songPreview.artists.join(", ") ||
-          DEFAULT_ARTIST_NAME,
-        album:
-          typeof detail.album === "string"
-            ? detail.album
-            : detail.album?.name || "",
-        duration: typeof detail.duration === "number" ? detail.duration : 0,
-        cover: detail.cover || songPreview.coverUrl || "",
-        audioUrl: detail.audioUrl || "",
+        id: mapped.id,
+        name: mapped.songName,
+        songName: mapped.songName,
+        artist: mapped.artist,
+        album: mapped.album,
+        duration: mapped.duration,
+        cover: mapped.cover,
+        audioUrl: playbackUrl,
       };
+      
+      console.log("[MessageCard] Playing song:", playable);
+      setQueue([playable]);
       playSong(playable);
-    } catch {
+    } catch (error) {
+      console.error("[MessageCard] Failed to play song:", error);
       toast.error("Failed to play song");
     }
   };
@@ -281,19 +482,23 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
 
     return (
       <div
-        className={`px-4 py-2 rounded-lg ${
-          isSentByMe ? "bg-primary text-primary-foreground" : "bg-muted/20"
+        className={`px-3 py-1.5 rounded-2xl break-words w-full min-w-0 whitespace-pre-wrap text-sm leading-relaxed ${
+          isSentByMe 
+            ? "bg-primary text-primary-foreground rounded-tr-sm" 
+            : "bg-muted/70 dark:bg-muted/50 rounded-tl-sm"
         }`}
       >
         {(() => {
-          const txt = String(message.content || "");
+          const txt = decodeUnicodeEscapes(message.content);
           const isUrl = /^https?:\/\//i.test(txt);
           return isUrl ? (
             <a href={txt} target="_blank" rel="noreferrer" className="text-sm underline break-all">
               {txt}
             </a>
           ) : (
-            <p className="text-sm break-words whitespace-pre-wrap">{txt}</p>
+            <p className="text-sm break-words whitespace-pre-wrap w-full leading-relaxed">
+              {txt}
+            </p>
           );
         })()}
       </div>
@@ -303,18 +508,71 @@ export const MessageCard = ({ message, playSong }: { message: Message; playSong:
   if (!contentNode) return null;
 
   return (
-    <div className={`flex ${isSentByMe ? "justify-end" : "justify-start"}`}>
-      <div className="max-w-xs lg:max-w-md space-y-1">
-        {contentNode}
-        <p
-          className={`text-xs text-muted-foreground/80 ${
-            isSentByMe ? "text-right" : ""
-          }`}
-        >
-          {message.timestamp}
-        </p>
+    <>
+      {hasTimeGap && (
+        <div className="flex justify-center my-3">
+          <span className="px-3 py-1 text-[11px] text-muted-foreground/80 bg-muted/30 dark:bg-muted/20 rounded-full">
+            {message.timestamp}
+          </span>
+        </div>
+      )}
+      <div
+        className={`group flex items-start gap-2 ${isSentByMe ? "justify-end" : "justify-start"} mb-2`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+        }}
+      >
+        {isSentByMe && actionButtonsSent}
+
+        {!isSentByMe && (
+          <Avatar className="w-8 h-8 flex-shrink-0 self-start">
+            <AvatarImage src={senderAvatar || undefined} alt={message.sender} />
+            <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+              {message.sender?.charAt(0) || "?"}
+            </AvatarFallback>
+          </Avatar>
+        )}
+
+        <div className={`max-w-[80%] sm:max-w-lg space-y-0.5 ${isSentByMe ? "mr-0" : "ml-0"} relative`}>
+          <div className="relative w-full pb-5 min-h-0 overflow-visible">
+            {contentNode}
+            {message.reactions && message.reactions.length > 0 && (
+              <div
+                className={`absolute bottom-0 ${
+                  isSentByMe ? "right-0" : "left-0"
+                } flex items-center gap-1 rounded-full bg-background/95 dark:bg-background/90 border border-border/40 px-2 py-0.5 shadow-sm z-20 flex-wrap max-w-[calc(100%-4px)]`}
+              >
+                {message.reactions.map((reaction) => {
+                  const decodedEmoji = decodeUnicodeEscapes(reaction.emoji);
+                  return (
+                    <div
+                      key={`${reaction.emoji}-${reaction.count}`}
+                      className={`flex items-center gap-1 text-xs flex-shrink-0 ${
+                        reaction.reactedByMe ? "text-primary font-semibold" : "text-foreground"
+                      }`}
+                    >
+                      <span>{decodedEmoji}</span>
+                      {reaction.count > 1 && <span>{reaction.count}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {showTimestamp && (
+            <p
+              className={`text-[10px] text-muted-foreground/50 transition-opacity duration-200 ${
+                isHovered ? "opacity-100" : "opacity-0"
+              } ${isSentByMe ? "text-right" : "text-left"}`}
+            >
+              {message.timestamp}
+            </p>
+          )}
+        </div>
+
+        {!isSentByMe && actionButtonsReceived}
       </div>
-    </div>
+    </>
   );
 };
-

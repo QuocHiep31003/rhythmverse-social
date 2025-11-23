@@ -1,5 +1,5 @@
 import { ref, onValue, off } from 'firebase/database';
-import { database } from '@/config/firebase-config';
+import { firebaseDb } from '@/config/firebase-config';
 import { API_BASE_URL, buildJsonHeaders } from '@/services/api/config';
 
 // Heartbeat ping để giữ presence online (Messenger-style)
@@ -64,7 +64,7 @@ export const setUserOffline = async (userId: number): Promise<void> => {
 };
 
 export const watchUserPresence = (userId: number, callback: (presence: { userId: number; online: boolean }) => void) => {
-  const statusRef = ref(database, `presence/users/${userId}/online`);
+  const statusRef = ref(firebaseDb, `presence/users/${userId}/online`);
   
   console.log('[Firebase Presence] Watching user:', userId);
   

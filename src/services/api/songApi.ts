@@ -18,6 +18,7 @@ export interface Song {
   playCount?: number;
   duration?: string | number; // BE trả về string format "3:45"
   cover?: string;
+  audioUrl?: string | null;
   album?: string | { name: string };
   albumId?: number;
   albumName?: string; // Từ một số API response
@@ -656,6 +657,17 @@ export const songsApi = {
   getStreamUrl: async (songId: number | string): Promise<{ streamUrl: string; uuid?: string }> => {
     const response = await apiClient.get(`/songs/${songId}/stream-url`);
     return response.data;
+  },
+  
+  // Get playback URL from stream session (for shared songs)
+  getPlaybackUrl: async (songId: number | string): Promise<{ playbackUrl: string }> => {
+    try {
+      const response = await apiClient.post(`/stream/${songId}/session`);
+      return response.data;
+    } catch (error) {
+      console.error("Error getting playback URL:", error);
+      throw error;
+    }
   },
 
   // Build S3 stream URL directly from uuid (used cho debug hoặc test)

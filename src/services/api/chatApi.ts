@@ -67,6 +67,23 @@ export interface ChatMessageDTO {
 }
 
 export const chatApi = {
+  sendMessage: async (senderId: number, receiverId: number, content: string): Promise<ChatMessageDTO> => {
+    console.log('[chatApi] Sending message to:', `${API_BASE_URL}/chat/send`, { senderId, receiverId, contentLength: content.length });
+    const res = await fetch(`${API_BASE_URL}/chat/send`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify({ senderId, receiverId, content }),
+    });
+    console.log('[chatApi] Response status:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error('[chatApi] Send message error:', errorMsg);
+      throw new Error(errorMsg);
+    }
+    const result = await res.json();
+    console.log('[chatApi] Send message success:', result);
+    return result;
+  },
   getHistory: async (userId1: number, userId2: number): Promise<ChatMessageDTO[]> => {
     const res = await fetch(`${API_BASE_URL}/chat/history/${userId1}/${userId2}`, {
       method: "GET",
@@ -124,5 +141,122 @@ export const chatApi = {
     });
     if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
     return (await res.json()) as ChatMessageDTO;
+  },
+  markConversationRead: async (userId: number, friendId: number): Promise<void> => {
+    // Try correct endpoint formats theo chuẩn Messenger
+    // Format 1: PUT /api/chat/read/conversation?readerId={userId}&partnerId={friendId} (khuyến nghị)
+    let res = await fetch(`${API_BASE_URL}/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`, {
+      method: "PUT",
+      headers: buildJsonHeaders(),
+    });
+    if (res.ok) return;
+    
+    // Format 2: POST /api/chat/read/conversation?readerId={userId}&partnerId={friendId}
+    const errorMsg1 = await parseErrorResponse(res);
+    res = await fetch(`${API_BASE_URL}/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (res.ok) return;
+    
+    // Format 3: POST /api/chat/read/conversation?userId={userId}&friendId={friendId} (backward compatible)
+    const errorMsg2 = await parseErrorResponse(res);
+    res = await fetch(`${API_BASE_URL}/chat/read/conversation?userId=${userId}&friendId=${friendId}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (res.ok) return;
+    
+    // Format 4: Legacy endpoint POST /api/chat/read/{userId}/{friendId}
+    const errorMsg3 = await parseErrorResponse(res);
+    res = await fetch(`${API_BASE_URL}/chat/read/${userId}/${friendId}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    if (res.ok) return;
+    
+    // If all fail, log warning but don't throw (non-critical operation)
+    const finalError = await parseErrorResponse(res);
+    console.warn('[chatApi] Failed to mark conversation as read:', errorMsg1 || errorMsg2 || errorMsg3 || finalError);
+  },
+  typingStart: async (roomId: string, userId: number): Promise<void> => {
+    if (!userId) {
+      console.warn('[chatApi] typingStart: userId is required but was', userId);
+      throw new Error('userId is required');
+    }
+    console.log('[chatApi] Starting typing:', { roomId, userId });
+    const res = await fetch(`${API_BASE_URL}/chat/rooms/${roomId}/typing/start?userId=${userId}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    console.log('[chatApi] Typing start response:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.warn('[chatApi] Failed to start typing:', errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  typingStop: async (roomId: string, userId: number): Promise<void> => {
+    if (!userId) {
+      console.warn('[chatApi] typingStop: userId is required but was', userId);
+      throw new Error('userId is required');
+    }
+    console.log('[chatApi] Stopping typing:', { roomId, userId });
+    const res = await fetch(`${API_BASE_URL}/chat/rooms/${roomId}/typing/stop?userId=${userId}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    console.log('[chatApi] Typing stop response:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.warn('[chatApi] Failed to stop typing:', errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  toggleReaction: async (messageId: number, emoji: string, userId: number): Promise<ChatMessageDTO> => {
+    console.log('[chatApi] Toggling reaction:', { messageId, emoji, userId });
+    // Endpoint mới: /api/chat/messages/{messageId}/reactions?userId={userId}&emoji={emoji}
+    const encodedEmoji = encodeURIComponent(emoji);
+    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}/reactions?userId=${userId}&emoji=${encodedEmoji}`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+    });
+    console.log('[chatApi] Toggle reaction response:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error('[chatApi] Toggle reaction error:', errorMsg);
+      throw new Error(errorMsg);
+    }
+    const result = await res.json();
+    console.log('[chatApi] Toggle reaction success:', result);
+    return result;
+  },
+  removeReaction: async (messageId: number, userId: number): Promise<void> => {
+    // Endpoint mới: DELETE /api/chat/messages/{messageId}/reactions/{userId}
+    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}/reactions/${userId}`, {
+      method: "DELETE",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.warn('[chatApi] Failed to remove reaction:', errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  deleteMessage: async (messageId: number, userId: number): Promise<{ messageId: number; deleted: boolean }> => {
+    console.log('[chatApi] Deleting message:', { messageId, userId });
+    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}?userId=${userId}`, {
+      method: "DELETE",
+      headers: buildJsonHeaders(),
+    });
+    console.log('[chatApi] Delete message response:', res.status, res.statusText);
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error('[chatApi] Delete message error:', errorMsg);
+      throw new Error(errorMsg);
+    }
+    const result = await res.json();
+    console.log('[chatApi] Delete message success:', result);
+    return result;
   },
 };

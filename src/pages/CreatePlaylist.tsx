@@ -1,29 +1,56 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Upload, Music, Lock, Globe, AlertCircle, X, Users } from "lucide-react";
+import { Upload, Music, Lock, Globe, X, Users } from "lucide-react";
 import { uploadImage } from "@/config/cloudinary";
 import { toast } from "@/hooks/use-toast";
 import Footer from "@/components/Footer";
 import { buildJsonHeaders, authApi } from "@/services/api";
 import { createSlug } from "@/utils/playlistUtils";
+import { PlaylistVisibility } from "@/types/playlist";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface PlaylistForm {
   name: string;
   description: string;
-  isPublic: boolean;
-  songLimit: number;
+  visibility: PlaylistVisibility;
   coverImage: File | null;
   coverUrl?: string;
   songIds: number[];
 }
+
+const VISIBILITY_OPTIONS: Record<
+  PlaylistVisibility,
+  { label: string; description: string; icon: ComponentType<{ className?: string }> }
+> = {
+  [PlaylistVisibility.PUBLIC]: {
+    label: "Public",
+    description: "Anyone can search and view this playlist.",
+    icon: Globe,
+  },
+  [PlaylistVisibility.FRIENDS_ONLY]: {
+    label: "Friends Only",
+    description: "Only your EchoVerse friends can discover it.",
+    icon: Users,
+  },
+  [PlaylistVisibility.PRIVATE]: {
+    label: "Private",
+    description: "Only you and invited collaborators can access it.",
+    icon: Lock,
+  },
+};
 
 const CreatePlaylist = () => {
   const navigate = useNavigate();
@@ -31,8 +58,7 @@ const CreatePlaylist = () => {
   const [formData, setFormData] = useState<PlaylistForm>({
     name: "",
     description: "",
-    isPublic: true,
-    songLimit: 500,
+    visibility: PlaylistVisibility.PUBLIC,
     coverImage: null,
     coverUrl: "",
     songIds: [],
@@ -48,6 +74,7 @@ const CreatePlaylist = () => {
     if (!q) return allSongs;
     return allSongs.filter(s => s.name.toLowerCase().includes(q) || String(s.releaseYear).includes(q));
   }, [songSearch, allSongs]);
+  const selectedVisibilityMeta = VISIBILITY_OPTIONS[formData.visibility];
 
   useEffect(() => {
     (async () => {
@@ -135,8 +162,7 @@ const CreatePlaylist = () => {
       const body: any = {
         name: formData.name,
         description: (formData.description || "").slice(0, 500),
-        visibility: formData.isPublic ? "PUBLIC" : "PRIVATE",
-        songLimit: formData.songLimit,
+        visibility: formData.visibility,
         songIds: formData.songIds || [],
         dateUpdate: today,
         coverUrl: /^https?:\/\//.test(coverUrlText) ? coverUrlText : (uploadedCoverUrl || formData.coverUrl || null),
@@ -205,18 +231,6 @@ const CreatePlaylist = () => {
               </div>
               <p className="text-xs text-muted-foreground">Recommended: 1000x1000px, max 5MB (JPG, PNG)</p>
 
-              {/* Moved Song Limit to left column */}
-              <div className="space-y-2 mt-4">
-                <Label htmlFor="song-limit">Song Limit</Label>
-                <div className="flex items-center gap-4">
-                  <Input id="song-limit" type="number" min={1} max={1000} value={formData.songLimit} onChange={(e) => handleInputChange("songLimit", parseInt(e.target.value) || 500)} className="bg-background/50 w-32" />
-                  <Badge variant="outline" className="flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3" />
-                    Max songs per playlist
-                  </Badge>
-                </div>
-              </div>
-
               {/* Moved Collaborators to left column */}
               <div className="space-y-2 mt-2">
                 <Label>Collaborators</Label>
@@ -243,20 +257,32 @@ const CreatePlaylist = () => {
             </div>
 
             <div className="space-y-4">
-              <Label>Privacy Settings</Label>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-background/30">
-                <div className="flex items-center gap-3">
-                  {formData.isPublic ? <Globe className="w-5 h-5 text-green-500" /> : <Lock className="w-5 h-5 text-orange-500" />}
-                  <div>
-                    <p className="font-medium">{formData.isPublic ? "Public" : "Private"}</p>
-                    <p className="text-sm text-muted-foreground">{formData.isPublic ? "Anyone can search and view this playlist" : "Only you can see this playlist"}</p>
-                  </div>
-                </div>
-                <Switch checked={formData.isPublic} onCheckedChange={(checked) => handleInputChange("isPublic", checked)} />
-              </div>
+              <Label htmlFor="playlist-visibility">Privacy Settings</Label>
+              <Select
+                value={formData.visibility}
+                onValueChange={(value) => handleInputChange("visibility", value as PlaylistVisibility)}
+              >
+                <SelectTrigger
+                  id="playlist-visibility"
+                  className="w-full border-border/60 bg-background/30 text-left"
+                >
+                  <SelectValue placeholder="Select visibility" />
+                </SelectTrigger>
+              <SelectContent className="bg-card/95 border-border/40 text-foreground">
+                {Object.entries(VISIBILITY_OPTIONS).map(([value, option]) => {
+                  const Icon = option.icon;
+                  return (
+                    <SelectItem key={value} value={value} className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4 text-primary" />
+                          <span>{option.label}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                })}
+              </SelectContent>
+            </Select>
             </div>
-
-            {/* Song Limit moved to left */}
 
             {/* Song selection removed for create flow as requested */}
 
@@ -273,9 +299,13 @@ const CreatePlaylist = () => {
                     <div className="flex-1">
                       <h3 className="font-medium text-lg">{formData.name}</h3>
                       {formData.description && <p className="text-sm text-muted-foreground mt-1">{formData.description}</p>}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant={formData.isPublic ? "default" : "secondary"}>{formData.isPublic ? "Public" : "Private"}</Badge>
-                        <Badge variant="outline">{formData.songIds.length}/{formData.songLimit} songs</Badge>
+                      <div className="flex flex-wrap items-center gap-2 mt-2">
+                        <Badge variant={formData.visibility === PlaylistVisibility.PUBLIC ? "default" : formData.visibility === PlaylistVisibility.FRIENDS_ONLY ? "secondary" : "outline"}>
+                          {selectedVisibilityMeta?.label || "Visibility"}
+                        </Badge>
+                        <Badge variant="outline">
+                          {formData.songIds.length} {formData.songIds.length === 1 ? "song" : "songs"}
+                        </Badge>
                       </div>
                     </div>
                   </div>

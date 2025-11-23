@@ -38,7 +38,10 @@ import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import {
   watchNotifications,
   NotificationDTO,
+  markNotificationsAsRead,
 } from "@/services/firebase/notifications";
+import { CHAT_TAB_OPENED_EVENT } from "@/utils/chatEvents";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
 import {
   premiumSubscriptionApi,
@@ -59,6 +62,9 @@ const TopBar = () => {
   const [inviteCount, setInviteCount] = useState<number>(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
   const [unreadAlertCount, setUnreadAlertCount] = useState<number>(0);
+  const [messageNotifications, setMessageNotifications] = useState<NotificationDTO[]>([]);
+  const [alertNotifications, setAlertNotifications] = useState<NotificationDTO[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
@@ -78,6 +84,9 @@ const TopBar = () => {
       return false;
     }
   });
+
+  // Firebase authentication state
+  const { firebaseReady } = useFirebaseAuth(currentUserId);
 
   const navigate = useNavigate();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -212,6 +221,9 @@ const TopBar = () => {
         const me = await authApi.me();
         if (me) {
           setIsAuthenticated(true);
+          if (typeof me?.id === "number") {
+            setCurrentUserId(me.id);
+          }
           setProfileName(me?.name || me?.username || "");
           setProfileEmail(me?.email || "");
           setProfileAvatar(me?.avatar || "");
@@ -288,27 +300,62 @@ const TopBar = () => {
 
   /** ================= FIREBASE NOTIFS ================= **/
   useEffect(() => {
-    const raw = localStorage.getItem("userId");
-    const userId = raw ? Number(raw) : null;
-    if (!userId) return;
+    if (!currentUserId) return;
 
     const unsubscribe = watchNotifications(
-      userId,
+      currentUserId,
       (notifications: NotificationDTO[]) => {
-        const unreadMsg = notifications.filter(
-          (n) => n.type === "MESSAGE" && !n.read
-        ).length;
-        const unreadAlert = notifications.filter(
-          (n) => n.type !== "MESSAGE" && !n.read
-        ).length;
-
-        setUnreadMsgCount(unreadMsg);
-        setUnreadAlertCount(unreadAlert);
+        const messageNotifs = notifications.filter((n) => n.type === "MESSAGE");
+        const alertNotifs = notifications.filter((n) => n.type !== "MESSAGE");
+        setMessageNotifications(messageNotifs);
+        setAlertNotifications(alertNotifs);
+        setUnreadMsgCount(messageNotifs.filter((n) => !n.read).length);
+        setUnreadAlertCount(alertNotifs.filter((n) => !n.read).length);
       }
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!notifOpen || !currentUserId || !firebaseReady) return;
+    const unreadIds = alertNotifications
+      .filter((n) => !n.read && n.id)
+      .map((n) => String(n.id));
+    if (unreadIds.length > 0) {
+      // Cập nhật local state ngay lập tức: đánh dấu tất cả alert notifications là đã đọc
+      setAlertNotifications((prev) =>
+        prev.map((n) => (unreadIds.includes(String(n.id)) ? { ...n, read: true } : n))
+      );
+      setUnreadAlertCount(0); // Optimistic update
+      // Đánh dấu đã đọc trong Firebase (chỉ khi Firebase auth đã sẵn sàng)
+      void markNotificationsAsRead(currentUserId, unreadIds);
+    }
+  }, [notifOpen, currentUserId, firebaseReady, alertNotifications]);
+
+  useEffect(() => {
+    if (!currentUserId || !firebaseReady) return;
+    const handler = () => {
+      const unreadIds = messageNotifications
+        .filter((n) => !n.read && n.id)
+        .map((n) => String(n.id));
+      if (unreadIds.length) {
+        // Cập nhật local state ngay lập tức: đánh dấu tất cả message notifications là đã đọc
+        setMessageNotifications((prev) =>
+          prev.map((n) => (unreadIds.includes(String(n.id)) ? { ...n, read: true } : n))
+        );
+        setUnreadMsgCount(0); // Optimistic update
+        // Đánh dấu đã đọc trong Firebase (chỉ khi Firebase auth đã sẵn sàng)
+        void markNotificationsAsRead(currentUserId, unreadIds);
+      } else {
+        setUnreadMsgCount(0);
+      }
+    };
+    window.addEventListener(CHAT_TAB_OPENED_EVENT, handler);
+    return () => {
+      window.removeEventListener(CHAT_TAB_OPENED_EVENT, handler);
+    };
+  }, [currentUserId, firebaseReady, messageNotifications]);
 
   /** ================= LOGOUT ================= **/
   const handleLogout = () => {

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { toast } from "sonner";
-
 import { friendsApi } from "@/services/api/friendsApi";
 import { authApi } from "@/services/api/authApi";
 import { API_BASE_URL } from "@/services/api/config";
@@ -17,12 +15,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 
 import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
+import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
 import { chatApi, ChatMessageDTO } from "@/services/api/chatApi";
 import { useMusic } from "@/contexts/MusicContext";
-import { watchChatMessages, type FirebaseMessage } from "@/services/firebase/chat";
+import type { Song } from "@/contexts/MusicContext";
+import { watchChatMessages, type FirebaseMessage, watchTyping, watchReactions, watchMessageIndex, getChatRoomKey } from "@/services/firebase/chat";
 
-import { NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
+import { NotificationDTO as FBNotificationDTO, watchNotifications } from "@/services/firebase/notifications";
 import {
 
   MessageCircle,
@@ -31,8 +31,10 @@ import {
 
 } from "lucide-react";
 
-import type { CollabInviteDTO, Message, Friend, ApiFriendDTO, ApiPendingDTO } from "@/types/social";
-import { parseIncomingContent } from "@/utils/socialUtils";
+import type { CollabInviteDTO, Message, Friend, ApiFriendDTO, ApiPendingDTO, MessageReactionSummary } from "@/types/social";
+import { parseIncomingContent, DEFAULT_ARTIST_NAME, decodeUnicodeEscapes } from "@/utils/socialUtils";
+import { emitChatBubble } from "@/utils/chatBubbleBus";
+import { emitChatTabOpened } from "@/utils/chatEvents";
 import { ChatArea } from "@/components/social/ChatArea";
 import { FriendsPanel } from "@/components/social/FriendsPanel";
 import { FriendRequestsList } from "@/components/social/FriendRequestsList";
@@ -40,6 +42,7 @@ import { PublicProfileCard } from "@/components/social/PublicProfileCard";
 import { SocialInlineCard } from "@/components/social/SocialInlineCard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 
 
 // Realtime notification DTO from /user/queue/notifications
@@ -51,11 +54,126 @@ type SocialTab = "chat" | "friends";
 const normalizeSocialTab = (value?: string | null): SocialTab =>
   (value || "").toLowerCase() === "friends" ? "friends" : "chat";
 
+const coerceToNumber = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const CHAT_HISTORY_POLL_INTERVAL_MS = 15_000;
+
+// Type for window extension to track pending chat refreshes
+declare global {
+  interface Window {
+    __chatRefreshPending?: Record<string, boolean>;
+  }
+}
+
+const resolveSongNumericId = (song: Song | null | undefined): number | null => {
+  if (!song) return null;
+  const candidates: unknown[] = [
+    song.id,
+    (song as { songId?: unknown }).songId,
+    (song as { SongId?: unknown }).SongId,
+    (song as { song?: { id?: unknown } }).song?.id,
+  ];
+  for (const candidate of candidates) {
+    const parsed = coerceToNumber(candidate);
+    if (parsed != null) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const resolveSongTitle = (song: Song | null | undefined): string => {
+  if (!song) return "";
+  const candidates = [
+    song.songName,
+    (song as { name?: string }).name,
+    (song as { title?: string }).title,
+    (song as { songTitle?: string }).songTitle,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+  return "";
+};
+
+const resolveSongArtist = (song: Song | null | undefined): string => {
+  if (!song) return "";
+  const names: string[] = [];
+  const addName = (value: unknown) => {
+    if (!value) return;
+    if (typeof value === "string" && value.trim().length > 0) {
+      names.push(value.trim());
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(addName);
+      return;
+    }
+    if (typeof value === "object") {
+      const maybeName = (value as { name?: unknown }).name;
+      if (typeof maybeName === "string" && maybeName.trim().length > 0) {
+        names.push(maybeName.trim());
+      }
+    }
+  };
+
+  addName(song.artist);
+  addName((song as { artistName?: unknown }).artistName);
+  addName((song as { artists?: unknown }).artists);
+  addName((song as { artistNames?: unknown }).artistNames);
+
+  const unique = Array.from(new Set(names.filter((name) => name.length > 0)));
+  return unique.join(", ");
+};
+
+const getMessageSortKey = (msg: Message): number => {
+  if (typeof msg.sentAt === "number" && Number.isFinite(msg.sentAt)) {
+    return msg.sentAt;
+  }
+  if (typeof msg.id === "string") {
+    const numericId = Number(msg.id);
+    if (Number.isFinite(numericId)) return numericId;
+    const digits = msg.id.match(/\d+/g);
+    if (digits?.length) {
+      const last = Number(digits[digits.length - 1]);
+      if (Number.isFinite(last)) return last;
+    }
+  }
+  return 0;
+};
+
+const sortMessagesChronologically = (messages: Message[]): Message[] => {
+  return [...messages].sort((a, b) => {
+    const diff = getMessageSortKey(a) - getMessageSortKey(b);
+    if (diff !== 0) return diff;
+    return String(a.id).localeCompare(String(b.id));
+  });
+};
+
 
 
 const Social = () => {
 
-  const [selectedChat, setSelectedChat] = useState<string | null>(null);
+  const [selectedChat, setSelectedChat] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('lastChatFriendId');
+    } catch {
+      return null;
+    }
+  });
 
   const [activeTab, setActiveTab] = useState<SocialTab>(() => {
     if (typeof window === 'undefined') return 'chat';
@@ -65,6 +183,9 @@ const Social = () => {
   const [newMessage, setNewMessage] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
+  const pushBubble = useCallback((message: string, variant: "info" | "success" | "warning" | "error" = "info") => {
+    emitChatBubble({ from: "EchoVerse", message, variant });
+  }, []);
 
   
 
@@ -90,6 +211,16 @@ const Social = () => {
   }, [searchParams]);
 
   const [friends, setFriends] = useState<Friend[]>([]);
+
+  const friendsRef = useRef<Friend[]>([]);
+  const chatWatchersRef = useRef<Record<string, () => void>>({});
+  const typingWatchersRef = useRef<Record<string, () => void>>({});
+  const reactionsWatcherRef = useRef<(() => void) | null>(null);
+  const lastReadRef = useRef<Record<string, number>>({});
+  const selectedChatRef = useRef<string | null>(selectedChat);
+  const typingStatusRef = useRef<{ roomId: string | null; active: boolean }>({ roomId: null, active: false });
+  const typingStartTimeoutRef = useRef<number | null>(null);
+  const typingStopTimeoutRef = useRef<number | null>(null);
 
   const [loadingFriends, setLoadingFriends] = useState<boolean>(false);
 
@@ -128,7 +259,16 @@ const Social = () => {
     return Number.isFinite(n) ? n : undefined;
   }, [localStorage.getItem('userId')]);
 
-  // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° lÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°u invite URL ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ quay lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i sau ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p khi ngÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi dÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ng chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p
+  const { firebaseReady, firebaseStatus, firebaseError } = useFirebaseAuth(meId);
+  const realtimeUserId = firebaseReady ? meId : undefined;
+
+  useEffect(() => {
+    if (firebaseError) {
+      console.error("[Social] Firebase auth error:", firebaseError);
+    }
+  }, [firebaseError]);
+
+  // Legacy invite URL persistence removed.
   // Legacy invite persistence removed
 
   // Legacy invite preview flow removed
@@ -166,10 +306,54 @@ const Social = () => {
   // Invite link preview state
   // Legacy states removed
 
-  // ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿m sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ tin nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯n chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng bÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc
+  // Track unread counts for chats and notifications.
   const [unreadMessagesCount, setUnreadMessagesCount] = useState<number>(0);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
-  const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>({});
+  
+  // Load unreadByFriend from localStorage on mount
+  const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>(() => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const stored = localStorage.getItem('unreadByFriend');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        console.log('[Social] Loaded unreadByFriend from localStorage:', parsed);
+        return parsed;
+      }
+    } catch (e) {
+      console.warn('[Social] Failed to load unreadByFriend from localStorage:', e);
+    }
+    return {};
+  });
+  
+  // Save unreadByFriend to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('unreadByFriend', JSON.stringify(unreadByFriend));
+      console.log('[Social] Saved unreadByFriend to localStorage:', unreadByFriend);
+    } catch (e) {
+      console.warn('[Social] Failed to save unreadByFriend to localStorage:', e);
+    }
+  }, [unreadByFriend]);
+  
+  // Track message IDs that have already been counted to avoid double counting
+  const countedMessageIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    friendsRef.current = friends;
+  }, [friends]);
+
+  useEffect(() => {
+    selectedChatRef.current = selectedChat;
+    if (selectedChat) {
+      try {
+        localStorage.setItem('lastChatFriendId', selectedChat);
+      } catch {
+        void 0;
+      }
+    }
+  }, [selectedChat]);
 
 
 
@@ -182,6 +366,361 @@ const Social = () => {
   // Chat state: messages per friend id
 
   const [chatByFriend, setChatByFriend] = useState<Record<string, Message[]>>({});
+  const [typingByFriend, setTypingByFriend] = useState<Record<string, boolean>>({});
+  const [reactionsByMessage, setReactionsByMessage] = useState<Record<string, MessageReactionSummary[]>>({});
+  const [messageIndexByRoom, setMessageIndexByRoom] = useState<Record<string, Record<string, string>>>({});
+
+  const getLastActivityTimestamp = useCallback(
+    (friendId: string): number => {
+      const friendMessages = chatByFriend[friendId];
+      if (!friendMessages || friendMessages.length === 0) {
+        return 0;
+      }
+      const latest = friendMessages[friendMessages.length - 1];
+      return getMessageSortKey(latest);
+    },
+    [chatByFriend]
+  );
+
+  const markConversationAsRead = useCallback(
+    (friendKey: string | number | null | undefined) => {
+      if (!meId || friendKey == null) return;
+      const friendId = Number(friendKey);
+      if (!Number.isFinite(friendId)) return;
+      const cacheKey = `${meId}-${friendId}`;
+      const now = Date.now();
+      const last = lastReadRef.current[cacheKey];
+      if (last && now - last < 1000) return;
+      lastReadRef.current[cacheKey] = now;
+      chatApi
+        .markConversationRead(meId, friendId)
+        .catch((error) => console.warn("[Social] Failed to mark conversation as read", error));
+    },
+    [meId]
+  );
+
+  const mergeFirebaseMessages = useCallback(
+    (friendKey: string, firebaseMessages: FirebaseMessage[]) => {
+      const parsed = firebaseMessages.map((firebaseMessage) => {
+        // Priority: contentPlain > contentPreview > content/contentCipher
+        // If only preview exists (truncated), show it temporarily while fetching full content
+        const hasPlaintext = !!firebaseMessage.contentPlain;
+        const displayContent =
+          firebaseMessage.contentPlain ??
+          firebaseMessage.contentPreview ??
+          (typeof firebaseMessage.content === "string" && firebaseMessage.content.trim() ? firebaseMessage.content : "") ??
+          (typeof firebaseMessage.contentCipher === "string" ? "[Encrypted]" : "");
+        
+        if (!displayContent && !firebaseMessage.sharedContentType && !firebaseMessage.sharedContent) {
+          console.warn("[Social] Message from Firebase has no displayable content:", {
+            id: firebaseMessage.id,
+            messageId: firebaseMessage.messageId,
+            hasContentPlain: !!firebaseMessage.contentPlain,
+            hasContentPreview: !!firebaseMessage.contentPreview,
+            hasContent: !!firebaseMessage.content,
+            hasContentCipher: !!firebaseMessage.contentCipher,
+          });
+        }
+        
+        const normalized: ChatMessageDTO = {
+          ...(firebaseMessage as unknown as ChatMessageDTO),
+          contentPlain: hasPlaintext ? firebaseMessage.contentPlain : (displayContent || undefined),
+          content: displayContent || (hasPlaintext ? undefined : ""),
+        };
+        const parsed = parseIncomingContent(normalized, friendsRef.current.length ? friendsRef.current : friends);
+        // Store firebaseKey for reactions lookup
+        // Priority: firebaseKey field in message object > snapshot key (id)
+        const firebaseKey = (firebaseMessage as { firebaseKey?: string }).firebaseKey || firebaseMessage.id;
+        if (firebaseKey) {
+          return { ...parsed, firebaseKey };
+        }
+        return parsed;
+      });
+      
+      // If any message lacks plaintext, trigger history refresh to get full content immediately
+      const needsRefresh = parsed.some((msg) => {
+        const original = firebaseMessages.find((fm) => String(fm.id) === String(msg.id));
+        // Check if message has only preview (truncated) or no contentPlain
+        return original && (!original.contentPlain || (original.contentPreview && !original.contentPlain)) && original.messageId;
+      });
+      
+      if (needsRefresh && meId) {
+        const friendNumericId = Number(friendKey);
+        if (Number.isFinite(friendNumericId)) {
+          // Fetch immediately without debounce for better UX
+          const refreshKey = `refresh-${friendKey}`;
+          if (!window.__chatRefreshPending?.[refreshKey]) {
+            if (!window.__chatRefreshPending) {
+              window.__chatRefreshPending = {};
+            }
+            window.__chatRefreshPending[refreshKey] = true;
+            // Fetch immediately, no setTimeout delay for better UX
+            chatApi
+              .getHistory(meId, friendNumericId)
+              .then((history) => {
+                const normalizedHistory = history.map((h) => ({
+                  ...h,
+                  contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
+                }));
+                const mapped = normalizedHistory.map((h) => parseIncomingContent(h, friendsRef.current.length ? friendsRef.current : friends));
+                setChatByFriend((prev) => {
+                  const existing = prev[friendKey] || [];
+                  const historyIds = new Set(mapped.map((m) => String(m.id)));
+                  const historyByBackendId = new Map<number, Message>();
+                  mapped.forEach((msg) => {
+                    if (msg.backendId) {
+                      historyByBackendId.set(msg.backendId, msg);
+                    }
+                  });
+                  
+                  // Merge: update existing messages with full content from history
+                  const updated = existing.map((msg) => {
+                    // If message has backendId and history has full content for it, use history version
+                    if (msg.backendId && historyByBackendId.has(msg.backendId)) {
+                      const historyMsg = historyByBackendId.get(msg.backendId)!;
+                      // Always use history version if it has content (full content from API)
+                      if (historyMsg.content) {
+                        console.log('[Social] Updating message with full content from history:', { 
+                          backendId: msg.backendId, 
+                          oldLength: msg.content?.length || 0, 
+                          newLength: historyMsg.content.length 
+                        });
+                        return historyMsg;
+                      }
+                    }
+                    // If message ID matches history, use history version
+                    if (historyIds.has(String(msg.id))) {
+                      const historyMsg = mapped.find(m => String(m.id) === String(msg.id));
+                      if (historyMsg && historyMsg.content) {
+                        console.log('[Social] Updating message by ID with full content:', { 
+                          id: msg.id, 
+                          oldLength: msg.content?.length || 0, 
+                          newLength: historyMsg.content.length 
+                        });
+                        return historyMsg;
+                      }
+                    }
+                    return msg;
+                  });
+                  
+                  // Add new messages from history that don't exist in current
+                  const existingIds = new Set(updated.map(m => String(m.id)));
+                  mapped.forEach((msg) => {
+                    if (!existingIds.has(String(msg.id))) {
+                      updated.push(msg);
+                    }
+                  });
+                  
+                  // Keep temp messages that aren't in history yet
+                  existing.forEach((msg) => {
+                    if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
+                      const alreadyAdded = updated.some(m => m.id === msg.id);
+                      if (!alreadyAdded) {
+                        updated.push(msg);
+                      }
+                    }
+                  });
+                  
+                  return { ...prev, [friendKey]: sortMessagesChronologically(updated) };
+                });
+                if (window.__chatRefreshPending) {
+                  delete window.__chatRefreshPending[refreshKey];
+                }
+              })
+              .catch((err) => {
+                console.warn("[Social] Failed to refresh message history:", err);
+                if (window.__chatRefreshPending) {
+                  delete window.__chatRefreshPending[refreshKey];
+                }
+              });
+          }
+        }
+      }
+
+      setChatByFriend((prev) => {
+        const existing = prev[friendKey] || [];
+        const replaced = existing.map((msg) => {
+          if (typeof msg.id !== "string" || !msg.id.startsWith("temp-")) {
+            return msg;
+          }
+          const matching = parsed.find((candidate) => {
+            if (candidate.sender !== msg.sender) return false;
+            if (candidate.type !== msg.type) return false;
+            if (msg.type === "song") {
+              return candidate.songData?.id === msg.songData?.id;
+            }
+            if (msg.type === "playlist") {
+              return candidate.playlistData?.id === msg.playlistData?.id;
+            }
+            if (msg.type === "album") {
+              return candidate.albumData?.id === msg.albumData?.id;
+            }
+            return candidate.content === msg.content;
+          });
+          return matching ?? msg;
+        });
+
+        const unique = new Map<string, Message>();
+        replaced.forEach((message) => {
+          unique.set(String(message.id), message);
+        });
+        parsed.forEach((message) => {
+          unique.set(String(message.id), message);
+        });
+
+        const sorted = sortMessagesChronologically(Array.from(unique.values()));
+        const previous = prev[friendKey] || [];
+        const unchanged =
+          previous.length === sorted.length &&
+          previous.every((message, index) => {
+            const next = sorted[index];
+            if (!next) return false;
+            if (message.id !== next.id) return false;
+            if (message.content !== next.content) return false;
+            if (message.type !== next.type) return false;
+            const messageSongId = message.songData?.id ?? null;
+            const nextSongId = next.songData?.id ?? null;
+            return messageSongId === nextSongId;
+          });
+
+        if (unchanged) {
+          return prev;
+        }
+
+        // Đếm tin nhắn chưa đọc từ Firebase messages
+        // Chỉ đếm tin nhắn mới thực sự (không phải khi reload)
+        const isInitialLoad = previous.length === 0;
+        
+        if (!isInitialLoad) {
+          const previousIds = new Set(previous.map(m => String(m.id)));
+          const previousBackendIds = new Set(
+            previous
+              .filter(m => m.backendId)
+              .map(m => String(m.backendId))
+          );
+          
+          // Tìm tin nhắn mới: không có trong previous (theo ID hoặc backendId)
+          const newMessages = sorted.filter(m => {
+            const hasId = previousIds.has(String(m.id));
+            const hasBackendId = m.backendId && previousBackendIds.has(String(m.backendId));
+            return !hasId && !hasBackendId;
+          });
+          
+          // Chỉ đếm nếu không đang xem chat này
+          const isViewingThisChat = activeTab === "chat" && selectedChat === friendKey;
+          
+          if (newMessages.length > 0 && !isViewingThisChat) {
+            // Đếm tin nhắn chưa đọc từ người khác, tránh đếm trùng
+            const unreadNewMessages = newMessages.filter(m => {
+              const isFromOther = m.sender !== "You";
+              // Kiểm tra read status nếu có (từ Firebase message)
+              const isUnread = m.read === false || m.read === undefined;
+              // Kiểm tra xem message này đã được đếm chưa
+              const messageKey = m.id || (m.backendId ? String(m.backendId) : null);
+              const alreadyCounted = messageKey ? countedMessageIdsRef.current.has(`${friendKey}:${messageKey}`) : false;
+              return isFromOther && isUnread && !alreadyCounted;
+            });
+
+            if (unreadNewMessages.length > 0) {
+              // Đánh dấu các message đã được đếm
+              unreadNewMessages.forEach(m => {
+                const messageKey = m.id || (m.backendId ? String(m.backendId) : null);
+                if (messageKey) {
+                  countedMessageIdsRef.current.add(`${friendKey}:${messageKey}`);
+                }
+              });
+              
+              console.log('[Social] New unread messages detected from Firebase:', { 
+                friendKey, 
+                count: unreadNewMessages.length,
+                totalNew: newMessages.length,
+                messages: unreadNewMessages.map(m => ({ 
+                  id: m.id, 
+                  backendId: m.backendId,
+                  sender: m.sender, 
+                  read: m.read,
+                  sentAt: m.sentAt 
+                }))
+              });
+              setUnreadByFriend((prev) => {
+                const current = prev[friendKey] || 0;
+                const newCount = current + unreadNewMessages.length;
+                console.log('[Social] Updating unread count from Firebase:', { friendKey, current, newCount });
+                return { ...prev, [friendKey]: newCount };
+              });
+            }
+          }
+        }
+
+        return { ...prev, [friendKey]: sorted };
+      });
+
+      if (activeTab === "chat" && selectedChat === friendKey) {
+        setUnreadByFriend((prev) => {
+          if (!prev[friendKey] || prev[friendKey] === 0) return prev;
+          // Xóa các message IDs đã đếm cho friend này khi reset unread count
+          const keysToDelete: string[] = [];
+          countedMessageIdsRef.current.forEach(key => {
+            if (key.startsWith(`${friendKey}:`)) {
+              keysToDelete.push(key);
+            }
+          });
+          keysToDelete.forEach(key => countedMessageIdsRef.current.delete(key));
+          return { ...prev, [friendKey]: 0 };
+        });
+        markConversationAsRead(friendKey);
+      }
+    },
+    [activeTab, selectedChat, markConversationAsRead, friends, meId]
+  );
+
+  useEffect(() => {
+    if (!selectedChat) return;
+    const stillExists = friends.some((friend) => friend.id === selectedChat);
+    if (!stillExists) {
+      setSelectedChat(null);
+    }
+  }, [friends, selectedChat]);
+
+  useEffect(() => {
+    if (activeTab !== "chat") return;
+    if (selectedChat && friends.some((friend) => friend.id === selectedChat)) {
+      return;
+    }
+    if (!friends.length) return;
+
+    const unreadCandidates = friends
+      .filter((friend) => (unreadByFriend[friend.id] || 0) > 0)
+      .sort((a, b) => {
+        const diff = (unreadByFriend[b.id] || 0) - (unreadByFriend[a.id] || 0);
+        if (diff !== 0) return diff;
+        return getLastActivityTimestamp(b.id) - getLastActivityTimestamp(a.id);
+      });
+
+    const recentCandidates = [...friends].sort(
+      (a, b) => getLastActivityTimestamp(b.id) - getLastActivityTimestamp(a.id)
+    );
+
+    const fallback = friends[0];
+    const nextFriend = unreadCandidates[0] || recentCandidates[0] || fallback;
+    if (nextFriend && nextFriend.id !== selectedChat) {
+      setSelectedChat(nextFriend.id);
+    }
+  }, [activeTab, friends, selectedChat, unreadByFriend, getLastActivityTimestamp]);
+
+  useEffect(() => {
+    if (activeTab !== "chat" || !selectedChat) return;
+    setUnreadByFriend((prev) => {
+      if (!prev[selectedChat] || prev[selectedChat] === 0) return prev;
+      return { ...prev, [selectedChat]: 0 };
+    });
+    markConversationAsRead(selectedChat);
+  }, [activeTab, selectedChat, markConversationAsRead]);
+
+  useEffect(() => {
+    if (activeTab !== "chat" || !selectedChat) return;
+    emitChatTabOpened({ friendId: selectedChat });
+  }, [activeTab, selectedChat]);
 
   // Normalize relative URLs from API to absolute
   const toAbsoluteUrl = (u?: string | null): string | null => {
@@ -263,7 +802,9 @@ const Social = () => {
 
       const mapped: Friend[] = apiFriends.map((f) => ({
 
-        id: String(f.friendId || f.id),
+        id: String(f.friendId ?? f.id),
+        friendUserId: typeof f.friendId === "number" ? f.friendId : undefined,
+        relationshipId: typeof f.id === "number" ? f.id : undefined,
 
         name: f.friendName || `User ${f.friendId}`,
 
@@ -303,7 +844,7 @@ const Social = () => {
 
     if (!Number.isFinite(idNum)) return;
 
-    // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi API khi cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ token
+    // Only call the API when a token is available
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (!token) {
       setPending([]);
@@ -336,10 +877,10 @@ const Social = () => {
     try {
       await friendsApi.accept(id);
       await Promise.all([loadPending(), loadFriends()]);
-      toast.success('ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥p nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­n lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
+      pushBubble("Friend request accepted", "success");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e || 'KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥p nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­n ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
-      toast.error(msg);
+      const msg = e instanceof Error ? e.message : String(e || 'Failed to accept friend request');
+      pushBubble(msg, "error");
     }
   };
 
@@ -347,10 +888,10 @@ const Social = () => {
     try {
       await friendsApi.reject(id);
       await loadPending();
-      toast.success('ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œi lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
+      pushBubble("Friend request declined", "success");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e || 'KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œi ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi');
-      toast.error(msg);
+      const msg = e instanceof Error ? e.message : String(e || 'Failed to decline friend request');
+      pushBubble(msg, "error");
     }
   };
 
@@ -358,7 +899,7 @@ const Social = () => {
 
   const loadCollabInvites = useCallback(async () => {
 
-    // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° gÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âi API khi cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ token (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh 401 spam khi chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p)
+  // Only fetch invites when tokens exist to avoid 401 spam after logout
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (!token) {
       setCollabInvites([]);
@@ -373,8 +914,8 @@ const Social = () => {
 
       setCollabInvites(Array.isArray(list) ? list : []);
 
-      // ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥u ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ xem khi load invites (giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¹nh rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±ng khi vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â o tab friends thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ xem)
-      // CÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ lÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°u vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â o localStorage ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ track invites ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ xem
+      // Track which invites the user has viewed so we can highlight new ones later
+      // Uses localStorage so the state persists between sessions
       if (Array.isArray(list) && list.length > 0 && meId) {
         try {
           const viewedInvitesKey = `viewedInvites_${meId}`;
@@ -395,7 +936,7 @@ const Social = () => {
 
 
 
-  // Load dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯ liÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡u chÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­nh ngay khi ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ userId
+  // Load friends, pending requests, and invites when auth or tabs change
   useEffect(() => {
     if (!hasToken || !meId) return;
     void loadFriends();
@@ -428,13 +969,15 @@ const Social = () => {
 
   // Firebase Realtime handler
 
-  // Memoize friendIds ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o array mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Âi lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§n render (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh trigger presence watch khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§n thiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿t)
+  // Memoize friend ids so presence listeners do not churn each render
 
   const friendsIdsString = useMemo(() => JSON.stringify(friends.map(f => f.id).sort()), [friends.map(f => f.id).join(',')]);
 
   const friendIds = useMemo(() => friends.map(f => Number(f.id)).sort((a, b) => a - b), [friendsIdsString]);
 
-  const { sendMessage, watchChatWithFriend, isConnected } = useFirebaseRealtime(meId, {
+  // Không cần khôi phục từ notifications nữa vì đã lưu vào localStorage
+
+  useFirebaseRealtime(realtimeUserId, {
 
     onPresence: (p) => {
 
@@ -452,7 +995,9 @@ const Social = () => {
 
             const newOnlineStatus = !!p.online;
 
-            console.log('[Social] ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ MATCH! Updating friend', friendId, 'from', f.isOnline, 'to', newOnlineStatus);
+            if (f.isOnline !== newOnlineStatus) {
+              console.log('[Social] Updating friend presence', friendId, 'from', f.isOnline, 'to', newOnlineStatus);
+            }
 
             return { ...f, isOnline: newOnlineStatus };
 
@@ -471,7 +1016,7 @@ const Social = () => {
     },
 
     onNotification: (n: FBNotificationDTO) => {
-      // CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­p nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng bÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc
+
       if (!n.read) {
         setUnreadNotificationsCount(prev => prev + 1);
       }
@@ -479,25 +1024,16 @@ const Social = () => {
       try {
 
         if (n?.type === 'MESSAGE') {
-          // TÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ tin nhÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯n chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âc theo tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«ng bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡n
-          if (!n.read) {
-            const sid = n.senderId ? String(n.senderId) : undefined;
-            if (sid) {
-              setUnreadByFriend(prev => {
-                const curr = prev[sid] || 0;
-                // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œang mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ chat vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi user nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â y, khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ng dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“n
-                if (selectedChat && String(selectedChat) === sid) return { ...prev, [sid]: 0 };
-                return { ...prev, [sid]: curr + 1 };
-              });
-            }
-          }
-          toast(`${n.senderName || 'Someone'}: ${n.body || ''}`);
+          // Không đếm unreadByFriend từ notification nữa
+          // Unread count sẽ được đếm từ Firebase messages để tránh đếm trùng
+          // Chỉ hiển thị bubble notification
+          pushBubble(`${n.senderName || 'Someone'}: ${n.body || 'New message'}`, "info");
 
         } else if (n?.type === 'SHARE') {
 
           const title = n?.metadata?.playlistName || n?.metadata?.songName || n?.metadata?.albumName || n?.title || 'Shared content';
 
-          toast(`${n.senderName || 'Someone'} shared: ${title}`);
+          pushBubble(`${n.senderName || 'Someone'} shared: ${title}`, "info");
 
           // Also reflect the share inside the chat thread for the receiver
 
@@ -509,7 +1045,7 @@ const Social = () => {
               const m = n.metadata as { playlistId?: number; songId?: number; albumId?: number } | undefined;
 
             
-            // Load message tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« chat history ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥y sharedContent (async, khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng await)
+
             void (async () => {
               try {
                 const history = await chatApi.getHistory(meId, sid);
@@ -538,7 +1074,7 @@ const Social = () => {
                 }
               } catch { /* fallback to creating message from metadata */ }
               
-              // Fallback: tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡o message vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi type ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âºng tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« metadata
+
               let msgType: "text" | "song" | "playlist" | "album" = 'text';
               if (m?.playlistId) msgType = 'playlist';
               else if (m?.albumId) msgType = 'album';
@@ -572,19 +1108,19 @@ const Social = () => {
 
         } else if (n?.type === 'INVITE') {
 
-          toast(`${n.senderName || 'Someone'} invited you to collaborate on a playlist`);
+          pushBubble(`${n.senderName || 'Someone'} invited you to collaborate on a playlist`, "info");
 
           loadCollabInvites().catch(() => { void 0; });
 
         } else if (n?.type === 'FRIEND_REQUEST') {
 
-          toast(`${n.senderName || 'Someone'} sent you a friend request`);
+          pushBubble(`${n.senderName || 'Someone'} sent you a friend request`, "info");
 
           loadPending().catch(() => { void 0; });
 
         } else if (n?.type === 'FRIEND_REQUEST_ACCEPTED') {
 
-          toast(`${n.senderName || 'Someone'} accepted your friend request`);
+          pushBubble(`${n.senderName || 'Someone'} accepted your friend request`, "success");
 
           loadFriends().catch(() => { void 0; });
 
@@ -598,136 +1134,501 @@ const Social = () => {
 
   });
 
-
-
-  // Watch chat messages for selected friend
-  // Reset unread count khi chÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Ân chat
   useEffect(() => {
-    if (selectedChat) {
-      // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° clear unread cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§a cuÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢c chat ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œang mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸
-      setUnreadByFriend(prev => ({ ...prev, [selectedChat]: 0 }));
+    if (!meId || !firebaseReady) {
+      Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
+      chatWatchersRef.current = {};
+      return;
     }
-  }, [selectedChat]);
 
-  // Recompute tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ng unread tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« per-friend map
+    const friendKeys = friends.map((friend) => friend.id).filter((id): id is string => typeof id === "string");
+    const friendKeySet = new Set(friendKeys);
+
+    Object.entries(chatWatchersRef.current).forEach(([friendId, unsubscribe]) => {
+      if (!friendKeySet.has(friendId)) {
+        unsubscribe();
+        delete chatWatchersRef.current[friendId];
+      }
+    });
+
+    friendKeys.forEach((friendId) => {
+      if (chatWatchersRef.current[friendId]) return;
+      const friendNumericId = Number(friendId);
+      if (!Number.isFinite(friendNumericId)) return;
+      const unsubscribe = watchChatMessages(meId, friendNumericId, (messages) => {
+        mergeFirebaseMessages(friendId, messages);
+      });
+      chatWatchersRef.current[friendId] = unsubscribe;
+    });
+
+    return () => {
+      Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
+      chatWatchersRef.current = {};
+    };
+  }, [meId, firebaseReady, friendsIdsString, mergeFirebaseMessages]);
+
+  useEffect(() => {
+    if (!meId || !firebaseReady) {
+      Object.values(typingWatchersRef.current).forEach((unsubscribe) => unsubscribe());
+      typingWatchersRef.current = {};
+      setTypingByFriend({});
+      return;
+    }
+
+    const friendKeys = friends.map((friend) => friend.id).filter((id): id is string => typeof id === "string");
+    const friendKeySet = new Set(friendKeys);
+
+    Object.entries(typingWatchersRef.current).forEach(([friendId, unsubscribe]) => {
+      if (!friendKeySet.has(friendId)) {
+        unsubscribe();
+        delete typingWatchersRef.current[friendId];
+        setTypingByFriend((prev) => {
+          if (!(friendId in prev)) return prev;
+          const { [friendId]: _removed, ...rest } = prev;
+          return rest;
+        });
+      }
+    });
+
+    friendKeys.forEach((friendId) => {
+      if (typingWatchersRef.current[friendId]) return;
+      const numericFriendId = Number(friendId);
+      if (!Number.isFinite(numericFriendId)) return;
+      const roomId = meId ? getChatRoomKey(meId, numericFriendId) : null;
+      if (!roomId) return;
+      const unsubscribe = watchTyping(roomId, numericFriendId, (data) => {
+        if (!data) {
+          setTypingByFriend((prev) => {
+            if (!(friendId in prev) || !prev[friendId]) return prev;
+            const { [friendId]: _removed, ...rest } = prev;
+            return rest;
+          });
+          return;
+        }
+        // Check TTL: if updatedAt exists and is older than 5s, consider not typing
+        const now = Date.now();
+        const updatedAt = data.updatedAt;
+        const isTyping = Boolean(data.isTyping) && (!updatedAt || (now - updatedAt < 5000));
+        console.log('[Social] Typing status update:', { friendId, roomId, isTyping, updatedAt, now, ttl: updatedAt ? (now - updatedAt) : 'N/A' });
+        setTypingByFriend((prev) => {
+          if (prev[friendId] === isTyping) return prev;
+          return { ...prev, [friendId]: isTyping };
+        });
+      });
+      typingWatchersRef.current[friendId] = () => {
+        unsubscribe();
+        setTypingByFriend((prev) => {
+          if (!(friendId in prev)) return prev;
+          const { [friendId]: _removed, ...rest } = prev;
+          return rest;
+        });
+      };
+    });
+
+    return () => {
+      Object.values(typingWatchersRef.current).forEach((unsubscribe) => unsubscribe());
+      typingWatchersRef.current = {};
+      setTypingByFriend({});
+    };
+  }, [meId, firebaseReady, friendsIdsString]);
+
+  useEffect(() => {
+    if (!meId || !firebaseReady || !selectedChat) {
+      if (typingStartTimeoutRef.current) {
+        clearTimeout(typingStartTimeoutRef.current);
+        typingStartTimeoutRef.current = null;
+      }
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
+      if (typingStatusRef.current.active && typingStatusRef.current.roomId) {
+        const roomId = typingStatusRef.current.roomId;
+        typingStatusRef.current = { roomId: null, active: false };
+        if (meId) {
+          void chatApi.typingStop(roomId, meId).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    const friendNumericId = Number(selectedChat);
+    if (!Number.isFinite(friendNumericId)) return;
+    const roomId = getChatRoomKey(meId, friendNumericId);
+    const trimmed = newMessage.trim();
+
+    const stopTyping = () => {
+      if (!typingStatusRef.current.active || typingStatusRef.current.roomId !== roomId) {
+        return;
+      }
+      typingStatusRef.current = { roomId: null, active: false };
+      if (meId && firebaseReady) {
+        console.log('[Social] Stopping typing indicator:', { roomId, meId });
+        void chatApi.typingStop(roomId, meId).catch((error) => {
+          console.warn("[Social] Failed to stop typing indicator", error?.message || error);
+        });
+      }
+    };
+
+    if (trimmed.length > 0) {
+      // Debounce 300ms before starting typing
+      if (typingStartTimeoutRef.current) {
+        clearTimeout(typingStartTimeoutRef.current);
+      }
+      typingStartTimeoutRef.current = window.setTimeout(() => {
+        if (!typingStatusRef.current.active || typingStatusRef.current.roomId !== roomId) {
+          typingStatusRef.current = { roomId, active: true };
+          if (meId && firebaseReady) {
+            console.log('[Social] Starting typing indicator:', { roomId, meId });
+            void chatApi.typingStart(roomId, meId).catch((error) => {
+              console.warn("[Social] Failed to start typing indicator", error?.message || error);
+            });
+          }
+        }
+        typingStartTimeoutRef.current = null;
+      }, 300);
+      
+      // Clear stop timeout when user is typing
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+      }
+      typingStopTimeoutRef.current = window.setTimeout(() => {
+        stopTyping();
+        typingStopTimeoutRef.current = null;
+      }, 1000); // 1 giây sau khi ngưng nhập
+    } else {
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
+      stopTyping();
+    }
+
+    return () => {
+      if (typingStartTimeoutRef.current) {
+        clearTimeout(typingStartTimeoutRef.current);
+        typingStartTimeoutRef.current = null;
+      }
+      if (typingStopTimeoutRef.current) {
+        clearTimeout(typingStopTimeoutRef.current);
+        typingStopTimeoutRef.current = null;
+      }
+      stopTyping();
+    };
+  }, [meId, firebaseReady, selectedChat, newMessage]);
+
+  // Watch messageIndex to map messageId -> firebaseKey
+  useEffect(() => {
+    if (!meId || !firebaseReady || !selectedChat) {
+      setMessageIndexByRoom(prev => {
+        const friendNumericId = Number(selectedChat);
+        if (!Number.isFinite(friendNumericId)) return prev;
+        const roomId = getChatRoomKey(meId, friendNumericId);
+        const { [roomId]: _removed, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
+
+    const friendNumericId = Number(selectedChat);
+    if (!Number.isFinite(friendNumericId)) return;
+    const roomId = getChatRoomKey(meId, friendNumericId);
+    console.log('[Social] Setting up messageIndex watcher for room:', roomId);
+
+    const unsubscribe = watchMessageIndex(roomId, (index) => {
+      console.log('[Social] MessageIndex received:', { roomId, index });
+      setMessageIndexByRoom(prev => ({ ...prev, [roomId]: index }));
+      
+      // Update messages with firebaseKey from index
+      setChatByFriend(prev => {
+        const messages = prev[selectedChat] || [];
+        const updated = messages.map(msg => {
+          if (msg.firebaseKey) return msg; // Already has firebaseKey
+          const messageId = msg.backendId || (msg.id && !msg.id.startsWith('temp-') ? Number(msg.id) : null);
+          if (messageId && Number.isFinite(messageId)) {
+            const firebaseKey = index[String(messageId)];
+            if (firebaseKey) {
+              console.log('[Social] Mapped firebaseKey for message:', { messageId, firebaseKey, msgId: msg.id });
+              return { ...msg, firebaseKey };
+            }
+          }
+          return msg;
+        });
+        if (updated.some((m, i) => m.firebaseKey !== messages[i]?.firebaseKey)) {
+          return { ...prev, [selectedChat]: updated };
+        }
+        return prev;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+      setMessageIndexByRoom(prev => {
+        const { [roomId]: _removed, ...rest } = prev;
+        return rest;
+      });
+    };
+  }, [meId, firebaseReady, selectedChat]);
+
+  // Watch reactions for selected chat
+  useEffect(() => {
+    if (!meId || !firebaseReady || !selectedChat) {
+      if (reactionsWatcherRef.current) {
+        reactionsWatcherRef.current();
+        reactionsWatcherRef.current = null;
+      }
+      setReactionsByMessage({});
+      return;
+    }
+
+    const friendNumericId = Number(selectedChat);
+    if (!Number.isFinite(friendNumericId)) return;
+    const roomId = getChatRoomKey(meId, friendNumericId);
+    console.log('[Social] Setting up reactions watcher for room:', roomId);
+
+    const unsubscribe = watchReactions(roomId, (reactions) => {
+      console.log('[Social] Firebase reactions received:', { roomId, reactionsCount: Object.keys(reactions).length, reactions });
+      const parsed: Record<string, MessageReactionSummary[]> = {};
+      Object.entries(reactions).forEach(([firebaseKey, userReactions]) => {
+        if (!userReactions || typeof userReactions !== 'object') {
+          console.warn('[Social] Invalid userReactions for key:', firebaseKey, userReactions);
+          return;
+        }
+        const grouped = new Map<string, { count: number; userIds: Set<number> }>();
+        Object.entries(userReactions).forEach(([userIdStr, reaction]) => {
+          if (!reaction || typeof reaction !== 'object') {
+            console.warn('[Social] Invalid reaction for userId:', userIdStr, reaction);
+            return;
+          }
+          const emoji = decodeUnicodeEscapes(reaction.emoji);
+          const userId = Number(userIdStr);
+          if (!emoji || !Number.isFinite(userId)) {
+            console.warn('[Social] Invalid emoji or userId:', { emoji, userId, userIdStr, reaction });
+            return;
+          }
+          if (!grouped.has(emoji)) {
+            grouped.set(emoji, { count: 0, userIds: new Set() });
+          }
+          const group = grouped.get(emoji)!;
+          group.count++;
+          group.userIds.add(userId);
+        });
+        const reactionsList = Array.from(grouped.entries()).map(([emoji, { count, userIds }]) => ({
+          emoji,
+          count,
+          reactedByMe: userIds.has(meId),
+        }));
+        // Store with both the original key (could be messageId number or firebaseKey string)
+        // and also as string version for lookup
+        parsed[firebaseKey] = reactionsList;
+        // If key is a number (messageId), also store as string for easier lookup
+        const numericKey = Number(firebaseKey);
+        if (Number.isFinite(numericKey) && String(numericKey) !== firebaseKey) {
+          parsed[String(numericKey)] = reactionsList;
+        }
+        console.log('[Social] Parsed reactions for key:', firebaseKey, reactionsList);
+      });
+      console.log('[Social] All parsed reactions:', parsed);
+      setReactionsByMessage(parsed);
+    });
+
+    reactionsWatcherRef.current = unsubscribe;
+
+    return () => {
+      console.log('[Social] Cleaning up reactions watcher for room:', roomId);
+      if (reactionsWatcherRef.current) {
+        reactionsWatcherRef.current();
+        reactionsWatcherRef.current = null;
+      }
+      setReactionsByMessage({});
+    };
+  }, [meId, firebaseReady, selectedChat]);
+
+  // Update messages with firebaseKey when messageIndex changes
+  useEffect(() => {
+    if (!selectedChat) return;
+    const friendNumericId = Number(selectedChat);
+    if (!Number.isFinite(friendNumericId)) return;
+    const roomId = getChatRoomKey(meId, friendNumericId);
+    const messageIndex = messageIndexByRoom[roomId];
+    if (!messageIndex || Object.keys(messageIndex).length === 0) return;
+
+    setChatByFriend(prev => {
+      const messages = prev[selectedChat] || [];
+      const updated = messages.map(msg => {
+        if (msg.firebaseKey) return msg; // Already has firebaseKey
+        const messageId = msg.backendId || (msg.id && !msg.id.startsWith('temp-') ? Number(msg.id) : null);
+        if (messageId && Number.isFinite(messageId)) {
+          const firebaseKey = messageIndex[String(messageId)];
+          if (firebaseKey) {
+            console.log('[Social] Updated firebaseKey for message from index:', { messageId, firebaseKey, msgId: msg.id });
+            return { ...msg, firebaseKey };
+          }
+        }
+        return msg;
+      });
+      // Only update if something changed
+      if (updated.some((m, i) => m.firebaseKey !== messages[i]?.firebaseKey)) {
+        return { ...prev, [selectedChat]: updated };
+      }
+      return prev;
+    });
+  }, [meId, selectedChat, messageIndexByRoom]);
+
+  // Handler for reaction toggle
+  const handleDeleteMessage = useCallback(
+    async (message: Message) => {
+      if (!meId) return;
+      
+      // Find messageId from message
+      const messageIdFromBackend = message.backendId;
+      const messageIdStr = message.id;
+      const derivedMessageId =
+        messageIdFromBackend ??
+        (messageIdStr && !messageIdStr.startsWith('temp-') ? Number(messageIdStr) : null);
+      
+      if (!derivedMessageId || !Number.isFinite(derivedMessageId)) {
+        console.warn('[Social] Cannot delete: message ID is invalid', {
+          messageIdStr,
+          backendId: messageIdFromBackend,
+        });
+        toast.error("Không thể xóa tin nhắn: ID không hợp lệ");
+        return;
+      }
+
+      try {
+        await chatApi.deleteMessage(derivedMessageId, meId);
+        
+        // Remove message from local state
+        if (selectedChat) {
+          setChatByFriend(prev => {
+            const friendMessages = prev[selectedChat] || [];
+            return {
+              ...prev,
+              [selectedChat]: friendMessages.filter(m => m.id !== message.id && m.backendId !== derivedMessageId)
+            };
+          });
+        }
+        
+        toast.success("Đã xóa tin nhắn");
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : "Không thể xóa tin nhắn";
+        console.error('[Social] Failed to delete message:', error);
+        toast.error(errorMsg);
+      }
+    },
+    [meId, selectedChat]
+  );
+
+  const handleReact = useCallback(
+    async (message: Message, emoji: string) => {
+      if (!meId || !selectedChat) return;
+      const friendNumericId = Number(selectedChat);
+      if (!Number.isFinite(friendNumericId)) return;
+
+      // Find messageId from message (could be in id or firebaseKey)
+      const messageIdFromBackend = message.backendId;
+      const messageIdStr = message.id;
+      const derivedMessageId =
+        messageIdFromBackend ??
+        (messageIdStr && !messageIdStr.startsWith('temp-') ? Number(messageIdStr) : null);
+      if (!derivedMessageId || !Number.isFinite(derivedMessageId)) {
+        console.warn('[Social] Cannot react: message ID is invalid', {
+          messageIdStr,
+          backendId: messageIdFromBackend,
+        });
+        return;
+      }
+
+      const normalizedEmoji = decodeUnicodeEscapes(emoji).trim();
+
+      try {
+        // Try multiple keys to find existing reactions
+        const firebaseKey = message.firebaseKey;
+        const messageIdKey = String(derivedMessageId);
+        const existingReactions = 
+          reactionsByMessage[firebaseKey || ''] || 
+          reactionsByMessage[messageIdKey] || 
+          reactionsByMessage[messageIdStr] || 
+          [];
+        const myReaction = existingReactions.find((r) => r.reactedByMe);
+        const isSameEmoji = myReaction?.emoji === normalizedEmoji;
+        
+        console.log('[Social] Toggling reaction:', { 
+          messageId: derivedMessageId, 
+          emoji: normalizedEmoji, 
+          firebaseKey, 
+          messageIdStr, 
+          hasReaction: !!myReaction,
+          isSameEmoji,
+          existingReactions
+        });
+        
+        if (isSameEmoji) {
+          // Remove reaction if clicking the same emoji
+          await chatApi.removeReaction(derivedMessageId, meId);
+          console.log('[Social] Reaction removed successfully');
+          // Optimistically update UI
+          const key = firebaseKey || messageIdKey || messageIdStr;
+          setReactionsByMessage(prev => {
+            const msgReactions = prev[firebaseKey || ''] || prev[messageIdKey] || prev[messageIdStr] || [];
+            const updated = msgReactions
+              .map(r => r.emoji === normalizedEmoji ? { ...r, count: Math.max(0, r.count - 1), reactedByMe: false } : r)
+              .filter(r => r.count > 0 || r.emoji !== normalizedEmoji);
+            const result = { ...prev };
+            if (firebaseKey) result[firebaseKey] = updated;
+            if (messageIdKey) result[messageIdKey] = updated;
+            if (messageIdStr) result[messageIdStr] = updated;
+            return result;
+          });
+        } else {
+          // If user has another reaction, remove it first, then add new one
+          if (myReaction) {
+            await chatApi.removeReaction(derivedMessageId, meId);
+          }
+          // Add new reaction
+          await chatApi.toggleReaction(derivedMessageId, normalizedEmoji, meId);
+          console.log('[Social] Reaction added successfully');
+          // Optimistically update UI
+          const key = firebaseKey || messageIdKey || messageIdStr;
+          setReactionsByMessage(prev => {
+            const msgReactions = prev[firebaseKey || ''] || prev[messageIdKey] || prev[messageIdStr] || [];
+            // Remove old reaction if exists
+            const withoutOld = myReaction 
+              ? msgReactions
+                  .map(r => r.emoji === myReaction.emoji ? { ...r, count: Math.max(0, r.count - 1), reactedByMe: false } : r)
+                  .filter(r => r.count > 0 || r.emoji !== myReaction.emoji)
+              : msgReactions;
+            // Add or update new reaction
+            const existing = withoutOld.find(r => r.emoji === normalizedEmoji);
+            const updated = existing
+              ? withoutOld.map(r => 
+                  r.emoji === normalizedEmoji ? { ...r, count: r.count + 1, reactedByMe: true } : r
+                )
+              : [...withoutOld, { emoji: normalizedEmoji, count: 1, reactedByMe: true }];
+            const result = { ...prev };
+            if (firebaseKey) result[firebaseKey] = updated;
+            if (messageIdKey) result[messageIdKey] = updated;
+            if (messageIdStr) result[messageIdStr] = updated;
+            return result;
+          });
+        }
+      } catch (error) {
+        console.error('[Social] Failed to toggle reaction:', error);
+        pushBubble('Failed to react to message', 'error');
+      }
+    },
+    [meId, selectedChat, reactionsByMessage, pushBubble]
+  );
+
   useEffect(() => {
     const total = Object.values(unreadByFriend).reduce((a, b) => a + (b || 0), 0);
     setUnreadMessagesCount(total);
   }, [unreadByFriend]);
 
-  useEffect(() => {
-
-    if (!meId || !selectedChat) return;
-
-    
-
-    console.log('[Social] Setting up Firebase watch for chat:', { meId, friendId: selectedChat });
-
-    
-
-    const unsubscribe = watchChatMessages(meId, Number(selectedChat), (messages) => {
-
-      console.log('[Social] Received messages from Firebase:', messages.length);
-
-      const parsed = messages.map((m) => {
-
-        const firebaseMessage = m as FirebaseMessage;
-
-        const normalized = {
-
-          ...(firebaseMessage as unknown as ChatMessageDTO),
-
-          contentPlain:
-
-            firebaseMessage.contentPlain ??
-
-            (typeof firebaseMessage.content === "string" ? firebaseMessage.content : undefined),
-
-        };
-
-        return parseIncomingContent(normalized, friends);
-
-      });
-
-      setChatByFriend(prev => {
-
-        // Merge vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi messages hiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¡n tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥t optimistic updates
-
-        const existing = prev[selectedChat] || [];
-
-        const existingIds = new Set(existing.map(m => m.id));
-
-        const newParsed = parsed.filter(m => !existingIds.has(m.id));
-
-        
-        // TÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m vÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ optimistic messages cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹ng content
-        const replaced = existing.map(m => {
-          // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  optimistic message (temp ID), tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t tÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ng ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©ng
-          if (m.id.startsWith('temp-')) {
-            const matching = parsed.find(p => 
-              p.sender === m.sender &&
-              p.type === m.type &&
-              ((m.type === 'song' && p.songData?.id === m.songData?.id) ||
-               (m.type === 'playlist' && p.playlistData?.id === m.playlistData?.id) ||
-               (m.type === 'album' && p.albumData?.id === m.albumData?.id) ||
-               (m.type === 'text' && p.content === m.content))
-            );
-            if (matching) return matching;
-          }
-          return m;
-        });
-        
-        // Remove duplicates sau khi replace
-        const unique = new Map<string, Message>();
-        replaced.forEach(m => {
-          if (!unique.has(m.id)) unique.set(m.id, m);
-        });
-        newParsed.forEach(m => {
-          if (!unique.has(m.id)) unique.set(m.id, m);
-        });
-        
-        const toSortKey = (msg: Message): number => {
-          if (typeof msg.sentAt === 'number' && Number.isFinite(msg.sentAt)) {
-            return msg.sentAt;
-          }
-          if (typeof msg.id === 'string') {
-            const numericId = Number(msg.id);
-            if (Number.isFinite(numericId)) return numericId;
-            const digits = msg.id.match(/\d+/g);
-            if (digits?.length) {
-              const last = Number(digits[digits.length - 1]);
-              if (Number.isFinite(last)) return last;
-            }
-          }
-          return 0;
-        };
-        return {
-          ...prev,
-          [selectedChat]: Array.from(unique.values()).sort((a, b) => {
-            const diff = toSortKey(a) - toSortKey(b);
-            if (diff !== 0) return diff;
-            return String(a.id).localeCompare(String(b.id));
-          }),
-        };
-      });
-
-    });
 
 
 
-    return () => {
-
-      console.log('[Social] Cleaning up Firebase watch');
-
-      unsubscribe();
-
-    };
-
-  }, [meId, selectedChat, JSON.stringify(friends.map(f => f.id))]);
-
-
-
-  // Initial presence fetch for all friends (fallback nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u Firebase chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a ready)
   useEffect(() => {
 
     (async () => {
@@ -746,7 +1647,7 @@ const Social = () => {
 
         setFriends(prev => prev.map(f => ({ ...f, isOnline: !!map[String(f.id)] })));
 
-        // Firebase realtime sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ override sau ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³
+
       } catch { void 0; }
 
     })();
@@ -854,7 +1755,7 @@ const Social = () => {
 
       await playlistCollabInvitesApi.accept(inviteId);
 
-      toast.success('Invite accepted');
+      pushBubble('Collab invite accepted', 'success');
 
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
 
@@ -864,7 +1765,7 @@ const Social = () => {
 
       const msg = e instanceof Error ? e.message : String(e);
 
-      toast.error(msg || 'Failed to accept');
+      pushBubble(msg || 'Unable to accept invite', 'error');
 
     }
 
@@ -878,7 +1779,7 @@ const Social = () => {
 
       await playlistCollabInvitesApi.reject(inviteId);
 
-      toast.success('Invite rejected');
+      pushBubble('Collab invite declined', 'info');
 
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
 
@@ -888,7 +1789,7 @@ const Social = () => {
 
       const msg = e instanceof Error ? e.message : String(e);
 
-      toast.error(msg || 'Failed to reject');
+      pushBubble(msg || 'Unable to decline invite', 'error');
 
     }
 
@@ -896,54 +1797,140 @@ const Social = () => {
 
 
 
-  // Load chat history for selected friend
-
+  // Poll chat history as a fallback when Firebase listeners lag
   useEffect(() => {
+    if (!meId || !selectedChat) return;
 
-    (async () => {
+    let cancelled = false;
 
-      if (!meId || !selectedChat) return;
-
-      try {
-
-        const history = await chatApi.getHistory(meId, Number(selectedChat));
-
-        const normalizedHistory = history.map((h) => ({
-
-          ...h,
-
-          contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
-
-        }));
-
-        const mapped = normalizedHistory
-          .map(h => parseIncomingContent(h, friends))
-          .sort((a, b) => {
-            const aKey = typeof a.sentAt === 'number' && Number.isFinite(a.sentAt) ? a.sentAt : Number(a.id) || 0;
-            const bKey = typeof b.sentAt === 'number' && Number.isFinite(b.sentAt) ? b.sentAt : Number(b.id) || 0;
-            return aKey - bKey;
+    const mergeHistory = (historyMessages: Message[]) => {
+      setChatByFriend(prev => {
+        const existing = prev[selectedChat] || [];
+        const historyIds = new Set(historyMessages.map(m => m.id));
+        const friendNumericId = Number(selectedChat);
+        const roomId = Number.isFinite(friendNumericId) ? getChatRoomKey(meId, friendNumericId) : null;
+        // Ensure messageIndex is always an object, never undefined
+        const messageIndex = (roomId && messageIndexByRoom[roomId]) ? messageIndexByRoom[roomId] : {};
+        
+        // Create maps for efficient lookup
+        const existingMap = new Map<string, Message>();
+        const existingByBackendId = new Map<number, Message>();
+        existing.forEach(msg => {
+          if (msg.id) existingMap.set(msg.id, msg);
+          if (msg.backendId) existingByBackendId.set(msg.backendId, msg);
+        });
+        // Merge history messages, preserving firebaseKey from existing or messageIndex
+        const merged = historyMessages.map(historyMsg => {
+          // Try to find existing message by id first
+          const existingMsg = existingMap.get(historyMsg.id);
+          if (existingMsg?.firebaseKey && !historyMsg.firebaseKey) {
+            return { ...historyMsg, firebaseKey: existingMsg.firebaseKey };
+          }
+          // Try to find by backendId if available
+          if (historyMsg.backendId) {
+            const existingByBackend = existingByBackendId.get(historyMsg.backendId);
+            if (existingByBackend?.firebaseKey && !historyMsg.firebaseKey) {
+              return { ...historyMsg, firebaseKey: existingByBackend.firebaseKey };
+            }
+            // Try to get firebaseKey from messageIndex (only if messageIndex is an object)
+            if (messageIndex && typeof messageIndex === 'object') {
+              const firebaseKeyFromIndex = messageIndex[String(historyMsg.backendId)];
+              if (firebaseKeyFromIndex && !historyMsg.firebaseKey) {
+                console.log('[Social] Mapped firebaseKey from messageIndex:', { messageId: historyMsg.backendId, firebaseKey: firebaseKeyFromIndex });
+                return { ...historyMsg, firebaseKey: firebaseKeyFromIndex };
+              }
+            }
+          }
+          // Fallback: try to get from messageId if it's a number
+          const messageIdNum = historyMsg.id && !historyMsg.id.startsWith('temp-') ? Number(historyMsg.id) : null;
+          if (messageIdNum && Number.isFinite(messageIdNum) && messageIndex && typeof messageIndex === 'object') {
+            const firebaseKeyFromIndex = messageIndex[String(messageIdNum)];
+            if (firebaseKeyFromIndex && !historyMsg.firebaseKey) {
+              console.log('[Social] Mapped firebaseKey from messageIndex (fallback):', { messageId: messageIdNum, firebaseKey: firebaseKeyFromIndex });
+              return { ...historyMsg, firebaseKey: firebaseKeyFromIndex };
+            }
+          }
+          return historyMsg;
+        });
+        // Add temp messages that aren't in history
+        existing.forEach(msg => {
+          if (msg.id?.startsWith('temp-') && !historyIds.has(msg.id)) {
+            merged.push(msg);
+          }
+        });
+        const sortedMerged = sortMessagesChronologically(merged);
+        const unchanged =
+          existing.length === sortedMerged.length &&
+          existing.every((msg, idx) => {
+            const next = sortedMerged[idx];
+            if (!next) return false;
+            if (msg.id !== next.id) return false;
+            if (msg.content !== next.content) return false;
+            if (msg.type !== next.type) return false;
+            const msgSongId = msg.songData?.id ?? null;
+            const nextSongId = next.songData?.id ?? null;
+            if (msgSongId !== nextSongId) return false;
+            return true;
           });
-        setChatByFriend(prev => ({ ...prev, [selectedChat]: mapped }));
+        if (unchanged) return prev;
+        
+        
+        return { ...prev, [selectedChat]: sortedMerged };
+      });
+    };
 
-      } catch { void 0; }
+    const fetchHistory = async (reason: 'initial' | 'poll') => {
+      try {
+        const history = await chatApi.getHistory(meId, Number(selectedChat));
+        const normalizedHistory = history.map((h) => ({
+          ...h,
+          contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
+        }));
+        const mapped = sortMessagesChronologically(
+          normalizedHistory.map(h => parseIncomingContent(h, friendsRef.current))
+        );
+        if (!cancelled) {
+          mergeHistory(mapped);
+          if (activeTab === 'chat') {
+            markConversationAsRead(selectedChat);
+          }
+        }
+      } catch (error) {
+        if (reason === 'initial') {
+          console.error('[Social] Failed to load chat history:', error);
+        } else {
+          console.warn('[Social] Chat history poll failed:', error);
+        }
+      }
+    };
 
-    })();
+    void fetchHistory('initial');
 
-  }, [meId, selectedChat]);
+    const intervalId = window.setInterval(() => {
+      void fetchHistory('poll');
+    }, CHAT_HISTORY_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [meId, selectedChat, activeTab, markConversationAsRead]);
 
 
 
   const handleSendMessage = async () => {
 
-    if (!newMessage.trim() || !selectedChat || !meId) return;
+    const rawInput = newMessage.trim();
+    if (!rawInput || !selectedChat || !meId) return;
 
     const receiverId = Number(selectedChat);
 
-    const messageContent = newMessage.trim();
+    const decodedContent = decodeUnicodeEscapes(rawInput);
+    const messageContent = decodedContent || rawInput;
 
     
 
-    // Optimistic update - hiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢n thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¹ message ngay
+    // Optimistic update so the UI feels instant
 
     const now = Date.now();
     const optimisticMsg: Message = { 
@@ -967,7 +1954,7 @@ const Social = () => {
 
     try {
 
-      const result = await sendMessage(meId, receiverId, messageContent);
+      const result = await chatApi.sendMessage(meId, receiverId, messageContent);
 
       console.log('[Social] Message sent result:', result);
 
@@ -1021,7 +2008,7 @@ const Social = () => {
 
       }));
 
-      toast.error(e instanceof Error ? e.message : 'Failed to send message');
+      pushBubble(e instanceof Error ? e.message : 'Failed to send message', 'error');
 
       setNewMessage(messageContent); // Restore message for retry
 
@@ -1029,74 +2016,149 @@ const Social = () => {
 
   };
 
+  const isSelectedFriendTyping = selectedChat ? !!typingByFriend[selectedChat] : false;
+  
+  // Debug typing status
+  useEffect(() => {
+    if (selectedChat) {
+      console.log('[Social] Typing status check:', { 
+        selectedChat, 
+        isTyping: typingByFriend[selectedChat],
+        allTyping: typingByFriend 
+      });
+    }
+  }, [selectedChat, typingByFriend]);
 
+  // Merge reactions into messages for selected chat
+  const messagesWithReactions = useMemo(() => {
+    if (!selectedChat) return chatByFriend;
+    const messages = chatByFriend[selectedChat] || [];
+    console.log('[Social] Merging reactions:', { 
+      messagesCount: messages.length, 
+      reactionsKeys: Object.keys(reactionsByMessage),
+      reactionsByMessage 
+    });
+    return {
+      ...chatByFriend,
+      [selectedChat]: messages.map((msg) => {
+        // Try multiple keys: firebaseKey (priority), messageId (backend), and id
+        // Backend stores reactions with firebaseKey (string like "-OeeIuig2tnWwY6vA6bf")
+        const firebaseKey = msg.firebaseKey;
+        const messageIdKey = msg.backendId ? String(msg.backendId) : null;
+        const messageIdNum = msg.backendId || (msg.id && !msg.id.startsWith('temp-') ? Number(msg.id) : null);
+        const msgId = msg.id;
+        
+        // Try all possible keys
+        let reactions = reactionsByMessage[firebaseKey || ''] || [];
+        if (reactions.length === 0 && messageIdKey) {
+          reactions = reactionsByMessage[messageIdKey] || [];
+        }
+        if (reactions.length === 0 && messageIdNum && Number.isFinite(messageIdNum)) {
+          reactions = reactionsByMessage[String(messageIdNum)] || [];
+        }
+        if (reactions.length === 0 && msgId) {
+          reactions = reactionsByMessage[msgId] || [];
+        }
+        
+        if (reactions.length > 0) {
+          console.log('[Social] Merged reactions for message:', { 
+            msgId, 
+            firebaseKey, 
+            messageIdKey, 
+            messageIdNum,
+            reactions,
+            sender: msg.sender,
+            allReactionKeys: Object.keys(reactionsByMessage)
+          });
+        }
+        return { ...msg, reactions: reactions.length > 0 ? reactions : undefined };
+      }),
+    };
+  }, [chatByFriend, selectedChat, reactionsByMessage]);
 
   const handleShareCurrentSong = async () => {
 
     if (!currentSong || !selectedChat || !meId) return;
 
     const receiverId = Number(selectedChat);
+    const now = Date.now();
+    const tempId = `temp-share-${now}`;
+    const numericSongId = resolveSongNumericId(currentSong);
+    const songTitle = resolveSongTitle(currentSong) || "Shared song";
+    const songArtist = resolveSongArtist(currentSong) || DEFAULT_ARTIST_NAME;
+    const payloadId =
+      numericSongId ??
+      (currentSong.id && currentSong.id.trim().length > 0 ? currentSong.id : now);
 
-    const content = `SONG:${JSON.stringify({ id: currentSong.id, title: currentSong.title || '', artist: currentSong.artist || '' })}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      sender: "You",
+      content: "Shared a song",
+      timestamp: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sentAt: now,
+      type: "song",
+      songData: { id: payloadId, title: songTitle, artist: songArtist }
+    };
+
+    setChatByFriend(prev => ({
+      ...prev,
+      [selectedChat]: [...(prev[selectedChat] || []), optimisticMsg]
+    }));
 
     try {
+      if (numericSongId != null) {
+        const result = await chatApi.shareSong(meId, receiverId, numericSongId);
+        const normalizedResult = {
+          ...result,
+          contentPlain:
+            result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined)
+        };
+        const parsed = parseIncomingContent(normalizedResult as ChatMessageDTO, friends);
+        setChatByFriend(prev => {
+          const existing = prev[selectedChat] || [];
+          const replaced = existing.map(m => (m.id === tempId ? parsed : m));
+          const hasParsed = replaced.some(m => m.id === parsed.id);
+          return {
+            ...prev,
+            [selectedChat]: hasParsed ? replaced : [...replaced, parsed]
+          };
+        });
+        return;
+      }
 
-      const result = await sendMessage(meId, receiverId, content);
-      // Optimistic update vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºi ID tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡m, sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â½ ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£c thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ khi Firebase broadcast message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t
-      const now = Date.now();
-      const tempId = `temp-share-${now}`;
-      const optimisticMsg: Message = { 
-        id: tempId, 
-        sender: 'You', 
-        content: 'Shared a song', 
-        timestamp: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
-        sentAt: now,
-        type: 'song', 
-        songData: { id: currentSong.id, title: currentSong.title || '', artist: currentSong.artist || '' } 
+      const fallbackPayload = {
+        id: payloadId,
+        title: songTitle,
+        artist: songArtist
       };
-      setChatByFriend(prev => {
-        const existing = prev[selectedChat] || [];
-        // Check xem ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ message nÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â y chÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°a (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh duplicate)
-        const alreadyExists = existing.some(m => 
-          m.type === 'song' && 
-          m.songData?.id === currentSong.id && 
-          m.sender === 'You' &&
-          m.timestamp === optimisticMsg.timestamp
-        );
-        if (alreadyExists) return prev;
-        return { ...prev, [selectedChat]: [...existing, optimisticMsg] };
-      });
-      
-      // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u sendMessage trÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£ vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â message thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­t, thay thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿ optimistic message
+      const content = `SONG:${JSON.stringify(fallbackPayload)}`;
+      const result = await chatApi.sendMessage(meId, receiverId, content);
+
       if (result && typeof result === "object" && "id" in result) {
         const normalizedResult = {
           ...result,
-          contentPlain: result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined),
+          contentPlain:
+            result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined)
         };
         const parsed = parseIncomingContent(normalizedResult as ChatMessageDTO, friends);
-        setChatByFriend(prev => ({
-          ...prev,
-          [selectedChat]: prev[selectedChat]?.map(m => 
-            m.id === tempId ? parsed : m
-          ).filter((m, idx, arr) => {
-            // Remove duplicate nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u cÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³
-            return idx === arr.findIndex(ms => ms.id === m.id);
-          }) || []
-        }));
+        setChatByFriend(prev => {
+          const existing = prev[selectedChat] || [];
+          return {
+            ...prev,
+            [selectedChat]: existing.map(m => (m.id === tempId ? parsed : m))
+          };
+        });
       }
     } catch (e) {
-
-      toast.error('Failed to share song');
-
-      // Remove optimistic message on error
+      console.error('[Social] Failed to share song:', e);
+      pushBubble('Failed to share song', 'error');
       setChatByFriend(prev => ({
         ...prev,
-        [selectedChat]: prev[selectedChat]?.filter(m => !m.id.startsWith('temp-share-')) || []
+        [selectedChat]: prev[selectedChat]?.filter(m => m.id !== tempId) || []
       }));
     }
 
   };
-
 
 
   const handleSharePlaylistLink = async () => {
@@ -1113,7 +2175,7 @@ const Social = () => {
 
       const receiverId = Number(selectedChat);
 
-      await sendMessage(meId, receiverId, `PLAYLIST_LINK:${url}`);
+      await chatApi.sendMessage(meId, receiverId, `PLAYLIST_LINK:${url}`);
 
       // Optimistic update
 
@@ -1128,7 +2190,7 @@ const Social = () => {
       };
       setChatByFriend(prev => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), msg] }));
 
-    } catch { toast.error('Failed to share link'); }
+    } catch { pushBubble('Failed to share link', 'error'); }
 
   };
 
@@ -1138,7 +2200,7 @@ const Social = () => {
 
   // Poll friends list so new friendship reflects without manual reload
 
-  // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° update nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u friends list thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±c sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â± thay ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢i (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh trigger presence watch khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng cÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§n thiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿t)
+
 
   useEffect(() => {
 
@@ -1172,7 +2234,7 @@ const Social = () => {
 
         
 
-        // ChÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â° update nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u friends list thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±c sÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â± thay ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢i (so sÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh IDs)
+
 
         setFriends(prev => {
 
@@ -1182,11 +2244,11 @@ const Social = () => {
 
           
 
-          // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u IDs giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œng nhau, giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯ lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i isOnline tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« prev (trÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡nh reset presence)
+
 
           if (prevIds === newIds) {
 
-            // Map lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¯ isOnline tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â« prev
+
 
             const updated = mapped.map(newF => {
 
@@ -1202,7 +2264,7 @@ const Social = () => {
 
           
 
-          // NÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿u IDs khÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡c nhau (thÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âªm/bÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Âºt friends), update bÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬nh thÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âng
+
 
           return mapped;
 
@@ -1212,7 +2274,7 @@ const Social = () => {
 
     };
 
-    // TÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ng interval lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âªn 30 giÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢y ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ giÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â£m polling
+
 
     const iv = setInterval(tick, 30000);
 
@@ -1228,7 +2290,7 @@ const Social = () => {
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
       if (!token) {
-        toast.error('Please login to copy your profile link');
+        pushBubble('Please sign in to generate a share link', 'warning');
         navigate('/login');
         return;
       }
@@ -1254,13 +2316,13 @@ const Social = () => {
       if (linkUrl) {
         setShareUrl(linkUrl);
         try { await navigator.clipboard.writeText(linkUrl); } catch { /* noop */ }
-        toast.success('Profile link copied!', { description: linkUrl });
+        pushBubble(`Copied invite link: ${linkUrl}`, 'success');
       } else {
-        toast.error('Could not build profile link');
+        pushBubble('Unable to generate invite link', 'error');
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(msg || 'Failed to copy profile link');
+      pushBubble(msg || 'Failed to share invite link', 'error');
     }
   };
 
@@ -1349,13 +2411,16 @@ const Social = () => {
       if (!friend) return;
       const ok = window.confirm(`Unfriend ${friend.name}?`);
       if (!ok) return;
-      await friendsApi.remove(Number(me), Number(friendId));
+      const friendUserId = friend.friendUserId ?? Number(friendId);
+      await friendsApi.remove(Number(me), Number(friendUserId), {
+        relationshipId: friend.relationshipId,
+      });
       await loadFriends();
       if (selectedChat === friendId) setSelectedChat(null);
-      toast.success('Unfriended');
+      pushBubble('Friend removed', 'info');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast.error(msg || 'Failed to unfriend');
+      pushBubble(msg || 'Failed to remove friend', 'error');
     }
   };
 
@@ -1400,14 +2465,14 @@ const Social = () => {
               ) : inlineProfileNotFound ? (
                   <div className="p-6">
                     <DialogHeader className="text-center">
-                      <DialogTitle>KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥y profile</DialogTitle>
+                      <DialogTitle>Profile Not Found</DialogTitle>
                       <DialogDescription>
-                        KhÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â´ng tÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬m thÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¥y profile / Vui lÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â²ng kiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢m tra lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i username hoÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·c ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â°ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âng dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â«n.
+                        We could not find that profile. Please double-check the username or try again later.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="mt-6 flex justify-center">
                       <Button variant="outline" onClick={closeProfileModal}>
-                        Quay lÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂºÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡i
+                        Go back
                       </Button>
                     </div>
                   </div>
@@ -1444,7 +2509,7 @@ const Social = () => {
             <TabsTrigger value="chat" className="gap-2 relative">
               <MessageCircle className="w-4 h-4" />
               Chat
-                {/* Per-user unread shown in list; hide tÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â»ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ng here */}
+                {/* Per-user unread shown in list; hide badge here */}
             </TabsTrigger>
 
             <TabsTrigger value="friends" className="gap-2">
@@ -1464,7 +2529,7 @@ const Social = () => {
               <ChatArea
                 selectedChat={selectedChat}
                 friends={friends}
-                messages={chatByFriend}
+                messages={messagesWithReactions}
                 unreadByFriend={unreadByFriend}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
@@ -1477,6 +2542,9 @@ const Social = () => {
                 currentSong={currentSong}
                 loadingFriends={loadingFriends}
                 meId={meId}
+                isFriendTyping={isSelectedFriendTyping}
+                onReact={handleReact}
+                onDelete={handleDeleteMessage}
               />
             </TabsContent>
 
