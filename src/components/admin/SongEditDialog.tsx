@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -587,9 +587,43 @@ export const SongEditDialog = ({
     }
   };
 
+  // Ngăn đóng dialog khi click ra ngoài - chỉ cho phép đóng bằng nút X hoặc Hủy
+  // Sử dụng ref để track xem đóng từ nút X/Hủy hay click outside
+  const isClosingFromButtonRef = useRef(false);
+  
+  const handleOpenChange = (newOpen: boolean) => {
+    if (!newOpen) {
+      // Nếu đang loading, không cho phép đóng
+      if (isLoading) {
+        isClosingFromButtonRef.current = false;
+        return;
+      }
+      
+      // Nếu đóng từ click outside (không phải từ button), không cho phép đóng
+      // Nhưng nếu đóng từ nút X (isClosingFromButtonRef = true), cho phép đóng
+      if (!isClosingFromButtonRef.current) {
+        // Click outside, giữ dialog mở
+        return;
+      }
+      
+      // Đóng từ nút X hoặc Hủy, cho phép đóng
+      isClosingFromButtonRef.current = false;
+      onOpenChange(newOpen);
+    } else {
+      onOpenChange(newOpen);
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] w-[calc(100vw-2rem)] max-h-[90vh] overflow-hidden flex flex-col p-0">
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent 
+        className="sm:max-w-[900px] w-[calc(100vw-2rem)] max-h-[90vh] overflow-hidden flex flex-col p-0"
+        onInteractOutside={(e) => {
+          // Ngăn đóng khi click ra ngoài (nhưng nút X vẫn hoạt động bình thường)
+          e.preventDefault();
+        }}
+        style={{ '--hide-default-close': 'none' } as React.CSSProperties}
+      >
         {/* Loading Overlay */}
         {isLoading && (
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
@@ -600,6 +634,20 @@ export const SongEditDialog = ({
           </div>
         )}
 
+        {/* Custom close button để control được việc đóng */}
+        <button
+          type="button"
+          onClick={() => {
+            isClosingFromButtonRef.current = true;
+            // Gọi onOpenChange để trigger handleOpenChange, nó sẽ xử lý logic đóng
+            onOpenChange(false);
+          }}
+          disabled={isLoading}
+          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none z-50 bg-background/80 backdrop-blur-sm"
+        >
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </button>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="text-2xl font-bold">
             Chỉnh sửa bài hát

@@ -265,23 +265,28 @@ const MusicPlayer = () => {
 
     const loadStreamUrl = async () => {
       try {
-        // Gọi BE lấy CloudFront signed URL trực tiếp (TTL 60s)
-        const { streamUrl, uuid } = await songsApi.getStreamUrl(currentSong.id);
-        let finalStreamUrl = streamUrl;
+        // Dùng proxy endpoint để backend tự generate signed URL cho mỗi request
+        // Proxy sẽ handle cả manifest và segments với signed URLs riêng
+        const { uuid } = await songsApi.getStreamUrl(currentSong.id);
         
-        if (!finalStreamUrl) {
-          throw new Error("No stream URL available");
+        if (!uuid) {
+          throw new Error("No UUID available for streaming");
         }
 
-        // Backend đã trả về CloudFront signed URL trực tiếp cho _128kbps.m3u8
-        // Không cần append filename nữa, dùng trực tiếp
-        const finalStreamUrlAbsolute = finalStreamUrl.startsWith("http")
-          ? finalStreamUrl
-          : `${window.location.origin}${finalStreamUrl}`;
+        // Dùng proxy endpoint thay vì CloudFront signed URL trực tiếp
+        // Proxy sẽ tự generate signed URL cho manifest và tất cả segments
+        // HLS.js sẽ tự động resolve relative segment URLs relative to playlist URL
+        const proxyBaseUrl = `/api/songs/${currentSong.id}/stream-proxy`;
+        // Request variant playlist trực tiếp (HLS.js sẽ tự load segments từ đây)
+        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${uuid}_128kbps.m3u8`;
 
-        console.log("Using CloudFront signed URL (TTL 60s):", finalStreamUrlAbsolute);
+        console.log("Using proxy endpoint for HLS streaming:", finalStreamUrlAbsolute);
+        console.log("HLS.js will automatically resolve segment URLs relative to this playlist");
 
         if (Hls.isSupported()) {
+          // Lấy token để gửi kèm request
+          const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
+          
           hls = new Hls({
             enableWorker: true,
             lowLatencyMode: false,
@@ -305,8 +310,13 @@ const MusicPlayer = () => {
             fragLoadingTimeOut: 20000, // 20s timeout cho fragment
             fragLoadingMaxRetry: 3, // Retry 3 lần cho fragment (ít hơn mặc định)
             fragLoadingRetryDelay: 1000, // Delay 1s giữa các retry
-            xhrSetup: (xhr) => {
+            xhrSetup: (xhr, url) => {
               xhr.withCredentials = true;
+              // QUAN TRỌNG: Thêm Authorization header vào tất cả HLS requests để bảo mật
+              // Token được lấy từ closure scope (đã được lấy ở trên)
+              if (token) {
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+              }
             },
           });
           
@@ -532,7 +542,7 @@ const MusicPlayer = () => {
           };
 
           audio.addEventListener("loadedmetadata", safariMetadataListener);
-          audio.src = finalStreamUrl;
+          audio.src = finalStreamUrlAbsolute; // Dùng absolute URL cho Safari
           audio.load();
         } else {
           setIsLoading(false);
@@ -1061,9 +1071,53 @@ const MusicPlayer = () => {
     if (!currentSong) {
       setShowLyrics(false);
       setIsExpanded(false);
+      setShowPlaylist(false);
       setSuggestedSongs([]);
     }
   }, [currentSong]);
+
+  // Close all overlays on Escape key (global handler)
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isExpanded) {
+          setIsExpanded(false);
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (showLyrics) {
+          setShowLyrics(false);
+          e.preventDefault();
+          e.stopPropagation();
+        } else if (showPlaylist) {
+          setShowPlaylist(false);
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }
+    };
+    
+    // Only add listener if any overlay is open
+    if (isExpanded || showLyrics || showPlaylist) {
+      window.addEventListener('keydown', handleEscape, true);
+      return () => window.removeEventListener('keydown', handleEscape, true);
+    }
+  }, [isExpanded, showLyrics, showPlaylist]);
+
+  // Safety: Force close all overlays if they're stuck open without currentSong
+  useEffect(() => {
+    if (!currentSong) {
+      // Small delay to ensure state updates
+      const timer = setTimeout(() => {
+        if (isExpanded || showLyrics || showPlaylist) {
+          console.warn("[MusicPlayer] Force closing stuck overlays - no current song");
+          setIsExpanded(false);
+          setShowLyrics(false);
+          setShowPlaylist(false);
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [currentSong, isExpanded, showLyrics, showPlaylist]);
 
   // Load suggested songs (50 max) whenever current song changes
   useEffect(() => {
@@ -1331,7 +1385,12 @@ const MusicPlayer = () => {
 
       {/* Expanded Player */}
       {isExpanded && (
-        <div className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-lg flex flex-col">
+        <div 
+          className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-lg flex flex-col"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setIsExpanded(false);
+          }}
+        >
           {/* Header */}
           <div className="flex justify-between items-center p-4 border-b border-border/40">
             <h3 className="text-lg font-semibold">Now Playing</h3>
@@ -1465,8 +1524,14 @@ const MusicPlayer = () => {
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
           <div
-            className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/98 to-background backdrop-blur-md"
+            className="absolute inset-0 bg-gradient-to-b from-background/95 via-background/98 to-background backdrop-blur-md cursor-pointer"
             onClick={() => setShowLyrics(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setShowLyrics(false);
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Close lyrics"
           />
 
           {/* Content panel */}
@@ -1523,8 +1588,11 @@ const MusicPlayer = () => {
         <div className="fixed inset-0 z-[52]">
           {/* Background overlay */}
           <div
-            className="absolute inset-0 bg-background/95 backdrop-blur-md"
+            className="absolute inset-0 bg-background/95 backdrop-blur-md cursor-pointer"
             onClick={() => setShowPlaylist(false)}
+            role="button"
+            tabIndex={0}
+            aria-label="Close playlist"
           />
 
           {/* Content panel */}
@@ -1713,7 +1781,7 @@ const MusicPlayer = () => {
               title={shareSong.title}
               type="song"
               url={shareSong.url}
-              open={true}
+              open={!!shareSong}
               onOpenChange={(isOpen) => {
                 if (!isOpen) {
                   setShareSong(null);

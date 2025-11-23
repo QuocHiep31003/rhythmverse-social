@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Check, ChevronsUpDown, Loader2, Upload, Play } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Upload, Play, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -93,7 +93,7 @@ const songFormSchema = z.object({
   lyricistIds: z.array(z.number()).optional(),
   producerIds: z.array(z.number()).optional(),
   artistIds: z.array(z.number()).optional(),
-  moodIds: z.array(z.number()).optional(),
+  moodIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 mood"), // Bắt buộc
   duration: z.string().optional(),
 });
 
@@ -130,9 +130,49 @@ export const SongFormDialog = ({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingSubmit, setPendingSubmit] = useState<SongFormValues | null>(null);
+  const [isClosingDialog, setIsClosingDialog] = useState(false); // Flag để phân biệt đóng form vs submit
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
   const [fileError, setFileError] = useState<string | null>(null);
   const [activeContributorPopover, setActiveContributorPopover] = useState<ContributorField | null>(null);
+
+  // Ngăn đóng dialog khi click ra ngoài - chỉ cho phép đóng bằng nút X hoặc Hủy
+  // Sử dụng ref để track xem đóng từ nút X/Hủy hay click outside
+  const isClosingFromButtonRef = useRef(false);
+  
+  const handleOpenChange = (newOpen: boolean) => {
+    console.log('[SongFormDialog] handleOpenChange called, newOpen:', newOpen, 'isClosingFromButton:', isClosingFromButtonRef.current, 'isLoading:', isLoading, 'uploading:', uploading, 'mode:', mode);
+    if (!newOpen) {
+      // Nếu đang loading/uploading, không cho phép đóng
+      if (isLoading || uploading) {
+        console.log('[SongFormDialog] Blocking close: isLoading or uploading');
+        isClosingFromButtonRef.current = false;
+        return;
+      }
+      
+      // Nếu đóng từ click outside (không phải từ button), không cho phép đóng
+      if (!isClosingFromButtonRef.current) {
+        console.log('[SongFormDialog] Blocking close: click outside');
+        return; // Click outside, giữ dialog mở
+      }
+      
+      // Đóng từ nút X hoặc Hủy
+      // Nếu đang ở chế độ create, hỏi xác nhận trước khi đóng
+      if (mode === "create") {
+        console.log('[SongFormDialog] Create mode: showing confirm dialog');
+        setIsClosingDialog(true);
+        setShowConfirmDialog(true);
+        isClosingFromButtonRef.current = false;
+        return;
+      }
+      
+      // Edit mode: cho phép đóng từ nút X hoặc Hủy
+      console.log('[SongFormDialog] Edit mode: closing dialog');
+      isClosingFromButtonRef.current = false;
+      onOpenChange(newOpen);
+    } else {
+      onOpenChange(newOpen);
+    }
+  };
 
   const form = useForm<SongFormValues>({
     resolver: zodResolver(songFormSchema),
@@ -377,11 +417,47 @@ export const SongFormDialog = ({
   const handleCancelConfirm = () => {
     setShowConfirmDialog(false);
     setPendingSubmit(null);
+    setIsClosingDialog(false);
+  };
+
+  // Xử lý xác nhận đóng form
+  const handleConfirmClose = () => {
+    setShowConfirmDialog(false);
+    setIsClosingDialog(false);
+    onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] w-[calc(100vw-2rem)] max-h-[90vh] overflow-hidden flex flex-col">
+    <Dialog 
+      open={open} 
+      onOpenChange={handleOpenChange}
+      modal={true}
+    >
+      <DialogContent 
+        className="sm:max-w-[900px] w-[calc(100vw-2rem)] max-h-[90vh] overflow-hidden flex flex-col"
+        onInteractOutside={(e) => {
+          // Ngăn đóng khi click ra ngoài (nhưng nút X vẫn hoạt động bình thường)
+          e.preventDefault();
+        }}
+        style={{ '--hide-default-close': 'none' } as React.CSSProperties}
+      >
+        {/* Custom close button để control được việc đóng */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[SongFormDialog] Close button clicked, mode:', mode, 'isLoading:', isLoading, 'uploading:', uploading);
+            isClosingFromButtonRef.current = true;
+            // Gọi onOpenChange để trigger handleOpenChange, nó sẽ xử lý logic đóng
+            onOpenChange(false);
+          }}
+          disabled={isLoading || uploading}
+          className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none z-50 bg-background/80 backdrop-blur-sm"
+        >
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </button>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
             {mode === "create" ? "Thêm bài hát mới" : "Chỉnh sửa bài hát"}
@@ -522,6 +598,7 @@ export const SongFormDialog = ({
                       Sắp xếp nghệ sĩ theo từng vai trò. Thứ tự trong danh sách sẽ được giữ nguyên.
                     </p>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
                   {contributorFieldConfigs.map(({ field, label, required, badgeLabel }) => (
                     <FormField
                       key={field}
@@ -682,6 +759,7 @@ export const SongFormDialog = ({
                       }}
                     />
                   ))}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="genre" className="space-y-4">
@@ -812,7 +890,7 @@ export const SongFormDialog = ({
                                   <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
                                   <span className="truncate flex-1 min-w-0">{genre?.name || `ID: ${genreId}`}</span>
                                   <div className="flex items-center gap-2">
-                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <label className="text-xs font-medium text-[hsl(var(--admin-active-foreground))] opacity-80">Score:</label>
                                     <Input
                                       type="number"
                                       step="0.1"
@@ -824,7 +902,7 @@ export const SongFormDialog = ({
                                         newScores.set(genreId, e.target.value);
                                         setGenreScores(newScores);
                                       }}
-                                      className="w-20 h-8 text-xs"
+                                      className="w-20 h-8 text-xs font-semibold bg-background text-foreground border-border focus:border-[hsl(var(--admin-active))] focus:ring-[hsl(var(--admin-active))]"
                                       placeholder="1.0"
                                     />
                                   </div>
@@ -860,7 +938,7 @@ export const SongFormDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium flex items-center gap-2">
-                          Mood (tùy chọn)
+                          Mood <span className="text-destructive">*</span>
                           {field.value && field.value.length > 0 && (
                             <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
                               {field.value.length} đã chọn
@@ -888,7 +966,7 @@ export const SongFormDialog = ({
                                       </span>
                                     </div>
                                   ) : (
-                                    <span>Tìm kiếm và chọn mood...</span>
+                                    <span>Vui lòng chọn ít nhất 1 mood...</span>
                                   )}
                                 </div>
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -981,7 +1059,7 @@ export const SongFormDialog = ({
                                   <div className="w-2 h-2 bg-[hsl(var(--admin-active-foreground))] rounded-full"></div>
                                   <span className="truncate flex-1 min-w-0">{mood?.name || `ID: ${moodId}`}</span>
                                   <div className="flex items-center gap-2">
-                                    <label className="text-xs text-muted-foreground">Score:</label>
+                                    <label className="text-xs font-medium text-[hsl(var(--admin-active-foreground))] opacity-80">Score:</label>
                                     <Input
                                       type="number"
                                       step="0.1"
@@ -993,7 +1071,7 @@ export const SongFormDialog = ({
                                         newScores.set(moodId, e.target.value);
                                         setMoodScores(newScores);
                                       }}
-                                      className="w-20 h-8 text-xs"
+                                      className="w-20 h-8 text-xs font-semibold bg-background text-foreground border-border focus:border-[hsl(var(--admin-active))] focus:ring-[hsl(var(--admin-active))]"
                                       placeholder="1.0"
                                     />
                                   </div>
@@ -1047,8 +1125,15 @@ export const SongFormDialog = ({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isLoading}
+                onClick={() => {
+                  if (mode === "create") {
+                    setIsClosingDialog(true);
+                    setShowConfirmDialog(true);
+                  } else {
+                    onOpenChange(false);
+                  }
+                }}
+                disabled={isLoading || uploading}
                 className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-active-foreground))] transition-all duration-200"
               >
                 Hủy
@@ -1065,20 +1150,27 @@ export const SongFormDialog = ({
         </Form>
       </DialogContent>
 
-      {/* Confirm Dialog for critical field changes */}
+      {/* Confirm Dialog - cho việc đóng form khi đang create hoặc thay đổi quan trọng */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
+        <DialogContent
+          onInteractOutside={(e) => {
+            // Ngăn đóng confirm dialog khi click ra ngoài
+            e.preventDefault();
+          }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />
-              Xác nhận thay đổi quan trọng
+              {isClosingDialog ? "Xác nhận đóng form" : "Xác nhận thay đổi quan trọng"}
             </DialogTitle>
             <DialogDescription>
-              Bạn đang thay đổi các trường quan trọng có thể ảnh hưởng đến việc nhận diện bài hát:
+              {isClosingDialog 
+                ? "Bạn đang tạo bài hát mới. Bạn có chắc chắn muốn đóng form? Dữ liệu chưa lưu sẽ bị mất."
+                : "Bạn đang thay đổi các trường quan trọng có thể ảnh hưởng đến việc nhận diện bài hát:"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
-            {pendingSubmit && (
+            {pendingSubmit && !isClosingDialog && (
               <>
               </>
             )}
@@ -1092,9 +1184,9 @@ export const SongFormDialog = ({
             </Button>
             <Button
               variant="destructive"
-              onClick={handleConfirmSubmit}
+              onClick={isClosingDialog ? handleConfirmClose : handleConfirmSubmit}
             >
-              Xác nhận thay đổi
+              {isClosingDialog ? "Đóng form" : "Xác nhận thay đổi"}
             </Button>
           </DialogFooter>
         </DialogContent>

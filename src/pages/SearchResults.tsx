@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Footer from "@/components/Footer";
 import ChatBubble from "@/components/ChatBubble";
 import PromotionCarousel from "@/components/PromotionCarousel";
@@ -51,26 +51,8 @@ const SearchResults = () => {
   const [selectedSong, setSelectedSong] = useState<{ id: number; name: string; urlImageAlbum?: string } | null>(null);
   const { playSong, setQueue } = useMusic();
   
-  // Debounce search
-  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
-  
-  useEffect(() => {
-    if (queryParam) {
-      // Clear previous timeout
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-      // Set new timeout for debounce
-      const timeout = setTimeout(() => {
-        fetchSearchResults(queryParam);
-      }, 300); // 300ms debounce
-      setSearchTimeout(timeout);
-      
-      return () => {
-        clearTimeout(timeout);
-      };
-    }
-  }, [queryParam, fetchSearchResults]);
+  // Debounce search - dùng useRef để tránh re-render
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const fetchSearchResults = useCallback(async (queryParam: string) => {
     if (!queryParam.trim()) return;
@@ -101,6 +83,27 @@ const SearchResults = () => {
       setLoading(false);
     }
   }, []);
+  
+  useEffect(() => {
+    if (queryParam) {
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      // Set new timeout for debounce
+      const timeout = setTimeout(() => {
+        fetchSearchResults(queryParam);
+      }, 300); // 300ms debounce
+      searchTimeoutRef.current = timeout;
+      
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+          searchTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [queryParam, fetchSearchResults]);
 
   const handleFilterChange = async (filterId: string) => {
     setActiveFilter(filterId);

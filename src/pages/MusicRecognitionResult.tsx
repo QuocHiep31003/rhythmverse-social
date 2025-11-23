@@ -431,7 +431,23 @@ const MusicRecognitionResult = () => {
                 : (item.artist || 'Unknown Artist');
               
               // Get score for display (use scoreDouble if available for humming, otherwise score)
-              const displayScore = item.scoreDouble !== undefined ? item.scoreDouble : (item.score !== undefined ? item.score : null);
+              // Backend should always provide score (0-100), but handle null/undefined gracefully
+              // CRITICAL: Check both score and scoreDouble, and handle 0 as valid score
+              const displayScore = item.scoreDouble !== undefined && item.scoreDouble !== null 
+                ? item.scoreDouble 
+                : (item.score !== undefined && item.score !== null ? item.score : null);
+              
+              // Debug logging - log all items to see what we're getting
+              console.log("[MusicRecognitionResult] Item data:", {
+                source: item.source,
+                acrId: item.acrId,
+                title: item.title,
+                score: item.score,
+                scoreDouble: item.scoreDouble,
+                displayScore: displayScore,
+                isInternal: item.internal,
+                rawItem: item
+              });
               
               return (
                 <div key={item.acrId || index} className="p-4 border border-border rounded-lg bg-muted/50">
@@ -443,12 +459,24 @@ const MusicRecognitionResult = () => {
                         {artists}
                       </div>
                       <div className="mt-2 flex gap-2 flex-wrap items-center">
-                        {/* CRITICAL: Display score prominently - ONLY show score, nothing else */}
-                        {displayScore !== null && (
+                        {/* CRITICAL: Display score prominently - ALWAYS show if available (including 0) */}
+                        {displayScore !== null && displayScore !== undefined && typeof displayScore === 'number' ? (
                           <Badge variant="default" className="bg-primary text-primary-foreground font-semibold text-base px-3 py-1">
-                            ⭐ {typeof displayScore === 'number' && displayScore % 1 !== 0 
-                              ? displayScore.toFixed(1) 
-                              : displayScore}%
+                            ⭐ {(() => {
+                              // Normalize score to 0-100 if needed (backend should already normalize, but double-check)
+                              let normalizedScore = displayScore;
+                              if (normalizedScore <= 1.0 && normalizedScore > 0) {
+                                normalizedScore = normalizedScore * 100;
+                              }
+                              // Format: show as integer if whole number, otherwise 1 decimal
+                              return normalizedScore % 1 !== 0 
+                                ? normalizedScore.toFixed(1) 
+                                : Math.round(normalizedScore);
+                            })()}%
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground text-sm px-3 py-1">
+                            ⚠️ Score not available (score: {String(item.score)}, scoreDouble: {String(item.scoreDouble)})
                           </Badge>
                         )}
                       </div>
