@@ -40,8 +40,8 @@ export default function PaymentSuccessPage() {
     } else {
       setLoading(false);
       toast({
-        title: 'Lỗi',
-        description: 'Không tìm thấy mã đơn hàng',
+        title: 'Error',
+        description: 'Order code not found',
         variant: 'destructive',
       });
     }
@@ -72,7 +72,7 @@ export default function PaymentSuccessPage() {
           </div>
 
           <CardTitle className="text-2xl">
-            {loading ? 'Đang xử lý...' : 'Thanh toán thành công!'}
+            {loading ? 'Processing...' : 'Payment Successful!'}
           </CardTitle>
         </CardHeader>
 
@@ -81,12 +81,12 @@ export default function PaymentSuccessPage() {
             <>
               <div className="text-center space-y-2">
                 <p className="text-muted-foreground">
-                  Cảm ơn bạn đã nâng cấp Premium. Tài khoản của bạn đã được kích hoạt.
+                  Thank you for upgrading to Premium. Your account has been activated.
                 </p>
 
                 {orderCode && (
                   <p className="text-sm text-muted-foreground">
-                    Mã đơn hàng: <span className="font-mono">#{orderCode}</span>
+                    Order Code: <span className="font-mono">#{orderCode}</span>
                   </p>
                 )}
               </div>
@@ -95,14 +95,14 @@ export default function PaymentSuccessPage() {
               <div className="bg-gradient-primary/10 rounded-lg p-4 border border-primary/20">
                 <div className="flex items-center gap-3 mb-2">
                   <Crown className="w-6 h-6 text-primary" />
-                  <h3 className="font-semibold">Bạn đã là thành viên Premium!</h3>
+                  <h3 className="font-semibold">You are now a Premium member!</h3>
                 </div>
 
                 <ul className="text-sm text-muted-foreground space-y-1 ml-9">
-                  <li>✓ Nghe nhạc không giới hạn</li>
-                  <li>✓ Chất lượng âm thanh cao (320kbps)</li>
-                  <li>✓ Tải nhạc ngoại tuyến</li>
-                  <li>✓ Tính năng AI nâng cao</li>
+                  <li>✓ Unlimited music streaming</li>
+                  <li>✓ High-quality audio (320kbps)</li>
+                  <li>✓ Offline downloads</li>
+                  <li>✓ Advanced AI features</li>
                 </ul>
               </div>
 
@@ -114,7 +114,7 @@ export default function PaymentSuccessPage() {
                   onClick={() => navigate('/premium')}
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Quay lại Premium
+                  Back to Premium
                 </Button>
 
                 <Button
@@ -123,7 +123,7 @@ export default function PaymentSuccessPage() {
                   onClick={() => navigate('/')}
                 >
                   <Home className="w-4 h-4 mr-2" />
-                  Về trang chủ
+                  Home
                 </Button>
               </div>
 
@@ -132,7 +132,7 @@ export default function PaymentSuccessPage() {
                 className="w-full text-primary"
                 onClick={() => navigate('/profile')}
               >
-                Xem hồ sơ
+                View Profile
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </>

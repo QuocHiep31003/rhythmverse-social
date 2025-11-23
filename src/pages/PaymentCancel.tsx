@@ -18,14 +18,14 @@ export default function PaymentCancelPage() {
           <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
             <XCircle className="w-10 h-10 text-yellow-500" />
           </div>
-          <CardTitle className="text-2xl">Thanh toán đã bị hủy</CardTitle>
+          <CardTitle className="text-2xl">Payment Cancelled</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-muted-foreground">
-            Bạn đã hủy quá trình thanh toán. Không có khoản phí nào được tính.
+            You have cancelled the payment process. No charges were made.
           </p>
           <p className="text-center text-sm text-muted-foreground">
-            Nếu bạn muốn nâng cấp lên Premium, bạn có thể thử lại bất cứ lúc nào.
+            If you want to upgrade to Premium, you can try again anytime.
           </p>
           <div className="flex gap-4">
             <Button 
@@ -34,7 +34,7 @@ export default function PaymentCancelPage() {
               onClick={() => navigate('/premium')}
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Quay lại Premium
+              Back to Premium
             </Button>
             <Button 
               variant="default" 
@@ -42,7 +42,7 @@ export default function PaymentCancelPage() {
               onClick={() => navigate('/')}
             >
               <Home className="w-4 h-4 mr-2" />
-              Về trang chủ
+              Home
             </Button>
           </div>
         </CardContent>

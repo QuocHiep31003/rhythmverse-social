@@ -14,6 +14,9 @@ import Footer from "@/components/Footer";
 import { buildJsonHeaders, authApi } from "@/services/api";
 import { createSlug } from "@/utils/playlistUtils";
 import { PlaylistVisibility } from "@/types/playlist";
+import { useFeatureLimit } from "@/hooks/useFeatureLimit";
+import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import {
   Select,
   SelectContent,
@@ -55,6 +58,7 @@ const VISIBILITY_OPTIONS: Record<
 const CreatePlaylist = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [formData, setFormData] = useState<PlaylistForm>({
     name: "",
     description: "",
@@ -75,6 +79,13 @@ const CreatePlaylist = () => {
     return allSongs.filter(s => s.name.toLowerCase().includes(q) || String(s.releaseYear).includes(q));
   }, [songSearch, allSongs]);
   const selectedVisibilityMeta = VISIBILITY_OPTIONS[formData.visibility];
+
+  // Feature limit hook
+  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+    featureName: FeatureName.PLAYLIST_CREATE,
+    autoCheck: true,
+    onLimitReached: () => setShowLimitModal(true),
+  });
 
   useEffect(() => {
     (async () => {
@@ -137,8 +148,22 @@ const CreatePlaylist = () => {
       toast({ title: "Playlist name required", description: "Please enter a name for your playlist", variant: "destructive" });
       return;
     }
+
+    // Check feature limit
+    if (!canUse) {
+      setShowLimitModal(true);
+      return;
+    }
+
     setIsLoading(true);
     try {
+      // Use feature (increment usage count)
+      const success = await useFeature();
+      if (!success) {
+        setShowLimitModal(true);
+        setIsLoading(false);
+        return;
+      }
       const today = new Date().toISOString().split("T")[0];
       let uploadedCoverUrl: string | null = null;
       if (formData.coverImage) {
@@ -314,8 +339,13 @@ const CreatePlaylist = () => {
             )}
 
             <div className="flex gap-4 pt-4">
-              <Button variant="outline" onClick={() => navigate(-1)} className="flex-1" disabled={isLoading}>Cancel</Button>
-              <Button onClick={handleSave} className="flex-1" disabled={isLoading || !formData.name.trim()}>{isLoading ? "Creating..." : "Create Playlist"}</Button>
+              <Button variant="outline" onClick={() => navigate(-1)} className="flex-1" disabled={isLoading || isCheckingLimit}>Cancel</Button>
+              <Button onClick={handleSave} className="flex-1" disabled={isLoading || isCheckingLimit || !formData.name.trim() || !canUse}>
+                {isLoading ? "Creating..." : isCheckingLimit ? "Checking..." : "Create Playlist"}
+                {!isPremium && remaining > 0 && (
+                  <span className="ml-2 text-xs opacity-75">({remaining} left)</span>
+                )}
+              </Button>
             </div>
             </div>
             </div>
@@ -323,6 +353,15 @@ const CreatePlaylist = () => {
         </Card>
       </div>
       <Footer />
+      
+      <FeatureLimitModal
+        open={showLimitModal}
+        onOpenChange={setShowLimitModal}
+        featureName={FeatureName.PLAYLIST_CREATE}
+        featureDisplayName="Create Playlist"
+        remaining={remaining}
+        limit={3}
+      />
     </div>
   );
 };

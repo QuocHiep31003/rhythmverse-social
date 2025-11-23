@@ -108,7 +108,8 @@ const Profile = () => {
       setUserId(user.id || null);
       let subscription: PremiumSubscriptionDTO | null = null;
       try {
-        subscription = await premiumSubscriptionApi.getMySubscription(user.id);
+        // Lấy subscription từ /me endpoint để có đầy đủ thông tin
+        subscription = await premiumSubscriptionApi.getMySubscription();
         setPremiumSubscription(subscription);
       } catch (subscriptionError) {
         console.warn("Failed to fetch premium subscription", subscriptionError);
@@ -129,24 +130,37 @@ const Profile = () => {
         isSubscriptionActive(subscription)
       ];
       const isPremiumUser = premiumSources.some((flag) => Boolean(flag));
+      // Ưu tiên lấy từ subscription (startsAt/expiresAt), sau đó mới lấy từ user
       const premiumStartDate =
+        subscription?.startsAt ||
+        subscription?.startDate ||
         user.premiumStartDate ||
         user.premiumActivatedAt ||
-        subscription?.startDate ||
         null;
       const premiumEndDate =
-        user.premiumEndDate ||
-        user.premiumExpiresAt ||
+        subscription?.expiresAt ||
         subscription?.endDate ||
         subscription?.currentPeriodEnd ||
+        user.premiumEndDate ||
+        user.premiumExpiresAt ||
         null;
-      const planLabel =
+      // Format planLabel to English, remove Vietnamese text
+      let rawPlanLabel =
         subscription?.planName ||
         subscription?.planCode ||
         (user as any)?.planName ||
         (user as any)?.plan ||
         (user as any)?.membership ||
         (isPremiumUser ? "Premium" : "Free");
+      
+      // Convert Vietnamese plan names to English
+      const planLabel = rawPlanLabel
+        ?.replace(/Premium\s*1\s*tháng/gi, "Premium Monthly")
+        ?.replace(/Premium\s*3\s*tháng/gi, "Premium Quarterly")
+        ?.replace(/Premium\s*1\s*năm/gi, "Premium Yearly")
+        ?.replace(/Premium\s*tháng/gi, "Premium Monthly")
+        ?.replace(/Premium\s*năm/gi, "Premium Yearly")
+        || (isPremiumUser ? "Premium" : "Free");
       setProfileData({
         name: user.name || "",
         username: user.email ? `@${user.email.split('@')[0]}` : "",
@@ -309,10 +323,12 @@ const Profile = () => {
       if (Number.isNaN(date.getTime())) {
         return dateString;
       }
-      return new Intl.DateTimeFormat('vi-VN', {
+      return new Intl.DateTimeFormat('en-US', {
         day: '2-digit',
         month: '2-digit',
-        year: 'numeric'
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       }).format(date);
     } catch {
       return dateString || null;
@@ -331,7 +347,7 @@ const Profile = () => {
       return (
         <Badge variant="default" className="bg-green-500 hover:bg-green-600">
           <CheckCircle2 className="w-3 h-3 mr-1" />
-          Đã thanh toán
+          Success
         </Badge>
       );
     }
@@ -342,7 +358,7 @@ const Profile = () => {
       return (
         <Badge variant="outline" className="border-amber-500 text-amber-500">
           <Clock className="w-3 h-3 mr-1" />
-          Đang xử lý
+          Pending
         </Badge>
       );
     }
@@ -350,7 +366,7 @@ const Profile = () => {
     return (
       <Badge variant="destructive">
         <XCircle className="w-3 h-3 mr-1" />
-        Thất bại
+        Failed
       </Badge>
     );
   };
@@ -655,17 +671,11 @@ const Profile = () => {
                           {profileData.planLabel || (profileData.premium ? "Premium" : "Free")}
                         </Badge>
                       </div>
-                      {(profileData.planLabel || profileData.premiumStart || profileData.premiumEnd) && (
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground justify-center md:justify-start mb-2">
-                          {profileData.planLabel && (
-                            <span>
-                              Gói hiện tại:{" "}
-                              <span className="font-medium text-foreground">{profileData.planLabel}</span>
-                            </span>
-                          )}
+                      {(profileData.premiumStart || profileData.premiumEnd) && (
+                        <div className="flex flex-col gap-2 text-xs text-muted-foreground justify-start mb-2">
                           {profileData.premiumStart && (
                             <span>
-                              Bắt đầu:{" "}
+                              Start Date:{" "}
                               <span className="font-medium text-foreground">
                                 {formatMembershipDate(profileData.premiumStart)}
                               </span>
@@ -673,7 +683,7 @@ const Profile = () => {
                           )}
                           {profileData.premiumEnd && (
                             <span>
-                              Hết hạn:{" "}
+                              Expires:{" "}
                               <span className={`font-medium ${profileData.premium ? "text-green-400" : "text-red-400"}`}>
                                 {formatMembershipDate(profileData.premiumEnd)}
                               </span>
@@ -856,7 +866,7 @@ const Profile = () => {
                     <div className="text-2xl font-bold text-green-500">
                       {allPaymentOrders.filter(o => o.status === 'SUCCESS').length}
                     </div>
-                    <p className="text-sm text-muted-foreground">Giao dịch thành công</p>
+                    <p className="text-sm text-muted-foreground">Successful</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
@@ -864,7 +874,7 @@ const Profile = () => {
                     <div className="text-2xl font-bold text-red-500">
                       {allPaymentOrders.filter(o => o.status !== 'SUCCESS').length}
                     </div>
-                    <p className="text-sm text-muted-foreground">Giao dịch thất bại</p>
+                    <p className="text-sm text-muted-foreground">Failed</p>
                   </CardContent>
                 </Card>
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
@@ -876,7 +886,7 @@ const Profile = () => {
                           .reduce((sum, o) => sum + o.amount, 0)
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground">Tổng đã thanh toán</p>
+                    <p className="text-sm text-muted-foreground">Total Paid</p>
                   </CardContent>
                 </Card>
               </div>
@@ -886,7 +896,7 @@ const Profile = () => {
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2">
                       <CreditCard className="w-5 h-5" />
-                      Lịch sử thanh toán
+                      Payment History
                     </CardTitle>
                     <Button
                       variant="outline"
@@ -895,16 +905,16 @@ const Profile = () => {
                       disabled={paymentLoading}
                     >
                       <RefreshCw className={`w-4 h-4 mr-2 ${paymentLoading ? 'animate-spin' : ''}`} />
-                      Làm mới
+                      Refresh
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <Tabs value={paymentFilter} onValueChange={(v) => setPaymentFilter(v as typeof paymentFilter)} className="mb-4">
                     <TabsList>
-                      <TabsTrigger value="all">Tất cả</TabsTrigger>
-                      <TabsTrigger value="SUCCESS">Thành công</TabsTrigger>
-                      <TabsTrigger value="FAILED">Thất bại</TabsTrigger>
+                      <TabsTrigger value="all">All</TabsTrigger>
+                      <TabsTrigger value="SUCCESS">Success</TabsTrigger>
+                      <TabsTrigger value="FAILED">Failed</TabsTrigger>
                     </TabsList>
                   </Tabs>
                   {paymentLoading ? (
@@ -913,7 +923,7 @@ const Profile = () => {
                     </div>
                   ) : paymentOrders.length === 0 ? (
                     <div className="text-center py-12">
-                      <p className="text-muted-foreground">Chưa có giao dịch nào</p>
+                      <p className="text-muted-foreground">No transactions yet</p>
                     </div>
                   ) : (
                     <>
@@ -921,40 +931,21 @@ const Profile = () => {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Mã đơn hàng</TableHead>
-                              <TableHead>Mô tả</TableHead>
-                              <TableHead>Số tiền</TableHead>
-                              <TableHead>Trạng thái</TableHead>
-                              <TableHead>Ngày tạo</TableHead>
+                              <TableHead>Order Code</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead>Amount</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Date</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {paymentOrders.map((order) => (
                               <TableRow key={order.orderCode}>
-                                <TableCell className="font-medium">
+                                <TableCell className="font-medium text-muted-foreground">
                                   #{order.orderCode}
                                 </TableCell>
-                                <TableCell>
-                                  <div className="font-medium">{order.description}</div>
-                                  {order.status === 'SUCCESS' && order.reference && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      Mã giao dịch: {order.reference}
-                                    </div>
-                                  )}
-                                  {order.status === 'SUCCESS' && order.transactionDateTime && (
-                                    <div className="text-xs text-muted-foreground/80">
-                                      Thời gian PayOS: {order.transactionDateTime}
-                                    </div>
-                                  )}
-                                  {order.status !== 'SUCCESS' && (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      {order.failureReason
-                                        ? order.failureReason
-                                        : order.payosCode?.toUpperCase() === 'PENDING'
-                                        ? 'Đang chờ PayOS gửi webhook xác nhận'
-                                        : order.payosDesc || 'Không có lý do được cung cấp'}
-                                    </div>
-                                  )}
+                                <TableCell className="font-medium">
+                                  {order.description}
                                 </TableCell>
                                 <TableCell>
                                   <div className="font-semibold text-primary">
@@ -962,25 +953,14 @@ const Profile = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {getPaymentStatusBadge(order)} {order.status}
+                                  {getPaymentStatusBadge(order)}
                                 </TableCell>
-                                <TableCell className="text-muted-foreground">
-                                  <div>{formatPaymentDate(order.createdAt)}</div>
-                                  {order.paidAt && (
-                                    <div className="text-xs text-green-500 mt-1">
-                                      Thanh toán: {formatPaymentDate(order.paidAt)}
-                                    </div>
-                                  )}
-                                  {order.failedAt && (
-                                    <div className="text-xs text-red-500 mt-1">
-                                      Thất bại: {formatPaymentDate(order.failedAt)}
-                                    </div>
-                                  )}
-                                  {order.updatedAt && order.updatedAt !== order.createdAt && (
-                                    <div className="text-xs text-muted-foreground/70 mt-1">
-                                      Cập nhật: {formatPaymentDate(order.updatedAt)}
-                                    </div>
-                                  )}
+                                <TableCell className="text-muted-foreground text-sm">
+                                  {order.paidAt 
+                                    ? formatPaymentDate(order.paidAt)
+                                    : order.failedAt
+                                    ? formatPaymentDate(order.failedAt)
+                                    : formatPaymentDate(order.createdAt)}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -992,7 +972,7 @@ const Profile = () => {
                       {paymentTotalPages > 1 && (
                         <div className="flex items-center justify-between mt-4">
                           <div className="text-sm text-muted-foreground">
-                            Trang {paymentPage + 1} / {paymentTotalPages} ({paymentTotalElements} giao dịch)
+                            Page {paymentPage + 1} / {paymentTotalPages} ({paymentTotalElements} transactions)
                           </div>
                           <div className="flex gap-2">
                             <Button
@@ -1002,7 +982,7 @@ const Profile = () => {
                               disabled={paymentPage === 0 || paymentLoading}
                             >
                               <ChevronLeft className="w-4 h-4 mr-1" />
-                              Trước
+                              Previous
                             </Button>
                             <Button
                               variant="outline"
@@ -1010,7 +990,7 @@ const Profile = () => {
                               onClick={() => setPaymentPage((p) => Math.min(paymentTotalPages - 1, p + 1))}
                               disabled={paymentPage >= paymentTotalPages - 1 || paymentLoading}
                             >
-                              Sau
+                              Next
                               <ChevronRight className="w-4 h-4 ml-1" />
                             </Button>
                           </div>
