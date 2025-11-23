@@ -61,13 +61,19 @@ export function AddFriendButton({ targetUserId }: AddFriendButtonProps) {
     setSending(true);
     try {
       if (incomingRequest?.id) {
+        console.log('👤 [DEBUG] Accepting friend request:', incomingRequest.id);
         await friendsApi.accept(Number(incomingRequest.id));
         toast({ title: 'Đã kết bạn' });
       } else {
-        await friendsApi.sendRequest(0, Number(targetUserId));
+        console.log('👤 [DEBUG] Sending friend request to user:', targetUserId);
+        const result = await friendsApi.sendRequest(0, Number(targetUserId));
+        console.log('👤 [DEBUG] Friend request sent, API response:', result);
         toast({ title: 'Đã gửi lời mời' });
+        // Note: Backend should create notification for the receiver
+        // Notification will be received via Firebase listener
       }
     } catch (e: any) {
+      console.error('👤 [DEBUG] Failed to send/accept friend request:', e);
       toast({ title: 'Không thể xử lý', description: e?.message || 'Lỗi không xác định' });
     } finally {
       setSending(false);

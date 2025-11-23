@@ -38,10 +38,12 @@ import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import {
   watchNotifications,
   NotificationDTO,
-  markNotificationsAsRead,
 } from "@/services/firebase/notifications";
+import { markNotificationsAsRead } from "@/services/api/notificationsApi";
 import { CHAT_TAB_OPENED_EVENT } from "@/utils/chatEvents";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
+import { watchAllRoomUnreadCounts } from "@/services/firebase/chat";
+import { chatApi } from "@/services/api/chatApi";
 
 import {
   premiumSubscriptionApi,
@@ -309,13 +311,95 @@ const TopBar = () => {
         const alertNotifs = notifications.filter((n) => n.type !== "MESSAGE");
         setMessageNotifications(messageNotifs);
         setAlertNotifications(alertNotifs);
-        setUnreadMsgCount(messageNotifs.filter((n) => !n.read).length);
+        // Note: unreadMsgCount is now managed by Firebase rooms listener below
+        // Only count notification unread here, not chat message unread
         setUnreadAlertCount(alertNotifs.filter((n) => !n.read).length);
       }
     );
 
     return () => unsubscribe();
   }, [currentUserId]);
+
+  /** ================= FIREBASE CHAT UNREAD COUNTS ================= **/
+  // Load initial unread count from API
+  useEffect(() => {
+    if (!currentUserId) return;
+    
+    let cancelled = false;
+    
+    const loadInitialUnreadCount = async () => {
+      try {
+        const data = await chatApi.getUnreadCounts(currentUserId);
+        if (!cancelled) {
+          console.log('[TopBar] Loaded initial unread count from API:', data.totalUnread);
+          setUnreadMsgCount(data.totalUnread);
+        }
+      } catch (error) {
+        console.warn('[TopBar] Failed to load initial unread count from API:', error);
+        // Fallback: set 0, Firebase listener will update
+        if (!cancelled) {
+          setUnreadMsgCount(0);
+        }
+      }
+    };
+    
+    void loadInitialUnreadCount();
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId]);
+
+  // Listen Firebase realtime unread counts (with API polling fallback)
+  useEffect(() => {
+    if (!currentUserId || !firebaseReady) return;
+
+    console.log('[TopBar] Setting up Firebase chat unread counts listener for user:', currentUserId);
+    
+    // ✅ Track Firebase realtime activity - nếu có update thì không cần poll
+    let lastFirebaseUpdateRef = Date.now();
+    let pollInterval: number | null = null;
+    
+    const unsubscribe = watchAllRoomUnreadCounts(
+      currentUserId,
+      (unreadCounts, totalUnread) => {
+        lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
+        console.log('[TopBar] Chat unread counts updated from Firebase:', { unreadCounts, totalUnread });
+        setUnreadMsgCount(totalUnread);
+      }
+    );
+    
+    // ✅ Fallback: Poll API chỉ khi Firebase không update trong 30s (realtime fail)
+    const pollUnreadCounts = async () => {
+      const timeSinceLastFirebaseUpdate = Date.now() - lastFirebaseUpdateRef;
+      
+      // Nếu Firebase đã update trong 30s gần đây → không cần poll
+      if (timeSinceLastFirebaseUpdate < 30000) {
+        console.log('[TopBar] Skipping poll - Firebase updated recently:', timeSinceLastFirebaseUpdate, 'ms ago');
+        return;
+      }
+      
+      try {
+        const data = await chatApi.getUnreadCounts(currentUserId);
+        console.log('[TopBar] Polled unread count from API (Firebase fallback):', data.totalUnread);
+        setUnreadMsgCount(data.totalUnread);
+      } catch (error) {
+        console.warn('[TopBar] Failed to poll unread counts from API:', error);
+      }
+    };
+    
+    // ✅ Poll mỗi 30s (thay vì 10s) - chỉ poll khi Firebase không hoạt động
+    pollInterval = window.setInterval(pollUnreadCounts, 30000);
+
+    return () => {
+      console.log('[TopBar] Cleaning up Firebase chat unread counts listener');
+      unsubscribe();
+      if (pollInterval !== null) {
+        window.clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    };
+  }, [currentUserId, firebaseReady]);
 
   useEffect(() => {
     if (!notifOpen || !currentUserId || !firebaseReady) return;
@@ -328,11 +412,16 @@ const TopBar = () => {
         prev.map((n) => (unreadIds.includes(String(n.id)) ? { ...n, read: true } : n))
       );
       setUnreadAlertCount(0); // Optimistic update
-      // Đánh dấu đã đọc trong Firebase (chỉ khi Firebase auth đã sẵn sàng)
-      void markNotificationsAsRead(currentUserId, unreadIds);
+      // Đánh dấu đã đọc qua backend API (backend sẽ mirror vào Firebase)
+      void markNotificationsAsRead(currentUserId, unreadIds).catch((error) => {
+        console.warn('[TopBar] Failed to mark notifications as read:', error);
+        // Optimistic update đã xử lý UI, nên không cần rollback
+      });
     }
   }, [notifOpen, currentUserId, firebaseReady, alertNotifications]);
 
+  // Mark message notifications as read when chat tab is opened
+  // Note: Chat unread count is managed by Firebase rooms listener, not here
   useEffect(() => {
     if (!currentUserId || !firebaseReady) return;
     const handler = () => {
@@ -344,11 +433,12 @@ const TopBar = () => {
         setMessageNotifications((prev) =>
           prev.map((n) => (unreadIds.includes(String(n.id)) ? { ...n, read: true } : n))
         );
-        setUnreadMsgCount(0); // Optimistic update
-        // Đánh dấu đã đọc trong Firebase (chỉ khi Firebase auth đã sẵn sàng)
-        void markNotificationsAsRead(currentUserId, unreadIds);
-      } else {
-        setUnreadMsgCount(0);
+        // Đánh dấu đã đọc qua backend API (backend sẽ mirror vào Firebase)
+        // Note: Chat unread count will be updated by backend when markConversationAsRead is called
+        void markNotificationsAsRead(currentUserId, unreadIds).catch((error) => {
+          console.warn('[TopBar] Failed to mark message notifications as read:', error);
+          // Optimistic update đã xử lý UI, nên không cần rollback
+        });
       }
     };
     window.addEventListener(CHAT_TAB_OPENED_EVENT, handler);

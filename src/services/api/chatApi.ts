@@ -143,13 +143,20 @@ export const chatApi = {
     return (await res.json()) as ChatMessageDTO;
   },
   markConversationRead: async (userId: number, friendId: number): Promise<void> => {
+    // 🔴 DEBUG: Log mỗi lần mark as read được gọi
+    console.log('🔴 [DEBUG] markConversationRead called:', { userId, friendId });
+    console.trace('🔴 [DEBUG] Call stack:');
+    
     // Try correct endpoint formats theo chuẩn Messenger
     // Format 1: PUT /api/chat/read/conversation?readerId={userId}&partnerId={friendId} (khuyến nghị)
     let res = await fetch(`${API_BASE_URL}/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`, {
       method: "PUT",
       headers: buildJsonHeaders(),
     });
-    if (res.ok) return;
+    if (res.ok) {
+      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 1)');
+      return;
+    }
     
     // Format 2: POST /api/chat/read/conversation?readerId={userId}&partnerId={friendId}
     const errorMsg1 = await parseErrorResponse(res);
@@ -157,7 +164,10 @@ export const chatApi = {
       method: "POST",
       headers: buildJsonHeaders(),
     });
-    if (res.ok) return;
+    if (res.ok) {
+      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 2)');
+      return;
+    }
     
     // Format 3: POST /api/chat/read/conversation?userId={userId}&friendId={friendId} (backward compatible)
     const errorMsg2 = await parseErrorResponse(res);
@@ -165,7 +175,10 @@ export const chatApi = {
       method: "POST",
       headers: buildJsonHeaders(),
     });
-    if (res.ok) return;
+    if (res.ok) {
+      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 3)');
+      return;
+    }
     
     // Format 4: Legacy endpoint POST /api/chat/read/{userId}/{friendId}
     const errorMsg3 = await parseErrorResponse(res);
@@ -173,7 +186,10 @@ export const chatApi = {
       method: "POST",
       headers: buildJsonHeaders(),
     });
-    if (res.ok) return;
+    if (res.ok) {
+      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 4)');
+      return;
+    }
     
     // If all fail, log warning but don't throw (non-critical operation)
     const finalError = await parseErrorResponse(res);
@@ -258,5 +274,18 @@ export const chatApi = {
     const result = await res.json();
     console.log('[chatApi] Delete message success:', result);
     return result;
+  },
+  getUnreadCounts: async (userId: number): Promise<{ userId: number; unreadCounts: Record<string, number>; totalUnread: number }> => {
+    const res = await fetch(`${API_BASE_URL}/chat/unread/${userId}`, {
+      method: "GET",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.warn('[chatApi] Failed to get unread counts:', errorMsg);
+      // Return empty if API not available yet (backward compatibility)
+      return { userId, unreadCounts: {}, totalUnread: 0 };
+    }
+    return await res.json();
   },
 };

@@ -102,6 +102,85 @@ export const watchRoomMeta = (roomId: string, callback: (data: any | null) => vo
   return () => unsubscribe();
 };
 
+/**
+ * Watch unread count for a specific room and user
+ * Path: rooms/{roomKey}/unread/{userId}
+ */
+export const watchRoomUnreadCount = (
+  roomKey: string,
+  userId: number,
+  callback: (count: number) => void
+) => {
+  const unreadRef = ref(firebaseDb, `rooms/${roomKey}/unread/${userId}`);
+  console.log('[Firebase Chat] Watching unread count at:', `rooms/${roomKey}/unread/${userId}`);
+  
+  const unsubscribe = onValue(
+    unreadRef,
+    (snapshot) => {
+      const count = snapshot.exists() ? (snapshot.val() || 0) : 0;
+      console.log('[Firebase Chat] Unread count updated:', { roomKey, userId, count });
+      callback(Number(count));
+    },
+    (error) => {
+      console.warn("[Firebase Chat] Error watching unread count:", error);
+      // Return 0 if error (permission denied, etc.)
+      callback(0);
+    }
+  );
+  
+  return () => unsubscribe();
+};
+
+/**
+ * Watch all rooms and aggregate unread counts for a user
+ * Path: rooms/
+ * Note: Falls back to empty if permission denied (backend may not have setup rooms/ path yet)
+ */
+export const watchAllRoomUnreadCounts = (
+  userId: number,
+  callback: (unreadCounts: Record<string, number>, totalUnread: number) => void
+) => {
+  const roomsRef = ref(firebaseDb, `rooms`);
+  console.log('[Firebase Chat] Watching all room unread counts for user:', userId);
+  
+  const unsubscribe = onValue(
+    roomsRef,
+    (snapshot) => {
+      const rooms = snapshot.exists() ? (snapshot.val() || {}) : {};
+      const unreadCounts: Record<string, number> = {};
+      let totalUnread = 0;
+      
+      // Iterate through all rooms
+      Object.keys(rooms).forEach((roomKey) => {
+        const room = rooms[roomKey];
+        if (room?.unread && room.unread[userId] !== undefined) {
+          const count = Number(room.unread[userId]) || 0;
+          if (count > 0) {
+            unreadCounts[roomKey] = count;
+            totalUnread += count;
+          }
+        }
+      });
+      
+      console.log('[Firebase Chat] All unread counts updated:', { unreadCounts, totalUnread });
+      callback(unreadCounts, totalUnread);
+    },
+    (error: any) => {
+      // Handle permission denied gracefully - backend may not have setup rooms/ path yet
+      if (error?.code === 'PERMISSION_DENIED' || error?.message?.includes('permission_denied')) {
+        console.warn('[Firebase Chat] Permission denied for rooms/ - backend may not have setup this path yet. Using API fallback.');
+        // Return empty - API will provide the unread counts
+        callback({}, 0);
+      } else {
+        console.warn("[Firebase Chat] Error watching all room unread counts:", error);
+        callback({}, 0);
+      }
+    }
+  );
+  
+  return () => unsubscribe();
+};
+
 export const watchTyping = (
   roomId: string,
   friendId: number,
