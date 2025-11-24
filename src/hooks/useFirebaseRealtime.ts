@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { setUserOnline, setUserOffline, pingPresence, watchUserPresence, watchMultipleUsersPresence } from '@/services/firebase/presence';
-import { watchChatMessages, sendMessage, type FirebaseMessage } from '@/services/firebase/chat';
 import { watchNotifications, NotificationDTO } from '@/services/firebase/notifications';
 
 // Để tránh spam presence ping, FE không được ping quá dày.
@@ -16,7 +15,6 @@ const PRESENCE_PING_INTERVAL_MS = Number.isFinite(parsedEnvPing)
 type UseFirebaseRealtimeOptions = {
   onPresence?: (presence: { userId: number; online: boolean }) => void;
   onNotification?: (notification: NotificationDTO) => void;
-  onMessage?: (message: FirebaseMessage) => void;
   friends?: number[];
 };
 
@@ -26,7 +24,6 @@ export default function useFirebaseRealtime(
 ) {
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribePresenceRef = useRef<(() => void)[]>([]);
-  const unsubscribeChatRef = useRef<(() => void)[]>([]);
   const unsubscribeNotifRef = useRef<(() => void) | null>(null);
   const shownNotificationsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef<boolean>(true);
@@ -74,7 +71,7 @@ export default function useFirebaseRealtime(
         console.log('[Firebase Realtime] Heartbeat ping');
         lastPingTimeRef.current = Date.now();
         void pingPresence(userId);
-      }, PRESENCE_PING_INTERVAL_MS); // default 15 gi�y - Messenger-style heartbeat
+      }, PRESENCE_PING_INTERVAL_MS); // default 15s heartbeat
       console.log('[Firebase Realtime] Heartbeat interval (ms):', PRESENCE_PING_INTERVAL_MS);
     } else {
       // Nếu userId không đổi, chỉ cập nhật presence listeners nếu cần
@@ -95,35 +92,104 @@ export default function useFirebaseRealtime(
     if (currentOptions?.onNotification) {
       console.log('[Firebase Realtime] Setting up notification watch');
       unsubscribeNotifRef.current = watchNotifications(userId, (notifications) => {
-        // Bỏ qua lần load đầu tiên (chỉ show notifications mới sau đó)
+        // ✅ Hiển thị notifications unread ngay cả khi initial load
         if (isInitialLoadRef.current) {
-          // Đánh dấu tất cả notifications hiện tại là đã xem
+          // ✅ Lấy tất cả notifications unread (read === false hoặc read === undefined)
+          // Coi undefined/null là unread (chưa đọc)
+          const unreadOnInitialLoad = notifications.filter(n => n.read !== true);
+          
+          // ✅ Log chi tiết để debug
+          const readStatusSample = notifications.slice(0, 10).map(n => ({
+            id: n.id,
+            type: n.type,
+            read: n.read,
+            readType: typeof n.read,
+            senderName: n.senderName
+          }));
+          
+          console.log('[Firebase Realtime] Initial load:', {
+            total: notifications.length,
+            unread: unreadOnInitialLoad.length,
+            unreadTypes: unreadOnInitialLoad.map(n => n.type),
+            readStatusSample: readStatusSample,
+            unreadDetails: unreadOnInitialLoad.slice(0, 5).map(n => ({
+              id: n.id,
+              type: n.type,
+              read: n.read,
+              senderName: n.senderName
+            }))
+          });
+          
+          // ✅ Show tất cả unread notifications khi initial load
+          unreadOnInitialLoad.forEach((notification) => {
+            if (notification.id) {
+              shownNotificationsRef.current.add(String(notification.id));
+              console.log('[Firebase Realtime] Showing unread notification on initial load:', {
+                id: notification.id,
+                type: notification.type,
+                senderName: notification.senderName,
+                body: notification.body
+              });
+              optionsRef.current?.onNotification?.(notification);
+            }
+          });
+          
+          // ✅ Đánh dấu tất cả notifications (cả read và unread) là đã xem để không show lại
           notifications.forEach(n => {
             if (n.id) {
               shownNotificationsRef.current.add(String(n.id));
             }
           });
           isInitialLoadRef.current = false;
-          console.log('[Firebase Realtime] Initial load, marking all notifications as shown');
+          console.log('[Firebase Realtime] Initial load completed, shown', unreadOnInitialLoad.length, 'unread notifications');
           return;
         }
 
-        // Chỉ lấy notifications mới (chưa từng show)
+        // Lấy notifications mới (chưa từng show) - chỉ show notification được tạo SAU khi user vào trang
         const unread = notifications.filter(n => {
           if (!n.id) return false;
           const id = String(n.id);
-          // Chỉ lấy notification chưa đọc VÀ chưa từng show
-          return !n.read && !shownNotificationsRef.current.has(id);
+          // ✅ Chỉ lấy notification chưa đọc (read !== true) VÀ chưa từng show
+          return n.read !== true && !shownNotificationsRef.current.has(id);
         });
 
-        // Show notification mới nhất và đánh dấu đã show
-        if (unread.length > 0) {
-          const newest = unread[0]; // Đã sort newest first trong watchNotifications
-          if (newest.id) {
-            shownNotificationsRef.current.add(String(newest.id));
-            console.log('[Firebase Realtime] Showing new notification:', newest.id);
-            optionsRef.current?.onNotification?.(newest);
+        // Log chi tiết để debug
+        const unreadDetails = unread.map(n => ({
+          id: n.id,
+          type: n.type,
+          read: n.read,
+          senderName: n.senderName,
+          body: n.body?.substring(0, 50)
+        }));
+        const allUnread = notifications.filter(n => !n.read);
+        
+        console.log('[Firebase Realtime] Filtered unread notifications:', {
+          total: notifications.length,
+          allUnreadCount: allUnread.length,
+          allUnreadTypes: allUnread.map(n => n.type),
+          newUnreadCount: unread.length,
+          newUnreadDetails: unreadDetails,
+          shownCount: shownNotificationsRef.current.size
+        });
+
+        // Show TẤT CẢ unread notifications mới (không chỉ mới nhất)
+        // Điều này đảm bảo user nhận được tất cả notifications (friend request, collab invite, etc.)
+        unread.forEach((notification) => {
+          if (notification.id) {
+            shownNotificationsRef.current.add(String(notification.id));
+            console.log('[Firebase Realtime] Showing notification:', {
+              id: notification.id,
+              type: notification.type,
+              senderName: notification.senderName,
+              body: notification.body,
+              read: notification.read
+            });
+            optionsRef.current?.onNotification?.(notification);
           }
+        });
+
+        if (unread.length === 0) {
+          console.log('[Firebase Realtime] No new unread notifications to show');
         }
       });
     }
@@ -165,8 +231,6 @@ export default function useFirebaseRealtime(
       }
       unsubscribePresenceRef.current.forEach(unsub => unsub());
       unsubscribePresenceRef.current = [];
-      unsubscribeChatRef.current.forEach(unsub => unsub());
-      unsubscribeChatRef.current = [];
       if (unsubscribeNotifRef.current) {
         unsubscribeNotifRef.current();
         unsubscribeNotifRef.current = null;
@@ -214,31 +278,7 @@ export default function useFirebaseRealtime(
     };
   }, [userId, friendsKey]); // Re-run khi friends thay đổi (so sánh bằng JSON.stringify)
 
-  // Function để watch chat với một friend cụ thể
-  const watchChatWithFriend = (friendId: number, onNewMessage: (msg: FirebaseMessage) => void) => {
-    if (!userId) return () => {};
-    
-    const unsubscribe = watchChatMessages(userId, friendId, (messages) => {
-      // Chỉ trigger callback cho message mới nhất nếu cần
-      if (messages.length > 0 && options?.onMessage) {
-        const latest = messages[messages.length - 1];
-        if (latest.senderId !== userId) {
-          options.onMessage(latest);
-        }
-      }
-    });
-    
-    unsubscribeChatRef.current.push(unsubscribe);
-    return unsubscribe;
-  };
-
   return {
-    sendMessage: (senderId: number, receiverId: number, content: string) => {
-      return sendMessage(senderId, receiverId, content);
-    },
-    watchChatWithFriend,
     isConnected: !!userId
   };
 }
-
-

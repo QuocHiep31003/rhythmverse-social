@@ -79,16 +79,64 @@ export const friendsApi = {
   },
 
   // Backward-compatible: userId tham số bị bỏ qua theo API mới
-  remove: async (_userId: number, friendId: number) => {
-    // New API: DELETE /api/friends/{friendId}
-    const response = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
-      method: 'DELETE',
-      headers: buildJsonHeaders(),
+  remove: async (_userId: number, friendId: number, opts?: { relationshipId?: number }) => {
+    const headers = buildJsonHeaders();
+
+    console.log('[Friends API] Unfriend request:', {
+      userId: _userId,
+      friendId: friendId,
+      relationshipId: opts?.relationshipId
     });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+
+    // Prefer official endpoint: DELETE /api/friends/{friendId}
+    const primaryResponse = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
+      method: "DELETE",
+      headers,
+    });
+
+    if (primaryResponse.ok) {
+      try {
+        const result = await primaryResponse.text();
+        console.log('[Friends API] Unfriend success (primary):', result);
+        return result;
+      } catch {
+        console.log('[Friends API] Unfriend success (primary, no response body)');
+        return "Unfriended";
+      }
     }
-    try { return await response.text(); } catch { return 'Unfriended'; }
+
+    const primaryError = await parseErrorResponse(primaryResponse);
+    console.warn('[Friends API] Primary endpoint failed:', {
+      status: primaryResponse.status,
+      error: primaryError
+    });
+
+    // Fallback: try relationshipId endpoint if available
+    if (opts?.relationshipId) {
+      console.log('[Friends API] Trying fallback endpoint with relationshipId:', opts.relationshipId);
+      const fallbackResponse = await fetch(`${API_BASE_URL}/friends/relationships/${opts.relationshipId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (fallbackResponse.ok) {
+        try {
+          const result = await fallbackResponse.text();
+          console.log('[Friends API] Unfriend success (fallback):', result);
+          return result;
+        } catch {
+          console.log('[Friends API] Unfriend success (fallback, no response body)');
+          return "Unfriended";
+        }
+      }
+      const fallbackError = await parseErrorResponse(fallbackResponse);
+      console.error('[Friends API] Fallback endpoint also failed:', {
+        status: fallbackResponse.status,
+        error: fallbackError
+      });
+      throw new Error(primaryError || fallbackError || "Failed to unfriend");
+    }
+
+    throw new Error(primaryError || "Failed to unfriend");
   },
 };
 

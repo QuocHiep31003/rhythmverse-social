@@ -270,7 +270,7 @@ const Playlist = () => {
                       <h3 className="font-semibold truncate">{playlist.name}</h3>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <div onClick={(e) => e.stopPropagation()}>
-                          <ShareButton title={playlist.name} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.name || playlist.title || 'playlist', playlist.id)}`} />
+                          <ShareButton title={playlist.name} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.name || playlist.title || 'playlist', playlist.id)}`} isPrivate={!playlist.isPublic} />
                         </div>
                         <Button 
                           variant="ghost" 

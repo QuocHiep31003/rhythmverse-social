@@ -9,6 +9,8 @@ export interface UserDTO {
     address?: string;
     roleId?: number;
     roleName?: string;
+    role?: string; // Backend enum UserRole serialized as string: "USER" or "ADMIN"
+    roles?: string[]; // Array of roles (if multiple)
     password?: string;
     avatar?: string; // <-- add avatar field
     premium?: boolean;

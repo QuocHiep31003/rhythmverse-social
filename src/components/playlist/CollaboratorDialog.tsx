@@ -81,9 +81,13 @@ export const CollaboratorDialog = ({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-lg" aria-describedby="collab-dialog-description">
+      <DialogContent
+        className="sm:max-w-lg"
+        aria-describedby="collab-dialog-description"
+        aria-labelledby="collab-dialog-title"
+      >
         <DialogHeader>
-          <DialogTitle>Add Collaborators</DialogTitle>
+          <DialogTitle id="collab-dialog-title">Add Collaborators</DialogTitle>
           <DialogDescription id="collab-dialog-description">
             Select friends to collaborate on this playlist. Choose their role.
           </DialogDescription>
@@ -94,15 +98,24 @@ export const CollaboratorDialog = ({
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Current collaborators
               </p>
-              <div className="flex flex-col gap-2 max-h-32 overflow-y-auto pr-1">
+              <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
                 {collaborators
                   .filter((m) => !m.isOwner)
                   .map((member) => (
                     <div key={member.userId} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarImage src={member.avatar || undefined} alt={member.name} />
-                          <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                          {member.avatar ? (
+                            <AvatarImage src={member.avatar} alt={member.name} />
+                          ) : null}
+                          <AvatarFallback className="bg-gradient-primary text-white text-xs">
+                            {member.name
+                              .split(" ")
+                              .map((n) => n.charAt(0))
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                         <div>
                           <p className="text-sm font-medium text-foreground">{member.name}</p>

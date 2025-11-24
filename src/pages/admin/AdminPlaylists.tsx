@@ -234,7 +234,7 @@ const AdminPlaylists = () => {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Tìm kiếm playlist..."
+                      placeholder="Search playlists..."
                       value={searchQuery}
                       onChange={(e) => {
                         setSearchQuery(e.target.value);
@@ -248,23 +248,23 @@ const AdminPlaylists = () => {
                       <SelectValue placeholder="Visibility" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tất cả visibility</SelectItem>
-                      <SelectItem value="PUBLIC">Công khai</SelectItem>
-                      <SelectItem value="PRIVATE">Riêng tư</SelectItem>
-                      <SelectItem value="FRIENDS_ONLY">Bạn bè</SelectItem>
+                      <SelectItem value="all">All visibility</SelectItem>
+                      <SelectItem value="PUBLIC">Public</SelectItem>
+                      <SelectItem value="PRIVATE">Private</SelectItem>
+                      <SelectItem value="FRIENDS_ONLY">Friends only</SelectItem>
                     </SelectContent>
                   </Select>
                   <Select value={sortBy} onValueChange={(v) => { setSortBy(v); setCurrentPage(0); }}>
                     <SelectTrigger className="w-[180px] bg-background/50">
-                      <SelectValue placeholder="Sắp xếp" />
+                      <SelectValue placeholder="Sort" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="name-asc">Tên A-Z</SelectItem>
-                      <SelectItem value="name-desc">Tên Z-A</SelectItem>
-                      <SelectItem value="date-newest">Mới nhất</SelectItem>
-                      <SelectItem value="date-oldest">Cũ nhất</SelectItem>
-                      <SelectItem value="songs-desc">Nhiều bài hát nhất</SelectItem>
-                      <SelectItem value="songs-asc">Ít bài hát nhất</SelectItem>
+                      <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                      <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                      <SelectItem value="date-newest">Date modified (Newest)</SelectItem>
+                      <SelectItem value="date-oldest">Date modified (Oldest)</SelectItem>
+                      <SelectItem value="songs-desc">Song count (Most)</SelectItem>
+                      <SelectItem value="songs-asc">Song count (Least)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

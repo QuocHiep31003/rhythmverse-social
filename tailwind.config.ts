@@ -110,6 +110,11 @@ export default {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(-360deg)" },
         },
+        // 👇 Animation typing indicator (3 chấm nhảy lên xuống)
+        typing: {
+          "0%, 60%, 100%": { transform: "translateY(0)", opacity: "0.4" },
+          "30%": { transform: "translateY(-8px)", opacity: "1" },
+        },
       },
 
       animation: {
@@ -125,6 +130,9 @@ export default {
         "spin-reverse-slow": "reversespin 20s linear infinite",
         "spin-reverse-slower": "reversespin 40s linear infinite",
         "spin-reverse-super-slow": "reversespin 80s linear infinite",
+        
+        // 👇 Typing indicator animation
+        typing: "typing 1.4s ease-in-out infinite",
       },
     },
   },

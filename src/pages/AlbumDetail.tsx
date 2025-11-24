@@ -6,9 +6,18 @@ import ChatBubble from "@/components/ChatBubble";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal, Users, ListPlus } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 
 
@@ -105,6 +114,17 @@ const AlbumDetail = () => {
   const [related, setRelated] = useState<any[]>([]);
   const [liked, setLiked] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
+    id: string | number;
+    name: string;
+    cover?: string;
+  } | null>(null);
+  const [shareSong, setShareSong] = useState<{
+    id: string | number;
+    title: string;
+    url: string;
+  } | null>(null);
   const [palette, setPalette] = useState({
     primary: "rgb(140,140,160)",
     surfaceTop: "rgb(28,28,34)",
@@ -170,7 +190,7 @@ const AlbumDetail = () => {
         setLoading(false);
       }
     })();
-  }, [slug, setQueue]);
+  }, [slug, navigate]);
 
   /* ========== Play / Pause logic chuẩn ========== */
   const handlePlayAlbum = () => {
@@ -189,6 +209,42 @@ const AlbumDetail = () => {
     }),
     [palette]
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen transition-colors duration-500 text-foreground bg-background">
+        <div className="w-full border-b border-border bg-gradient-to-b from-background/95 to-background/80">
+          <div className="container mx-auto px-4 py-10 md:py-14 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
+            <Skeleton className="w-52 h-52 md:w-60 md:h-60 rounded-2xl" />
+            <div className="flex-1 space-y-4">
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-12 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <div className="flex gap-3 mt-6">
+                <Skeleton className="h-11 w-24" />
+                <Skeleton className="h-11 w-11 rounded-full" />
+                <Skeleton className="h-11 w-11 rounded-full" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="container mx-auto px-4 py-8">
+          <Card className="border-border bg-card backdrop-blur-md">
+            <CardContent className="p-0">
+              <div className="px-6 py-3 border-b border-border">
+                <Skeleton className="h-4 w-full" />
+              </div>
+              <div className="space-y-2 px-6 py-4">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen transition-colors duration-500 text-foreground bg-background">
@@ -343,9 +399,43 @@ const AlbumDetail = () => {
                           }`}
                         />
                       </Button>
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <ShareButton title={song.name || song.songName || "Unknown Song"} type="song" url={`${window.location.origin}/song/${song.id}`} />
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSongForPlaylist({
+                                id: song.id,
+                                name: song.name || song.songName || "Unknown Song",
+                                cover: song.urlImageAlbum || song.cover,
+                              });
+                              setAddToPlaylistOpen(true);
+                            }}
+                          >
+                            <ListPlus className="w-4 h-4 mr-2" />
+                            Thêm vào playlist
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShareSong({
+                                id: song.id,
+                                title: song.name || song.songName || "Unknown Song",
+                                url: `${window.location.origin}/song/${song.id}`,
+                              });
+                            }}
+                          >
+                            <Users className="w-4 h-4 mr-2" />
+                            Chia sẻ với bạn bè
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 );
@@ -409,6 +499,30 @@ const AlbumDetail = () => {
         .bar.delay-200{animation-delay:.24s}
         @keyframes ev{0%{height:4px}50%{height:14px}100%{height:4px}}
       `}</style>
+      
+      {selectedSongForPlaylist && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongForPlaylist.id}
+          songTitle={selectedSongForPlaylist.name}
+          songCover={selectedSongForPlaylist.cover}
+        />
+      )}
+      {shareSong && (
+        <ShareButton
+          key={`share-${shareSong.id}-${Date.now()}`}
+          title={shareSong.title}
+          type="song"
+          url={shareSong.url}
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setShareSong(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

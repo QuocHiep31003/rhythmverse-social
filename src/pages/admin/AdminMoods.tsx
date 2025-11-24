@@ -10,6 +10,15 @@ import { moodsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 
+const SORT_OPTIONS = [
+  { label: "Name (A-Z)", value: "name,asc" },
+  { label: "Name (Z-A)", value: "name,desc" },
+  { label: "Date created (Newest)", value: "createdAt,desc" },
+  { label: "Date created (Oldest)", value: "createdAt,asc" },
+  { label: "Date modified (Newest)", value: "updatedAt,desc" },
+  { label: "Date modified (Oldest)", value: "updatedAt,asc" },
+];
+
 const AdminMoods = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [moods, setMoods] = useState<any[]>([]);
@@ -23,6 +32,7 @@ const AdminMoods = () => {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
+  const [sortOption, setSortOption] = useState<string>(SORT_OPTIONS[0].value);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatDateTime = (value?: string) => {
@@ -52,12 +62,12 @@ const AdminMoods = () => {
 
   useEffect(() => {
     loadMoods();
-  }, [currentPage, pageSize, searchQuery]);
+  }, [currentPage, pageSize, searchQuery, sortOption]);
 
   const loadMoods = async () => {
     try {
       setLoading(true);
-      const data = await moodsApi.getAll({ page: currentPage, size: pageSize, sort: "name,asc", search: searchQuery || undefined });
+      const data = await moodsApi.getAll({ page: currentPage, size: pageSize, sort: sortOption, search: searchQuery || undefined });
       setMoods(data.content || []); setTotalPages(data.totalPages || 0); setTotalElements(data.totalElements || 0);
     } catch (error) { toast({ title: "Lỗi", description: "Không thể tải danh sách mood", variant: "destructive" }); }
     finally { setLoading(false); }
@@ -136,9 +146,24 @@ const AdminMoods = () => {
         </div>
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
             <CardHeader className="flex-shrink-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Tìm kiếm mood..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background" /></div>
-                <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Hiển thị:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">mỗi trang</span></div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="Search moods..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(0); }} className="pl-10 bg-background" /></div>
+                  <div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Show:</span><select value={pageSize} onChange={(e) => handlePageSizeChange(Number(e.target.value))} className="bg-background border border-border rounded px-2 py-1 text-sm"><option value={5}>5</option><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select><span className="text-sm text-muted-foreground">per page</span></div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={sortOption}
+                    onChange={(e) => { setSortOption(e.target.value); setCurrentPage(0); }}
+                    className="bg-background border border-border rounded-md px-3 py-2 text-sm min-w-[200px] focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
@@ -152,7 +177,7 @@ const AdminMoods = () => {
                     <table className="w-full table-fixed border-collapse">
                       <thead className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b-2 border-[hsl(var(--admin-border))]">
                         <tr>
-                          <th className="w-12 text-left text-sm font-medium text-muted-foreground pl-3 pr-0 py-2">STT</th>
+                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
@@ -165,8 +190,8 @@ const AdminMoods = () => {
                       <tbody>
                         {moods.map((mood, index) => (
                           <tr key={mood.id} className="border-b border-border hover:bg-muted/50">
-                            <td className="w-12 pl-3 pr-0 py-3 text-left align-top">{currentPage * pageSize + index + 1}</td>
-                            <td className="p-3 text-left align-top">
+                            <td className="w-16 p-3 text-center align-top">{currentPage * pageSize + index + 1}</td>
+                            <td className="w-1/4 p-3 text-left align-top">
                               <div className="flex flex-col gap-1">
                                 <span className="font-medium">{mood.name}</span>
                                 {renderStatusBadge(mood.status)}
@@ -185,7 +210,7 @@ const AdminMoods = () => {
                                 <Badge variant="outline" className="text-muted-foreground">Không có</Badge>
                               )}
                             </td>
-                            <td className="p-3 text-left align-top">
+                            <td className="w-1/4 p-3 text-left align-top">
                               {mood.gradient ? (
                                 <div className="flex items-center gap-2">
                                   <div
@@ -230,7 +255,7 @@ const AdminMoods = () => {
           {/* Pagination outside of scrollable area */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 flex-shrink-0">
-              <div className="text-sm text-muted-foreground">Hiển thị {moods.length} trên tổng số {totalElements} mood</div>
+              <div className="text-sm text-muted-foreground">Showing {moods.length} of {totalElements} moods</div>
               <div className="flex items-center gap-1">
                 <Button variant="outline" size="icon" onClick={goToFirstPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronsLeft className="w-4 h-4" /></Button>
                 <Button variant="outline" size="icon" onClick={goToPreviousPage} disabled={currentPage === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><ChevronLeft className="w-4 h-4" /></Button>

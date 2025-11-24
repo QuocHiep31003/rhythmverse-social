@@ -21,6 +21,17 @@ export const authApi = {
         return await response.json();
     },
 
+  getFirebaseToken: async (): Promise<{ token: string; userId: number }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/firebase-token`, {
+      method: 'GET',
+      headers: buildJsonHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+    return await response.json();
+  },
+
     /**
      * Verify OTP for registration
      */

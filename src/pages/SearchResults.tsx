@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Footer from "@/components/Footer";
 import ChatBubble from "@/components/ChatBubble";
 import PromotionCarousel from "@/components/PromotionCarousel";
@@ -18,12 +18,16 @@ import {
   Apple,
   CheckCircle,
   AlertCircle,
+  ListPlus,
+  MoreHorizontal,
 } from "lucide-react";
 import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import { createSlug } from "@/utils/playlistUtils";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
@@ -43,21 +47,63 @@ const SearchResults = () => {
   });
   const [loading, setLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<{ id: number; name: string; urlImageAlbum?: string } | null>(null);
   const { playSong, setQueue } = useMusic();
-  useEffect(() => {
-    if (queryParam) {
-      fetchSearchResults(queryParam);
-    }
-  }, [queryParam]);
-  const fetchSearchResults = async (queryParam) => {
+  
+  // Debounce search - dùng useRef để tránh re-render
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const fetchSearchResults = useCallback(async (queryParam: string) => {
     if (!queryParam.trim()) return;
     setLoading(true);
-    const data = await searchApi.getAll(queryParam);
-    setSearchResults(data);
-    setDetailedResults({ songs: [], artists: [], albums: [] });
-    console.log(data)
-    setLoading(false);
-  };
+    try {
+      // Gọi API riêng biệt cho từng loại kết quả
+      const [songsResponse, artistsResponse, albumsResponse] = await Promise.all([
+        songsApi.getAll({ search: queryParam, size: 5, page: 0 }),
+        artistsApi.getAll({ search: queryParam, size: 4, page: 0 }),
+        albumsApi.getAll({ search: queryParam, size: 4, page: 0 }),
+      ]);
+
+      setSearchResults({
+        songs: songsResponse.content || [],
+        artists: artistsResponse.content || [],
+        albums: albumsResponse.content || [],
+      });
+      setDetailedResults({ songs: [], artists: [], albums: [] });
+      console.log('Search results:', {
+        songs: songsResponse.content?.length || 0,
+        artists: artistsResponse.content?.length || 0,
+        albums: albumsResponse.content?.length || 0,
+      });
+    } catch (error) {
+      console.error('Error fetching search results:', error);
+      setSearchResults({ songs: [], artists: [], albums: [] });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  
+  useEffect(() => {
+    if (queryParam) {
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      // Set new timeout for debounce
+      const timeout = setTimeout(() => {
+        fetchSearchResults(queryParam);
+      }, 300); // 300ms debounce
+      searchTimeoutRef.current = timeout;
+      
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+          searchTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [queryParam, fetchSearchResults]);
 
   const handleFilterChange = async (filterId: string) => {
     setActiveFilter(filterId);
@@ -221,8 +267,8 @@ const SearchResults = () => {
                           <div
                             key={song.id}
                             className="flex items-center gap-4 p-3 hover:bg-muted/50 group cursor-pointer rounded-lg transition-colors"
-                            onClick={() => handlePlaySong(song)}
                           >
+                            <div className="flex items-center gap-2 flex-1 min-w-0" onClick={() => handlePlaySong(song)}>
                             <span className="w-6 text-sm text-muted-foreground text-center group-hover:hidden">
                               {index + 1}
                             </span>
@@ -233,11 +279,40 @@ const SearchResults = () => {
                               <img src={song.urlImageAlbum || "/placeholder.svg"} alt={song.name} className="w-full h-full object-cover" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-foreground truncate">{song.name}</p>
+                              <p className="font-semibold text-foreground truncate">{song.name || song.songName || "Unknown Song"}</p>
                               <p className="text-sm text-muted-foreground truncate">
-                                {song.artists?.map(a => a.name).join(", ")}
+                                {typeof song.artists === 'string' 
+                                  ? song.artists 
+                                  : Array.isArray(song.artists) 
+                                    ? song.artists.map((a: { name?: string; id?: number } | string) => 
+                                        typeof a === 'string' ? a : a.name || String(a.id || '')
+                                      ).join(", ")
+                                    : song.artist || "Unknown Artist"}
                               </p>
                             </div>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedSong({ id: song.id, name: song.name, urlImageAlbum: song.urlImageAlbum });
+                                  setAddToPlaylistOpen(true);
+                                }}>
+                                  <ListPlus className="w-4 h-4 mr-2" />
+                                  Thêm vào playlist
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         ))}
                       </div>
@@ -334,7 +409,15 @@ const SearchResults = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate text-foreground">{song.name || song.songName || "Unknown Song"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                                {typeof song.artists === 'string' 
+                                  ? song.artists 
+                                  : Array.isArray(song.artists) 
+                                    ? song.artists.map((a: { name?: string; id?: number } | string) => 
+                                        typeof a === 'string' ? a : a.name || String(a.id || '')
+                                      ).join(", ")
+                                    : song.artist || "Unknown Artist"}
+                      </p>
                     </div>
                     <span className="text-xs font-medium text-primary">{song.trend}</span>
                   </div>
@@ -366,6 +449,16 @@ const SearchResults = () => {
       </div>
 
       <Footer />
+      
+      {selectedSong && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSong.id}
+          songTitle={selectedSong.name}
+          songCover={selectedSong.urlImageAlbum}
+        />
+      )}
     </div>
   );
 };

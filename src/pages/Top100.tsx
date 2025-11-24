@@ -4,9 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Play, Heart, Trophy, TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
+import { Play, Heart, Trophy, TrendingUp, TrendingDown, Minus, Sparkles, MoreHorizontal, ListPlus, Users } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import Footer from "@/components/Footer";
 import { songsApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
@@ -17,8 +25,19 @@ import { mapToPlayerSong } from "@/lib/utils";
 const Top100 = () => {
   const [likedItems, setLikedItems] = useState<string[]>([]);
   const [topSongs, setTopSongs] = useState<any[]>([]);
-  const { playSong, setQueue } = useMusic();
+  const { playSong, setQueue, addToQueue, queue } = useMusic();
   const [isLoading, setIsLoading] = useState(true);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
+    id: string | number;
+    name: string;
+    cover?: string;
+  } | null>(null);
+  const [shareSong, setShareSong] = useState<{
+    id: string | number;
+    title: string;
+    url: string;
+  } | null>(null);
 
   // Fetch top 100 trending songs (dùng API hot-today chuẩn hóa với top=100)
   useEffect(() => {
@@ -104,7 +123,7 @@ const Top100 = () => {
   const getRankIcon = (currentRank: number, previousRank: number) => {
     // Nếu vị trí cũ > 100 thì đây là NEW
     if (previousRank > 100 || previousRank <= 0 || previousRank === undefined || previousRank === null) {
-      return <Sparkles className="w-4 h-4 text-yellow-400" title="New" />;
+      return <Sparkles className="w-4 h-4 text-yellow-400" aria-label="New" />;
     }
     const change = previousRank - currentRank;
     if (change > 0) return <TrendingUp className="w-4 h-4 text-green-500" />;
@@ -160,6 +179,42 @@ const Top100 = () => {
       title: likedItems.includes(itemId) ? "Removed from favorites" : "Added to favorites",
       duration: 2000,
     });
+  };
+
+  const handleAddToQueue = (song: any) => {
+    const formattedSong = {
+      id: song.id,
+      name: song.name || song.songName,
+      songName: song.songName || song.name,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+      cover: song.cover,
+      audioUrl: song.audioUrl,
+      uuid: song.uuid,
+    };
+
+    // Kiểm tra xem bài hát đã có trong queue chưa
+    const existingIndex = queue.findIndex(s => String(s.id) === String(song.id));
+    
+    if (existingIndex >= 0) {
+      // Nếu đã có, remove và add lại ở cuối
+      const newQueue = queue.filter(s => String(s.id) !== String(song.id));
+      setQueue([...newQueue, formattedSong]);
+      toast({
+        title: "Đã di chuyển bài hát",
+        description: `${song.name || song.songName || "Bài hát"} đã được đưa ra sau cùng trong danh sách phát`,
+        duration: 2000,
+      });
+    } else {
+      // Nếu chưa có, add vào cuối
+      addToQueue(formattedSong);
+      toast({
+        title: "Đã thêm vào danh sách phát",
+        description: `${song.name || song.songName || "Bài hát"} đã được thêm vào cuối danh sách`,
+        duration: 2000,
+      });
+    }
   };
 
   return (
@@ -261,7 +316,43 @@ const Top100 = () => {
                         >
                           <Heart className={`w-4 h-4 ${likedItems.includes(song.id) ? 'fill-current' : ''}`} />
                         </Button>
-                        <ShareButton title={song.name || song.songName || "Unknown Song"} type="song" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSongForPlaylist({
+                                  id: song.id,
+                                  name: song.name || song.songName || "Unknown Song",
+                                  cover: song.cover,
+                                });
+                                setAddToPlaylistOpen(true);
+                              }}
+                            >
+                              <ListPlus className="w-4 h-4 mr-2" />
+                              Thêm vào playlist
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShareSong({
+                                  id: song.id,
+                                  title: song.name || song.songName || "Unknown Song",
+                                  url: `${window.location.origin}/song/${song.id}`,
+                                });
+                              }}
+                            >
+                              <Users className="w-4 h-4 mr-2" />
+                              Chia sẻ với bạn bè
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   ))
@@ -401,6 +492,30 @@ const Top100 = () => {
         </Tabs>
       </div>
       <Footer />
+      
+      {selectedSongForPlaylist && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongForPlaylist.id}
+          songTitle={selectedSongForPlaylist.name}
+          songCover={selectedSongForPlaylist.cover}
+        />
+      )}
+      {shareSong && (
+        <ShareButton
+          key={`share-${shareSong.id}-${Date.now()}`}
+          title={shareSong.title}
+          type="song"
+          url={shareSong.url}
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setShareSong(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

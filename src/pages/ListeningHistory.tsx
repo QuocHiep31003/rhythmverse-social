@@ -7,26 +7,54 @@ import { Clock, Headphones, Trash2 } from "lucide-react";
 import Footer from "@/components/Footer";
 import { formatPlayCount } from "@/lib/utils";
 import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
+import { userApi } from "@/services/api/userApi";
 import { toast } from "@/hooks/use-toast";
 
 const ListeningHistory = () => {
   const [history, setHistory] = useState<ListeningHistoryDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const userId = 1; // TODO: Get from auth context
+  const [userId, setUserId] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchHistory();
+    fetchUserAndHistory();
   }, []);
 
-  const fetchHistory = async () => {
+  const fetchUserAndHistory = async () => {
     try {
       setLoading(true);
-      const data = await listeningHistoryApi.getByUser(userId);
+      // Lấy thông tin user hiện tại
+      const user = await userApi.getCurrentProfile();
+      if (user?.id) {
+        setUserId(user.id);
+        await fetchHistory(user.id);
+      } else {
+        toast({
+          title: "Error",
+          description: "Please login to view your listening history",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load user information",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchHistory = async (currentUserId: number) => {
+    try {
+      setLoading(true);
+      const data = await listeningHistoryApi.getByUser(currentUserId, 0, 100);
       console.log('📊 Listening History Data:', data);
       console.log('📊 First item:', data[0]);
       console.log('📊 Song data:', data[0]?.song);
       
-      // Sort by listenedAt date (newest first)
+      // Sort by listenedAt date (newest first) - backend đã sort nhưng đảm bảo
       const sortedData = data.sort((a, b) => {
         const dateA = new Date(a.listenedAt || 0).getTime();
         const dateB = new Date(b.listenedAt || 0).getTime();

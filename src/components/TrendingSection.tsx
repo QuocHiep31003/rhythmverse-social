@@ -1,12 +1,21 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowUp, ArrowDown, Sparkles, Minus } from "lucide-react";
+import { ArrowUp, ArrowDown, Sparkles, Minus, MoreHorizontal, ListPlus, Users } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { TrendingSong, getTrendingComparison, TrendStatus } from "@/services/api/trendingApi";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { formatDuration, mapToPlayerSong } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import ShareButton from "@/components/ShareButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 const TrendIcon = ({ status }: { status: TrendStatus }) => {
     switch (status) {
@@ -30,6 +39,17 @@ const TrendingSection = () => {
   const { playSong, setQueue } = useMusic();
   const [trendingSongs, setTrendingSongs] = useState<TrendingSongWithRank[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
+    id: string | number;
+    name: string;
+    cover?: string;
+  } | null>(null);
+  const [shareSong, setShareSong] = useState<{
+    id: string | number;
+    title: string;
+    url: string;
+  } | null>(null);
 
   useEffect(() => {
     const fetchTrending = async () => {
@@ -127,12 +147,73 @@ const TrendingSection = () => {
                 <div className="hidden sm:block text-sm text-muted-foreground">
                   {formatDuration(song.duration)}
                 </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSongForPlaylist({
+                          id: song.id,
+                          name: song.songName || "Unknown Song",
+                          cover: song.cover,
+                        });
+                        setAddToPlaylistOpen(true);
+                      }}
+                    >
+                      <ListPlus className="w-4 h-4 mr-2" />
+                      Thêm vào playlist
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShareSong({
+                          id: song.id,
+                          title: song.songName || "Unknown Song",
+                          url: `${window.location.origin}/song/${song.id}`,
+                        });
+                      }}
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Chia sẻ với bạn bè
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 </div>
               ))
             )}
           </CardContent>
         </Card>
       </div>
+      
+      {selectedSongForPlaylist && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongForPlaylist.id}
+          songTitle={selectedSongForPlaylist.name}
+          songCover={selectedSongForPlaylist.cover}
+        />
+      )}
+      {shareSong && (
+        <ShareButton
+          key={`share-${shareSong.id}-${Date.now()}`}
+          title={shareSong.title}
+          type="song"
+          url={shareSong.url}
+          open={true}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) {
+              setShareSong(null);
+            }
+          }}
+        />
+      )}
     </section>
   );
 };

@@ -102,6 +102,8 @@ type RecognizeItem = {
   internal?: boolean;
   song?: any;
   youtubeVideoId?: string;
+  score?: number; // Recognition confidence score (0-100) - CRITICAL for display
+  scoreDouble?: number; // Recognition confidence score as double (for humming)
 };
 
 const MusicRecognitionResult = () => {
@@ -423,9 +425,30 @@ const MusicRecognitionResult = () => {
               const isCustomFiles = item.source === 'custom_files';
               
               const title = isInternal ? item.song?.name : (item.title || '(No title)');
+              // Get artists - now it's a string, not an array
               const artists = isInternal
-                ? (item.song?.artists || []).map((a: any) => a.name).join(', ')
+                ? (item.song?.artists || item.artist || 'Unknown Artist')
                 : (item.artist || 'Unknown Artist');
+              
+              // Get score for display (use scoreDouble if available for humming, otherwise score)
+              // Backend should always provide score (0-100), but handle null/undefined gracefully
+              // CRITICAL: Check both score and scoreDouble, and handle 0 as valid score
+              const displayScore = item.scoreDouble !== undefined && item.scoreDouble !== null 
+                ? item.scoreDouble 
+                : (item.score !== undefined && item.score !== null ? item.score : null);
+              
+              // Debug logging - log all items to see what we're getting
+              console.log("[MusicRecognitionResult] Item data:", {
+                source: item.source,
+                acrId: item.acrId,
+                title: item.title,
+                score: item.score,
+                scoreDouble: item.scoreDouble,
+                displayScore: displayScore,
+                isInternal: item.internal,
+                rawItem: item
+              });
+              
               return (
                 <div key={item.acrId || index} className="p-4 border border-border rounded-lg bg-muted/50">
                   <div className="flex items-center justify-between gap-3">
@@ -435,35 +458,25 @@ const MusicRecognitionResult = () => {
                         <User className="w-3 h-3" />
                         {artists}
                       </div>
-                      <div className="mt-2 flex gap-2 flex-wrap">
-                        {isInternal && (
-                          <Badge variant="secondary" className="bg-green-600/15 text-green-600">
-                            ✅ In System
+                      <div className="mt-2 flex gap-2 flex-wrap items-center">
+                        {/* CRITICAL: Display score prominently - ALWAYS show if available (including 0) */}
+                        {displayScore !== null && displayScore !== undefined && typeof displayScore === 'number' ? (
+                          <Badge variant="default" className="bg-primary text-primary-foreground font-semibold text-base px-3 py-1">
+                            ⭐ {(() => {
+                              // Normalize score to 0-100 if needed (backend should already normalize, but double-check)
+                              let normalizedScore = displayScore;
+                              if (normalizedScore <= 1.0 && normalizedScore > 0) {
+                                normalizedScore = normalizedScore * 100;
+                              }
+                              // Format: show as integer if whole number, otherwise 1 decimal
+                              return normalizedScore % 1 !== 0 
+                                ? normalizedScore.toFixed(1) 
+                                : Math.round(normalizedScore);
+                            })()}%
                           </Badge>
-                        )}
-                        {isHumming && (
-                          <Badge variant="outline" className="bg-yellow-500/15 text-yellow-600 border-yellow-500/50">
-                            🎵 Humming
-                          </Badge>
-                        )}
-                        {isMusic && (
-                          <Badge variant="outline" className="bg-blue-500/15 text-blue-600 border-blue-500/50">
-                            🎶 Music DB
-                          </Badge>
-                        )}
-                        {isCustomFiles && (
-                          <Badge variant="outline" className="bg-purple-500/15 text-purple-600 border-purple-500/50">
-                            📁 Custom Files
-                          </Badge>
-                        )}
-                        {!isInternal && (
-                          <Badge variant="outline" className="text-xs">
-                            External
-                          </Badge>
-                        )}
-                        {item.acrId && (
-                          <Badge variant="outline" className="text-xs">
-                            ACR: {item.acrId.slice(0, 8)}…
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground text-sm px-3 py-1">
+                            ⚠️ Score not available (score: {String(item.score)}, scoreDouble: {String(item.scoreDouble)})
                           </Badge>
                         )}
                       </div>
@@ -477,7 +490,7 @@ const MusicRecognitionResult = () => {
                               id: song.id,
                               name: song.name,
                               songName: song.name,
-                              artist: (song.artists || []).map((a: any) => a.name).join(', '),
+                              artist: typeof song.artists === 'string' ? song.artists : (song.artists || []).map((a: any) => a.name).join(', '),
                               album: typeof song.album === 'object' && song.album ? (song.album as { name: string }).name : 'Unknown',
                               duration: song.duration || 0,
                               cover: song.urlImageAlbum || '',

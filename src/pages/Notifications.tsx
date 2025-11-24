@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useState, useRef, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import ChatBubble from "@/components/ChatBubble";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,6 +25,18 @@ const typeMeta: Record<
     icon: Users,
     badge: "border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-100",
     tone: "from-emerald-500/10 via-transparent to-transparent",
+  },
+  INVITE_ACCEPTED: {
+    label: "Chấp nhận cộng tác",
+    icon: CheckCircle2,
+    badge: "border-green-500/30 bg-green-500/12 text-green-700 dark:text-green-100",
+    tone: "from-green-500/10 via-transparent to-transparent",
+  },
+  INVITE_REJECTED: {
+    label: "Từ chối cộng tác",
+    icon: Users,
+    badge: "border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-100",
+    tone: "from-red-500/10 via-transparent to-transparent",
   },
   SHARE: {
     label: "Chia sẻ",
@@ -103,7 +115,15 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
       return "đã chấp nhận lời mời kết bạn";
     case "INVITE": {
       const playlistName = meta?.playlistName || "một playlist";
-      return `mời bạn cộng tác trên “${playlistName}”`;
+      return `mời bạn cộng tác trên "${playlistName}"`;
+    }
+    case "INVITE_ACCEPTED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      return `đã chấp nhận lời mời cộng tác trên "${playlistName}"`;
+    }
+    case "INVITE_REJECTED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      return `đã từ chối lời mời cộng tác trên "${playlistName}"`;
     }
     case "SHARE": {
       const title =
@@ -122,9 +142,12 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
 };
 
 const Notifications = () => {
+  // ✅ Persist notifications trong state và ref để không mất khi chuyển trang
   const [rawItems, setRawItems] = useState<NotificationDTO[]>([]);
   const [locallyRead, setLocallyRead] = useState<Record<string, boolean>>({});
   const navigate = useNavigate();
+  const itemsRef = useRef<NotificationDTO[]>([]); // ✅ Ref để persist
+  
   const meId = useMemo(() => {
     try {
       const raw = localStorage.getItem("userId");
@@ -139,12 +162,38 @@ const Notifications = () => {
     if (!meId) return;
     const unsub = watchNotifications(meId, (list) => {
       const safeList = Array.isArray(list) ? list : [];
-      setRawItems(
-        safeList.filter((item) => item.type !== "MESSAGE")
-      );
+      // Chỉ filter MESSAGE, giữ lại TẤT CẢ notifications khác (kể cả trùng)
+      const filtered = safeList.filter((item) => item.type !== "MESSAGE");
+      
+      // ✅ Debug: Log friend request notifications
+      const friendRequests = filtered.filter(n => n.type === 'FRIEND_REQUEST');
+      const invites = filtered.filter(n => n.type === 'INVITE');
+      console.log('[Notifications Page] Notifications loaded:', {
+        total: filtered.length,
+        friendRequests: friendRequests.length,
+        invites: invites.length,
+        friendRequestDetails: friendRequests.slice(0, 5).map(n => ({
+          id: n.id,
+          type: n.type,
+          read: n.read,
+          senderName: n.senderName,
+          createdAt: n.createdAt
+        }))
+      });
+      
+      // ✅ Update cả state và ref để persist - HIỂN THỊ TẤT CẢ, KHÔNG DEDUPLICATE
+      setRawItems(filtered);
+      itemsRef.current = filtered;
     });
     return () => { try { unsub(); } catch { /* noop */ } };
   }, [meId]);
+  
+  // ✅ Restore từ ref khi component mount lại (khi quay lại từ trang khác)
+  useEffect(() => {
+    if (itemsRef.current.length > 0 && rawItems.length === 0) {
+      setRawItems(itemsRef.current);
+    }
+  }, [rawItems.length]);
 
   useEffect(() => {
     // Remove local flags for notifications no longer present
@@ -162,18 +211,56 @@ const Notifications = () => {
 
   const goTo = (n: NotificationDTO) => {
     try {
-      navigate("/social?tab=friends");
+      const type = n.type;
+      const meta = n.metadata as { playlistId?: number; roomId?: string } | undefined;
+      
+      if (type === 'INVITE' || type === 'INVITE_ACCEPTED' || type === 'INVITE_REJECTED') {
+        // Navigate đến social với tab friends để xem collab invites
+        navigate("/social?tab=friends");
+      } else if (type === 'FRIEND_REQUEST' || type === 'FRIEND_REQUEST_ACCEPTED') {
+        // Navigate đến social với tab friends để xem friend requests
+        navigate("/social?tab=friends");
+      } else if (type === 'SHARE') {
+        // Navigate đến social để xem chat/share
+        if (meta?.roomId) {
+          navigate(`/social?chat=${meta.roomId}`);
+        } else {
+          navigate("/social");
+        }
+      } else {
+        // Default: navigate đến social
+        navigate("/social");
+      }
     } catch { /* noop */ }
   };
 
+  // Sắp xếp thông báo theo thời gian mới nhất trước (createdAt giảm dần)
+  const items = useMemo(() => {
+    return [...rawItems].sort((a, b) => {
+      const timeA = parseTimestamp(a.createdAt) ?? 0;
+      const timeB = parseTimestamp(b.createdAt) ?? 0;
+      return timeB - timeA; // Mới nhất trước
+    });
+  }, [rawItems]);
+  
+  // Pagination: hiển thị 6 items ban đầu (6 thông báo mới nhất), nếu có nhiều hơn 6 thì có nút "Xem thêm"
   const [visibleCount, setVisibleCount] = useState<number>(6);
-  const items = useMemo(() => rawItems, [rawItems]);
-
+  const hasInitializedRef = useRef<boolean>(false);
+  
   useEffect(() => {
-    // Reset pagination if list shrinks (e.g., user logs out/in)
-    setVisibleCount((prev) => Math.min(prev, items.length || 6));
-  }, [items.length]);
-
+    // Chỉ reset về 6 khi vào trang lần đầu (khi items từ 0 lên > 0)
+    // Không reset khi user đã click "Xem thêm"
+    if (!hasInitializedRef.current && items.length > 0) {
+      setVisibleCount(6);
+      hasInitializedRef.current = true;
+    }
+    // Nếu items giảm xuống dưới visibleCount, reset về items.length hoặc 6 (tùy cái nào nhỏ hơn)
+    if (items.length < visibleCount) {
+      setVisibleCount(Math.min(6, items.length));
+    }
+  }, [items.length, visibleCount]);
+  
+  // Lấy 6 thông báo mới nhất (đã được sắp xếp)
   const visibleItems = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
 
   const grouped = useMemo(() => {
@@ -259,6 +346,24 @@ const Notifications = () => {
             Mở lời mời
           </Button>
         );
+      case "INVITE_ACCEPTED":
+        return (
+          <Badge
+            variant="secondary"
+            className="rounded-full border border-green-500/40 bg-green-500/12 text-green-700 dark:text-green-200"
+          >
+            Đã chấp nhận
+          </Badge>
+        );
+      case "INVITE_REJECTED":
+        return (
+          <Badge
+            variant="secondary"
+            className="rounded-full border border-red-500/40 bg-red-500/12 text-red-700 dark:text-red-200"
+          >
+            Đã từ chối
+          </Badge>
+        );
       case "SHARE":
         return (
           <Button
@@ -328,6 +433,7 @@ const Notifications = () => {
                             tabIndex={0}
                             onClick={() => {
                               markAsRead(n.id);
+                              // Navigate ngay lập tức, không delay
                               goTo(n);
                             }}
                             onKeyDown={(event) => {
@@ -375,15 +481,26 @@ const Notifications = () => {
                 );
               })
             )}
-            {visibleCount < items.length && (
-              <div className="pt-4 flex justify-center">
-                <Button
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => setVisibleCount((c) => Math.min(c + 6, items.length))}
-                >
-                  Xem thông báo trước đó
-                </Button>
+            {items.length > 6 && (
+              <div className="pt-4 flex justify-center gap-2">
+                {visibleCount < items.length && (
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => setVisibleCount((c) => Math.min(c + 6, items.length))}
+                  >
+                    Xem thêm
+                  </Button>
+                )}
+                {visibleCount > 6 && (
+                  <Button
+                    variant="ghost"
+                    className="rounded-full"
+                    onClick={() => setVisibleCount(6)}
+                  >
+                    Ẩn bớt
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>

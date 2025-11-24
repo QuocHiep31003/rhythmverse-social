@@ -27,6 +27,8 @@ export interface CollabInviteDTO {
 
 export interface Message {
   id: string;
+  firebaseKey?: string;
+  backendId?: number;
   sender: string;
   content: string;
   timestamp: string;
@@ -55,6 +57,13 @@ export interface Message {
   sharedPlaylist?: SharedPlaylistMessageData;
   sharedAlbum?: SharedAlbumMessageData;
   sharedSong?: SharedSongMessageData;
+  reactions?: MessageReactionSummary[];
+}
+
+export interface MessageReactionSummary {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
 }
 
 export interface SharedPlaylistSongMessageData {
@@ -97,6 +106,8 @@ export interface SharedSongMessageData {
 
 export interface Friend {
   id: string;
+  friendUserId?: number;
+  relationshipId?: number;
   name: string;
   username: string;
   avatar?: string | null;

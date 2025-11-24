@@ -47,17 +47,15 @@ export const isValidImageValue = (value?: string | null): value is string => {
 
 export const resolveSongCover = (
   song: SearchSongResult & { songId?: number; cover?: string | null; artwork?: string | null; thumbUrl?: string | null; albumArtUrl?: string | null },
-  fallback?: string | null,
 ): string => {
-  // Đơn giản như các nơi khác: dùng cover hoặc urlImageAlbum
-  if (isValidImageValue(song.cover)) return song.cover;
+  // Chỉ dùng ảnh từ API như ban đầu, không thêm logic phức tạp
   if (isValidImageValue(song.urlImageAlbum)) return song.urlImageAlbum;
+  if (isValidImageValue(song.cover)) return song.cover;
   return '';
 };
 
 export const mapSongsFromResponse = (
   songsRaw: unknown,
-  defaultCover?: string | null,
 ): (Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null })[] => {
   if (!Array.isArray(songsRaw)) return [];
   return songsRaw
@@ -73,9 +71,28 @@ export const mapSongsFromResponse = (
       };
       const rawId = typeof song.id === 'number' ? song.id : typeof song.songId === 'number' ? song.songId : undefined;
       if (rawId == null) return undefined;
-      const artistNames = Array.isArray(song.artists) && song.artists.length
-        ? song.artists.map((a) => a?.name).filter(Boolean).join(', ')
-        : undefined;
+      
+      // Xử lý artist rõ ràng, tránh lỗi cú pháp từ chuỗi lồng nhiều điều kiện
+      const artistsArray =
+        Array.isArray(song.artists) && song.artists.length > 0
+          ? song.artists
+              .map((a) => {
+                if (typeof a === "string") return a.trim();
+                if (a && typeof a === "object" && "name" in a && typeof (a as { name?: unknown }).name === "string") {
+                  return ((a as { name?: string }).name || "").trim();
+                }
+                return null;
+              })
+              .filter((name): name is string => !!name && name.length > 0)
+          : [];
+      const artistFromArray = artistsArray.join(", ");
+      const artistFromString =
+        typeof (song.artists as unknown) === "string" && (song.artists as unknown as string).trim().length > 0
+          ? (song.artists as unknown as string).trim()
+          : "";
+      const artistField = (song as { artist?: unknown }).artist;
+      const artistFromField = typeof artistField === "string" && artistField.trim().length > 0 ? artistField.trim() : "";
+      const artist = artistFromArray || artistFromString || artistFromField || "Unknown";
       const addedAt =
         song.addedAt ??
         song.added_at ??
@@ -112,9 +129,9 @@ export const mapSongsFromResponse = (
         id: String(rawId),
         title: song.name ?? (song as { title?: string }).title ?? 'Untitled',
         songName: song.name ?? (song as { title?: string }).title ?? 'Untitled',
-        artist: artistNames ?? (song as { artist?: string }).artist ?? 'Unknown',
+        artist: artist,
         album: song.album?.name ?? (song as { albumName?: string }).albumName ?? '',
-        cover: resolveSongCover(song, defaultCover),
+        cover: resolveSongCover(song),
         audioUrl: song.audioUrl ?? (song as { audio?: string }).audio ?? '',
         duration: toSeconds(song.duration),
         addedAt: addedAt ?? undefined,
@@ -203,4 +220,3 @@ export const parseSlug = (slugFromUrl: string): { slug: string; id?: number } =>
   // Nếu không có ID trong URL, chỉ có slug
   return { slug: slugFromUrl };
 };
-

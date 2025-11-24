@@ -142,9 +142,33 @@ const AdminSongs = () => {
     setIsSubmitting(true);
     try {
       if (formMode === "create") {
+        toast({
+          title: "Đang tải lên và xử lý audio",
+          description: "Upload lên S3, tạo HLS và đồng bộ ACR có thể mất 1-2 phút. Vui lòng giữ trang này mở.",
+          duration: 60000,
+        });
+      }
+
+      if (formMode === "create") {
         // Create song without genreIds and moodIds first, then add them with scores
-        const { genreIds, moodIds, ...songData } = data;
-        const createdSong = await songsApi.create(songData);
+        const { genreIds, moodIds, file, ...songData } = data;
+        let createdSong: Song | undefined;
+
+        if (!file) {
+          toast({
+            title: "Thiếu file audio",
+            description: "Vui lòng chọn file nhạc trước khi tạo bài hát mới.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        createdSong = await songsApi.createWithFile({
+          ...songData,
+          genreIds,
+          moodIds,
+          file,
+        });
         
         // Add genres with scores after song is created
         if (createdSong && createdSong.id && genreIds && genreIds.length > 0) {
@@ -440,7 +464,7 @@ const AdminSongs = () => {
                       <SelectValue placeholder="All status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tất cả</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
                       {statusOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
@@ -460,15 +484,17 @@ const AdminSongs = () => {
                     }}
                   >
                     <SelectTrigger className="w-56">
-                      <SelectValue placeholder="Sắp xếp" />
+                      <SelectValue placeholder="Sort" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="name,asc">Tên A-Z</SelectItem>
-                      <SelectItem value="name,desc">Tên Z-A</SelectItem>
-                      <SelectItem value="releaseYear,desc">Năm phát hành: Mới nhất</SelectItem>
-                      <SelectItem value="releaseYear,asc">Năm phát hành: Cũ nhất</SelectItem>
-                      <SelectItem value="updatedAt,desc">Cập nhật: Mới nhất</SelectItem>
-                      <SelectItem value="updatedAt,asc">Cập nhật: Cũ nhất</SelectItem>
+                      <SelectItem value="name,asc">Name (A-Z)</SelectItem>
+                      <SelectItem value="name,desc">Name (Z-A)</SelectItem>
+                      <SelectItem value="createdAt,desc">Date created (Newest)</SelectItem>
+                      <SelectItem value="createdAt,asc">Date created (Oldest)</SelectItem>
+                      <SelectItem value="releaseYear,desc">Release year (Newest)</SelectItem>
+                      <SelectItem value="releaseYear,asc">Release year (Oldest)</SelectItem>
+                      <SelectItem value="updatedAt,desc">Date modified (Newest)</SelectItem>
+                      <SelectItem value="updatedAt,asc">Date modified (Oldest)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -587,7 +613,7 @@ const AdminSongs = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 flex-shrink-0">
             <div className="text-sm text-muted-foreground">
-              Hiển thị {songsList.length} trên tổng số {totalElements} bài hát
+              Showing {songsList.length} of {totalElements} songs
             </div>
             <div className="flex items-center gap-1">
               <Button

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -7,9 +8,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Play, Heart, MoreHorizontal, Clock, Share2, ListPlus, Download } from "lucide-react";
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createSlug } from "@/utils/playlistUtils";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 
 interface MusicCardProps {
   title: string;
@@ -35,10 +36,11 @@ const MusicCard = ({
   const navigate = useNavigate();
   const [isLiked, setIsLiked] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
 
   const handleCardClick = () => {
     if (songId) {
-      navigate(`/song/${createSlug(songName || 'song', songId)}`);
+      navigate(`/song/${createSlug(title || 'song', songId)}`);
     }
   };
 
@@ -74,10 +76,21 @@ const MusicCard = ({
           </div>
         </CardContent>
       </Card>
+      {songId && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={songId}
+          songTitle={title}
+          songCover={imageUrl}
+        />
+      )}
+    </>
     );
   }
 
   return (
+    <>
     <Card 
       className="bg-card/50 border-border/40 hover:bg-card/80 transition-all duration-300 group cursor-pointer hover:shadow-card"
       onMouseEnter={() => setIsHovered(true)}
@@ -129,9 +142,9 @@ const MusicCard = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); console.log('Add to playlist'); }}>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setAddToPlaylistOpen(true); }}>
                   <ListPlus className="mr-2 h-4 w-4" />
-                  Add to Playlist
+                  Thêm vào playlist
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={(e) => { e.stopPropagation(); console.log('Share'); }}>
                   <Share2 className="mr-2 h-4 w-4" />
@@ -164,6 +177,16 @@ const MusicCard = ({
         </div>
       </CardContent>
     </Card>
+    {songId && (
+      <AddToPlaylistDialog
+        open={addToPlaylistOpen}
+        onOpenChange={setAddToPlaylistOpen}
+        songId={songId}
+        songTitle={title}
+        songCover={imageUrl}
+      />
+    )}
+    </>
   );
 };
 
