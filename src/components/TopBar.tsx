@@ -352,7 +352,7 @@ const TopBar = () => {
         setAlertNotifications(alertNotifs);
         // Note: unreadMsgCount is now managed by Firebase rooms listener below
         // Only count notification unread here, not chat message unread
-        setUnreadAlertCount(alertNotifs.filter((n) => !n.read).length);
+        setUnreadAlertCount(alertNotifs.filter((n) => n.read !== true).length);
       }
     );
 
