@@ -219,7 +219,7 @@ const Notifications = () => {
         navigate("/social?tab=friends");
       } else if (type === 'FRIEND_REQUEST' || type === 'FRIEND_REQUEST_ACCEPTED') {
         // Navigate đến social với tab friends để xem friend requests
-        navigate("/social?tab=friends");
+      navigate("/social?tab=friends");
       } else if (type === 'SHARE') {
         // Navigate đến social để xem chat/share
         if (meta?.roomId) {
@@ -246,7 +246,7 @@ const Notifications = () => {
   // Pagination: hiển thị 6 items ban đầu (6 thông báo mới nhất), nếu có nhiều hơn 6 thì có nút "Xem thêm"
   const [visibleCount, setVisibleCount] = useState<number>(6);
   const hasInitializedRef = useRef<boolean>(false);
-  
+
   useEffect(() => {
     // Chỉ reset về 6 khi vào trang lần đầu (khi items từ 0 lên > 0)
     // Không reset khi user đã click "Xem thêm"
@@ -483,12 +483,12 @@ const Notifications = () => {
             )}
             {items.length > 6 && (
               <div className="pt-4 flex justify-center gap-2">
-                {visibleCount < items.length && (
-                  <Button
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={() => setVisibleCount((c) => Math.min(c + 6, items.length))}
-                  >
+            {visibleCount < items.length && (
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => setVisibleCount((c) => Math.min(c + 6, items.length))}
+                >
                     Xem thêm
                   </Button>
                 )}
@@ -499,7 +499,7 @@ const Notifications = () => {
                     onClick={() => setVisibleCount(6)}
                   >
                     Ẩn bớt
-                  </Button>
+                </Button>
                 )}
               </div>
             )}

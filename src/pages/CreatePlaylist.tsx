@@ -14,6 +14,8 @@ import Footer from "@/components/Footer";
 import { buildJsonHeaders, authApi } from "@/services/api";
 import { createSlug } from "@/utils/playlistUtils";
 import { PlaylistVisibility } from "@/types/playlist";
+import { createGridCover, uploadDataUrlToCloudinary } from "@/utils/imageUtils";
+import { songsApi } from "@/services/api/songApi";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
@@ -144,8 +146,19 @@ const CreatePlaylist = () => {
   };
 
   const handleSave = async () => {
+    // Validation
     if (!formData.name.trim()) {
       toast({ title: "Playlist name required", description: "Please enter a name for your playlist", variant: "destructive" });
+      return;
+    }
+
+    if (formData.name.length > 100) {
+      toast({ title: "Name too long", description: "Playlist name must not exceed 100 characters", variant: "destructive" });
+      return;
+    }
+
+    if (formData.description.length > 300) {
+      toast({ title: "Description too long", description: "Description must not exceed 300 characters", variant: "destructive" });
       return;
     }
 
@@ -166,9 +179,39 @@ const CreatePlaylist = () => {
       }
       const today = new Date().toISOString().split("T")[0];
       let uploadedCoverUrl: string | null = null;
+      
+      // Nếu có ảnh upload, dùng ảnh đó
       if (formData.coverImage) {
         uploadedCoverUrl = await uploadCoverIfNeeded(formData.coverImage);
+      } 
+      // Nếu không có ảnh nhưng có songs, tạo cover từ 4 ảnh bài hát đầu tiên
+      else if (!coverUrlText && formData.songIds.length > 0) {
+        try {
+          // Lấy 4 bài hát đầu tiên
+          const first4SongIds = formData.songIds.slice(0, 4);
+          const songPromises = first4SongIds.map(id => 
+            songsApi.getById(String(id)).catch(() => null)
+          );
+          const songs = (await Promise.all(songPromises)).filter(Boolean);
+          
+          if (songs.length > 0) {
+            // Lấy ảnh từ các bài hát
+            const imageUrls = songs.map((song: any) => 
+              song.urlImageAlbum || song.albumImageUrl || song.albumCoverImg || null
+            );
+            
+            // Tạo grid cover
+            const gridDataUrl = await createGridCover(imageUrls);
+            
+            // Upload lên Cloudinary
+            uploadedCoverUrl = await uploadDataUrlToCloudinary(gridDataUrl);
+          }
+        } catch (error) {
+          console.warn("Failed to generate cover from songs:", error);
+          // Không throw error, chỉ log warning - playlist vẫn được tạo
+        }
       }
+      
       // Try to resolve current userId for ownership
       let ownerId: number | undefined;
       try {
@@ -186,7 +229,7 @@ const CreatePlaylist = () => {
 
       const body: any = {
         name: formData.name,
-        description: (formData.description || "").slice(0, 500),
+        description: (formData.description || "").slice(0, 300),
         visibility: formData.visibility,
         songIds: formData.songIds || [],
         dateUpdate: today,

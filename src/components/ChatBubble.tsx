@@ -15,39 +15,48 @@ const variantStyles: Record<
 > = {
   info: {
     light:
-      "bg-white/95 text-slate-900 border-slate-200 ring-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.12)]",
+      "bg-white text-slate-900 border-slate-200 ring-sky-50 shadow-[0_10px_35px_rgba(15,23,42,0.12)]",
     dark:
-      "dark:bg-gradient-to-br dark:from-purple-500/15 dark:via-fuchsia-500/10 dark:to-indigo-500/10 dark:text-purple-50/90 dark:border-purple-300/20 dark:ring-purple-400/10 dark:shadow-[0_8px_30px_rgba(88,28,135,0.25)]",
+      "dark:bg-slate-900 dark:text-white dark:border-slate-700 dark:ring-slate-800 dark:shadow-[0_10px_35px_rgba(0,0,0,0.45)]",
   },
   success: {
     light:
-      "bg-emerald-50 text-emerald-900 border-emerald-200 ring-emerald-100 shadow-[0_8px_30px_rgba(16,185,129,0.15)]",
+      "bg-white text-slate-900 border-emerald-100 ring-emerald-50 shadow-[0_10px_35px_rgba(16,185,129,0.14)]",
     dark:
-      "dark:bg-gradient-to-br dark:from-emerald-500/20 dark:via-emerald-500/15 dark:to-emerald-500/5 dark:text-emerald-50 dark:border-emerald-300/30 dark:ring-emerald-400/20 dark:shadow-[0_8px_30px_rgba(16,185,129,0.25)]",
+      "dark:bg-slate-900 dark:text-white dark:border-emerald-500/30 dark:ring-emerald-500/15 dark:shadow-[0_10px_35px_rgba(16,185,129,0.35)]",
   },
   warning: {
     light:
-      "bg-amber-50 text-amber-900 border-amber-200 ring-amber-100 shadow-[0_8px_30px_rgba(245,158,11,0.15)]",
+      "bg-white text-slate-900 border-amber-100 ring-amber-50 shadow-[0_10px_35px_rgba(245,158,11,0.14)]",
     dark:
-      "dark:bg-gradient-to-br dark:from-amber-500/25 dark:via-amber-500/15 dark:to-amber-500/10 dark:text-amber-50 dark:border-amber-300/40 dark:ring-amber-400/20 dark:shadow-[0_8px_30px_rgba(245,158,11,0.25)]",
+      "dark:bg-slate-900 dark:text-white dark:border-amber-400/30 dark:ring-amber-400/15 dark:shadow-[0_10px_35px_rgba(245,158,11,0.35)]",
   },
   error: {
     light:
-      "bg-rose-50 text-rose-900 border-rose-200 ring-rose-100 shadow-[0_8px_30px_rgba(244,63,94,0.15)]",
+      "bg-white text-slate-900 border-rose-100 ring-rose-50 shadow-[0_10px_35px_rgba(244,63,94,0.16)]",
     dark:
-      "dark:bg-gradient-to-br dark:from-rose-500/25 dark:via-rose-500/15 dark:to-rose-500/10 dark:text-rose-50 dark:border-rose-300/40 dark:ring-rose-400/20 dark:shadow-[0_8px_30px_rgba(244,63,94,0.25)]",
+      "dark:bg-slate-900 dark:text-white dark:border-rose-400/30 dark:ring-rose-400/15 dark:shadow-[0_10px_35px_rgba(244,63,94,0.4)]",
   },
   default: {
     light:
-      "bg-white/95 text-slate-900 border-slate-200 ring-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.12)]",
+      "bg-white text-slate-900 border-slate-200 ring-slate-100 shadow-[0_10px_35px_rgba(15,23,42,0.12)]",
     dark:
-      "dark:bg-gradient-to-br dark:from-purple-500/15 dark:via-fuchsia-500/10 dark:to-indigo-500/10 dark:text-purple-50/90 dark:border-purple-300/20 dark:ring-purple-400/10 dark:shadow-[0_8px_30px_rgba(88,28,135,0.25)]",
+      "dark:bg-slate-900 dark:text-white dark:border-slate-700 dark:ring-slate-800 dark:shadow-[0_10px_35px_rgba(0,0,0,0.45)]",
   },
 };
 
 const getVariantKey = (variant?: ChatBubblePayload["variant"]) => {
   if (!variant) return "default" as const;
   return variantStyles[variant] ? variant : "default";
+};
+
+const cleanMessageBody = (from: string, message?: string | null) => {
+  const body = (message ?? "").trim();
+  const prefix = `${from}:`;
+  if (body.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return body.slice(prefix.length).trimStart();
+  }
+  return body;
 };
 
 const ChatBubble = () => {
@@ -120,7 +129,7 @@ const ChatBubble = () => {
         <div
           key={message.id}
           className={cn(
-            "pointer-events-auto rounded-3xl p-4 max-w-[340px] cursor-pointer",
+            "pointer-events-auto rounded-3xl p-5 max-w-[400px] cursor-pointer",
             "border ring-1 backdrop-blur-2xl backdrop-saturate-150",
             "animate-slide-in-right transition-all duration-300",
             "hover:shadow-2xl hover:-translate-y-0.5",
@@ -129,33 +138,34 @@ const ChatBubble = () => {
           )}
           onClick={() => dismissMessage(message.id)}
         >
-          <div className="flex items-start gap-4">
-            <Avatar className="h-8 w-8 flex-shrink-0 ring-2 ring-slate-200 dark:ring-purple-400/30 ring-offset-0">
+          <div className="flex items-start gap-3">
+            <Avatar className="h-8 w-8 ring-2 ring-slate-200 dark:ring-slate-500 ring-offset-0">
               <AvatarImage src={message.avatar} alt={message.from} />
-              <AvatarFallback className="text-xs bg-slate-200 text-slate-700 dark:bg-purple-500/40 dark:text-white">
+              <AvatarFallback className="text-xs bg-slate-200 text-slate-800 dark:bg-slate-400 dark:text-slate-900">
                 {message.from.charAt(0)}
               </AvatarFallback>
             </Avatar>
-            
+
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold text-sm text-slate-900 dark:text-purple-50/90 truncate">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900 dark:text-white truncate max-w-[140px]">
                   {message.from}
                 </span>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 text-slate-500 hover:text-slate-700 dark:text-purple-200/70 dark:hover:text-purple-50"
+                  className="h-6 w-6 text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   onClick={(e) => {
                     e.stopPropagation();
                     dismissMessage(message.id);
                   }}
+                  aria-label="Dismiss notification"
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-sm text-slate-700 dark:text-purple-100/80 break-words line-clamp-2 overflow-hidden">
-                {message.message}
+              <p className="mt-1 text-sm text-slate-800 dark:text-slate-50 break-words">
+                {cleanMessageBody(message.from, message.message)}
               </p>
             </div>
           </div>
@@ -164,20 +174,20 @@ const ChatBubble = () => {
             <Button
               variant="outline"
               size="sm"
-              className="h-6 text-xs px-3 border-slate-200 text-slate-700 hover:bg-slate-100 hover:border-slate-300 dark:border-purple-400/30 dark:text-purple-100 dark:hover:bg-purple-400/10 dark:hover:border-purple-300/40"
+              className="h-6 text-xs px-3 border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400 dark:border-slate-500 dark:text-white dark:hover:bg-slate-800"
               onClick={(e) => {
                 e.stopPropagation();
                 dismissMessage(message.id);
               }}
             >
-              <MessageCircle className="w-4 h-4 mr-1 text-slate-500 dark:text-purple-200" />
+              <MessageCircle className="w-4 h-4 mr-1 text-slate-700 dark:text-white" />
               Reply
             </Button>
             {message.id.startsWith('inv-') && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 text-xs px-3 text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-purple-100 dark:hover:text-purple-50 dark:hover:bg-purple-400/10"
+                className="h-6 text-xs px-3 text-slate-900 hover:text-black hover:bg-slate-100 dark:text-white dark:hover:bg-slate-800"
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate('/social?tab=friends');

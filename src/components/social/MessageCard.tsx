@@ -500,6 +500,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
           _link={playlistLink}
           isSentByMe={isSentByMe}
           loading={loadingPlaylist}
+          sharedBy={message.sender}
         />
       );
     }
@@ -515,10 +516,10 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
 
     return (
       <div
-        className={`px-3 py-1.5 rounded-2xl break-words w-full min-w-0 whitespace-pre-wrap text-sm leading-relaxed ${
+        className={`px-3 py-1.5 rounded-2xl break-words w-full min-w-0 whitespace-pre-wrap text-sm leading-relaxed border ${
           isSentByMe 
-            ? "bg-primary text-primary-foreground rounded-tr-sm" 
-            : "bg-muted/70 dark:bg-muted/50 rounded-tl-sm"
+            ? "bg-primary text-primary-foreground rounded-tr-sm border-primary/50" 
+            : "bg-white text-foreground border-muted/40 dark:bg-muted/50 dark:text-muted-foreground rounded-tl-sm"
         }`}
       >
         {(() => {
