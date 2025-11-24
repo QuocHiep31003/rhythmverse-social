@@ -1,11 +1,20 @@
+import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Music, ListMusic, TrendingUp } from "lucide-react";
+import { Users, Music, ListMusic } from "lucide-react";
 import { mockSongs, mockUsers, mockPlaylists } from "@/data/mockData";
 
 const DEFAULT_AVATAR_URL = "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
 
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(value);
+
 const AdminHome = () => {
-  const stats = [
+
+  const stats = useMemo(() => [
     {
       title: "Tổng người dùng",
       value: mockUsers.length.toString(),
@@ -26,15 +35,8 @@ const AdminHome = () => {
       icon: ListMusic,
       description: "Đang hoạt động",
       color: "text-[hsl(var(--primary))]"
-    },
-    {
-      title: "Lượt phát",
-      value: "1.2M",
-      icon: TrendingUp,
-      description: "+18% tuần này",
-      color: "text-[hsl(var(--admin-accent))]"
     }
-  ];
+  ], []);
 
   return (
     <div className="space-y-6">
@@ -63,6 +65,8 @@ const AdminHome = () => {
           </Card>
         ))}
       </div>
+
+      {/* Premium-specific widgets moved to dedicated dashboard */}
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300">
