@@ -107,6 +107,9 @@ const PlaylistDetail = () => {
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
   const fetchedSongCoverIdsRef = useRef<Set<string>>(new Set());
+  const friendsLoadedRef = useRef(false);
+  const lastCollaboratorsRef = useRef<string>("");
+  const lastPendingInvitesRef = useRef<string>("");
   // Normalize relative URLs from API to absolute
   const toAbsoluteUrl = useCallback((u?: string | null): string | null => {
     if (!u) return null;
@@ -960,11 +963,33 @@ const PlaylistDetail = () => {
 
   useEffect(() => {
     const fetchFriendsForDialog = async () => {
+      // Chỉ load khi dialog mở
+      if (!collabOpen) {
+        friendsLoadedRef.current = false;
+        return;
+      }
+
+      // Kiểm tra xem đã load chưa và collaborators/pendingInvites có thay đổi không
+      const collaboratorsKey = JSON.stringify(collaborators.map(c => c.userId).sort());
+      const pendingInvitesKey = JSON.stringify(pendingInvites.map(inv => inv.receiverId).sort());
+      
+      // Nếu đã load và không có thay đổi về collaborators/pendingInvites, không load lại
+      if (friendsLoadedRef.current && 
+          lastCollaboratorsRef.current === collaboratorsKey && 
+          lastPendingInvitesRef.current === pendingInvitesKey) {
+        return;
+      }
+
       try {
         setLoadingFriends(true);
         const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
         const me = rawUserId ? Number(rawUserId) : undefined;
-        if (!me) { setFriends([]); return; }
+        if (!me) { 
+          setFriends([]); 
+          friendsLoadedRef.current = true;
+          return; 
+        }
+        
         const list = await friendsApi.getFriends(me);
         interface FriendListItem {
           friendId?: number;
@@ -998,10 +1023,17 @@ const PlaylistDetail = () => {
         });
 
         setFriends(filtered);
-      } catch { setFriends([]); }
-      finally { setLoadingFriends(false); }
+        friendsLoadedRef.current = true;
+        lastCollaboratorsRef.current = collaboratorsKey;
+        lastPendingInvitesRef.current = pendingInvitesKey;
+      } catch { 
+        setFriends([]); 
+        friendsLoadedRef.current = true;
+      } finally { 
+        setLoadingFriends(false); 
+      }
     };
-    if (collabOpen) fetchFriendsForDialog();
+    fetchFriendsForDialog();
   }, [collabOpen, playlist?.ownerId, collaborators, pendingInvites]);
 
   useEffect(() => {
@@ -1858,11 +1890,18 @@ const PlaylistDetail = () => {
                       <Plus className="w-5 h-5 mr-2" />
                       Add Song
                     </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-h-[85vh] overflow-y-auto scrollbar-custom">
-                    <DialogHeader>
-                      <DialogTitle>Add Song to Playlist</DialogTitle>
-                    </DialogHeader>
+                </DialogTrigger>
+                <DialogContent
+                  className="max-h-[85vh] overflow-y-auto scrollbar-custom"
+                  aria-describedby="add-song-dialog-description"
+                  aria-labelledby="add-song-dialog-title"
+                >
+                  <DialogHeader>
+                    <DialogTitle id="add-song-dialog-title">Add Song to Playlist</DialogTitle>
+                    <DialogDescription id="add-song-dialog-description">
+                      Choose a song and add it to this playlist.
+                    </DialogDescription>
+                  </DialogHeader>
                     <div className="space-y-4">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

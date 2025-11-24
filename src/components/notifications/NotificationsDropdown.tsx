@@ -294,7 +294,8 @@ const NotificationsDropdown = ({ onClose }: Props) => {
               const Icon = meta.icon;
               const timeAgo = formatRelativeTime(n.createdAt);
               const senderInitial = (n.senderName || "H").charAt(0).toUpperCase();
-              const unread = !n.read;
+              // Treat only explicit true as read; string "false"/number 0 should remain unread
+              const unread = n.read !== true;
               const description = getNotificationDescription(n);
 
               return (

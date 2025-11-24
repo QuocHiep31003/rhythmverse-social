@@ -81,9 +81,13 @@ export const CollaboratorDialog = ({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="sm:max-w-lg" aria-describedby="collab-dialog-description">
+      <DialogContent
+        className="sm:max-w-lg"
+        aria-describedby="collab-dialog-description"
+        aria-labelledby="collab-dialog-title"
+      >
         <DialogHeader>
-          <DialogTitle>Add Collaborators</DialogTitle>
+          <DialogTitle id="collab-dialog-title">Add Collaborators</DialogTitle>
           <DialogDescription id="collab-dialog-description">
             Select friends to collaborate on this playlist. Choose their role.
           </DialogDescription>
