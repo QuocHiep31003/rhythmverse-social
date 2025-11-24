@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Music, Users, Eye } from "lucide-react";
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 import { toast } from "sonner";
+import { userApi } from "@/services/api/userApi";
+import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 
 interface InvitePlaylistSongDTO {
   id?: number;
@@ -65,6 +67,7 @@ const PlaylistInvites = () => {
   const [invites, setInvites] = useState<CollabInviteDTO[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  const [isPremium, setIsPremium] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -80,6 +83,45 @@ const PlaylistInvites = () => {
   };
 
   useEffect(() => { void load(); }, []);
+
+  // Check premium status
+  useEffect(() => {
+    const checkPremium = async () => {
+      try {
+        const user = await userApi.getCurrentProfile();
+        let isPremiumFromUser =
+          (user as any)?.isPremium ??
+          (user as any)?.premium ??
+          user?.roleName?.toUpperCase() === "PREMIUM";
+
+        if (!isPremiumFromUser && user?.id) {
+          try {
+            const subscription: PremiumSubscriptionDTO | null =
+              await premiumSubscriptionApi.getMySubscription(user.id);
+            if (subscription) {
+              const status =
+                subscription.status ||
+                subscription.subscriptionStatus ||
+                "";
+              const normalizedStatus = status.toUpperCase();
+              isPremiumFromUser =
+                normalizedStatus === "ACTIVE" ||
+                normalizedStatus === "TRIALING" ||
+                subscription?.isActive ||
+                subscription?.active ||
+                false;
+            }
+          } catch (e) {
+            console.warn("Failed to check premium subscription", e);
+          }
+        }
+        setIsPremium(Boolean(isPremiumFromUser));
+      } catch (e) {
+        console.warn("Failed to check premium status", e);
+      }
+    };
+    checkPremium();
+  }, []);
 
   // Auto-refresh on interval and when window regains focus
   useEffect(() => {
@@ -206,7 +248,7 @@ const PlaylistInvites = () => {
                               <span>Visibility: {p.visibility || "Unknown"}</span>
                               <span>{total} {total === 1 ? "song" : "songs"}</span>
                               {p.songLimit != null && (
-                                <span>Limit {p.songLimit}</span>
+                                <span>Limit {isPremium ? "Unlimited" : p.songLimit}</span>
                               )}
                             </div>
                           </div>

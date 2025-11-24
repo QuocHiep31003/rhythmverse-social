@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import Footer from "@/components/Footer";
 import { 
   Check, 
@@ -21,55 +20,206 @@ import {
   Loader2
 } from "lucide-react";
 import { paymentApi } from "@/services/api/paymentApi";
-import { exchangeRateApi } from "@/services/api/exchangeRateApi";
 import { userApi } from "@/services/api/userApi";
+import { subscriptionPlanApi, SubscriptionPlanDTO } from "@/services/api/subscriptionPlanApi";
+import { FeatureName } from "@/services/api/featureUsageApi";
 import { useToast } from "@/hooks/use-toast";
 
 const Premium = () => {
   const navigate = useNavigate();
-  const [selectedPlan, setSelectedPlan] = useState<"monthly" | "yearly">("monthly");
   const [isUpgrading, setIsUpgrading] = useState(false);
-  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
-  const [isLoadingRate, setIsLoadingRate] = useState(true);
   const [userId, setUserId] = useState<number | null>(null);
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlanDTO[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const { toast } = useToast();
 
-  const features = {
-    free: [
-      { icon: Music, text: "Basic music streaming", included: true },
-      { icon: Volume2, text: "Standard audio quality", included: true },
-      { icon: Heart, text: "Create playlists", included: true },
-      { icon: Users, text: "Basic social features", included: true },
-      { icon: Download, text: "Offline downloads", included: false },
-      { icon: BarChart3, text: "Advanced analytics", included: false },
-      { icon: MessageCircle, text: "Priority support", included: false },
-      { icon: Trophy, text: "Exclusive events", included: false },
-      { icon: Zap, text: "AI search", included: false },
-      { icon: Sparkles, text: "Custom themes", included: false }
-    ],
-    premium: [
-      { icon: Music, text: "Unlimited music streaming", included: true },
-      { icon: Volume2, text: "High-quality audio (320kbps)", included: true },
-      { icon: Heart, text: "Unlimited playlists & albums", included: true },
-      { icon: Users, text: "Full social features", included: true },
-      { icon: Download, text: "Unlimited offline downloads", included: true },
-      { icon: BarChart3, text: "Listening habit analytics", included: true },
-      { icon: MessageCircle, text: "24/7 support", included: true },
-      { icon: Trophy, text: "Exclusive content & events", included: true },
-      { icon: Zap, text: "AI melody & lyrics search", included: true },
-      { icon: Sparkles, text: "Custom themes & profiles", included: true }
-    ]
+  // Map feature name to icon và text
+  const getFeatureIcon = (featureName: string) => {
+    const iconMap: Record<string, any> = {
+      PLAYLIST_CREATE: Heart,
+      OFFLINE_DOWNLOAD: Download,
+      AI_SEARCH: Zap,
+      ADVANCED_ANALYTICS: BarChart3,
+      CUSTOM_THEME: Sparkles,
+    };
+    return iconMap[featureName] || Music;
   };
 
-  // Lấy tỉ giá và user info khi component mount
+  const getFeatureText = (featureName: string) => {
+    const textMap: Record<string, string> = {
+      PLAYLIST_CREATE: "Create playlists",
+      OFFLINE_DOWNLOAD: "Offline downloads",
+      AI_SEARCH: "AI search",
+      ADVANCED_ANALYTICS: "Advanced analytics",
+      CUSTOM_THEME: "Custom themes",
+    };
+    return textMap[featureName] || featureName;
+  };
+
+  // Convert plan features to display format
+  const getPlanFeatures = (plan: SubscriptionPlanDTO | null) => {
+    if (!plan || !plan.features) return [];
+    
+    return plan.features.map(f => ({
+      icon: getFeatureIcon(f.featureName),
+      text: f.featureDisplayName || getFeatureText(f.featureName),
+      included: !!f.isEnabled,
+      limit: f.limitValue === null ? "Unlimited" : f.limitValue
+    }));
+  };
+
+  // Tìm FREE và PREMIUM plan
+  const freePlan = subscriptionPlans.find(p => p.planCode?.toUpperCase() === "FREE");
+  const premiumPlan = subscriptionPlans.find(p => p.planCode?.toUpperCase() === "PREMIUM");
+  
+  // Lấy các gói khác (không phải FREE và PREMIUM)
+  const otherPlans = subscriptionPlans.filter(
+    p => p.planCode?.toUpperCase() !== "FREE" && p.planCode?.toUpperCase() !== "PREMIUM"
+  );
+  const annualPlan = otherPlans.find(p => p.planCode?.toUpperCase() === "PREMIUM_YEARLY") || null;
+  const additionalPlans = otherPlans.filter(p => p.planCode?.toUpperCase() !== "PREMIUM_YEARLY");
+
+  const formatPrice = (plan: SubscriptionPlanDTO) => {
+    if (!plan.price || plan.price <= 0) return "Miễn phí";
+    return `${Number(plan.price).toLocaleString("vi-VN")} ${plan.currency || "VND"}`;
+  };
+
+  const getDurationLabel = (plan: SubscriptionPlanDTO) => {
+    if (!plan.durationDays || !plan.price || plan.price <= 0) return null;
+    return `Chu kỳ ${plan.durationDays.toLocaleString("vi-VN")} ngày`;
+  };
+
+  const renderPlanCard = (
+    plan: SubscriptionPlanDTO | null,
+    options?: {
+      badge?: string;
+      accent?: "free" | "premium" | "annual" | "default";
+      highlight?: boolean;
+      buttonLabel?: string;
+      subtext?: string;
+      lockButton?: boolean;
+    }
+  ) => {
+    if (!plan) return null;
+
+    const accent = options?.accent || "default";
+    const accentClasses: Record<string, string> = {
+      free: "from-emerald-500/30 via-emerald-500/10 to-transparent border-emerald-400/30",
+      premium: "from-primary/50 via-pink-500/30 to-violet-600/20 border-primary/40 shadow-[0_10px_40px_-20px_rgba(147,51,234,0.7)]",
+      annual: "from-indigo-500/40 via-sky-500/20 to-transparent border-indigo-400/40",
+      default: "from-white/10 via-white/5 to-transparent border-white/10",
+    };
+
+    const planFeatures = getPlanFeatures(plan);
+    const isFreePlan = !plan.price || plan.price <= 0;
+    const isButtonDisabled = options?.lockButton || isFreePlan || isUpgrading || !plan.price || plan.price <= 0;
+    const displayBadge = options?.badge;
+    const buttonText =
+      isButtonDisabled && isFreePlan
+        ? "Current Plan"
+        : isUpgrading
+        ? "Processing..."
+        : options?.buttonLabel || `Upgrade to ${plan.planName}`;
+
+    const baseButtonClass =
+      "mt-4 w-full rounded-2xl font-semibold tracking-wide transition-all duration-300 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
+    const highlightButtonClass =
+      "bg-gradient-to-r from-primary via-pink-500 to-orange-400 text-white shadow-[0_20px_45px_-20px_rgba(244,114,182,0.9)] hover:shadow-[0_25px_55px_-20px_rgba(244,114,182,0.9)] hover:translate-y-0.5";
+    const mutedButtonClass =
+      "bg-white/10 hover:bg-white/20 text-white/90 border border-white/20 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]";
+
+    return (
+      <div
+        key={plan.planCode}
+        className={`relative rounded-3xl border bg-gradient-to-br ${accentClasses[accent]} p-[1.5px] flex flex-col h-full`}
+      >
+        <div className="rounded-[calc(1.5rem-1.5px)] bg-slate-950/80 backdrop-blur-xl h-full px-5 py-5 md:px-6 md:py-6 flex flex-col shadow-lg">
+          {displayBadge && (
+            <div className="mb-4 flex justify-between items-center gap-3">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-white/10 text-white/80">
+                {displayBadge}
+              </span>
+              {options?.highlight && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary via-pink-500 to-orange-400/90 px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-[0_15px_35px_-20px_rgba(244,114,182,0.95)]">
+                  <Sparkles className="w-3 h-3" />
+                  Best for power listeners
+                </span>
+              )}
+            </div>
+          )}
+          <div className="space-y-1">
+            <h3 className="text-3xl font-bold text-white">{plan.planName}</h3>
+          </div>
+          <div className="mt-4 mb-2 space-y-1">
+            <div className="text-4xl font-black text-white">{formatPrice(plan)}</div>
+            {getDurationLabel(plan) ? (
+              <p className="text-sm text-white/70">{getDurationLabel(plan)}</p>
+            ) : (
+              <div className="h-3" />
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mb-3 line-clamp-2 min-h-[40px]">
+            {plan.description || "Tận hưởng trải nghiệm âm nhạc đầy đủ tính năng."}
+          </p>
+          {options?.subtext ? (
+            <p className="text-xs text-white/60 mb-4">{options.subtext}</p>
+          ) : (
+            <div className="mb-3 h-3" />
+          )}
+          <div className="space-y-1.5 flex-1 min-h-[260px]">
+            {planFeatures.length ? (
+              planFeatures.map((feature, index) => (
+                <div
+                  key={`${plan.planCode}-feature-${index}`}
+                  className={`flex items-center gap-3 rounded-2xl border px-3 py-1.5 text-sm ${
+                    feature.included
+                      ? "border-white/5 bg-white/5 text-white/90"
+                      : "border-white/5 bg-white/0 text-white/50"
+                  }`}
+                >
+                  {feature.included ? (
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <feature.icon className="w-4 h-4 shrink-0 text-white/70" />
+                  <span className="flex-1">
+                    {feature.text}
+                    {feature.limit !== "Unlimited" && ` (${feature.limit})`}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-sm text-white/70">Chưa có tính năng cho gói này.</div>
+            )}
+          </div>
+          <Button
+            variant={options?.highlight ? "hero" : "outline"}
+            className={`${baseButtonClass} ${
+              options?.highlight ? highlightButtonClass : mutedButtonClass
+            }`}
+            disabled={isButtonDisabled}
+            onClick={() => {
+              if (!isFreePlan) {
+                handleUpgrade(plan);
+              }
+            }}
+          >
+            {buttonText}
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // Lấy user info và subscription plans khi component mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setIsLoadingRate(true);
-        const rate = await exchangeRateApi.getUSDtoVND();
-        setExchangeRate(rate);
-        
-        // Lấy userId
+        setIsLoadingPlans(true);
+        const plans = await subscriptionPlanApi.getActivePlans().catch(() => []);
+        setSubscriptionPlans(plans || []);
+
         try {
           const user = await userApi.getCurrentProfile();
           setUserId(user.id || null);
@@ -77,36 +227,15 @@ const Premium = () => {
           console.warn('Failed to fetch user profile:', userError);
         }
       } catch (error) {
-        console.error('Error fetching exchange rate:', error);
-        // Dùng tỉ giá mặc định nếu có lỗi
-        setExchangeRate(24000);
+        console.error('Error fetching plans:', error);
+        setSubscriptionPlans([]);
       } finally {
-        setIsLoadingRate(false);
+        setIsLoadingPlans(false);
       }
     };
 
     fetchData();
   }, []);
-
-  // Tính toán giá VNĐ dựa trên tỉ giá (reactive với exchangeRate)
-  const pricing = useMemo(() => {
-    const getAmountVND = (usdPrice: number): number => {
-      return exchangeRate ? Math.round(usdPrice * exchangeRate) : Math.round(usdPrice * 24000);
-    };
-
-    return {
-      monthly: { 
-        price: 0.1, 
-        originalPrice: null,
-        amountVND: getAmountVND(0.1)
-      },
-      yearly: { 
-        price: 1, 
-        originalPrice: 48.0,
-        amountVND: getAmountVND(1)
-      }
-    };
-  }, [exchangeRate]);
 
   const benefits = [
     {
@@ -141,52 +270,47 @@ const Premium = () => {
     }
   ];
 
-  const handleUpgrade = async () => {
+  const handleUpgrade = async (targetPlan?: SubscriptionPlanDTO) => {
     try {
       setIsUpgrading(true);
-      
-      const plan = pricing[selectedPlan];
-      
-      // Kiểm tra plan và amountVND
-      if (!plan || !plan.amountVND || plan.amountVND <= 0) {
-        throw new Error('Invalid order amount. Please try again.');
+
+      const plan = targetPlan || premiumPlan;
+      if (!plan) {
+        throw new Error("Plan not found. Please try again.");
       }
-      
-      // Format description chuyên nghiệp: User ID + Plan
-      const planName = selectedPlan === "monthly" ? "Monthly" : "Yearly";
-      const description = userId 
-        ? `Premium ${planName} - User ID: ${userId}`
-        : `Premium ${planName} Subscription`;
-      
-      console.log('Creating order with:', {
-        amount: plan.amountVND,
-        description: description,
-        plan: selectedPlan,
-        userId: userId
-      });
-      
-      // Tạo đơn hàng
+
+      const amountVND = plan.price ? Number(plan.price) : 0;
+      if (amountVND <= 0) {
+        throw new Error("Invalid order amount. Please try again.");
+      }
+
+      const planName = plan.planName || plan.planCode || "Premium";
+      const rawDescription = userId
+        ? `${planName} - ${userId}`
+        : `${planName} Subscription`;
+      // PayOS giới hạn mô tả 25 ký tự nên cần cắt ngắn
+      const description = rawDescription.slice(0, 25);
+
       const result = await paymentApi.createOrder({
-        amount: plan.amountVND,
-        description: description,
-        // buyerEmail có thể lấy từ user profile nếu cần
+        amount: amountVND,
+        description,
       });
 
-      console.log('Order created successfully:', result);
-
-      // Redirect đến PayOS checkout
       if (result?.checkoutUrl) {
         window.location.href = result.checkoutUrl;
       } else {
-        throw new Error('Failed to receive payment link from server');
+        throw new Error("Failed to receive payment link from server");
       }
     } catch (error) {
-      console.error('Error creating order:', error);
+      console.error("Error creating order:", error);
       setIsUpgrading(false);
       toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create order. Please try again.',
-        variant: 'destructive',
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to create order. Please try again.",
+        variant: "destructive",
       });
     }
   };
@@ -207,114 +331,41 @@ const Premium = () => {
 
         
 
-        {/* Pricing Toggle */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-muted/20 rounded-lg p-1 flex">
-            <Button
-              variant={selectedPlan === "monthly" ? "default" : "ghost"}
-              onClick={() => setSelectedPlan("monthly")}
-              className="rounded-md"
-            >
-              Monthly
-            </Button>
-            <Button
-              variant={selectedPlan === "yearly" ? "default" : "ghost"}
-              onClick={() => setSelectedPlan("yearly")}
-              className="rounded-md"
-            >
-              Yearly
-              <Badge variant="secondary" className="ml-2">Save ~12%</Badge>
-            </Button>
-          </div>
-        </div>
-
         {/* Pricing Cards */}
-        <div className="flex justify-center mb-12">
-          <div className="grid md:grid-cols-2 gap-8 max-w-4xl w-full items-stretch [&>div]:w-full">
-          {/* Free Plan */}
-          <Card className="bg-gradient-glass backdrop-blur-sm border-white/10 h-full flex flex-col">
-            <CardHeader className="text-center pb-8 flex flex-col !p-6 min-h-[200px]">
-              <CardTitle className="text-2xl mb-4">Free Plan</CardTitle>
-              <div className="text-4xl font-bold mb-2">$0</div>
-              <div className="h-5 mb-2"></div>
-              <p className="text-muted-foreground">Perfect for casual listeners</p>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col space-y-4 !p-6 !pt-0">
-              <div className="flex-1 flex flex-col justify-center items-center space-y-4">
-                <div className="w-full max-w-sm space-y-4">
-                  {features.free.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      {feature.included ? (
-                        <Check className="w-5 h-5 text-green-500 shrink-0" />
-                      ) : (
-                        <X className="w-5 h-5 text-white shrink-0" />
-                      )}
-                      <feature.icon className="w-4 h-4 shrink-0" />
-                      <span className={feature.included ? "" : "text-muted-foreground"}>
-                        {feature.text}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <Button variant="outline" className="w-full mt-auto bg-muted/20 hover:bg-muted/30">
-                Current Plan
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Premium Plan */}
-          <Card className="bg-gradient-primary/10 border-primary/20 relative overflow-hidden h-full flex flex-col">
-            <div className="absolute top-0 right-0 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-1 rounded-bl-lg">
-              <span className="text-sm font-medium">Most Popular</span>
-            </div>
-            <CardHeader className="text-center pb-8 flex flex-col !p-6 min-h-[200px]">
-              <CardTitle className="text-2xl flex items-center justify-center gap-2 mb-4">
-                <Crown className="w-6 h-6 text-primary" />
-                Premium Plan
-              </CardTitle>
-              <div className="space-y-2 mb-2">
-                <div className="text-4xl font-bold">
-                  ${pricing[selectedPlan].price}
-                  <span className="text-lg font-normal text-muted-foreground">
-                    /{selectedPlan === "monthly" ? "month" : "year"}
-                  </span>
-                </div>
-                {pricing[selectedPlan].originalPrice && (
-                  <div className="text-sm text-muted-foreground line-through">
-                    Original ${pricing[selectedPlan].originalPrice}/year
-                  </div>
-                )}
-                {!pricing[selectedPlan].originalPrice && (
-                  <div className="h-5"></div>
-                )}
-              </div>
-              <p className="text-muted-foreground">Everything you need for the ultimate music experience</p>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col space-y-4 !p-6 !pt-0">
-              <div className="flex-1 flex flex-col justify-center items-center space-y-4">
-                <div className="w-full max-w-sm space-y-4">
-                  {features.premium.map((feature, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <Check className="w-5 h-5 text-green-500 shrink-0" />
-                      <feature.icon className="w-4 h-4 shrink-0" />
-                      <span>{feature.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <Button 
-                variant="hero" 
-                className="w-full mt-auto" 
-                onClick={handleUpgrade}
-                disabled={isUpgrading}
-              >
-                {isUpgrading ? "Processing..." : "Upgrade to Premium"}
-              </Button>
-            </CardContent>
-          </Card>
+        {isLoadingPlans ? (
+          <div className="flex justify-center items-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        </div>
+        ) : (
+          <div className="mb-12">
+            <div className="grid gap-3 lg:grid-cols-3 max-w-6xl mx-auto auto-rows-fr">
+              {renderPlanCard(freePlan || null, {
+                accent: "free",
+                badge: "Starter Plan",
+                buttonLabel: "Current Plan",
+                lockButton: true,
+              })}
+              {renderPlanCard(premiumPlan || null, {
+                accent: "premium",
+                badge: "Most Popular",
+                highlight: true,
+                buttonLabel: "Upgrade to Premium",
+              })}
+              {renderPlanCard(annualPlan, {
+                accent: "annual",
+                badge: "Best Value",
+                buttonLabel: "Upgrade to Gói Premium 1 Năm",
+              })}
+              {additionalPlans.map(plan =>
+                renderPlanCard(plan, {
+                  accent: "default",
+                  badge: plan.planCode,
+                  buttonLabel: `Upgrade to ${plan.planName}`,
+                })
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Benefits Section */}
         <div className="mb-12">
@@ -373,13 +424,18 @@ const Premium = () => {
           <h2 className="text-2xl font-bold mb-4">Ready to upgrade your music experience?</h2>
           <p className="text-muted-foreground mb-6">Join millions of users who have chosen Premium.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button variant="hero" size="lg" onClick={handleUpgrade} disabled={isUpgrading}>
+            <Button 
+              variant="hero" 
+              size="lg" 
+              onClick={() => handleUpgrade(premiumPlan)} 
+              disabled={isUpgrading || !premiumPlan}
+            >
               {isUpgrading ? "Processing..." : "Start Your Premium Journey"}
             </Button>
             <Button 
               variant="outline" 
               size="lg" 
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/payment/history')}
             >
               View Payment History
             </Button>

@@ -192,8 +192,8 @@ const TopBar = () => {
       return;
     }
 
-    // Check feature limit
-    if (!canUse) {
+    // Check feature limit - only show modal if not premium and hết lượt
+    if (!isPremium && remaining === 0) {
       setShowLimitModal(true);
       return;
     }
@@ -202,12 +202,14 @@ const TopBar = () => {
     setError("");
 
     try {
-      // Use feature (increment usage count)
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        setIsRecognizing(false);
-        return;
+      // Use feature (increment usage count) - only if not premium
+      if (!isPremium) {
+        const success = await useFeature();
+        if (!success) {
+          setShowLimitModal(true);
+          setIsRecognizing(false);
+          return;
+        }
       }
 
       const result = await arcApi.recognizeMusic(audioBlob);
@@ -634,7 +636,7 @@ const TopBar = () => {
 
                       <Button
                         onClick={handleRecognize}
-                        disabled={isRecognizing || isCheckingLimit || !canUse}
+                        disabled={isRecognizing || isCheckingLimit || (!isPremium && remaining === 0)}
                         className="w-full"
                       >
                         {isRecognizing ? (
@@ -788,6 +790,7 @@ const TopBar = () => {
         featureDisplayName="AI Search"
         remaining={remaining}
         limit={0}
+        isPremium={isPremium}
       />
     </header>
   );
