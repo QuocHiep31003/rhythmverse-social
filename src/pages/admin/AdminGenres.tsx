@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Music } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ArrowLeft, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Music, ListMusic } from "lucide-react";
 import { GenreFormDialog } from "@/components/admin/GenreFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { GenreSongsDialog } from "@/components/admin/GenreSongsDialog";
 import { genresApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +28,7 @@ const AdminGenres = () => {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [songsDialogOpen, setSongsDialogOpen] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -184,6 +186,7 @@ const AdminGenres = () => {
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
                           <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
@@ -215,6 +218,11 @@ const AdminGenres = () => {
                             <td className="w-24 p-3 align-top">
                               <span className="font-medium">{formatWeight(genre.weight)}</span>
                             </td>
+                            <td className="w-32 p-3 align-top text-center">
+                              <Badge variant="secondary" className="font-semibold">
+                                {genre.songCount ?? 0}
+                              </Badge>
+                            </td>
                             <td className="w-40 p-3 align-top text-sm text-muted-foreground">
                               {formatDateTime(genre.createdAt)}
                             </td>
@@ -223,6 +231,18 @@ const AdminGenres = () => {
                             </td>
                             <td className="w-32 text-right p-3 align-top">
                               <div className="flex items-center justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => {
+                                    setSelectedGenre(genre);
+                                    setSongsDialogOpen(true);
+                                  }} 
+                                  className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+                                  title="Xem bài hát"
+                                >
+                                  <ListMusic className="w-4 h-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(genre)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
                                   <Pencil className="w-4 h-4" />
                                 </Button>
@@ -271,6 +291,12 @@ const AdminGenres = () => {
 
         <GenreFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedGenre} isLoading={isSubmitting} mode={formMode} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa thể loại?" description={`Bạn có chắc muốn xóa thể loại "${selectedGenre?.name}"?`} isLoading={isSubmitting} />
+        <GenreSongsDialog 
+          open={songsDialogOpen} 
+          onOpenChange={setSongsDialogOpen} 
+          genreId={selectedGenre?.id || null}
+          genreName={selectedGenre?.name}
+        />
       </div>
     </div>
   );

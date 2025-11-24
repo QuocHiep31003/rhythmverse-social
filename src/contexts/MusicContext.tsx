@@ -14,6 +14,7 @@ export interface Song {
   url?: string;
   audio?: string;
   audioUrl?: string;
+  uuid?: string;
 }
 
 interface MusicContextType {

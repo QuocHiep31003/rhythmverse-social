@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Download, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Heart } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Heart, ListMusic } from "lucide-react";
 import { MoodFormDialog } from "@/components/admin/MoodFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { MoodSongsDialog } from "@/components/admin/MoodSongsDialog";
 import { moodsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ const AdminMoods = () => {
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [songsDialogOpen, setSongsDialogOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -182,6 +184,7 @@ const AdminMoods = () => {
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
                           <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
@@ -226,6 +229,11 @@ const AdminMoods = () => {
                             <td className="w-24 p-3 align-top">
                               <span className="font-medium">{formatWeight(mood.weight)}</span>
                             </td>
+                            <td className="w-32 p-3 align-top text-center">
+                              <Badge variant="secondary" className="font-semibold">
+                                {mood.songCount ?? 0}
+                              </Badge>
+                            </td>
                             <td className="w-40 p-3 align-top text-sm text-muted-foreground">
                               {formatDateTime(mood.createdAt)}
                             </td>
@@ -234,6 +242,18 @@ const AdminMoods = () => {
                             </td>
                             <td className="w-32 text-right p-3 align-top">
                               <div className="flex items-center justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => {
+                                    setSelectedMood(mood);
+                                    setSongsDialogOpen(true);
+                                  }} 
+                                  className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+                                  title="Xem bài hát"
+                                >
+                                  <ListMusic className="w-4 h-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(mood)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
                                   <Pencil className="w-4 h-4" />
                                 </Button>
@@ -282,6 +302,12 @@ const AdminMoods = () => {
 
         <MoodFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedMood} isLoading={isSubmitting} mode={formMode} />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa mood?" description={`Bạn có chắc muốn xóa mood "${selectedMood?.name}"?`} isLoading={isSubmitting} />
+        <MoodSongsDialog 
+          open={songsDialogOpen} 
+          onOpenChange={setSongsDialogOpen} 
+          moodId={selectedMood?.id || null}
+          moodName={selectedMood?.name}
+        />
       </div>
     </div>
   );

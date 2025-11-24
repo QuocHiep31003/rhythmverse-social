@@ -408,14 +408,15 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
         playbackUrl = detail.audioUrl || detail.audio || detail.url || null;
       }
       
-      // Nếu vẫn không có, thử getStreamUrl
-      if (!playbackUrl) {
+      // Nếu vẫn không có và có uuid, dùng proxy endpoint (giống MusicPlayer)
+      if (!playbackUrl && detail.uuid) {
         try {
-          const streamData = await songsApi.getStreamUrl(songId);
-          playbackUrl = streamData.streamUrl;
-          console.log("[MessageCard] Stream URL retrieved:", playbackUrl);
+          // Dùng proxy endpoint với uuid từ song detail
+          const proxyBaseUrl = `/api/songs/${songId}/stream-proxy`;
+          playbackUrl = `${window.location.origin}${proxyBaseUrl}/${detail.uuid}_128kbps.m3u8`;
+          console.log("[MessageCard] Using proxy endpoint with UUID:", playbackUrl);
         } catch (streamError2) {
-          console.warn("[MessageCard] Failed to get stream URL:", streamError2);
+          console.warn("[MessageCard] Failed to build proxy URL:", streamError2);
         }
       }
       

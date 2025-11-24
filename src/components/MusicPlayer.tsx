@@ -265,12 +265,21 @@ const MusicPlayer = () => {
 
     const loadStreamUrl = async () => {
       try {
-        // Dùng proxy endpoint để backend tự generate signed URL cho mỗi request
-        // Proxy sẽ handle cả manifest và segments với signed URLs riêng
-        const { uuid } = await songsApi.getStreamUrl(currentSong.id);
-        
-        if (!uuid) {
-          throw new Error("No UUID available for streaming");
+        // Dùng UUID trực tiếp từ currentSong; nếu chưa có thì fetch lại từ BE
+        let songUuid = currentSong?.uuid;
+        if (!songUuid) {
+          console.warn("[MusicPlayer] Song missing uuid, fetching detail from backend", currentSong.id);
+          const backendSong = await songsApi.getById(currentSong.id);
+          songUuid = backendSong?.uuid;
+          if (!songUuid) {
+            throw new Error("UUID not available from backend");
+          }
+          const enrichedSong = { ...currentSong, uuid: songUuid };
+          setQueue((prev) =>
+            prev.map((song) => (song.id === enrichedSong.id ? { ...song, uuid: songUuid } : song))
+          );
+          playSong(enrichedSong);
+          return;
         }
 
         // Dùng proxy endpoint thay vì CloudFront signed URL trực tiếp
@@ -278,7 +287,7 @@ const MusicPlayer = () => {
         // HLS.js sẽ tự động resolve relative segment URLs relative to playlist URL
         const proxyBaseUrl = `/api/songs/${currentSong.id}/stream-proxy`;
         // Request variant playlist trực tiếp (HLS.js sẽ tự load segments từ đây)
-        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${uuid}_128kbps.m3u8`;
+        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${songUuid}_128kbps.m3u8`;
 
         console.log("Using proxy endpoint for HLS streaming:", finalStreamUrlAbsolute);
         console.log("HLS.js will automatically resolve segment URLs relative to this playlist");
