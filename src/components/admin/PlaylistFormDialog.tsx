@@ -115,14 +115,14 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
   };
 
   const handleSubmit = async (values: PlaylistFormValues) => {
-    // Check feature limit only for create mode
-    if (mode === "create" && !canUse) {
+    // Check feature limit only for create mode - only show modal if not premium and hết lượt
+    if (mode === "create" && !isPremium && remaining === 0) {
       setShowLimitModal(true);
       return;
     }
 
-    // Use feature (increment usage count) only for create mode
-    if (mode === "create") {
+    // Use feature (increment usage count) only for create mode and if not premium
+    if (mode === "create" && !isPremium) {
       const success = await useFeature();
       if (!success) {
         setShowLimitModal(true);
@@ -255,7 +255,7 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading || isCheckingLimit} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Hủy</Button>
               <Button 
                 type="submit" 
-                disabled={isLoading || isCheckingLimit || (mode === "create" && !canUse)} 
+                disabled={isLoading || isCheckingLimit || (mode === "create" && !isPremium && remaining === 0)} 
                 className="bg-primary hover:bg-primary/90"
               >
                 {isLoading ? "Đang lưu..." : isCheckingLimit ? "Đang kiểm tra..." : mode === "create" ? "Tạo playlist" : "Cập nhật"}
@@ -276,6 +276,7 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
           featureDisplayName="Create Playlist"
           remaining={remaining}
           limit={3}
+          isPremium={isPremium}
         />
       )}
     </Dialog>

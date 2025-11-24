@@ -54,8 +54,13 @@ export const useFeatureLimit = (
       const data = await featureUsageApi.useFeature(featureName);
       setUsage(data);
 
-      if (!data.canUse) {
-        // Hết lượt
+      // Check bằng remaining thay vì canUse để chính xác hơn
+      // Nếu là premium hoặc còn lượt (remaining > 0) thì cho phép
+      const isPremiumUser = data.isPremium === true;
+      const hasRemaining = (data.remaining ?? 0) > 0;
+      
+      if (!isPremiumUser && !hasRemaining) {
+        // Hết lượt (không premium và remaining = 0)
         if (onLimitReached) {
           onLimitReached();
         }
@@ -104,5 +109,8 @@ export const useFeatureLimit = (
     refresh: checkUsage,
   };
 };
+
+
+
 
 

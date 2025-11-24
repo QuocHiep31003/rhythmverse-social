@@ -18,6 +18,7 @@ interface FeatureLimitModalProps {
   featureDisplayName?: string;
   remaining?: number;
   limit?: number;
+  isPremium?: boolean;
 }
 
 const featureDescriptions: Record<FeatureName, string> = {
@@ -63,11 +64,15 @@ export const FeatureLimitModal = ({
   featureDisplayName,
   remaining = 0,
   limit = 0,
+  isPremium = false,
 }: FeatureLimitModalProps) => {
   const navigate = useNavigate();
   const displayName = featureDisplayName || featureName.replace(/_/g, " ");
   const description = featureDescriptions[featureName] || "This premium feature";
   const benefits = featureBenefits[featureName] || [];
+
+  // Don't show modal if user is already premium
+  const shouldShow = open && !isPremium;
 
   const handleUpgrade = () => {
     onOpenChange(false);
@@ -75,7 +80,7 @@ export const FeatureLimitModal = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={shouldShow} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
