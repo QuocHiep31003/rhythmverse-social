@@ -149,20 +149,29 @@ const CreatePlaylist = () => {
       return;
     }
 
-    // Check feature limit
-    if (!canUse) {
-      setShowLimitModal(true);
-      return;
+    // Premium users: luôn cho phép
+    if (isPremium) {
+      // Premium user, không cần check limit
+    } else {
+      // Free users: check remaining
+      if (remaining === 0) {
+        setShowLimitModal(true);
+        return;
+      }
     }
 
     setIsLoading(true);
     try {
-      // Use feature (increment usage count)
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        setIsLoading(false);
-        return;
+      // Use feature (increment usage count) - only if not premium
+      if (!isPremium) {
+        const success = await useFeature();
+        if (!success) {
+          // Nếu useFeature trả về false, có thể là hết lượt hoặc lỗi
+          // Check lại remaining để chắc chắn
+          setShowLimitModal(true);
+          setIsLoading(false);
+          return;
+        }
       }
       const today = new Date().toISOString().split("T")[0];
       let uploadedCoverUrl: string | null = null;
@@ -340,7 +349,16 @@ const CreatePlaylist = () => {
 
             <div className="flex gap-4 pt-4">
               <Button variant="outline" onClick={() => navigate(-1)} className="flex-1" disabled={isLoading || isCheckingLimit}>Cancel</Button>
-              <Button onClick={handleSave} className="flex-1" disabled={isLoading || isCheckingLimit || !formData.name.trim() || !canUse}>
+              <Button 
+                onClick={handleSave} 
+                className="flex-1" 
+                disabled={
+                  isLoading || 
+                  isCheckingLimit || 
+                  !formData.name.trim() || 
+                  (!isPremium && remaining === 0) // Chỉ disable khi không premium VÀ hết lượt
+                }
+              >
                 {isLoading ? "Creating..." : isCheckingLimit ? "Checking..." : "Create Playlist"}
                 {!isPremium && remaining > 0 && (
                   <span className="ml-2 text-xs opacity-75">({remaining} left)</span>
@@ -361,6 +379,7 @@ const CreatePlaylist = () => {
         featureDisplayName="Create Playlist"
         remaining={remaining}
         limit={3}
+        isPremium={isPremium}
       />
     </div>
   );
