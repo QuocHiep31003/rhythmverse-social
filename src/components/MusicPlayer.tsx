@@ -275,9 +275,10 @@ const MusicPlayer = () => {
             throw new Error("UUID not available from backend");
           }
           const enrichedSong = { ...currentSong, uuid: songUuid };
-          setQueue((prev) =>
-            prev.map((song) => (song.id === enrichedSong.id ? { ...song, uuid: songUuid } : song))
+          const updatedQueue = queue.map((song) =>
+            song.id === enrichedSong.id ? { ...song, uuid: songUuid } : song
           );
+          setQueue(updatedQueue);
           playSong(enrichedSong);
           return;
         }
