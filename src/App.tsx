@@ -46,7 +46,8 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminTrending from "./pages/admin/AdminTrending";
 import AdminPromotions from "./pages/admin/AdminPromotions";
 import AdminSnapshots from "./pages/admin/AdminSnapshots";
-import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
+import AdminSubscriptionPlans from "./pages/admin/AdminSubscriptionPlans";
+import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
@@ -90,7 +91,8 @@ const App = () => (
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
-                    <Route path="premium-subscriptions" element={<AdminPremiumSubscriptions />} />
+                    <Route path="subscription-plans" element={<AdminSubscriptionPlans />} />
+                    <Route path="premium-dashboard" element={<AdminPremiumDashboard />} />
                   </Routes>
                 </AdminLayout>
               } />
