@@ -127,9 +127,9 @@ export const PlaylistCard = ({
           </div>
         </div>
 
-        <div className="p-4">
-          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`}>
-            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors truncate">
+        <div className="p-4 min-w-0">
+          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} className="block min-w-0">
+            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors line-clamp-2 break-words overflow-hidden min-w-0">
               {playlist.title}
             </h3>
           </Link>
@@ -158,7 +158,7 @@ export const PlaylistCard = ({
           )}
           
           {playlist.description ? (
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 break-words overflow-hidden min-w-0">
               {playlist.description}
             </p>
           ) : null}

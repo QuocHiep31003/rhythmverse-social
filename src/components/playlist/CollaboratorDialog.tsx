@@ -43,6 +43,29 @@ interface CollaboratorDialogProps {
   onSearchChange: (query: string) => void;
 }
 
+const getInitials = (name?: string) => {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n.charAt(0))
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+};
+
+const renderAvatarImage = (src?: string | null, alt?: string) => {
+  if (!src) return null;
+  return (
+    <AvatarImage
+      src={src}
+      alt={alt || "Avatar"}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+      }}
+    />
+  );
+};
+
 export const CollaboratorDialog = ({
   open,
   onOpenChange,
@@ -105,16 +128,9 @@ export const CollaboratorDialog = ({
                     <div key={member.userId} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          {member.avatar ? (
-                            <AvatarImage src={member.avatar} alt={member.name} />
-                          ) : null}
-                          <AvatarFallback className="bg-gradient-primary text-white text-xs">
-                            {member.name
-                              .split(" ")
-                              .map((n) => n.charAt(0))
-                              .join("")
-                              .slice(0, 2)
-                              .toUpperCase()}
+                          {renderAvatarImage(member.avatar, member.name)}
+                          <AvatarFallback delayMs={0} className="bg-gradient-primary text-white text-xs">
+                            {getInitials(member.name)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -189,8 +205,8 @@ export const CollaboratorDialog = ({
                       }`}
                     >
                       <Avatar className="h-9 w-9">
-                        <AvatarImage src={friend.avatar || undefined} alt={friend.name} />
-                        <AvatarFallback>{friend.name.charAt(0)}</AvatarFallback>
+                        {renderAvatarImage(friend.avatar, friend.name)}
+                        <AvatarFallback delayMs={0}>{getInitials(friend.name)}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{friend.name}</p>
