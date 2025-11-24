@@ -62,6 +62,7 @@ import type { SongContributor } from "@/services/api/songContributorApi";
 import type { SongGenre } from "@/services/api/songGenreApi";
 import type { SongMood } from "@/services/api/songMoodApi";
 import type { Song, SongCreateUpdateData } from "@/services/api/songApi";
+import { Switch } from "@/components/ui/switch";
 
 const metadataSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
@@ -723,20 +724,25 @@ export const SongEditDialog = ({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Trạng thái</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={field.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="ACTIVE">Active</SelectItem>
-                              <SelectItem value="INACTIVE">Inactive</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {field.value === "ACTIVE" ? "Đang hiển thị" : "Tạm ẩn"}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {field.value === "ACTIVE"
+                                    ? "Bài hát sẽ xuất hiện trên tất cả màn hình người dùng"
+                                    : "Ẩn khỏi người dùng, chỉ quản trị viên nhìn thấy"}
+                                </p>
+                              </div>
+                              <Switch
+                                checked={field.value === "ACTIVE"}
+                                onCheckedChange={(checked) => field.onChange(checked ? "ACTIVE" : "INACTIVE")}
+                                className="data-[state=checked]:bg-green-500"
+                              />
+                            </div>
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
