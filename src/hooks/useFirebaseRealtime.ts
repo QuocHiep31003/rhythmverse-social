@@ -198,37 +198,17 @@ export default function useFirebaseRealtime(
     unsubscribePresenceRef.current.forEach(unsub => unsub());
     unsubscribePresenceRef.current = [];
 
-    // Handle pagehide/beforeunload để set offline (best effort)
-    const handlePageHide = () => {
-      if (currentUserIdRef.current) {
-        console.log('[Firebase Realtime] Page hiding, setting user offline');
-        void setUserOffline(currentUserIdRef.current);
-      }
-    };
-    
-    const handleBeforeUnload = () => {
-      if (currentUserIdRef.current) {
-        console.log('[Firebase Realtime] Before unload, setting user offline');
-        void setUserOffline(currentUserIdRef.current);
-      }
-    };
-    
-    window.addEventListener('pagehide', handlePageHide);
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
+    // KHÔNG xử lý pagehide/beforeunload ở đây vì PresenceManager đang quản lý online status toàn cục
+    // useFirebaseRealtime chỉ quản lý notifications và presence watching cho friends
+
     // Cleanup
     return () => {
-      window.removeEventListener('pagehide', handlePageHide);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
         pingIntervalRef.current = null;
       }
-      // Gọi setUserOffline khi cleanup (nhưng không chờ response vì có thể đang unmount)
-      if (currentUserIdRef.current) {
-        void setUserOffline(currentUserIdRef.current);
-      }
+      // KHÔNG gọi setUserOffline khi cleanup vì PresenceManager đang quản lý online status toàn cục
+      // Chỉ set offline khi thực sự đóng app/tab (đã xử lý trong PresenceManager)
       unsubscribePresenceRef.current.forEach(unsub => unsub());
       unsubscribePresenceRef.current = [];
       if (unsubscribeNotifRef.current) {

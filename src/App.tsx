@@ -57,6 +57,8 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentHistory from "./pages/PaymentHistory";
 
 import FriendRequestWatcher from "./components/FriendRequestWatcher";
+import ChatMessageWatcher from "./components/ChatMessageWatcher";
+import PresenceManager from "./components/PresenceManager";
 
 // ⭐ Missing import from main branch
 import InviteFriend from "./pages/InviteFriend";
@@ -156,6 +158,8 @@ const App = () => (
             })()}
 
             <FriendRequestWatcher />
+            <ChatMessageWatcher />
+            <PresenceManager />
           </BrowserRouter>
         </TooltipProvider>
       </MusicProvider>
