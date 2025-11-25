@@ -177,6 +177,15 @@ const ChatBubble = () => {
               className="h-6 text-xs px-3 border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400 dark:border-slate-500 dark:text-white dark:hover:bg-slate-800"
               onClick={(e) => {
                 e.stopPropagation();
+                // Lấy friendId từ meta để chuyển đến đúng chat
+                const friendId = message.meta?.friendId || message.meta?.friendNumericId;
+                if (friendId) {
+                  // Chuyển đến trang social với tab chat và chọn đúng người
+                  navigate(`/social?tab=chat&friend=${encodeURIComponent(String(friendId))}`);
+                } else {
+                  // Nếu không có friendId, chỉ chuyển đến trang chat
+                  navigate('/social?tab=chat');
+                }
                 dismissMessage(message.id);
               }}
             >

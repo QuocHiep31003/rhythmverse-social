@@ -685,7 +685,10 @@ const TopBar = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <NotificationsDropdown onClose={() => setNotifOpen(false)} />
+            <NotificationsDropdown
+              userId={currentUserId ?? undefined}
+              onClose={() => setNotifOpen(false)}
+            />
           </DropdownMenu>
 
           {/* Messages */}
@@ -693,7 +696,12 @@ const TopBar = () => {
             variant="ghost"
             size="icon"
             className="relative"
-            onClick={() => navigate("/social?tab=chat")}
+            onClick={() => {
+              // Reset unread count về 0 khi nhấn vào icon message
+              setUnreadMsgCount(0);
+              // Chuyển đến trang social với tab chat
+              navigate("/social?tab=chat");
+            }}
           >
             <MessageCircle className="h-5 w-5" />
             {unreadMsgCount > 0 && (

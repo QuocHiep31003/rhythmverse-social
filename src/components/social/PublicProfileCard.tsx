@@ -18,7 +18,7 @@ const toAbsoluteUrl = (u?: string | null): string | undefined => {
   return `${base}/${u}`;
 };
 
-export function PublicProfileCard({ profile }: { profile: PublicProfileDTO }) {
+export function PublicProfileCard({ profile, onAddFriendSuccess }: { profile: PublicProfileDTO; onAddFriendSuccess?: () => void }) {
   const isLoggedIn = (() => {
     try { return !!(localStorage.getItem('token') || sessionStorage.getItem('token')); } catch { return false; }
   })();
@@ -65,7 +65,7 @@ export function PublicProfileCard({ profile }: { profile: PublicProfileDTO }) {
           )}
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
             {isLoggedIn && !isSelf && profile?.id ? (
-              <AddFriendButton targetUserId={Number(profile.id)} />
+              <AddFriendButton targetUserId={Number(profile.id)} onSuccess={onAddFriendSuccess} />
             ) : (
               <span className="text-xs uppercase tracking-wide text-muted-foreground opacity-70">
                 {isSelf ? "Đây là profile của bạn" : "Đăng nhập để kết nối với người dùng này"}

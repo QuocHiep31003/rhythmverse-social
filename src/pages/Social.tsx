@@ -227,7 +227,27 @@ const Social = () => {
   useEffect(() => {
     const nextTab = normalizeSocialTab(searchParams.get('tab'));
     setActiveTab(prev => (prev === nextTab ? prev : nextTab));
-  }, [searchParams]);
+    
+    // Xử lý query parameter 'friend' để chọn đúng người chat
+    const friendParam = searchParams.get('friend');
+    if (friendParam && nextTab === 'chat') {
+      const friendId = String(friendParam);
+      // Chỉ set nếu friendId hợp lệ và khác với selectedChat hiện tại
+      if (friendId && friendId !== selectedChat) {
+        setSelectedChat(friendId);
+        // Lưu vào localStorage để giữ trạng thái
+        try {
+          localStorage.setItem('lastChatFriendId', friendId);
+        } catch {
+          void 0;
+        }
+        // Xóa query parameter sau khi đã xử lý
+        const next = new URLSearchParams(searchParams.toString());
+        next.delete('friend');
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [searchParams, selectedChat, setSearchParams]);
 
   const [friends, setFriends] = useState<Friend[]>([]);
 
@@ -2784,7 +2804,7 @@ const Social = () => {
                     </div>
                   </div>
               ) : inlineProfile ? (
-                <PublicProfileCard profile={inlineProfile} />
+                <PublicProfileCard profile={inlineProfile} onAddFriendSuccess={closeProfileModal} />
               ) : null}
               </DialogContent>
             </Dialog>
