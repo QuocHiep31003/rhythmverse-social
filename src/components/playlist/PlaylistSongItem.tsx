@@ -94,15 +94,15 @@ export const PlaylistSongItem = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Avatar className="w-6 h-6 flex-shrink-0 cursor-pointer">
-                  {song.addedByAvatar ? (
-                    <AvatarImage src={song.addedByAvatar} alt={song.addedBy || "Added by"} />
-                  ) : null}
-                  <AvatarFallback className="bg-gradient-primary text-white text-[10px]">
-                    {song.addedBy 
-                      ? song.addedBy.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-                      : '?'}
-                  </AvatarFallback>
-                </Avatar>
+                    {song.addedByAvatar ? (
+                      <AvatarImage src={song.addedByAvatar} alt={song.addedBy || "Added by"} />
+                    ) : null}
+                    <AvatarFallback className="bg-gradient-primary text-white text-[10px]">
+                      {song.addedBy 
+                        ? song.addedBy.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                        : '?'}
+                    </AvatarFallback>
+                  </Avatar>
               </TooltipTrigger>
               <TooltipContent>
                 <p>Thêm bởi {song.addedBy || "Unknown"}</p>

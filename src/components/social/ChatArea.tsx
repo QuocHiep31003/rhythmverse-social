@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useLayoutEffect, useState } from "react";
+﻿import { useRef, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,16 @@ import { MessageCircle, Search, Send, Music, Edit, Info, Smile } from "lucide-re
 import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 import type { Friend, Message } from "@/types/social";
+import type { Song } from "@/contexts/MusicContext";
 import { MessageCard } from "@/components/social/MessageCard";
 import { cn } from "@/lib/utils";
+
+const getMessageUniqueKey = (message: Message): string => {
+  if (typeof message.backendId === "number" && Number.isFinite(message.backendId)) {
+    return `backend:${message.backendId}`;
+  }
+  return `id:${message.id}`;
+};
 
 interface ChatAreaProps {
   selectedChat: string | null;
@@ -21,13 +29,13 @@ interface ChatAreaProps {
   onMessageChange: (value: string) => void;
   onSendMessage: () => void;
   onShareCurrentSong: () => void;
-  playSong: (song: any) => void;
-  currentSong: any;
+  playSong: (song: Song) => void;
+  currentSong: Song | null;
   loadingFriends: boolean;
   meId?: number;
   isFriendTyping?: boolean;
   onReact?: (message: Message, emoji: string) => void;
-  onDelete?: (message: Message) => void;
+  onDelete?: (message: Message) => Promise<boolean | void> | boolean | void;
 }
 
 export const ChatArea = ({
@@ -54,6 +62,95 @@ export const ChatArea = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedFriend = friends.find((f) => f.id === selectedChat);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [optimisticHiddenMessages, setOptimisticHiddenMessages] = useState<Record<string, Record<string, boolean>>>({});
+
+  const visibleMessagesByFriend = useMemo(() => {
+    const result: Record<string, Message[]> = {};
+    Object.entries(messages).forEach(([friendId, friendMessages]) => {
+      const hiddenMap = optimisticHiddenMessages[friendId];
+      if (!hiddenMap) {
+        result[friendId] = friendMessages;
+        return;
+      }
+      result[friendId] = friendMessages.filter((msg) => !hiddenMap[getMessageUniqueKey(msg)]);
+    });
+    return result;
+  }, [messages, optimisticHiddenMessages]);
+
+  useEffect(() => {
+    setOptimisticHiddenMessages((prev) => {
+      let changed = false;
+      const next: Record<string, Record<string, boolean>> = {};
+      Object.entries(prev).forEach(([friendId, hiddenMap]) => {
+        const friendMessages = messages[friendId] || [];
+        const messageKeySet = new Set(friendMessages.map(getMessageUniqueKey));
+        const retained: Record<string, boolean> = {};
+        Object.keys(hiddenMap).forEach((key) => {
+          if (messageKeySet.has(key)) {
+            retained[key] = true;
+          } else {
+            changed = true;
+          }
+        });
+        if (Object.keys(retained).length > 0) {
+          next[friendId] = retained;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [messages]);
+
+  const updateOptimisticHidden = (friendId: string, messageKey: string, hidden: boolean) => {
+    setOptimisticHiddenMessages((prev) => {
+      if (hidden) {
+        const friendHidden = prev[friendId];
+        if (friendHidden?.[messageKey]) return prev;
+        return {
+          ...prev,
+          [friendId]: {
+            ...(friendHidden || {}),
+            [messageKey]: true,
+          },
+        };
+      }
+      const friendHidden = prev[friendId];
+      if (!friendHidden?.[messageKey]) return prev;
+      const updatedFriend = { ...friendHidden };
+      delete updatedFriend[messageKey];
+      if (Object.keys(updatedFriend).length === 0) {
+        const { [friendId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return {
+        ...prev,
+        [friendId]: updatedFriend,
+      };
+    });
+  };
+
+  const getVisibleMessagesForFriend = (friendId?: string | null): Message[] => {
+    if (!friendId) return [];
+    return visibleMessagesByFriend[friendId] ?? messages[friendId] ?? [];
+  };
+
+  const handleDeleteRequest = (message: Message) => {
+    if (!selectedChat || !onDelete) return;
+    const friendId = selectedChat;
+    const messageKey = getMessageUniqueKey(message);
+    updateOptimisticHidden(friendId, messageKey, true);
+    const runDeletion = async () => {
+      try {
+        const result = await onDelete(message);
+        const success = result !== false;
+        if (!success) {
+          updateOptimisticHidden(friendId, messageKey, false);
+        }
+      } catch (error) {
+        updateOptimisticHidden(friendId, messageKey, false);
+      }
+    };
+    void runDeletion();
+  };
   
   // Debug typing status
   useEffect(() => {
@@ -102,7 +199,7 @@ export const ChatArea = ({
   }, [selectedChat, messages]);
 
   const getLastMessagePreview = (friendId: string, fallbackHandle: string) => {
-    const friendMessages = messages[friendId] || [];
+    const friendMessages = getVisibleMessagesForFriend(friendId);
     if (!friendMessages.length) {
       return fallbackHandle || "Bắt đầu trò chuyện";
     }
@@ -136,8 +233,8 @@ export const ChatArea = ({
   const renderFriendsList = () => {
     // Sắp xếp bạn bè theo tin nhắn mới nhất
     const sortedFriends = [...friends].sort((a, b) => {
-      const messagesA = messages[a.id] || [];
-      const messagesB = messages[b.id] || [];
+      const messagesA = getVisibleMessagesForFriend(a.id);
+      const messagesB = getVisibleMessagesForFriend(b.id);
       
       // Lấy tin nhắn mới nhất của mỗi bạn
       const lastMsgA = messagesA.length > 0 
@@ -161,7 +258,7 @@ export const ChatArea = ({
     return (
       <div className="space-y-0.5">
         {sortedFriends.map((friend) => {
-          const friendMessages = messages[friend.id] || [];
+          const friendMessages = getVisibleMessagesForFriend(friend.id) || [];
           const lastMessage = friendMessages.length > 0 ? friendMessages[friendMessages.length - 1] : null;
           const lastMessageTime = lastMessage?.timestamp || '';
           
@@ -212,7 +309,7 @@ export const ChatArea = ({
 
   const renderMessages = () => {
     if (!selectedChat) return null;
-    const currentMessages = messages[selectedChat] || [];
+    const currentMessages = getVisibleMessagesForFriend(selectedChat);
     const sortedMessages = [...currentMessages].sort((a, b) => {
       const aKey = typeof a.sentAt === "number" && Number.isFinite(a.sentAt) ? a.sentAt : Number(a.id) || 0;
       const bKey = typeof b.sentAt === "number" && Number.isFinite(b.sentAt) ? b.sentAt : Number(b.id) || 0;
@@ -232,7 +329,7 @@ export const ChatArea = ({
               message={message}
               playSong={playSong}
               onReact={onReact}
-              onDelete={onDelete}
+            onDelete={onDelete ? handleDeleteRequest : undefined}
               senderAvatar={senderFriend?.avatar || null}
               meId={meId}
               previousMessage={previousMessage}
@@ -409,8 +506,11 @@ export const ChatArea = ({
                     <div className="absolute bottom-full right-0 mb-2 z-50">
                       <Picker
                         data={data}
-                        onEmojiSelect={(emoji: any) => {
-                          const native = emoji?.native;
+                        onEmojiSelect={(emoji: unknown) => {
+                          const native =
+                            typeof emoji === "object" && emoji !== null && "native" in emoji
+                              ? (emoji as { native?: string }).native
+                              : undefined;
                           if (native) {
                             onMessageChange(`${newMessage}${native}`);
                           }

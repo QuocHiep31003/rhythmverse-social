@@ -44,6 +44,14 @@ import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 
+const getTitleFontClass = (length: number) => {
+  if (length > 80) return "text-3xl";
+  if (length > 50) return "text-4xl";
+  if (length > 30) return "text-5xl";
+  return "text-6xl";
+};
+
+
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -76,7 +84,6 @@ const PlaylistDetail = () => {
   const [editedDescription, setEditedDescription] = useState("");
   const [editedCoverUrl, setEditedCoverUrl] = useState("");
   const [editedVisibility, setEditedVisibility] = useState<PlaylistVisibility>(PlaylistVisibility.PUBLIC);
-  const [editedSongLimit, setEditedSongLimit] = useState<number>(500);
   const [inviteRole, setInviteRole] = useState<CollaboratorRole>(CollaboratorRole.EDITOR);
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
@@ -110,6 +117,23 @@ const PlaylistDetail = () => {
   const friendsLoadedRef = useRef(false);
   const lastCollaboratorsRef = useRef<string>("");
   const lastPendingInvitesRef = useRef<string>("");
+
+  const displayTitle = playlist?.title || "Playlist";
+  const displayTitleFontClass = useMemo(
+    () => getTitleFontClass(displayTitle.length),
+    [displayTitle.length]
+  );
+  const editTitleFontClass = useMemo(
+    () => getTitleFontClass(editedTitle.length),
+    [editedTitle.length]
+  );
+  const existingSongIds = useMemo(() => {
+    return new Set(
+      (playlist?.songs ?? [])
+        .map((song) => Number(song.id))
+        .filter((id) => Number.isFinite(id))
+    );
+  }, [playlist?.songs]);
   // Normalize relative URLs from API to absolute
   const toAbsoluteUrl = useCallback((u?: string | null): string | null => {
     if (!u) return null;
@@ -290,7 +314,7 @@ const PlaylistDetail = () => {
     });
 
     return entries;
-  }, [playlist, collaborators, friends, collaboratorAvatars, toAbsoluteUrl]);
+  }, [playlist, collaborators, friends, collaboratorAvatars, toAbsoluteUrl, meId]);
 
   // Load recommended songs based on playlist content
   // Ưu tiên: Mood > Genre > Artist
@@ -502,12 +526,15 @@ const PlaylistDetail = () => {
       }
   }, [playlist]);
     
-  // Load recommend khi playlist thay đổi (kể cả khi không có bài hát)
+  // Load recommend khi playlist thay đổi (chỉ cho owner/editor)
   useEffect(() => {
-    if (playlist) {
+    if (playlist && (permissions.canEdit || permissions.isOwner)) {
       loadRecommended();
+    } else {
+      // Nếu không có quyền edit, clear recommendations
+      setRecommendedSongs([]);
     }
-  }, [playlist, loadRecommended]);
+  }, [playlist, permissions.canEdit, permissions.isOwner, loadRecommended]);
 
   useEffect(() => {
     const load = async () => {
@@ -580,7 +607,6 @@ const PlaylistDetail = () => {
         setEditedDescription(data.description || '');
         setEditedCoverUrl(data.coverUrl || extendedData.urlImagePlaylist || '');
         setEditedVisibility(visibility);
-        setEditedSongLimit(extendedData?.songLimit ?? 500);
 
         const rawRoleCandidate =
           (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.role ??
@@ -1006,7 +1032,7 @@ const PlaylistDetail = () => {
           ? list.map((f: FriendListItem) => ({
             id: f.friendId ?? f.userId ?? f.id ?? 0,
             name: f.friendName ?? f.name ?? f.username ?? f.email ?? `User ${f.friendId ?? f.userId ?? f.id ?? ''}`,
-            avatar: f.friendAvatar ?? f.avatar ?? null,
+            avatar: toAbsoluteUrl(f.friendAvatar ?? f.avatar ?? null) || null,
           }))
           : [];
 
@@ -1571,7 +1597,7 @@ const PlaylistDetail = () => {
             />
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="mb-2">
               {(() => {
                 const currentVisibility = isEditing ? editedVisibility : (playlist?.visibility || PlaylistVisibility.PUBLIC);
@@ -1599,9 +1625,50 @@ const PlaylistDetail = () => {
               })()}
             </div>
             {isEditing ? (
-              <div className="space-y-3 mb-2">
-                <Input className="text-3xl md:text-4xl font-bold" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} placeholder="Playlist title" />
-                <Textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} placeholder="Description" rows={3} />
+              <div className="space-y-3 mb-2 min-w-0">
+                <div className="space-y-2 min-w-0">
+                  <Input 
+                    className={`${editTitleFontClass} font-bold w-full min-w-0`} 
+                    value={editedTitle} 
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 100) {
+                        setEditedTitle(value);
+                      } else {
+                        toast({ 
+                          title: "Name too long", 
+                          description: "Playlist name must not exceed 100 characters", 
+                          variant: "destructive" 
+                        });
+                      }
+                    }} 
+                    placeholder="Playlist title"
+                    maxLength={100}
+                  />
+                  <p className="text-xs text-muted-foreground">{editedTitle.length}/100 characters</p>
+                </div>
+                <div className="space-y-2 min-w-0">
+                  <Textarea 
+                    value={editedDescription} 
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 300) {
+                        setEditedDescription(value);
+                      } else {
+                        toast({ 
+                          title: "Description too long", 
+                          description: "Description must not exceed 300 characters", 
+                          variant: "destructive" 
+                        });
+                      }
+                    }} 
+                    placeholder="Description" 
+                    rows={3}
+                    maxLength={300}
+                    className="resize-none w-full min-w-0"
+                  />
+                  <p className="text-xs text-muted-foreground">{editedDescription.length}/300 characters</p>
+                </div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="visibility">Visibility</Label>
@@ -1616,21 +1683,36 @@ const PlaylistDetail = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="limit">Song limit</Label>
-                    <Input id="limit" type="number" min={1} max={1000} value={editedSongLimit} onChange={(e) => setEditedSongLimit(parseInt(e.target.value) || 500)} className="w-24" />
-                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={async () => {
                     if (!playlist) return;
+                    
+                    // Validation
+                    if (editedTitle.length > 100) {
+                      toast({ 
+                        title: "Name too long", 
+                        description: "Playlist name must not exceed 100 characters", 
+                        variant: "destructive" 
+                      });
+                      return;
+                    }
+                    
+                    if (editedDescription.length > 300) {
+                      toast({ 
+                        title: "Description too long", 
+                        description: "Description must not exceed 300 characters", 
+                        variant: "destructive" 
+                      });
+                      return;
+                    }
+                    
                     try {
                       await playlistsApi.update(playlist.id, {
                         name: editedTitle.trim() || playlist.title,
                         description: editedDescription,
                         coverUrl: editedCoverUrl || undefined,
                         visibility: editedVisibility,
-                        songLimit: editedSongLimit,
                         dateUpdate: new Date().toISOString().split('T')[0],
                         songIds: playlist.songs.map(s => Number(s.id)),
                       });
@@ -1651,12 +1733,16 @@ const PlaylistDetail = () => {
               </div>
             ) : (
               <>
-                <h1 className="text-4xl md:text-5xl font-extrabold mb-2">{playlist?.title || 'Playlist'}</h1>
-                <p className="text-sm text-muted-foreground">{playlist?.description}</p>
+                <h1 className={`${displayTitleFontClass} font-extrabold mb-2 line-clamp-2 break-words overflow-hidden min-w-0`}>
+                  {displayTitle}
+                </h1>
+                {playlist?.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2 break-words overflow-hidden min-w-0">{playlist?.description}</p>
+                )}
               </>
             )}
 
-            <div className="flex items-center gap-3 mb-6 mt-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4 mt-3">
               {(() => {
                 // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list
                 let ownerAvatar = playlist?.ownerAvatar;
@@ -1674,9 +1760,15 @@ const PlaylistDetail = () => {
                   <>
                     <Avatar className="w-9 h-9 border border-border/50">
                       {ownerAvatar ? (
-                        <AvatarImage src={toAbsoluteUrl(ownerAvatar) || undefined} alt={ownerName || "Owner"} />
+                        <AvatarImage
+                          src={toAbsoluteUrl(ownerAvatar) || undefined}
+                          alt={ownerName || "Owner"}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
                       ) : null}
-                      <AvatarFallback className="bg-gradient-primary text-white">
+                      <AvatarFallback delayMs={0} className="bg-gradient-primary text-white">
                         {ownerName 
                           ? ownerName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
                           : <UserIcon className="h-5 w-5" />
@@ -1919,6 +2011,13 @@ const PlaylistDetail = () => {
                               : typeof s.artists === 'string'
                                 ? s.artists
                                 : '';
+                            const numericId =
+                              typeof s.id === 'number'
+                                ? s.id
+                                : Number((s as { songId?: number }).songId ?? s.id);
+                            const alreadyInPlaylist =
+                              Number.isFinite(numericId) && existingSongIds.has(Number(numericId));
+                            const isAdding = Number.isFinite(numericId) && addingSongIds.includes(Number(numericId));
                             return (
                               <div key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30">
                                 <div className="flex-shrink-0">
@@ -1931,17 +2030,22 @@ const PlaylistDetail = () => {
                                   ) : (
                                     <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
                                       <Music className="w-6 h-6 text-muted-foreground" />
-                              </div>
+                                    </div>
                                   )}
-                            </div>
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="font-medium truncate">{s.name || s.songName || 'Unknown Song'}</p>
                                   {artistNames && (
                                     <p className="text-xs text-muted-foreground truncate">{artistNames}</p>
                                   )}
                                 </div>
-                                <Button size="sm" onClick={() => addSongToPlaylist(s)} disabled={addingSongIds.includes(Number(s.id))}>
-                                  {addingSongIds.includes(Number(s.id)) ? 'Adding...' : 'Add'}
+                                <Button
+                                  size="sm"
+                                  onClick={() => addSongToPlaylist(s)}
+                                  disabled={alreadyInPlaylist || isAdding || !Number.isFinite(numericId)}
+                                  variant={alreadyInPlaylist ? "secondary" : undefined}
+                                >
+                                  {alreadyInPlaylist ? 'Added' : isAdding ? 'Adding...' : 'Add'}
                                 </Button>
                               </div>
                             );
@@ -2042,8 +2146,8 @@ const PlaylistDetail = () => {
           </CardContent>
         </Card>
 
-        {/* Recommended Section - Luôn hiện nếu có playlist */}
-        {playlist && (
+        {/* Recommended Section - Chỉ hiện cho owner/editor, không hiện cho viewer */}
+        {playlist && (permissions.canEdit || permissions.isOwner) && (
           <Card className="bg-card/50 border-border/50 mt-8">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
