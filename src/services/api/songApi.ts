@@ -7,6 +7,7 @@ export interface Song {
   name: string; // BE trả về field "name", không phải "songName"
   title?: string;
   releaseYear?: number;
+  releaseAt?: string;
   genreIds?: number[];
   artistIds?: number[];
   artistNames?: string[];
@@ -52,7 +53,8 @@ export interface Song {
 // Interface cho Song creation/update
 export interface SongCreateUpdateData {
   name: string;
-  releaseYear: number;
+  releaseYear?: number;
+  releaseAt?: string;
   genreIds: number[];
   artistIds?: number[];
   performerIds?: number[];
@@ -203,9 +205,10 @@ export const songsApi = {
     try {
       const payload: Record<string, any> = {
         name: data.name,
-        releaseYear: data.releaseYear,
         genreIds: data.genreIds,
       };
+      if (data.releaseYear !== undefined) payload.releaseYear = data.releaseYear;
+      if (data.releaseAt !== undefined) payload.releaseAt = data.releaseAt;
       if (data.moodIds !== undefined) payload.moodIds = data.moodIds;
       if (data.uuid) payload.uuid = data.uuid;
       if (data.duration) payload.duration = data.duration;
@@ -235,7 +238,8 @@ export const songsApi = {
       const formData = new FormData();
       formData.append("file", data.file);
       formData.append("name", data.name);
-      formData.append("releaseYear", String(data.releaseYear));
+      if (data.releaseYear !== undefined) formData.append("releaseYear", String(data.releaseYear));
+      if (data.releaseAt !== undefined) formData.append("releaseAt", data.releaseAt);
 
       if (data.duration) formData.append("duration", data.duration);
 
@@ -275,6 +279,7 @@ export const songsApi = {
       const payload: Record<string, any> = {};
       if (data.name !== undefined) payload.name = data.name;
       if (data.releaseYear !== undefined) payload.releaseYear = data.releaseYear;
+      if (data.releaseAt !== undefined) payload.releaseAt = data.releaseAt;
       if (data.duration !== undefined) payload.duration = data.duration;
       if (data.status !== undefined) payload.status = data.status;
       if (data.genreIds !== undefined) payload.genreIds = data.genreIds;
@@ -304,6 +309,7 @@ export const songsApi = {
       const formData = new FormData();
       if (data.name) formData.append('name', data.name);
       if (data.releaseYear !== undefined) formData.append('releaseYear', String(data.releaseYear));
+      if (data.releaseAt !== undefined) formData.append('releaseAt', data.releaseAt);
       if (data.duration) formData.append('duration', data.duration);
       if (data.genreIds && data.genreIds.length) data.genreIds.forEach(v => formData.append('genreIds', String(v)));
       if (data.performerIds && data.performerIds.length) data.performerIds.forEach(v => formData.append('performerIds', String(v)));
@@ -697,6 +703,23 @@ export const songsApi = {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error("Error fetching recommendations:", error);
+      return [];
+    }
+  },
+
+  // Lấy danh sách gợi ý theo mood (có thể chọn nhiều mood)
+  getRecommendationsByMoods: async (moodIds: number[], limit: number = 30): Promise<Song[]> => {
+    try {
+      if (!moodIds || moodIds.length === 0) {
+        return [];
+      }
+      const params = new URLSearchParams();
+      moodIds.forEach((id) => params.append("moodIds", String(id)));
+      params.append("limit", String(limit));
+      const response = await apiClient.get(`/songs/recommendations/by-mood?${params.toString()}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching mood recommendations:", error);
       return [];
     }
   },

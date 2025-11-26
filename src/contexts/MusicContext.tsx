@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
 import { toast } from "@/hooks/use-toast";
+import { mapToPlayerSong, type ApiSong } from "@/lib/utils";
 
 export interface Song {
   id: string;
@@ -39,6 +40,30 @@ interface MusicContextType {
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
 
+type SongInput = Song | (Song & ApiSong) | (ApiSong & Record<string, any>);
+
+const normalizeSong = (song: SongInput): Song => {
+  const songData = song as ApiSong & Partial<Song>;
+  const mapped = mapToPlayerSong(songData);
+  const fallbackName = songData.songName ?? songData.name ?? songData.title ?? mapped.songName ?? "Unknown Song";
+  const normalizedId = mapped.id || String(songData.id ?? songData.songId ?? "");
+  return {
+    ...song,
+    ...mapped,
+    id: normalizedId,
+    name: songData.name ?? fallbackName,
+    songName: fallbackName,
+    artist: mapped.artist,
+    album: mapped.album,
+    duration: mapped.duration,
+    cover: mapped.cover,
+    audioUrl: mapped.audioUrl,
+    audio: mapped.audio,
+    url: mapped.url,
+    uuid: mapped.uuid ?? song.uuid,
+  };
+};
+
 export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -47,24 +72,25 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const [repeatMode, setRepeatMode] = useState<"off" | "one" | "all">("off");
 
   const playSong = (song: Song) => {
-    console.log("[MusicContext] playSong called with:", song.id, song.songName || song.name);
+    const normalized = normalizeSong(song);
+    console.log("[MusicContext] playSong called with:", normalized.id, normalized.songName || normalized.name);
     console.log("[MusicContext] Current queue length:", queue.length);
-    setCurrentSong(song);
+    setCurrentSong(normalized);
     setIsPlaying(true);
   };
   
   // Wrapper cho setQueue để log và đảm bảo state được update
   // Memoize để tránh infinite loop khi được dùng trong dependency arrays
   const setQueueWithLog = useCallback((songs: Song[]) => {
-    console.log("[MusicContext] setQueue called with", songs.length, "songs");
-    console.log("[MusicContext] Song IDs:", songs.map(s => s.id));
-    if (songs.length === 0) {
+    const normalizedSongs = songs.map(normalizeSong);
+    console.log("[MusicContext] setQueue called with", normalizedSongs.length, "songs");
+    console.log("[MusicContext] Song IDs:", normalizedSongs.map(s => s.id));
+    if (normalizedSongs.length === 0) {
       console.warn("[MusicContext] WARNING: Setting empty queue!");
     }
-    setQueue(songs);
-    // Log sau khi set để verify
+    setQueue(normalizedSongs);
     setTimeout(() => {
-      console.log("[MusicContext] Queue state after setQueue:", songs.length, "songs");
+      console.log("[MusicContext] Queue state after setQueue:", normalizedSongs.length, "songs");
     }, 0);
   }, []);
 
@@ -128,23 +154,24 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addToQueue = (song: Song) => {
+    const normalizedSong = normalizeSong(song);
     let shouldAutoplayFirstSong = false;
     setQueue(prev => {
-      const exists = prev.some((s) => String(s.id) === String(song.id));
+      const exists = prev.some((s) => String(s.id) === String(normalizedSong.id));
       if (exists) {
         toast({
           title: "Bài hát đã có trong danh sách phát",
-          description: `${song.songName || song.name || song.title || "Bài hát"} đã có trong danh sách đang phát.`,
+          description: `${normalizedSong.songName || normalizedSong.name || normalizedSong.title || "Bài hát"} đã có trong danh sách đang phát.`,
         });
         return prev;
       }
       if (prev.length === 0 && !currentSong) {
         shouldAutoplayFirstSong = true;
       }
-      return [...prev, song];
+      return [...prev, normalizedSong];
     });
     if (shouldAutoplayFirstSong) {
-      playSong(song);
+      playSong(normalizedSong);
     }
   };
 

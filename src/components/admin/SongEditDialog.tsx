@@ -66,9 +66,9 @@ import { Switch } from "@/components/ui/switch";
 
 const metadataSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
-  releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
+  releaseAt: z.string().min(1, "Thời gian phát hành không được để trống"),
   duration: z.string().optional(),
-  status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
+  status: z.enum(["ACTIVE", "INACTIVE", "PENDING_RELEASE"]).default("ACTIVE"),
 });
 
 const toArray = <T,>(value: unknown): T[] => {
@@ -227,6 +227,10 @@ export const SongEditDialog = ({
   }, [songData]);
 
   const artistLookup = useMemo(() => {
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
     const map = new Map<number, { id: number; name: string; avatar?: string }>();
     allArtists.forEach((artist) => map.set(artist.id, artist));
     return map;
@@ -236,7 +240,7 @@ export const SongEditDialog = ({
     resolver: zodResolver(metadataSchema),
     defaultValues: {
       name: "",
-      releaseYear: new Date().getFullYear(),
+      releaseAt: "",
       duration: "",
       status: "ACTIVE",
     },
@@ -281,11 +285,15 @@ export const SongEditDialog = ({
 
       if (song) {
         setSongData(song);
+        const releaseAtValue =
+          song.releaseAt
+            ? new Date(song.releaseAt).toISOString().slice(0, 16)
+            : "";
         form.reset({
           name: song.name || "",
-          releaseYear: song.releaseYear || new Date().getFullYear(),
+          releaseAt: releaseAtValue,
           duration: song.duration !== undefined && song.duration !== null ? String(song.duration) : "",
-          status: (song.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+          status: (song.status as "ACTIVE" | "INACTIVE" | "PENDING_RELEASE") || "ACTIVE",
         });
       }
 
@@ -326,7 +334,7 @@ export const SongEditDialog = ({
       setIsLoading(true);
       const updateData: SongMetadataUpdate = {
         name: data.name,
-        releaseYear: data.releaseYear,
+        releaseAt: data.releaseAt ? new Date(data.releaseAt).toISOString() : undefined,
         status: data.status,
       };
       if (data.duration) updateData.duration = data.duration;
@@ -702,15 +710,18 @@ export const SongEditDialog = ({
                       )}
                     />
 
-                    {/* Release Year - Editable */}
+                    {/* Release Time - Editable */}
                     <FormField
                       control={form.control}
-                      name="releaseYear"
+                      name="releaseAt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Năm phát hành *</FormLabel>
+                          <FormLabel>Thời gian phát hành *</FormLabel>
                           <FormControl>
-                            <Input type="number" placeholder="2024" {...field} />
+                            <Input
+                              type="datetime-local"
+                              {...field}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -728,17 +739,26 @@ export const SongEditDialog = ({
                             <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
                               <div>
                                 <p className="text-sm font-semibold text-foreground">
-                                  {field.value === "ACTIVE" ? "Đang hiển thị" : "Tạm ẩn"}
+                                  {field.value === "PENDING_RELEASE"
+                                    ? "Chờ phát hành"
+                                    : field.value === "ACTIVE"
+                                    ? "Đang hiển thị"
+                                    : "Tạm ẩn"}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {field.value === "ACTIVE"
+                                  {field.value === "PENDING_RELEASE"
+                                    ? "Bài hát sẽ tự động Active khi đến thời gian phát hành."
+                                    : field.value === "ACTIVE"
                                     ? "Bài hát sẽ xuất hiện trên tất cả màn hình người dùng"
                                     : "Ẩn khỏi người dùng, chỉ quản trị viên nhìn thấy"}
                                 </p>
                               </div>
                               <Switch
                                 checked={field.value === "ACTIVE"}
-                                onCheckedChange={(checked) => field.onChange(checked ? "ACTIVE" : "INACTIVE")}
+                                disabled={field.value === "PENDING_RELEASE"}
+                                onCheckedChange={(checked) =>
+                                  field.onChange(checked ? "ACTIVE" : "INACTIVE")
+                                }
                                 className="data-[state=checked]:bg-green-500"
                               />
                             </div>
@@ -767,6 +787,62 @@ export const SongEditDialog = ({
                         </FormItem>
                       )}
                     />
+
+                    {/* Preview audio */}
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Nghe thử</FormLabel>
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!songData?.id}
+                          onClick={async () => {
+                            if (!songData?.id) return;
+                            try {
+                              setIsPreviewing(true);
+                              const { playbackUrl } = await songsApi.getPlaybackUrl(String(songData.id));
+                              setPreviewUrl(playbackUrl);
+                              if (audioRef.current) {
+                                audioRef.current.pause();
+                                audioRef.current.src = playbackUrl;
+                                await audioRef.current.play();
+                              }
+                            } catch (error) {
+                              console.error("Error previewing song:", error);
+                              toast({
+                                title: "Lỗi",
+                                description: "Không thể phát thử bài hát",
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setIsPreviewing(false);
+                            }
+                          }}
+                        >
+                          {isPreviewing ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Đang tải...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4 mr-2" />
+                              Nghe thử
+                            </>
+                          )}
+                        </Button>
+                        {previewUrl && (
+                          <audio
+                            ref={audioRef}
+                            controls
+                            className="flex-1 max-w-full"
+                          >
+                            <source src={previewUrl} />
+                          </audio>
+                        )}
+                      </div>
+                    </FormItem>
 
                     {/* Play Count - Read only */}
                     <FormItem>

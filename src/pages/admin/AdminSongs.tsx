@@ -51,6 +51,7 @@ const AdminSongs = () => {
   const statusOptions = useMemo(
     () => [
       { value: "ACTIVE", label: "Đang hoạt động" },
+      { value: "PENDING_RELEASE", label: "Chờ phát hành" },
       { value: "INACTIVE", label: "Ngưng hoạt động" },
     ],
     []
@@ -574,10 +575,16 @@ const AdminSongs = () => {
                             className={
                               song.status === "INACTIVE"
                                 ? "bg-muted text-muted-foreground border border-dashed"
+                                : song.status === "PENDING_RELEASE"
+                                ? "bg-amber-500/10 text-amber-600 border border-amber-500/40"
                                 : "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))]"
                             }
                           >
-                            {song.status === "INACTIVE" ? "Inactive" : "Active"}
+                            {song.status === "INACTIVE"
+                              ? "Inactive"
+                              : song.status === "PENDING_RELEASE"
+                              ? "Chờ phát hành"
+                              : "Active"}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
