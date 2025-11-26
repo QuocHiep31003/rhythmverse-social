@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -20,6 +21,9 @@ import {
   X,
   Menu,
   MoreHorizontal,
+  GripVertical,
+  Trash2,
+  ChevronsDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,7 +38,6 @@ import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
-import { authApi } from "@/services/api/authApi";
 import { getAuthToken } from "@/services/api";
 import { mapToPlayerSong } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -63,6 +66,9 @@ const MusicPlayer = () => {
     playSong,
     setQueue,
     addToQueue,
+    removeFromQueue,
+    moveQueueItem,
+    resetPlayer,
   } = useMusic();
   const audioRef = useRef<HTMLAudioElement>(null);
   const lyricsRef = useRef<HTMLDivElement>(null);
@@ -76,43 +82,107 @@ const MusicPlayer = () => {
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [currentLyricIndex, setCurrentLyricIndex] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [hasReportedListen, setHasReportedListen] = useState(false);
-  const [hasIncrementedPlayCount, setHasIncrementedPlayCount] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [suggestedSongs, setSuggestedSongs] = useState<typeof queue>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [autoPlaySuggestions, setAutoPlaySuggestions] = useState(true);
+  const showQueueScrollHint = queue.length > 4;
   const loadedSuggestionsForSongId = useRef<string | number | null>(null);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [shareSong, setShareSong] = useState<{ id: string | number; title: string; url: string } | null>(null);
   const [playlistTab, setPlaylistTab] = useState<"queue" | "suggested">("queue");
+  const [draggingSongId, setDraggingSongId] = useState<string | null>(null);
   const isPlayingRef = useRef(isPlaying);
+  const currentSongRef = useRef<typeof currentSong>(null);
   const cleanupCallbacks = useRef<(() => void)[]>([]);
   const hlsInstanceRef = useRef<Hls | null>(null);
   const hasTriggeredEndedRef = useRef(false);
+  const listenedSecondsRef = useRef(0);
+  const hasReportedSessionRef = useRef(false);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Load current user ID from token
   useEffect(() => {
-    const loadUserId = async () => {
-      try {
-        const user = await authApi.me();
-        if (user?.id) {
-          setCurrentUserId(user.id);
-        }
-      } catch (error) {
-        console.warn("Failed to load user ID for listening history:", error);
-        setCurrentUserId(null);
-      }
-    };
-    loadUserId();
+    if (repeatMode !== "off" && autoPlaySuggestions) {
+      setAutoPlaySuggestions(false);
+      toast({
+        title: "Đã tắt gợi ý tự động",
+        description: "Gợi ý chỉ hoạt động khi chế độ lặp đang tắt.",
+        variant: "warning",
+      });
+    }
+  }, [repeatMode, autoPlaySuggestions]);
+
+  const resetListeningSessionTracking = useCallback(() => {
+    listenedSecondsRef.current = 0;
+    hasReportedSessionRef.current = false;
   }, []);
+
+  const finalizeListeningSession = useCallback((reason: string) => {
+    const song = currentSongRef.current;
+    if (!song) {
+      resetListeningSessionTracking();
+      return;
+    }
+
+    if (hasReportedSessionRef.current) {
+      resetListeningSessionTracking();
+      return;
+    }
+
+    const userId = 0;
+    const songIdForApi = isNaN(Number(song.id)) ? song.id : Number(song.id);
+    const accumulatedSeconds = Math.floor(listenedSecondsRef.current);
+    if (accumulatedSeconds <= 0) {
+      resetListeningSessionTracking();
+      return;
+    }
+
+    const audio = audioRef.current;
+    const audioDurationSeconds =
+      audio && !isNaN(audio.duration) && audio.duration > 0 ? Math.round(audio.duration) : null;
+    const normalizedSongDuration = audioDurationSeconds ?? Math.max(1, accumulatedSeconds);
+    const effectiveDuration = Math.min(Math.max(1, accumulatedSeconds), normalizedSongDuration);
+
+    console.log(
+      `Finalizing listening session (${reason}) → userId=${userId}, songId=${songIdForApi}, duration=${effectiveDuration}s/${normalizedSongDuration}s`,
+    );
+    hasReportedSessionRef.current = true;
+
+    listeningHistoryApi
+      .recordListen({
+        userId,
+        songId: songIdForApi,
+        listenedDuration: effectiveDuration,
+        songDuration: normalizedSongDuration,
+      })
+      .then(() => {
+        console.log('Listening session recorded successfully');
+      })
+      .catch((error) => {
+        console.error('Failed to record listening session:', error);
+        hasReportedSessionRef.current = false;
+      })
+      .finally(() => {
+        resetListeningSessionTracking();
+      });
+  }, [resetListeningSessionTracking]);
+
+  useEffect(() => {
+    if (location.pathname === "/login") {
+      finalizeListeningSession("login-navigation");
+      resetListeningSessionTracking();
+      resetPlayer();
+    }
+  }, [location.pathname, finalizeListeningSession, resetListeningSessionTracking, resetPlayer]);
+
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -189,6 +259,14 @@ const MusicPlayer = () => {
   };
 
   const handleToggleAutoSuggestions = (checked: boolean) => {
+    if (checked && repeatMode !== "off") {
+      toast({
+        title: "Không thể bật gợi ý",
+        description: "Tắt chế độ lặp để sử dụng gợi ý tự động.",
+        variant: "warning",
+      });
+      return;
+    }
     setAutoPlaySuggestions(checked);
     toast({
       title: checked ? "Đã bật gợi ý tự động" : "Đã tắt gợi ý tự động",
@@ -196,10 +274,15 @@ const MusicPlayer = () => {
         ? "Khi hết danh sách phát sẽ phát tiếp các gợi ý"
         : "Khi hết danh sách phát sẽ dừng lại",
       duration: 2500,
+      variant: checked ? "success" : "info",
     });
   };
 
-  const startSuggestionsPlayback = () => {
+  const startSuggestionsPlayback = useCallback(() => {
+    if (repeatMode !== "off") {
+      console.warn("Auto suggestions require repeat off");
+      return false;
+    }
     if (!autoPlaySuggestions) {
       console.warn("Auto suggestions disabled");
       return false;
@@ -208,34 +291,109 @@ const MusicPlayer = () => {
       console.warn("No suggested songs available");
       return false;
     }
-    // Thêm bài đầu tiên từ danh sách gợi ý vào queue và phát
     const nextSong = suggestedSongs[0];
     console.log("🎧 Adding suggested song to queue:", nextSong.songName || nextSong.name);
     addToQueue(nextSong);
     playSong(nextSong);
     return true;
-  };
+  }, [addToQueue, autoPlaySuggestions, playSong, repeatMode, suggestedSongs]);
 
-  const hasNextQueueSong = () => {
-    if (queue.length === 0 || !currentSong) {
+  const hasNextQueueSong = useCallback(() => {
+    if (queue.length === 0) {
+      return false;
+    }
+    if (!currentSong) {
       return queue.length > 0;
     }
     const currentIndex = queue.findIndex((s) => s.id === currentSong.id);
-    return currentIndex >= 0 && currentIndex < queue.length - 1;
-  };
+    if (currentIndex === -1) {
+      return queue.length > 0;
+    }
+    if (currentIndex < queue.length - 1) {
+      return true;
+    }
+    return repeatMode === "all" && queue.length > 0;
+  }, [currentSong, queue, repeatMode]);
+
+  const finalizeQueueAfterPlayback = useCallback(
+    (finishedSongId?: string | number) => {
+      if (!finishedSongId) return;
+      if (repeatMode === "off") {
+        removeFromQueue(finishedSongId);
+      } else if (repeatMode === "all") {
+        const idx = queue.findIndex((s) => String(s.id) === String(finishedSongId));
+        if (idx !== -1) {
+          moveQueueItem(idx, queue.length - 1);
+        }
+      }
+    },
+    [moveQueueItem, queue, removeFromQueue, repeatMode],
+  );
 
   const handleNextClick = () => {
     if (!hasNextQueueSong()) {
+      const finishedId = currentSong?.id;
+      finalizeQueueAfterPlayback(finishedId);
       if (!startSuggestionsPlayback()) {
         console.warn("No more songs to play");
       }
       return;
     }
+    const finishedId = currentSong?.id;
     playNext();
+    finalizeQueueAfterPlayback(finishedId);
   };
+
+  const handleRemoveSong = (event: MouseEvent<HTMLButtonElement>, songId: string | number) => {
+    event.stopPropagation();
+    removeFromQueue(songId);
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>, songId: string | number) => {
+    event.stopPropagation();
+    setDraggingSongId(String(songId));
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(songId));
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>, songId: string | number) => {
+    if (!draggingSongId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (draggingSongId === String(songId)) return;
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>, songId: string | number) => {
+    if (!draggingSongId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceIndex = queue.findIndex((s) => String(s.id) === draggingSongId);
+    const targetIndex = queue.findIndex((s) => String(s.id) === String(songId));
+    if (sourceIndex !== -1 && targetIndex !== -1 && sourceIndex !== targetIndex) {
+      moveQueueItem(sourceIndex, targetIndex);
+    }
+    setDraggingSongId(null);
+  };
+
+  const handleDropToEnd = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggingSongId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceIndex = queue.findIndex((s) => String(s.id) === draggingSongId);
+    if (sourceIndex !== -1 && sourceIndex !== queue.length - 1) {
+      moveQueueItem(sourceIndex, queue.length - 1);
+    }
+    setDraggingSongId(null);
+  };
+
+  const handleDragEnd = () => setDraggingSongId(null);
 
   // Load new song - professional handling with proper state management
   useEffect(() => {
+    finalizeListeningSession("song-change");
+    resetListeningSessionTracking();
+
     if (!audioRef.current || !currentSong) return;
 
     const audio = audioRef.current;
@@ -246,8 +404,6 @@ const MusicPlayer = () => {
     setIsLoading(true);
 
     // Reset all tracking states for new song
-    setHasReportedListen(false);
-    setHasIncrementedPlayCount(false);
     setCurrentTime(0);
     setProgress([0]);
     setCurrentLyricIndex(0);
@@ -265,12 +421,22 @@ const MusicPlayer = () => {
 
     const loadStreamUrl = async () => {
       try {
-        // Dùng proxy endpoint để backend tự generate signed URL cho mỗi request
-        // Proxy sẽ handle cả manifest và segments với signed URLs riêng
-        const { uuid } = await songsApi.getStreamUrl(currentSong.id);
-        
-        if (!uuid) {
-          throw new Error("No UUID available for streaming");
+        // Dùng UUID trực tiếp từ currentSong; nếu chưa có thì fetch lại từ BE
+        let songUuid = currentSong?.uuid;
+        if (!songUuid) {
+          console.warn("[MusicPlayer] Song missing uuid, fetching detail from backend", currentSong.id);
+          const backendSong = await songsApi.getById(currentSong.id);
+          songUuid = backendSong?.uuid;
+          if (!songUuid) {
+            throw new Error("UUID not available from backend");
+          }
+          const enrichedSong = { ...currentSong, uuid: songUuid };
+          const updatedQueue = queue.map((song) =>
+            song.id === enrichedSong.id ? { ...song, uuid: songUuid } : song
+          );
+          setQueue(updatedQueue);
+          playSong(enrichedSong);
+          return;
         }
 
         // Dùng proxy endpoint thay vì CloudFront signed URL trực tiếp
@@ -278,15 +444,12 @@ const MusicPlayer = () => {
         // HLS.js sẽ tự động resolve relative segment URLs relative to playlist URL
         const proxyBaseUrl = `/api/songs/${currentSong.id}/stream-proxy`;
         // Request variant playlist trực tiếp (HLS.js sẽ tự load segments từ đây)
-        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${uuid}_128kbps.m3u8`;
+        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${songUuid}_128kbps.m3u8`;
 
         console.log("Using proxy endpoint for HLS streaming:", finalStreamUrlAbsolute);
         console.log("HLS.js will automatically resolve segment URLs relative to this playlist");
 
         if (Hls.isSupported()) {
-          // Lấy token để gửi kèm request
-          const token = localStorage.getItem('token') || localStorage.getItem('adminToken');
-          
           hls = new Hls({
             enableWorker: true,
             lowLatencyMode: false,
@@ -313,9 +476,10 @@ const MusicPlayer = () => {
             xhrSetup: (xhr, url) => {
               xhr.withCredentials = true;
               // QUAN TRỌNG: Thêm Authorization header vào tất cả HLS requests để bảo mật
-              // Token được lấy từ closure scope (đã được lấy ở trên)
-              if (token) {
-                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+              // Lấy token mới nhất mỗi lần gửi request để luôn dùng access token hiện tại
+              const latestToken = getAuthToken();
+              if (latestToken) {
+                xhr.setRequestHeader('Authorization', `Bearer ${latestToken}`);
               }
             },
           });
@@ -693,11 +857,28 @@ const MusicPlayer = () => {
   useEffect(() => {
     if (!audioRef.current || !isPlaying) return;
 
+    let lastTick = Date.now();
     const interval = setInterval(() => {
-      if (audioRef.current) {
-        setCurrentTime(audioRef.current.currentTime);
+      const audio = audioRef.current;
+      if (!audio) {
+        return;
       }
-    }, 500); // Update every 500ms for better accuracy
+
+      setCurrentTime(audio.currentTime);
+
+      if (audio.paused) {
+        lastTick = Date.now();
+        return;
+      }
+
+      const now = Date.now();
+      const deltaSeconds = (now - lastTick) / 1000;
+      lastTick = now;
+
+      if (deltaSeconds > 0) {
+        listenedSecondsRef.current += deltaSeconds;
+      }
+    }, 500);
 
     return () => clearInterval(interval);
   }, [isPlaying]);
@@ -756,8 +937,7 @@ const MusicPlayer = () => {
       }
 
       if (repeatMode === "one") {
-        // Repeat current song
-        hasTriggeredEndedRef.current = false; // Reset để có thể repeat
+        hasTriggeredEndedRef.current = false;
         audio.currentTime = 0;
         if (hlsInstanceRef.current) {
           try {
@@ -768,12 +948,16 @@ const MusicPlayer = () => {
         }
         audio.play().catch(err => console.error("Repeat play error:", err));
       } else {
-        // Play next song (works for both "all" and "off" modes)
-        console.log("Playing next song");
-        if (hasNextQueueSong()) {
-        playNext();
-        } else if (!startSuggestionsPlayback()) {
-          console.warn("No songs left in queue or suggestions");
+        const finishedId = currentSong?.id;
+        const hasNext = hasNextQueueSong();
+        if (hasNext) {
+          playNext();
+          finalizeQueueAfterPlayback(finishedId);
+        } else {
+          finalizeQueueAfterPlayback(finishedId);
+          if (!startSuggestionsPlayback()) {
+            console.warn("No songs left in queue or suggestions");
+          }
         }
       }
     };
@@ -803,7 +987,7 @@ const MusicPlayer = () => {
           hasTriggeredEndedRef.current = true; // Đánh dấu đã trigger để tránh trigger lại
           // Chuyển bài ngay lập tức
           if (repeatMode === "one") {
-            hasTriggeredEndedRef.current = false; // Reset để có thể repeat
+            hasTriggeredEndedRef.current = false;
             audio.currentTime = 0;
             if (hlsInstanceRef.current) {
               try {
@@ -815,10 +999,15 @@ const MusicPlayer = () => {
             audio.play().catch(err => console.error("Repeat play error:", err));
           } else {
             console.log("Auto-playing next song");
+            const finishedId = currentSong?.id;
             if (hasNextQueueSong()) {
-            playNext();
-            } else if (!startSuggestionsPlayback()) {
-              console.warn("No songs left to auto-play");
+              playNext();
+              finalizeQueueAfterPlayback(finishedId);
+            } else {
+              finalizeQueueAfterPlayback(finishedId);
+              if (!startSuggestionsPlayback()) {
+                console.warn("No songs left to auto-play");
+              }
             }
           }
           return;
@@ -850,10 +1039,15 @@ const MusicPlayer = () => {
             audio.play().catch(err => console.error("Repeat play error:", err));
           } else {
             console.log("Auto-playing next song (loop detected), queue length:", queue.length);
+            const finishedId = currentSong?.id;
             if (hasNextQueueSong()) {
-            playNext();
-            } else if (!startSuggestionsPlayback()) {
-              console.warn("No songs left to auto-play");
+              playNext();
+              finalizeQueueAfterPlayback(finishedId);
+            } else {
+              finalizeQueueAfterPlayback(finishedId);
+              if (!startSuggestionsPlayback()) {
+                console.warn("No songs left to auto-play");
+              }
             }
           }
         }
@@ -924,7 +1118,7 @@ const MusicPlayer = () => {
       }
       clearInterval(endCheckInterval);
     };
-  }, [repeatMode, playNext, queue.length, currentSong]);
+  }, [repeatMode, playNext, hasNextQueueSong, startSuggestionsPlayback, finalizeQueueAfterPlayback, currentSong?.id]);
 
   // Handle volume
   useEffect(() => {
@@ -944,46 +1138,6 @@ const MusicPlayer = () => {
     }
   };
 
-  // Record listening history when user has listened for at least 30 seconds AND reached the end of the song
-  // This ensures we only count 1 play per song when user listens to the full duration
-  useEffect(() => {
-    if (!currentSong || hasReportedListen || !audioRef.current || !currentUserId) return;
-
-    const duration = audioRef.current.duration;
-    const isEnded = audioRef.current.ended || (duration && currentTime >= duration - 1); // Allow 1 second tolerance
-
-    // Record if: user has listened at least 30 seconds AND reached the end of the song
-    if (duration && !isNaN(duration) && currentTime >= 30 && isEnded) {
-      const songIdForApi = isNaN(Number(currentSong.id)) ? currentSong.id : Number(currentSong.id);
-      console.log(`🎵 Recording listen: ${currentSong.songName || currentSong.name || "Unknown Song"} (ID: ${currentSong.id}, UserID: ${currentUserId}, Coerced: ${songIdForApi}) (${Math.round(currentTime)}s / ${Math.round(duration)}s - Full play)`);
-
-      // Record listening history via backend API (backend will extract userId from token)
-      songsApi
-        .recordPlayback(songIdForApi, currentUserId)
-        .then(() => {
-          console.log("✅ Listening history recorded successfully");
-          setHasReportedListen(true);
-        })
-        .catch(err => {
-          console.error("❌ Failed to record listen:", err);
-        });
-
-      // Increment play count
-      if (!hasIncrementedPlayCount) {
-        console.log(`🎵 Incrementing play count for song ID: ${currentSong.id} (Coerced: ${songIdForApi}, Type: ${typeof songIdForApi})`);
-        songsApi
-          .incrementPlayCount(String(songIdForApi))
-          .then(() => {
-            console.log("✅ Play count incremented successfully");
-            setHasIncrementedPlayCount(true);
-          })
-          .catch(err => {
-            console.error("❌ Failed to increment play count:", err);
-            // Không throw error, chỉ log để không ảnh hưởng đến listening history
-          });
-      }
-    }
-  }, [currentTime, currentSong, hasReportedListen, hasIncrementedPlayCount]);
 
   const toggleMute = () => setIsMuted(!isMuted);
 
@@ -1612,6 +1766,9 @@ const MusicPlayer = () => {
                   <div>
                     <p className="text-sm text-muted-foreground">Các bài đang ở trong hàng chờ</p>
                     <h4 className="text-lg font-semibold text-foreground">Hàng chờ hiện tại ({queue.length})</h4>
+                    <p className="text-[11px] text-muted-foreground/80 mt-1">
+                      Giữ biểu tượng <GripVertical className="inline h-3 w-3" /> để sắp xếp. Kéo lên/xuống để xem thêm bài hát.
+                    </p>
                   </div>
                 </div>
                 {queue.length === 0 ? (
@@ -1623,55 +1780,98 @@ const MusicPlayer = () => {
                     </p>
                   </div>
                 ) : (
-                  queue.map((song) => (
-                    <div
-                      key={song.id}
-                      onClick={() => {
-                        playSong(song);
-                        // Không đóng panel khi click bài hát
-                      }}
-                className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors hover:bg-accent",
-                        currentSong?.id === song.id && "bg-primary/10 border border-primary/20"
-                      )}
-                    >
-                      <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                        {song.cover ? (
-                          <img
-                            src={song.cover}
-                            alt={song.songName || song.name || "Unknown Song"}
-                            onError={handleImageError}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
-                            <Music className="w-6 h-6 text-white" />
-                          </div>
+                  <div className="space-y-2">
+                    {queue.map((song) => (
+                      <div
+                        key={song.id}
+                        draggable
+                        onDragStart={(event) => handleDragStart(event, song.id)}
+                        onDragOver={(event) => handleDragOver(event, song.id)}
+                        onDrop={(event) => handleDrop(event, song.id)}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => playSong(song)}
+                        className={cn(
+                          "group flex items-center gap-3 rounded-xl border border-transparent bg-background/40 p-3 transition hover:border-primary/20 hover:bg-primary/5",
+                          currentSong?.id === song.id && "border-primary/40 bg-primary/10",
+                          draggingSongId === String(song.id) && "ring-2 ring-primary/50",
                         )}
-                        {currentSong?.id === song.id && isPlaying && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p
-                className={cn(
-                            "text-sm font-medium truncate",
-                            currentSong?.id === song.id && "text-primary"
-                          )}
+                      >
+                        <button
+                          type="button"
+                          onClick={(event) => event.stopPropagation()}
+                          className="hidden cursor-grab rounded-md p-2 text-muted-foreground transition group-hover:flex group-active:cursor-grabbing"
                         >
-                          {song.songName || song.name || "Unknown Song"}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {song.artist || "Unknown Artist"}
-                        </p>
+                          <GripVertical className="h-4 w-4" />
+                        </button>
+
+                        <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0 shadow-inner">
+                          {song.cover ? (
+                            <img
+                              src={song.cover}
+                              alt={song.songName || song.name || "Unknown Song"}
+                              onError={handleImageError}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-primary">
+                              <Music className="w-6 h-6 text-white" />
+                            </div>
+                          )}
+                          {currentSong?.id === song.id && isPlaying && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={cn(
+                              "text-sm font-semibold truncate",
+                              currentSong?.id === song.id && "text-primary",
+                            )}
+                          >
+                            {song.songName || song.name || "Unknown Song"}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {song.artist || "Unknown Artist"}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground flex-shrink-0">
+                          <span>{formatTime(song.duration || 0)}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="invisible text-muted-foreground transition group-hover:visible hover:text-destructive"
+                            onClick={(event) => handleRemoveSong(event, song.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="text-xs text-muted-foreground flex-shrink-0">
-                        {formatTime(song.duration || 0)}
+                    ))}
+
+                    {draggingSongId && (
+                      <div
+                        onDragOver={(event) => {
+                          if (!draggingSongId) return;
+                          event.preventDefault();
+                        }}
+                        onDrop={handleDropToEnd}
+                        className="flex h-12 items-center justify-center rounded-xl border border-dashed border-muted-foreground/40 text-xs text-muted-foreground"
+                      >
+                        Thả vào đây để đưa bài xuống cuối danh sách
                       </div>
-                    </div>
-                  ))
+                    )}
+                  </div>
+                )}
+
+                {showQueueScrollHint && (
+                  <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <ChevronsDown className="h-4 w-4 animate-bounce" />
+                    Cuộn để xem thêm bài hát
+                  </div>
                 )}
             </div>
 
@@ -1689,8 +1889,14 @@ const MusicPlayer = () => {
                     id="auto-suggestions-switch"
                     checked={autoPlaySuggestions}
                     onCheckedChange={handleToggleAutoSuggestions}
+                    disabled={repeatMode !== "off"}
                   />
                 </div>
+                {repeatMode !== "off" && (
+                  <p className="text-xs text-muted-foreground -mt-2 mb-3">
+                    Tắt chế độ lặp để sử dụng gợi ý tự động.
+                  </p>
+                )}
 
                 {!autoPlaySuggestions ? null : isLoadingSuggestions ? (
                   <div className="flex flex-col items-center justify-center text-center py-12">

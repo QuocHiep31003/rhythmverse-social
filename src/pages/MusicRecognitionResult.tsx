@@ -20,38 +20,56 @@ import {
 import { songsApi } from "@/services/api";
 import { searchYouTubeMusicVideoId } from "@/services/ytmusic";
 import { useMusic } from "@/contexts/MusicContext";
+import type { Song as PlayerSong } from "@/contexts/MusicContext";
 
-interface AuddResult {
-  artist?: string;
-  title?: string;
-  album?: string;
-  release_date?: string;
-  label?: string;
-  timecode?: string;
-  song_link?: string;
-  albumart?: string;
+interface AcrExternalMetadata {
   spotify?: {
-    url?: string;
-    external_urls?: { spotify?: string };
-    album?: {
-      images?: Array<{ url?: string; width?: number; height?: number }>;
+    track?: {
+      id?: string;
+      url?: string;
+      link?: string;
+      href?: string;
+      external_urls?: { spotify?: string };
     };
+    album?: { images?: Array<{ url?: string }> };
   };
-  deezer?: string;
+  deezer?: {
+    track?: { id?: string; link?: string; share?: string; url?: string };
+  };
+  youtube?: {
+    vid?: string;
+    url?: string;
+  };
   apple_music?: {
     url?: string;
-    previews?: Array<{ url?: string }>;
-    artwork?: {
-      url?: string;
-      width?: number;
-      height?: number;
-    };
+    href?: string;
+    preview_url?: string;
+    [territory: string]: unknown;
   };
 }
 
-interface AuddResponse {
-  status: string;
-  result: AuddResult;
+interface AcrMusicMetadata {
+  title?: string;
+  artist?: string;
+  artists?: Array<{ name?: string }>;
+  album?: { name?: string };
+  release_date?: string;
+  label?: string;
+  song_link?: string;
+  duration_ms?: number;
+  play_offset_ms?: number;
+  albumart?: string;
+  external_metadata?: AcrExternalMetadata;
+  external_ids?: {
+    isrc?: string;
+    upc?: string;
+  };
+  score?: number;
+  apple_music?: {
+    artwork?: {
+      url?: string;
+    };
+  };
 }
 
 interface HummingResult {
@@ -78,21 +96,312 @@ interface AcrResponse {
     id: number;
     name: string;
     audioUrl: string;
-    artists?: Array<{ id: number; name: string }>;
+    artists?: Array<{ id: number; name: string }> | string;
     genres?: Array<{ id: number; name: string }>;
-    duration?: string;
+    duration?: string | number;
     playCount?: number;
     releaseYear?: number;
     urlImageAlbum?: string;
+    album?: { name?: string } | string;
   };
   score?: number;
   acrid?: string;
   customFile?: Record<string, unknown>;
-  musicMetadata?: Record<string, unknown>;
+  musicMetadata?: AcrMusicMetadata | Record<string, unknown>;
   hummingResults?: HummingResult[]; // Kết quả từ humming nếu không có custom_file
+  acrResult?: {
+    metadata?: {
+      music?: AcrMusicMetadata[];
+    };
+  };
 }
 
-type RecognitionResult = AuddResponse | AcrResponse;
+type RecognitionResult = AcrResponse;
+
+type StreamingService = "spotify" | "deezer" | "youtube" | "apple" | "more";
+
+interface StreamingLink {
+  service: StreamingService;
+  label: string;
+  url: string;
+  className: string;
+}
+
+const firstValidUrl = (...urls: Array<string | null | undefined>) => {
+  for (const url of urls) {
+    if (typeof url === "string" && url.trim().length > 0) {
+      return url;
+    }
+  }
+  return undefined;
+};
+
+const extractAppleMusicUrl = (apple?: AcrExternalMetadata["apple_music"]) => {
+  if (!apple || typeof apple !== "object") return undefined;
+  if (typeof apple.url === "string" && apple.url.trim()) return apple.url;
+  if (typeof apple.href === "string" && apple.href.trim()) return apple.href;
+  if (typeof apple.preview_url === "string" && apple.preview_url.trim()) return apple.preview_url;
+
+  for (const value of Object.values(apple)) {
+    if (value && typeof value === "object") {
+      const nested = value as { url?: string; href?: string };
+      const nestedUrl = firstValidUrl(nested.url, nested.href);
+      if (nestedUrl) return nestedUrl;
+    }
+  }
+
+  return undefined;
+};
+
+const SpotifyIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 12-12C24 5.372 18.627 0 12 0zm5.59 17.74a.747.747 0 0 1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 1.02zm1.35-3.08a.93.93 0 0 1-1.28.3c-3.23-1.98-8.16-2.55-11.98-1.41a.93.93 0 0 1-.52-1.78c4.35-1.27 9.75-.64 13.46 1.62.37.22.48.69.24 1.27zm.13-3.24c-3.74-2.22-9.91-2.43-13.45-1.32a1.12 1.12 0 0 1-.65-2.15c4.14-1.26 10.9-1 15.26 1.55a1.12 1.12 0 0 1-1.16 1.92z" />
+  </svg>
+);
+
+const YoutubeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+  </svg>
+);
+
+const getStreamingLinks = (metadata?: AcrMusicMetadata | null): StreamingLink[] => {
+  const links: StreamingLink[] = [];
+  const externalMeta = metadata?.external_metadata ?? {};
+  const seen = new Set<string>();
+
+  const addLink = (service: StreamingService, label: string, url?: string | null, className?: string) => {
+    if (!url) return;
+    const key = `${service}:${url}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    links.push({
+      service,
+      label,
+      url,
+      className:
+        className ||
+        {
+          spotify: "bg-[#1DB954] hover:bg-[#1ed760] text-white border-0",
+          deezer: "bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0",
+          youtube: "bg-[#FF0000] hover:bg-[#ff3333] text-white border-0",
+          apple: "bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0",
+          more: "bg-muted border border-border hover:bg-muted/80 text-foreground",
+        }[service],
+    });
+  };
+
+  const spotifyTrack = externalMeta?.spotify?.track;
+  const spotifyUrl = firstValidUrl(
+    spotifyTrack?.external_urls?.spotify,
+    spotifyTrack?.url,
+    spotifyTrack?.link,
+    spotifyTrack?.href,
+    spotifyTrack?.id ? `https://open.spotify.com/track/${spotifyTrack.id}` : undefined
+  );
+  addLink("spotify", "Spotify", spotifyUrl);
+
+  const appleUrl = extractAppleMusicUrl(externalMeta?.apple_music);
+  addLink("apple", "Apple Music", appleUrl);
+
+  const deezerTrack = externalMeta?.deezer?.track;
+  const deezerUrl = firstValidUrl(
+    deezerTrack?.link,
+    deezerTrack?.url,
+    deezerTrack?.share,
+    deezerTrack?.id ? `https://www.deezer.com/track/${deezerTrack.id}` : undefined
+  );
+  addLink("deezer", "Deezer", deezerUrl);
+
+  const youtubeUrl = firstValidUrl(
+    externalMeta?.youtube?.url,
+    externalMeta?.youtube?.vid ? `https://www.youtube.com/watch?v=${externalMeta.youtube.vid}` : undefined
+  );
+  addLink("youtube", "YouTube", youtubeUrl);
+
+  const moreUrl = metadata?.song_link;
+  addLink("more", "More Info", moreUrl);
+
+  return links;
+};
+
+const mergeStreamingLinks = (...groups: Array<StreamingLink[]>) => {
+  const merged: StreamingLink[] = [];
+  const seen = new Set<string>();
+  groups.forEach((group) => {
+    group.forEach((link) => {
+      const key = `${link.service}:${link.url}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(link);
+    });
+  });
+  return merged;
+};
+
+const StreamingIcon = ({ service }: { service: StreamingService }) => {
+  switch (service) {
+    case "spotify":
+      return <SpotifyIcon />;
+    case "youtube":
+      return <YoutubeIcon />;
+    case "apple":
+      return <Apple className="w-5 h-5" />;
+    default:
+      return <ExternalLink className="w-5 h-5" />;
+  }
+};
+
+const getPrimaryMetadata = (result: AcrResponse | null): AcrMusicMetadata | undefined => {
+  if (!result) return undefined;
+
+  const direct = result.musicMetadata;
+  if (direct && typeof direct === "object") {
+    const typed = direct as Record<string, unknown>;
+    if (
+      "title" in typed ||
+      "artist" in typed ||
+      "album" in typed ||
+      "external_metadata" in typed
+    ) {
+      return typed as AcrMusicMetadata;
+    }
+    const nested = (typed.metadata as { music?: AcrMusicMetadata[] } | undefined)?.music;
+    if (Array.isArray(nested) && nested.length > 0) {
+      return nested[0];
+    }
+  }
+
+  const acrMeta = result.acrResult?.metadata?.music;
+  if (Array.isArray(acrMeta) && acrMeta.length > 0) {
+    return acrMeta[0];
+  }
+
+  const rawMeta = (result as { metadata?: { music?: AcrMusicMetadata[] } }).metadata?.music;
+  if (Array.isArray(rawMeta) && rawMeta.length > 0) {
+    return rawMeta[0];
+  }
+
+  return undefined;
+};
+
+const asExternalMetadata = (value: unknown): AcrExternalMetadata | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  return value as AcrExternalMetadata;
+};
+
+const getMetadataFromItem = (item: RecognizeItem): AcrMusicMetadata | undefined => {
+  if (item.metadata && typeof item.metadata === "object") {
+    const meta = item.metadata as AcrMusicMetadata;
+    if (meta.external_metadata || meta.song_link) {
+      return meta;
+    }
+  }
+
+  const metadata: AcrMusicMetadata = {
+    title: item.title ?? item.song?.name,
+    artist: item.artist,
+    external_metadata: undefined,
+  };
+
+  const externalMeta =
+    asExternalMetadata(item.externalMetadata) ??
+    asExternalMetadata(item.external_metadata) ??
+    asExternalMetadata((item.song as Record<string, unknown> | undefined)?.externalMetadata) ??
+    asExternalMetadata((item.song as Record<string, unknown> | undefined)?.external_metadata);
+
+  if (externalMeta) {
+    metadata.external_metadata = { ...externalMeta };
+  }
+
+  const songLink =
+    item.songLink ??
+    (item as { song_link?: string }).song_link ??
+    ((item.song as Record<string, unknown> | undefined)?.song_link as string | undefined);
+  if (songLink) {
+    metadata.song_link = songLink;
+  }
+
+  if (item.youtubeVideoId) {
+    metadata.external_metadata = metadata.external_metadata ?? {};
+    metadata.external_metadata.youtube = { vid: item.youtubeVideoId };
+  }
+
+  if (metadata.external_metadata || metadata.song_link) {
+    return metadata;
+  }
+
+  return undefined;
+};
+
+const getMetadataFromHummingResult = (item: HummingResult): AcrMusicMetadata | undefined => {
+  const metadata: AcrMusicMetadata = {
+    title: item.title,
+    artist: item.artists?.map((artist) => artist?.name).filter(Boolean).join(", "),
+    external_metadata: undefined,
+  };
+
+  if (item.youtubeVideoId) {
+    metadata.external_metadata = { youtube: { vid: item.youtubeVideoId } };
+  }
+
+  return metadata.external_metadata ? metadata : undefined;
+};
+
+const getMetadataFromSong = (song?: EchoverseSong | null): AcrMusicMetadata | undefined => {
+  if (!song) return undefined;
+  const metadata: AcrMusicMetadata = {
+    title: song.name,
+    artist:
+      typeof song.artists === "string"
+        ? song.artists
+        : (song.artists || [])
+            .map((artist) => (typeof artist === "string" ? artist : artist?.name))
+            .filter(Boolean)
+            .join(", ") || undefined,
+    external_metadata: undefined,
+  };
+
+  const externalMeta =
+    asExternalMetadata((song as { externalMetadata?: AcrExternalMetadata }).externalMetadata) ??
+    asExternalMetadata((song as { external_metadata?: AcrExternalMetadata }).external_metadata);
+
+  if (externalMeta) {
+    metadata.external_metadata = { ...externalMeta };
+  }
+
+  const additionalLink = (() => {
+    const record = song as Record<string, unknown>;
+    const possibleKeys = ["song_link", "songLink"];
+    for (const key of possibleKeys) {
+      const value = record?.[key];
+      if (typeof value === "string" && value.trim()) {
+        return value;
+      }
+    }
+    return undefined;
+  })();
+
+  const songLink =
+    (song as { songLink?: string }).songLink ||
+    (song as { song_link?: string }).song_link ||
+    additionalLink;
+
+  if (typeof songLink === "string" && songLink.trim()) {
+    metadata.song_link = songLink;
+  }
+
+  return metadata.external_metadata || metadata.song_link ? metadata : undefined;
+};
+
+type EchoverseSong = NonNullable<
+  AcrResponse["song"]
+> & {
+  externalMetadata?: AcrExternalMetadata;
+  external_metadata?: AcrExternalMetadata;
+  songLink?: string;
+  song_link?: string;
+};
 
 type RecognizeItem = {
   source: string;
@@ -100,10 +409,15 @@ type RecognizeItem = {
   title?: string;
   artist?: string;
   internal?: boolean;
-  song?: any;
+  song?: EchoverseSong;
   youtubeVideoId?: string;
   score?: number; // Recognition confidence score (0-100) - CRITICAL for display
   scoreDouble?: number; // Recognition confidence score as double (for humming)
+  metadata?: AcrMusicMetadata;
+  externalMetadata?: AcrExternalMetadata;
+  external_metadata?: AcrExternalMetadata;
+  songLink?: string;
+  song_link?: string;
 };
 
 const MusicRecognitionResult = () => {
@@ -113,7 +427,7 @@ const MusicRecognitionResult = () => {
   const [result, setResult] = useState<RecognitionResult | null>(null);
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
-  const [echoverseSong, setEchoverseSong] = useState<unknown>(null);
+  const [echoverseSong, setEchoverseSong] = useState<EchoverseSong | null>(null);
   const [isSearchingEchoverse, setIsSearchingEchoverse] = useState(false);
   const [audioError, setAudioError] = useState(false);
   const [hummingResultsWithYoutube, setHummingResultsWithYoutube] = useState<HummingResult[]>([]);
@@ -129,11 +443,6 @@ const MusicRecognitionResult = () => {
     return res !== null && 'matched' in res;
   };
 
-  // Helper to check if result is AUDD response
-  const isAuddResponse = (res: RecognitionResult | null): res is AuddResponse => {
-    return res !== null && 'status' in res && 'result' in res;
-  };
-
   useEffect(() => {
     if (location.state?.result) {
       const res = location.state.result;
@@ -141,7 +450,7 @@ const MusicRecognitionResult = () => {
       if (isListResponse(res)) {
         console.log("[MusicRecognitionResult] Detected list response, length:", res.length);
         setListResults(res);
-        setResult(null as any);
+        setResult(null);
       } else {
         console.log("[MusicRecognitionResult] Detected single result response");
         setResult(res);
@@ -158,43 +467,13 @@ const MusicRecognitionResult = () => {
   // Handle AUDD response - search echoverse database
   useEffect(() => {
     const handleRecognitionResult = async () => {
-      if (result && !isLoading) {
-        if (isAcrResponse(result)) {
-          // ACR response - if matched, song is already in response
-          if (result.matched && result.song) {
-            setEchoverseSong(result.song);
-            setIsSearchingEchoverse(false);
-          } else {
-            // Not matched in DB, clear echoverse song
-            setEchoverseSong(null);
-            setIsSearchingEchoverse(false);
-          }
-        } else if (isAuddResponse(result)) {
-          // AUDD response - search echoverse database
-          const recognitionResult = result.result;
-          console.log("Recognition result for echoverse search:", recognitionResult);
-          
-          if (recognitionResult && recognitionResult.title && recognitionResult.artist) {
-            setEchoverseSong(null);
-            setIsSearchingEchoverse(true);
-            try {
-              console.log("Searching echoverse for:", recognitionResult.title, "by", recognitionResult.artist);
-              const songs = await songsApi.findByTitleAndArtist(
-                recognitionResult.title,
-                recognitionResult.artist
-              );
-              console.log("Found echoverse songs:", songs);
-              if (songs && songs.length > 0) {
-                setEchoverseSong(songs[0]);
-                console.log("Set echoverse song:", songs[0]);
-              }
-            } catch (error) {
-              console.error("Error searching echoverse database:", error);
-            } finally {
-              setIsSearchingEchoverse(false);
-            }
-          }
+      if (result && !isLoading && isAcrResponse(result)) {
+        if (result.matched && result.song) {
+          setEchoverseSong(result.song);
+        } else {
+          setEchoverseSong(null);
         }
+        setIsSearchingEchoverse(false);
       }
     };
 
@@ -270,8 +549,13 @@ const MusicRecognitionResult = () => {
     navigate('/music-recognition');
   };
 
-  const formatTimecode = (timecode: string) => {
-    const seconds = parseInt(timecode);
+  const formatTimecode = (timecode?: string | number) => {
+    if (timecode === undefined || timecode === null) return "";
+    const seconds =
+      typeof timecode === "number"
+        ? Math.floor(timecode / 1000)
+        : Number.parseInt(timecode, 10);
+    if (Number.isNaN(seconds)) return "";
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
@@ -283,21 +567,28 @@ const MusicRecognitionResult = () => {
 
   const handlePlayOnEchoverse = () => {
     if (!echoverseSong) return;
-    
-    const song = echoverseSong as Record<string, unknown>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const formattedSong: any = {
-      id: song.id,
-      name: song.name,
-      songName: song.name,
-      artist: (song.artists as Array<{ name: string }>)?.map((a) => a.name).join(", ") || "Unknown",
-      album: typeof song.album === 'object' && song.album ? (song.album as { name: string }).name : "Unknown",
-      duration: song.duration || 0,
-      cover: song.urlImageAlbum || "",
-      genre: (song.genres as Array<{ name: string }>)?.[0]?.name || "Unknown",
-      plays: song.playCount || 0,
-      audio: song.audioUrl,
-      audioUrl: song.audioUrl,
+
+    const formattedSong: PlayerSong = {
+      id: String(echoverseSong.id),
+      name: echoverseSong.name,
+      songName: echoverseSong.name,
+      artist:
+        typeof echoverseSong.artists === "string"
+          ? echoverseSong.artists
+          : echoverseSong.artists?.map((artist) => artist.name).filter(Boolean).join(", ") ||
+            "Unknown",
+      album:
+        typeof echoverseSong.album === "string"
+          ? echoverseSong.album
+          : echoverseSong.album?.name || "Unknown",
+      duration: typeof echoverseSong.duration === "number"
+        ? echoverseSong.duration
+        : Number(echoverseSong.duration ?? 0),
+      cover: echoverseSong.urlImageAlbum || "",
+      genre: echoverseSong.genres?.[0]?.name || "Unknown",
+      plays: echoverseSong.playCount !== undefined ? String(echoverseSong.playCount) : undefined,
+      audio: echoverseSong.audioUrl,
+      audioUrl: echoverseSong.audioUrl,
     };
 
     setQueue([formattedSong]);
@@ -336,18 +627,19 @@ const MusicRecognitionResult = () => {
     );
   }
 
-  // Get recognition result based on response type
-  const recognitionResult = isAuddResponse(result) ? result.result : null;
   const acrResult = isAcrResponse(result) ? result : null;
+  const primaryMetadata = getPrimaryMetadata(acrResult);
+  const internalSongMetadata = getMetadataFromSong(acrResult?.song);
+  const streamingLinks = mergeStreamingLinks(
+    getStreamingLinks(primaryMetadata),
+    getStreamingLinks(internalSongMetadata)
+  );
   
   const hasResult = (() => {
-    if (isAuddResponse(result)) {
-      return recognitionResult && Object.keys(recognitionResult).length > 0;
-    }
     if (isAcrResponse(result)) {
-      // Có kết quả nếu có song match HOẶC có humming results
-      return (result.matched && result.song !== undefined) || 
-             (result.hummingResults && result.hummingResults.length > 0);
+      if (result.matched && result.song) return true;
+      if (result.hummingResults && result.hummingResults.length > 0) return true;
+      if (primaryMetadata && Object.keys(primaryMetadata).length > 0) return true;
     }
     return false;
   })();
@@ -358,16 +650,15 @@ const MusicRecognitionResult = () => {
     if (isAcrResponse(result) && result.song?.urlImageAlbum) {
       return result.song.urlImageAlbum;
     }
-    if (!hasResult || !recognitionResult) return "";
-    if (recognitionResult.albumart) return recognitionResult.albumart;
-    const appleArtworkTemplate = recognitionResult.apple_music?.artwork?.url;
+    if (!hasResult || !primaryMetadata) return "";
+    if (primaryMetadata.albumart) return primaryMetadata.albumart;
+    const appleArtworkTemplate = primaryMetadata.apple_music?.artwork?.url;
     if (appleArtworkTemplate) {
       return appleArtworkTemplate.replace("{w}", "512").replace("{h}", "512");
     }
-    const spotifyImages = recognitionResult.spotify?.album?.images;
+    const spotifyImages = primaryMetadata.external_metadata?.spotify?.album?.images;
     if (spotifyImages && spotifyImages.length > 0) {
-      const preferred = spotifyImages.find(img => img?.width === 300) || spotifyImages[0];
-      return preferred?.url || "";
+      return spotifyImages[0]?.url || "";
     }
     return "";
   })();
@@ -426,9 +717,20 @@ const MusicRecognitionResult = () => {
               
               const title = isInternal ? item.song?.name : (item.title || '(No title)');
               // Get artists - now it's a string, not an array
-              const artists = isInternal
-                ? (item.song?.artists || item.artist || 'Unknown Artist')
-                : (item.artist || 'Unknown Artist');
+              const artists = (() => {
+                if (isInternal) {
+                  if (typeof item.song?.artists === "string") {
+                    return item.song.artists;
+                  }
+                  if (Array.isArray(item.song?.artists)) {
+                    const names = item.song.artists.map((artist) => artist?.name).filter(Boolean).join(", ");
+                    if (names) return names;
+                  }
+                  if (item.artist) return item.artist;
+                  return "Unknown Artist";
+                }
+                return item.artist || "Unknown Artist";
+              })();
               
               // Get score for display (use scoreDouble if available for humming, otherwise score)
               // Backend should always provide score (0-100), but handle null/undefined gracefully
@@ -449,6 +751,9 @@ const MusicRecognitionResult = () => {
                 rawItem: item
               });
               
+              const itemMetadata = getMetadataFromItem(item);
+              const itemStreamingLinks = getStreamingLinks(itemMetadata);
+
               return (
                 <div key={item.acrId || index} className="p-4 border border-border rounded-lg bg-muted/50">
                   <div className="flex items-center justify-between gap-3">
@@ -486,16 +791,23 @@ const MusicRecognitionResult = () => {
                         <Button
                           onClick={() => {
                             const song = item.song;
-                            const formatted: any = {
-                              id: song.id,
+                            if (!song) return;
+                            const formatted: PlayerSong = {
+                              id: String(song.id),
                               name: song.name,
                               songName: song.name,
-                              artist: typeof song.artists === 'string' ? song.artists : (song.artists || []).map((a: any) => a.name).join(', '),
-                              album: typeof song.album === 'object' && song.album ? (song.album as { name: string }).name : 'Unknown',
-                              duration: song.duration || 0,
-                              cover: song.urlImageAlbum || '',
-                              genre: (song.genres || [])[0]?.name || 'Unknown',
-                              plays: song.playCount || 0,
+                              artist:
+                                typeof song.artists === "string"
+                                  ? song.artists
+                                  : (song.artists || []).map((artist) => artist.name).filter(Boolean).join(", ") || "Unknown",
+                              album:
+                                typeof song.album === "string"
+                                  ? song.album
+                                  : song.album?.name || "Unknown",
+                              duration: typeof song.duration === "number" ? song.duration : Number(song.duration ?? 0),
+                              cover: song.urlImageAlbum || "",
+                              genre: song.genres?.[0]?.name || "Unknown",
+                              plays: song.playCount !== undefined ? String(song.playCount) : undefined,
                               audio: song.audioUrl,
                               audioUrl: song.audioUrl,
                             };
@@ -529,6 +841,22 @@ const MusicRecognitionResult = () => {
                       )}
                     </div>
                   </div>
+                  {itemStreamingLinks.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {itemStreamingLinks.map((link) => (
+                        <Button
+                          key={`${link.service}-${link.url}`}
+                          size="icon"
+                          onClick={() => openExternalLink(link.url)}
+                          className={`rounded-full ${link.className}`}
+                          title={link.label}
+                        >
+                          <StreamingIcon service={link.service} />
+                          <span className="sr-only">{link.label}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   {/* YouTube Embed if available */}
                   {item.youtubeVideoId && (
                     <div className="mt-4 pt-4 border-t border-border">
@@ -597,62 +925,43 @@ const MusicRecognitionResult = () => {
           {/* Status */}
           <div className="mb-6">
             {(() => {
-              if (isAcrResponse(result)) {
-                if (result.matched && result.song) {
-                  return (
-                    <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-800 dark:text-green-200 flex items-center justify-between">
-                        <span>Kết quả từ Audio Fingerprint - Music successfully recognized!</span>
-                        {result.score !== undefined && (
-                          <Badge variant="secondary" className="ml-2">
-                            Score: {result.score}/100
-                          </Badge>
-                        )}
-                      </AlertDescription>
-                    </Alert>
-                  );
-                } else if (result.hummingResults && result.hummingResults.length > 0) {
-                  return (
-                    <Alert className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
-                      <AlertCircle className="h-4 w-4 text-yellow-600" />
-                      <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-                        Không tìm thấy trong hệ thống. Hiển thị {result.hummingResults.length} kết quả từ Humming để tham khảo.
-                      </AlertDescription>
-                    </Alert>
-                  );
-                } else {
-                  return (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Song not found in database. {result.score !== undefined && `Match score: ${result.score}/100`}
-                      </AlertDescription>
-                    </Alert>
-                  );
-                }
-              } else if (isAuddResponse(result)) {
-                if (result.status === "success" && hasResult) {
-                  return (
-                    <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertDescription className="text-green-800 dark:text-green-200">
-                        Music successfully recognized!
-                      </AlertDescription>
-                    </Alert>
-                  );
-                } else {
-                  return (
-                    <Alert variant="destructive">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        {hasResult ? `Recognition failed. Status: ${result.status}` : "No song was recognized. Please try again with a different audio file."}
-                      </AlertDescription>
-                    </Alert>
-                  );
-                }
+              if (!isAcrResponse(result)) return null;
+
+              if (result.matched && result.song) {
+                return (
+                  <Alert className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800 dark:text-green-200 flex items-center justify-between">
+                      <span>Kết quả từ Audio Fingerprint - Music successfully recognized!</span>
+                      {result.score !== undefined && (
+                        <Badge variant="secondary" className="ml-2">
+                          Score: {result.score}/100
+                        </Badge>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                );
               }
-              return null;
+
+              if (result.hummingResults && result.hummingResults.length > 0) {
+                return (
+                  <Alert className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950">
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                      Không tìm thấy trong hệ thống. Hiển thị {result.hummingResults.length} kết quả từ Humming để tham khảo.
+                    </AlertDescription>
+                  </Alert>
+                );
+              }
+
+              return (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Song not found in database. {result.score !== undefined && `Match score: ${result.score}/100`}
+                  </AlertDescription>
+                </Alert>
+              );
             })()}
           </div>
 
@@ -667,301 +976,202 @@ const MusicRecognitionResult = () => {
                 }
                 return (
                   <Card className="bg-card border-border">
-                <CardHeader>
-                  <CardTitle className="text-2xl text-foreground flex items-center gap-2">
-                    <Music className="w-6 h-6" />
-                    Song Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Song Details */}
-                  <div className="flex gap-6">
-                    {/* Album Art */}
-                    <div className="flex-shrink-0">
-                      <div className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
-                        {artworkUrl ? (
-                          <img
-                            src={artworkUrl}
-                            alt="Album Cover"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <Music className="w-12 h-12 text-muted-foreground" />
-                        )}
-                      </div>
-                    </div>
+                    <CardHeader>
+                      <CardTitle className="text-2xl text-foreground flex items-center gap-2">
+                        <Music className="w-6 h-6" />
+                        Song Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Song Details */}
+                      <div className="flex gap-6">
+                        {/* Album Art */}
+                        <div className="flex-shrink-0">
+                          <div className="w-32 h-32 bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+                            {artworkUrl ? (
+                              <img
+                                src={artworkUrl}
+                                alt="Album Cover"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Music className="w-12 h-12 text-muted-foreground" />
+                            )}
+                          </div>
+                        </div>
 
-                    {/* Song Info */}
-                    <div className="flex-1 space-y-3">
-                      <div>
-                        <h2 className="text-2xl font-bold text-foreground">
+                        {/* Song Info */}
+                        <div className="flex-1 space-y-3">
+                          <div>
+                            <h2 className="text-2xl font-bold text-foreground">
+                              {(() => {
+                                if (isAcrResponse(result) && result.song) {
+                                  return result.song.name || "Unknown Title";
+                                }
+                                return primaryMetadata?.title || primaryMetadata?.album?.name || "Unknown Title";
+                              })()}
+                            </h2>
+                            <p className="text-lg text-muted-foreground flex items-center gap-2">
+                              <User className="w-4 h-4" />
+                              {(() => {
+                                if (isAcrResponse(result) && typeof result.song?.artists === "string") {
+                                  return result.song.artists;
+                                }
+                                if (isAcrResponse(result) && Array.isArray(result.song?.artists)) {
+                                  return result.song?.artists?.map((a) => a.name).join(", ") || "Unknown Artist";
+                                }
+                                return (
+                                  primaryMetadata?.artist ||
+                                  primaryMetadata?.artists?.map((artist) => artist?.name).filter(Boolean).join(", ") ||
+                                  "Unknown Artist"
+                                );
+                              })()}
+                            </p>
+                          </div>
+
                           {(() => {
                             if (isAcrResponse(result) && result.song) {
-                              return result.song.name || "Unknown Title";
+                              // ACR song info
+                              return (
+                                <div className="flex flex-wrap gap-2">
+                                  {result.song.releaseYear && (
+                                    <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                      <Calendar className="w-3 h-3 mr-1" />
+                                      {result.song.releaseYear}
+                                    </Badge>
+                                  )}
+                                  {result.song.duration && (
+                                    <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      {result.song.duration}
+                                    </Badge>
+                                  )}
+                                  {result.song.genres && result.song.genres.length > 0 && (
+                                    <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                      {result.song.genres.map(g => g.name).join(", ")}
+                                    </Badge>
+                                  )}
+                                  {result.score !== undefined && (
+                                    <Badge variant="secondary" className="bg-primary/10 text-primary">
+                                      Score: {result.score}/100
+                                    </Badge>
+                                  )}
+                                </div>
+                              );
                             }
-                            return recognitionResult?.title || "Unknown Title";
+                            // External metadata info
+                            return (
+                              <>
+                                {primaryMetadata?.album?.name && (
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                                      Album: {primaryMetadata.album.name}
+                                    </Badge>
+                                  </div>
+                                )}
+                                <div className="flex flex-wrap gap-2">
+                                  {primaryMetadata?.release_date && (
+                                    <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                      <Calendar className="w-3 h-3 mr-1" />
+                                      {primaryMetadata.release_date}
+                                    </Badge>
+                                  )}
+                                  {primaryMetadata?.play_offset_ms && (
+                                    <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                      <Clock className="w-3 h-3 mr-1" />
+                                      {formatTimecode(primaryMetadata.play_offset_ms)}
+                                    </Badge>
+                                  )}
+                                  {primaryMetadata?.label && (
+                                    <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
+                                      Label: {primaryMetadata.label}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </>
+                            );
                           })()}
-                        </h2>
-                        <p className="text-lg text-muted-foreground flex items-center gap-2">
-                          <User className="w-4 h-4" />
-                          {(() => {
-                            if (isAcrResponse(result) && result.song?.artists) {
-                              return result.song.artists.map(a => a.name).join(", ") || "Unknown Artist";
-                            }
-                            return recognitionResult?.artist || "Unknown Artist";
-                          })()}
-                        </p>
+                        </div>
                       </div>
 
-                      {(() => {
-                        if (isAcrResponse(result) && result.song) {
-                          // ACR song info
-                          return (
-                            <>
-                              <div className="flex flex-wrap gap-2">
-                                {result.song.releaseYear && (
-                                  <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                    <Calendar className="w-3 h-3 mr-1" />
-                                    {result.song.releaseYear}
-                                  </Badge>
-                                )}
-                                {result.song.duration && (
-                                  <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                    <Clock className="w-3 h-3 mr-1" />
-                                    {result.song.duration}
-                                  </Badge>
-                                )}
-                                {result.song.genres && result.song.genres.length > 0 && (
-                                  <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                    {result.song.genres.map(g => g.name).join(", ")}
-                                  </Badge>
-                                )}
-                                {result.score !== undefined && (
-                                  <Badge variant="secondary" className="bg-primary/10 text-primary">
-                                    Score: {result.score}/100
-                                  </Badge>
-                                )}
-                              </div>
-                            </>
-                          );
-                        }
-                        // AUDD song info
-                        return (
-                          <>
-                            {recognitionResult?.album && (
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                                  Album: {recognitionResult.album}
-                                </Badge>
-                              </div>
-                            )}
-                            <div className="flex flex-wrap gap-2">
-                              {recognitionResult?.release_date && (
-                                <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                  <Calendar className="w-3 h-3 mr-1" />
-                                  {recognitionResult.release_date}
-                                </Badge>
-                              )}
-                              {recognitionResult?.timecode && (
-                                <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                  <Clock className="w-3 h-3 mr-1" />
-                                  {formatTimecode(recognitionResult.timecode)}
-                                </Badge>
-                              )}
-                              {recognitionResult?.label && (
-                                <Badge variant="outline" className="bg-muted border-border text-muted-foreground">
-                                  Label: {recognitionResult.label}
-                                </Badge>
-                              )}
+                      <div className="space-y-4">
+                        {streamingLinks.length > 0 && (
+                          <div>
+                            <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
+                            <div className="flex flex-wrap gap-3">
+                              {streamingLinks.map((link) => (
+                                <Button
+                                  key={`${link.service}-${link.url}`}
+                                  size="icon"
+                                  onClick={() => openExternalLink(link.url)}
+                                  className={`rounded-full ${link.className}`}
+                                  title={link.label}
+                                >
+                                  <StreamingIcon service={link.service} />
+                                  <span className="sr-only">{link.label}</span>
+                                </Button>
+                              ))}
                             </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                          </div>
+                        )}
 
-                  {/* Streaming Links */}
-          <div className="space-y-4">
-  <h3 className="text-lg font-semibold text-foreground">Listen on:</h3>
-  <div className="flex flex-wrap gap-3">
-    {(() => {
-      // Handle AUDD response
-      if (isAuddResponse(result) && recognitionResult) {
-        return (
-          <>
-            {recognitionResult.spotify?.external_urls?.spotify && (
-              <Button
-                onClick={() => openExternalLink(recognitionResult.spotify!.external_urls!.spotify!)}
-                className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 
-                  12-12C24 5.372 18.627 0 12 0zM17.59 17.74a.747.747 0 0 
-                  1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 
-                  1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 
-                  1.02z" />
-                </svg>
-                Spotify
-              </Button>
-            )}
+                        {echoverseSong && (
+                          <div className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border-2 border-primary/30">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+                                  <Headphones className="w-6 h-6 text-primary" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-foreground">Có sẵn trên Echoverse!</p>
+                                  <p className="text-sm text-muted-foreground">Nghe ngay trên nền tảng của chúng tôi</p>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={handlePlayOnEchoverse}
+                                className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 px-6 py-2 font-semibold"
+                              >
+                                <Play className="w-5 h-5" />
+                                Play Now
+                              </Button>
+                            </div>
+                          </div>
+                        )}
 
-            {recognitionResult.apple_music?.url && (
-              <Button
-                onClick={() => openExternalLink(recognitionResult.apple_music!.url!)}
-                variant="outline"
-                className="bg-[#FA243C] hover:bg-[#ff3b4f] text-white border-0 flex items-center gap-2"
-              >
-                <Apple className="w-4 h-4" />
-                Apple Music
-              </Button>
-            )}
+                        {isSearchingEchoverse && (
+                          <Alert className="bg-muted border-border">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription className="text-muted-foreground">
+                              Đang tìm kiếm bài hát trên nền tảng Echoverse...
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                      </div>
 
-            {recognitionResult.deezer && (
-              <Button
-                onClick={() => openExternalLink(recognitionResult.deezer!)}
-                variant="outline"
-                className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Deezer
-              </Button>
-            )}
-
-            {recognitionResult.song_link && (
-              <Button
-                onClick={() => openExternalLink(recognitionResult.song_link!)}
-                variant="outline"
-                className="bg-muted border-border hover:bg-muted/80 flex items-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                More Info
-              </Button>
-            )}
-          </>
-        );
-      }
-      
-      // Handle ACR response - extract from musicMetadata.external_metadata
-      if (isAcrResponse(result) && result.musicMetadata) {
-        const metadata = result.musicMetadata as Record<string, any>;
-        const externalMetadata = metadata.external_metadata as Record<string, any> | undefined;
-        
-        return (
-          <>
-            {externalMetadata?.spotify?.track?.id && (
-              <Button
-                onClick={() => openExternalLink(`https://open.spotify.com/track/${externalMetadata.spotify.track.id}`)}
-                className="bg-[#1DB954] hover:bg-[#1ed760] text-white border-0 flex items-center gap-2"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <path d="M12 0C5.373 0 0 5.372 0 12c0 6.627 5.373 12 12 12s12-5.373 
-                  12-12C24 5.372 18.627 0 12 0zM17.59 17.74a.747.747 0 0 
-                  1-1.03.24c-2.82-1.73-6.37-2.12-10.56-1.17a.75.75 0 1 
-                  1-.33-1.46c4.47-1.03 8.34-.59 11.42 1.27.36.22.47.69.24 
-                  1.02z" />
-                </svg>
-                Spotify
-              </Button>
-            )}
-
-            {externalMetadata?.deezer?.track?.id && (
-              <Button
-                onClick={() => openExternalLink(`https://www.deezer.com/track/${externalMetadata.deezer.track.id}`)}
-                variant="outline"
-                className="bg-[#EF5466] hover:bg-[#ff6b80] text-white border-0 flex items-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Deezer
-              </Button>
-            )}
-
-            {externalMetadata?.youtube?.vid && (
-              <Button
-                onClick={() => openExternalLink(`https://www.youtube.com/watch?v=${externalMetadata.youtube.vid}`)}
-                variant="outline"
-                className="bg-[#FF0000] hover:bg-[#ff3333] text-white border-0 flex items-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                YouTube
-              </Button>
-            )}
-          </>
-        );
-      }
-      
-      return null;
-    })()}
-
-    {/* Echoverse Play Button - Highlighted */}
-    {echoverseSong && (
-      <div className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border-2 border-primary/30">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-              <Headphones className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">Có sẵn trên Echoverse!</p>
-              <p className="text-sm text-muted-foreground">Nghe ngay trên nền tảng của chúng tôi</p>
-            </div>
-          </div>
-          <Button
-            onClick={handlePlayOnEchoverse}
-            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 px-6 py-2 font-semibold"
-          >
-            <Play className="w-5 h-5" />
-            Play Now
-          </Button>
-        </div>
-      </div>
-    )}
-  </div>
-  
-  {/* Search status indicator */}
-  {isSearchingEchoverse && (
-    <Alert className="bg-muted border-border">
-      <AlertCircle className="h-4 w-4" />
-      <AlertDescription className="text-muted-foreground">
-        Đang tìm kiếm bài hát trên nền tảng Echoverse...
-      </AlertDescription>
-    </Alert>
-  )}
-</div>
-
-                  {/* Audio Preview - chỉ hiển thị nếu có song match (custom_file) */}
-                  {isAcrResponse(result) && result.song && audioUrl && !audioError && (
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-semibold text-foreground">Original Audio:</h3>
-                      <audio
-                        controls
-                        className="w-full"
-                        src={audioUrl}
-                        onError={() => setAudioError(true)}
-                      >
-                        Your browser does not support the audio element.
-                      </audio>
-                    </div>
-                  )}
-                  {audioUrl && audioError && (
-                    <Alert className="bg-muted border-border">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription className="text-muted-foreground">
-                        Không phát được "Original Audio" từ file bạn tải lên. Vui lòng thử lại.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
+                      {/* Audio Preview - chỉ hiển thị nếu có song match (custom_file) */}
+                      {isAcrResponse(result) && result.song && audioUrl && !audioError && (
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-semibold text-foreground">Original Audio:</h3>
+                          <audio
+                            controls
+                            className="w-full"
+                            src={audioUrl}
+                            onError={() => setAudioError(true)}
+                          >
+                            Your browser does not support the audio element.
+                          </audio>
+                        </div>
+                      )}
+                      {audioUrl && audioError && (
+                        <Alert className="bg-muted border-border">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription className="text-muted-foreground">
+                            Không phát được "Original Audio" từ file bạn tải lên. Vui lòng thử lại.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
                 );
               })()}
 
@@ -1000,6 +1210,9 @@ const MusicRecognitionResult = () => {
                           if (score === undefined || score === null) return 'N/A';
                           return (score * 100).toFixed(1) + '%';
                         };
+
+                        const hummingMetadata = getMetadataFromHummingResult(item);
+                        const hummingStreamingLinks = getStreamingLinks(hummingMetadata);
 
                         return (
                           <div
@@ -1048,6 +1261,22 @@ const MusicRecognitionResult = () => {
                                 </div>
                               )}
                             </div>
+                            {hummingStreamingLinks.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {hummingStreamingLinks.map((link) => (
+                                  <Button
+                                    key={`${link.service}-${link.url}`}
+                                    size="icon"
+                                    onClick={() => openExternalLink(link.url)}
+                                    className={`rounded-full ${link.className}`}
+                                    title={link.label}
+                                  >
+                                    <StreamingIcon service={link.service} />
+                                    <span className="sr-only">{link.label}</span>
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
                             {item.matchedInSystem && item.song && (
                               <div className="mt-3 p-2 bg-green-50 dark:bg-green-950 rounded border border-green-200 dark:border-green-800">
                                 <strong className="text-green-800 dark:text-green-200">✅ Có trong hệ thống:</strong>

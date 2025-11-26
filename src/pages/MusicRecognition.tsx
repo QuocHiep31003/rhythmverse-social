@@ -17,9 +17,6 @@ import {
   Music
 } from "lucide-react";
 import { arcApi } from "@/services/api";
-import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureName } from "@/services/api/featureUsageApi";
-import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const MusicRecognition = () => {
   const navigate = useNavigate();
@@ -30,18 +27,10 @@ const MusicRecognition = () => {
   const [error, setError] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrlPreview, setAudioUrlPreview] = useState<string>("");
-  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-
-  // Feature limit hook for AI Search
-  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
-    featureName: FeatureName.AI_SEARCH,
-    autoCheck: true,
-    onLimitReached: () => setShowLimitModal(true),
-  });
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -142,23 +131,52 @@ const MusicRecognition = () => {
 
     const result = await arcApi.recognizeMusic(audioBlob);
 
-    // Check if result is valid and has actual data
-    if (!result || !result.result || result.result.length === 0) {
-      // Navigate to result page with no-result flag
+    const normalizeAcrResponse = (data: unknown) => {
+      if (Array.isArray(data) || !data || typeof data !== "object") return data;
+      if ("matched" in (data as Record<string, unknown>) || "result" in (data as Record<string, unknown>)) {
+        return data;
+      }
+
+      const metadata = (data as { metadata?: { music?: Array<Record<string, unknown>> } }).metadata;
+      const musicList = metadata?.music;
+      if (Array.isArray(musicList) && musicList.length > 0) {
+        const first = musicList[0];
+        return {
+          matched: false,
+          score: typeof first.score === "number" ? Math.round(first.score) : undefined,
+          acrid: first.acrid as string | undefined,
+          musicMetadata: first,
+        };
+      }
+
+      return data;
+    };
+
+    const normalizedResult = normalizeAcrResponse(result);
+
+    const isListResponse = Array.isArray(normalizedResult);
+    const hasListResults = isListResponse && normalizedResult.length > 0;
+    const hasStructuredResults =
+      !isListResponse &&
+      normalizedResult &&
+      (
+        (Array.isArray((normalizedResult as { result?: unknown[] }).result) && (normalizedResult as { result?: unknown[] }).result?.length) ||
+        (normalizedResult as { matched?: boolean }).matched ||
+        (Array.isArray((normalizedResult as { hummingResults?: unknown[] }).hummingResults) && (normalizedResult as { hummingResults?: unknown[] }).hummingResults?.length)
+      );
+
+    if (!hasListResults && !hasStructuredResults) {
       navigate("/music-recognition-result", {
-        state: { 
-          result: { 
-            status: "success", 
-            result: [] 
-          }, 
-          audioUrl: audioUrlPreview 
+        state: {
+          result: isListResponse ? [] : { ...(normalizedResult as Record<string, unknown>), result: (normalizedResult as { result?: unknown[] })?.result || [] },
+          audioUrl: audioUrlPreview
         },
       });
       return;
     }
 
     navigate("/music-recognition-result", {
-      state: { result, audioUrl: audioUrlPreview },
+      state: { result: normalizedResult, audioUrl: audioUrlPreview },
     });
   } catch (err: unknown) {
     const errorMessage =
@@ -286,6 +304,7 @@ const MusicRecognition = () => {
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
+
                   disabled={isLoading || isCheckingLimit || !audioUrl || (!isPremium && remaining === 0)}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   size="lg"
@@ -295,18 +314,8 @@ const MusicRecognition = () => {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Recognizing...
                     </>
-                  ) : isCheckingLimit ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Checking...
-                    </>
                   ) : (
-                    <>
-                      Recognize Music
-                      {!isPremium && remaining === 0 && (
-                        <span className="ml-2 text-xs opacity-75">(Premium only)</span>
-                      )}
-                    </>
+                    <>Recognize Music</>
                   )}
                 </Button>
                 
@@ -348,7 +357,6 @@ const MusicRecognition = () => {
           </Card>
         </div>
       </div>
-
       <FeatureLimitModal
         open={showLimitModal}
         onOpenChange={setShowLimitModal}

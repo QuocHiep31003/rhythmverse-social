@@ -21,16 +21,16 @@ export const authApi = {
         return await response.json();
     },
 
-  getFirebaseToken: async (): Promise<{ token: string; userId: number }> => {
-    const response = await fetch(`${API_BASE_URL}/auth/firebase-token`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
-    return await response.json();
-  },
+    getFirebaseToken: async (): Promise<{ token: string; userId: number }> => {
+        const response = await fetch(`${API_BASE_URL}/auth/firebase-token`, {
+            method: 'GET',
+            headers: buildJsonHeaders(),
+        });
+        if (!response.ok) {
+            throw new Error(await parseErrorResponse(response));
+        }
+        return await response.json();
+    },
 
     /**
      * Verify OTP for registration
@@ -102,8 +102,14 @@ export const authApi = {
             body: JSON.stringify({ email })
         });
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Không gửi được OTP reset password');
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const error = await response.json();
+                throw new Error(error.message || 'Không gửi được OTP reset password');
+            } else {
+                const text = await response.text();
+                throw new Error(text || 'Không gửi được OTP reset password');
+            }
         }
         return await response.json();
     },
@@ -117,8 +123,14 @@ export const authApi = {
             body: JSON.stringify({ email, otp, newPassword })
         });
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || 'Đặt lại mật khẩu thất bại');
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                const error = await response.json();
+                throw new Error(error.message || 'Đặt lại mật khẩu thất bại');
+            } else {
+                const text = await response.text();
+                throw new Error(text || 'Đặt lại mật khẩu thất bại');
+            }
         }
         return await response.json();
     },

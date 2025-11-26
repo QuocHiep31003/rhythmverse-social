@@ -99,6 +99,7 @@ export interface PlayerSong {
   url?: string;
   audio?: string;
   audioUrl?: string;
+  uuid?: string; // UUID để stream HLS
 }
 
 export function mapToPlayerSong(song: ApiSong): PlayerSong {
@@ -147,5 +148,6 @@ export function mapToPlayerSong(song: ApiSong): PlayerSong {
     audioUrl,
     audio: song.audio ?? audioUrl,
     url: song.url ?? audioUrl,
+    uuid: song.uuid, // Map UUID từ Song để dùng cho streaming
   };
 }

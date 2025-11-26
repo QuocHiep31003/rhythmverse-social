@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -25,6 +26,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
 
   const handleLogout = () => {
+    // Stop token refresh interval
+    stopTokenRefreshInterval();
+    clearTokens();
+    
     localStorage.removeItem("adminAuth");
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminRole");

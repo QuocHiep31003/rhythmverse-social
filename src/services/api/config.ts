@@ -3,6 +3,73 @@ import axios from 'axios';
 // Base URL cho API
 export const API_BASE_URL = "http://localhost:8080/api";
 
+// JWT token utilities
+interface DecodedToken {
+  exp: number;
+  iat: number;
+  sub: string;
+  [key: string]: any;
+}
+
+/**
+ * Decode JWT token without verification (client-side only)
+ * @param token JWT token string
+ * @returns Decoded token payload or null if invalid
+ */
+export const decodeToken = (token: string | null): DecodedToken | null => {
+  if (!token) return null;
+
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payload = parts[1];
+    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(decoded) as DecodedToken;
+  } catch (error) {
+    console.error('[decodeToken] Failed to decode token:', error);
+    return null;
+  }
+};
+
+/**
+ * Check if token is expired or will expire soon
+ * @param token JWT token string
+ * @param bufferMinutes Minutes before expiration to consider as "expiring soon" (default: 5 minutes)
+ * @returns true if token is expired or expiring soon
+ */
+export const isTokenExpiringSoon = (token: string | null, bufferMinutes: number = 5): boolean => {
+  if (!token) return true;
+
+  const decoded = decodeToken(token);
+  if (!decoded || !decoded.exp) return true;
+
+  const expirationTime = decoded.exp * 1000; // Convert to milliseconds
+  const currentTime = Date.now();
+  const bufferTime = bufferMinutes * 60 * 1000; // Convert minutes to milliseconds
+
+  // Token is expired or will expire within buffer time
+  return (expirationTime - currentTime) <= bufferTime;
+};
+
+/**
+ * Get time until token expiration in milliseconds
+ * @param token JWT token string
+ * @returns Time until expiration in ms, or 0 if expired/invalid
+ */
+export const getTimeUntilExpiration = (token: string | null): number => {
+  if (!token) return 0;
+
+  const decoded = decodeToken(token);
+  if (!decoded || !decoded.exp) return 0;
+
+  const expirationTime = decoded.exp * 1000; // Convert to milliseconds
+  const currentTime = Date.now();
+  const timeUntilExpiration = expirationTime - currentTime;
+
+  return Math.max(0, timeUntilExpiration);
+};
+
 // Auth helpers for API requests
 export const getAuthToken = (): string | null => {
   try {
@@ -63,7 +130,7 @@ export const setTokens = (token: string, refreshToken?: string) => {
   try {
     // Kiểm tra xem đang ở admin page hay không
     const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
-    
+
     if (isAdminPage) {
       // Lưu vào adminToken và adminRefreshToken nếu đang ở admin page
       localStorage.setItem('adminToken', token);
@@ -77,7 +144,7 @@ export const setTokens = (token: string, refreshToken?: string) => {
         localStorage.setItem('refreshToken', refreshToken);
       }
     }
-    
+
     // Cũng lưu vào sessionStorage để đồng bộ
     try {
       sessionStorage.setItem('token', token);
@@ -214,13 +281,13 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
         clearTokens();
         processQueue(refreshError, null);
-        
+
         // Redirect to login
         if (typeof window !== 'undefined') {
           const isAdminPage = window.location.pathname.startsWith('/admin');
           window.location.href = isAdminPage ? '/admin/login' : '/login';
         }
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -248,12 +315,12 @@ apiClient.interceptors.response.use(
         timeout: error.config?.timeout,
         url: error.config?.url
       });
-      
+
       // Check if it's a timeout
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         throw new Error('Request timeout - the server is taking too long to respond. Please try again.');
       }
-      
+
       throw new Error('Network error - please check your connection and ensure the backend server is running');
     } else {
       // Lỗi khác
@@ -395,11 +462,11 @@ export const fetchWithAuth = async (
         isRefreshingFetch = false;
         clearTokens();
         processQueueFetch(refreshError, null);
-        
+
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -450,6 +517,101 @@ export interface PaginatedResponse<T> {
   first: boolean;
   numberOfElements: number;
   empty: boolean;
+}
+
+// Auto-refresh token management
+let tokenRefreshInterval: NodeJS.Timeout | null = null;
+let isRefreshingProactively = false;
+
+/**
+ * Proactively refresh token if it's expiring soon
+ * @returns Promise<boolean> true if refresh was successful, false otherwise
+ */
+export const refreshTokenIfNeeded = async (): Promise<boolean> => {
+  const token = getAuthToken();
+  const refreshToken = getRefreshToken();
+
+  // No token or refresh token available
+  if (!token || !refreshToken) {
+    return false;
+  }
+
+  // Check if token is expiring soon (within 5 minutes)
+  if (!isTokenExpiringSoon(token, 5)) {
+    return false; // Token is still valid, no need to refresh
+  }
+
+  // Prevent multiple simultaneous refresh attempts
+  if (isRefreshingProactively) {
+    console.log('[refreshTokenIfNeeded] Refresh already in progress, skipping...');
+    return false;
+  }
+
+  isRefreshingProactively = true;
+
+  try {
+    console.log('[refreshTokenIfNeeded] Token expiring soon, refreshing proactively...');
+    const { authApi } = await import('./authApi');
+    const response = await authApi.refreshToken(refreshToken);
+
+    if (response.token && response.refreshToken) {
+      console.log('[refreshTokenIfNeeded] Token refreshed successfully');
+      setTokens(response.token, response.refreshToken);
+      isRefreshingProactively = false;
+      return true;
+    } else {
+      console.error('[refreshTokenIfNeeded] Invalid refresh response:', response);
+      isRefreshingProactively = false;
+      return false;
+    }
+  } catch (error) {
+    console.error('[refreshTokenIfNeeded] Failed to refresh token:', error);
+    isRefreshingProactively = false;
+    // Don't clear tokens here, let the interceptor handle 401 errors
+    return false;
+  }
+};
+
+/**
+ * Start automatic token refresh interval
+ * Checks token expiration every 2 minutes and refreshes if needed
+ */
+export const startTokenRefreshInterval = (): void => {
+  // Clear existing interval if any
+  stopTokenRefreshInterval();
+
+  // Check immediately
+  refreshTokenIfNeeded();
+
+  // Then check every 2 minutes (120000ms)
+  tokenRefreshInterval = setInterval(() => {
+    refreshTokenIfNeeded();
+  }, 2 * 60 * 1000); // 2 minutes
+
+  console.log('[startTokenRefreshInterval] Token refresh interval started (checks every 2 minutes)');
+};
+
+/**
+ * Stop automatic token refresh interval
+ */
+export const stopTokenRefreshInterval = (): void => {
+  if (tokenRefreshInterval) {
+    clearInterval(tokenRefreshInterval);
+    tokenRefreshInterval = null;
+    console.log('[stopTokenRefreshInterval] Token refresh interval stopped');
+  }
+};
+
+// Start token refresh interval when module loads (if in browser and token exists)
+// This handles page refresh scenarios
+if (typeof window !== 'undefined') {
+  // Wait a bit for localStorage to be ready
+  setTimeout(() => {
+    const token = getAuthToken();
+    if (token && !tokenRefreshInterval) {
+      startTokenRefreshInterval();
+    }
+  }, 1000);
 }
 
 export default apiClient;

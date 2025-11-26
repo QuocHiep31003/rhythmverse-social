@@ -106,7 +106,7 @@ const TrendingSection = () => {
               <Sparkles className="h-5 w-5 text-primary" />
               <span>Hot Today</span>
             </CardTitle>
-            <Link to="/trending">
+            <Link to="/top100">
               <Button variant="ghost" size="sm">See All</Button>
             </Link>
           </CardHeader>

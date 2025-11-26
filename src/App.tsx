@@ -11,7 +11,6 @@ import AdminLayout from "@/components/AdminLayout";
 import Index from "./pages/Index";
 import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
-import TrendingMusic from "./pages/TrendingMusic";
 import Top100 from "./pages/Top100";
 import PlaylistDetail from "./pages/PlaylistDetail";
 import CreatePlaylist from "./pages/CreatePlaylist";
@@ -46,6 +45,9 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import AdminTrending from "./pages/admin/AdminTrending";
 import AdminPromotions from "./pages/admin/AdminPromotions";
 import AdminSnapshots from "./pages/admin/AdminSnapshots";
+import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
+import TermsOfService from "./pages/TermsOfService";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminSubscriptionPlans from "./pages/admin/AdminSubscriptionPlans";
 import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 
@@ -75,6 +77,8 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/terms" element={<TermsOfService />} />
+              <Route path="/privacy" element={<PrivacyPolicy />} />
 
               {/* Admin Routes */}
               <Route path="/admin/*" element={
@@ -109,7 +113,7 @@ const App = () => (
                     <Route path="/playlists" element={<PlaylistLibrary />} />
                     <Route path="/playlist/:slug" element={<PlaylistDetail />} />
                     <Route path="/create-playlist" element={<CreatePlaylist />} />
-                    <Route path="/trending" element={<TrendingMusic />} />
+                    <Route path="/trending" element={<Top100 />} />
                     <Route path="/top100" element={<Top100 />} />
                     <Route path="/quiz" element={<Quiz />} />
                     <Route path="/quiz/create" element={<CreateQuiz />} />

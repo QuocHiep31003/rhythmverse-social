@@ -20,14 +20,22 @@ import {
   AlertCircle,
   ListPlus,
   MoreHorizontal,
+  Copy,
 } from "lucide-react";
 import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import { createSlug } from "@/utils/playlistUtils";
+import { toast } from "@/hooks/use-toast";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const SearchResults = () => {
   const [searchParams] = useSearchParams();
@@ -49,7 +57,7 @@ const SearchResults = () => {
   const [activeFilter, setActiveFilter] = useState("all");
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState<{ id: number; name: string; urlImageAlbum?: string } | null>(null);
-  const { playSong, setQueue } = useMusic();
+  const { playSong, addToQueue } = useMusic();
   
   // Debounce search - dùng useRef để tránh re-render
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -302,14 +310,46 @@ const SearchResults = () => {
                                   <MoreHorizontal className="w-4 h-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedSong({ id: song.id, name: song.name, urlImageAlbum: song.urlImageAlbum });
-                                  setAddToPlaylistOpen(true);
-                                }}>
+                              <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToQueue(mapToPlayerSong(song));
+                                    toast({
+                                      title: "Đã thêm vào danh sách phát",
+                                      description: `${song.name} đã được đưa vào hàng chờ.`,
+                                      variant: "success",
+                                    });
+                                  }}
+                                >
+                                  <Play className="w-4 h-4 mr-2" />
+                                  Thêm vào danh sách đang phát
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedSong({ id: song.id, name: song.name, urlImageAlbum: song.urlImageAlbum });
+                                    setAddToPlaylistOpen(true);
+                                  }}
+                                >
                                   <ListPlus className="w-4 h-4 mr-2" />
                                   Thêm vào playlist
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const url = `${window.location.origin}/song/${song.id}`;
+                                    navigator.clipboard.writeText(url);
+                                    toast({
+                                      title: "Đã sao chép liên kết bài hát",
+                                      description: "Có thể dán và chia sẻ ngay với bạn bè.",
+                                      variant: "info",
+                                    });
+                                  }}
+                                >
+                                  <Copy className="w-4 h-4 mr-2" />
+                                  Sao chép liên kết
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>

@@ -20,13 +20,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Upload, X } from "lucide-react";
+import { MOOD_ICON_OPTIONS } from "@/data/iconOptions";
 import { uploadImage } from "@/config/cloudinary";
+import { Upload, X } from "lucide-react";
 
 const moodFormSchema = z.object({
   name: z.string().min(1, "Tên mood không được để trống").max(100),
-  iconUrl: z.string().optional(),
+  iconKey: z.string().optional(),
+  customIconUrl: z.string().optional(),
   gradient: z.string().optional(),
+}).refine((data) => !!(data.iconKey || data.customIconUrl), {
+  message: "Vui lòng chọn icon hoặc upload icon riêng",
+  path: ["iconKey"],
 });
 
 type MoodFormValues = z.infer<typeof moodFormSchema>;
@@ -35,7 +40,7 @@ interface MoodFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: MoodFormValues) => void;
-  defaultValues?: Partial<MoodFormValues>;
+  defaultValues?: Partial<MoodFormValues> & { iconUrl?: string };
   isLoading?: boolean;
   mode: "create" | "edit";
 }
@@ -49,29 +54,41 @@ export const MoodFormDialog = ({
   mode,
 }: MoodFormDialogProps) => {
   const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [customPreview, setCustomPreview] = useState<string>("");
 
   const form = useForm<MoodFormValues>({
     resolver: zodResolver(moodFormSchema),
     defaultValues: {
       name: "",
-      iconUrl: "",
-      gradient: "",
+      iconKey: MOOD_ICON_OPTIONS[0]?.value ?? "sun",
+      gradient: MOOD_ICON_OPTIONS[0]?.gradientClass ?? "from-neon-pink to-primary",
+      customIconUrl: "",
       ...defaultValues,
     },
   });
 
   useEffect(() => {
     if (open && defaultValues) {
-      form.reset(defaultValues);
-      setPreviewUrl(defaultValues.iconUrl || "");
+      const preset = MOOD_ICON_OPTIONS.find((opt) => opt.value === defaultValues.iconUrl);
+      form.reset({
+        name: defaultValues.name || "",
+        iconKey: preset ? preset.value : "",
+        customIconUrl: preset ? "" : defaultValues.iconUrl || "",
+        gradient:
+          defaultValues.gradient ||
+          preset?.gradientClass ||
+          MOOD_ICON_OPTIONS[0]?.gradientClass ||
+          "from-neon-pink to-primary",
+      });
+      setCustomPreview(preset ? "" : defaultValues.iconUrl || "");
     } else if (open) {
       form.reset({
         name: "",
-        iconUrl: "",
-        gradient: "",
+        iconKey: MOOD_ICON_OPTIONS[0]?.value ?? "sun",
+        gradient: MOOD_ICON_OPTIONS[0]?.gradientClass ?? "from-neon-pink to-primary",
+        customIconUrl: "",
       });
-      setPreviewUrl("");
+      setCustomPreview("");
     }
   }, [open, defaultValues, form]);
 
@@ -82,8 +99,9 @@ export const MoodFormDialog = ({
     setUploading(true);
     try {
       const result = await uploadImage(file);
-      setPreviewUrl(result.secure_url);
-      form.setValue("iconUrl", result.secure_url);
+      setCustomPreview(result.secure_url);
+      form.setValue("customIconUrl", result.secure_url, { shouldDirty: true, shouldValidate: true });
+      form.setValue("iconKey", "", { shouldDirty: true, shouldValidate: true });
     } catch (error) {
       console.error("Upload error:", error);
     } finally {
@@ -92,12 +110,16 @@ export const MoodFormDialog = ({
   };
 
   const handleRemoveImage = () => {
-    setPreviewUrl("");
-    form.setValue("iconUrl", "");
+    setCustomPreview("");
+    form.setValue("customIconUrl", "", { shouldDirty: true, shouldValidate: true });
   };
 
   const handleSubmit = (data: MoodFormValues) => {
-    onSubmit(data);
+    onSubmit({
+      name: data.name,
+      iconUrl: data.customIconUrl || data.iconKey || "",
+      gradient: data.gradient,
+    });
   };
 
   return (
@@ -150,49 +172,85 @@ export const MoodFormDialog = ({
             {/* Icon Upload */}
             <FormField
               control={form.control}
-              name="iconUrl"
+              name="iconKey"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Icon</FormLabel>
                   <FormControl>
-                    <div className="flex flex-col gap-4">
-                      {previewUrl ? (
-                        <div className="relative w-32 h-32 rounded-lg overflow-hidden border">
-                          <img
-                            src={previewUrl}
-                            alt="Preview"
-                            className="w-full h-full object-cover"
-                          />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {MOOD_ICON_OPTIONS.map((option) => {
+                        const IconComp = option.icon;
+                        const isSelected = field.value === option.value;
+                        return (
                           <button
+                            key={option.value}
                             type="button"
-                            onClick={handleRemoveImage}
-                            className="absolute top-1 right-1 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90"
+                            onClick={() => {
+                              field.onChange(option.value);
+                              setCustomPreview("");
+                              form.setValue("customIconUrl", "", { shouldDirty: true, shouldValidate: true });
+                              if (option.gradientClass) {
+                                form.setValue("gradient", option.gradientClass, { shouldDirty: true });
+                              }
+                            }}
+                            className={`flex items-center gap-3 rounded-lg border p-3 text-left transition hover:border-primary hover:bg-primary/5 ${
+                              isSelected ? "border-primary ring-2 ring-primary/40 bg-primary/5" : "border-border"
+                            }`}
                           >
-                            <X className="w-4 h-4" />
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/80 text-white">
+                              <IconComp className="h-5 w-5" />
+                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">{option.label}</span>
+                              <span className="text-xs text-muted-foreground">{option.value}</span>
+                            </div>
                           </button>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent">
-                          <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Upload icon</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleFileUpload}
-                            disabled={uploading}
-                          />
-                        </label>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        * Khuyến nghị 512x512px, tối đa 5MB (JPG, PNG, WebP)
-                      </p>
+                        );
+                      })}
                     </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Hoặc upload icon riêng</p>
+              <div className="flex flex-col gap-4">
+                {customPreview ? (
+                  <div className="relative w-32 h-32 rounded-lg overflow-hidden border">
+                    <img
+                      src={customPreview}
+                      alt="Custom icon"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className="absolute top-1 right-1 p-1 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90"
+                      aria-label="Remove icon"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent">
+                    <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Upload icon</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                      disabled={uploading}
+                    />
+                  </label>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  * Khuyến nghị 512x512px, tối đa 5MB (JPG, PNG, WebP)
+                </p>
+              </div>
+            </div>
 
             <DialogFooter>
               <Button
