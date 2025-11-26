@@ -59,6 +59,11 @@ const cleanMessageBody = (from: string, message?: string | null) => {
   return body;
 };
 
+const truncateMessageBody = (text: string, maxChars = 220) => {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars).trim()}…`;
+};
+
 const ChatBubble = () => {
   const [newMessages, setNewMessages] = useState<ChatBubbleMessage[]>([]);
   const navigate = useNavigate();
@@ -164,8 +169,10 @@ const ChatBubble = () => {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="mt-1 text-sm text-slate-800 dark:text-slate-50 break-words">
-                {cleanMessageBody(message.from, message.message)}
+              <p className="mt-1 text-sm text-slate-800 dark:text-slate-50 break-words line-clamp-2">
+                {truncateMessageBody(
+                  cleanMessageBody(message.from, message.message)
+                )}
               </p>
             </div>
           </div>

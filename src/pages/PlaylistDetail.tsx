@@ -1102,6 +1102,9 @@ const PlaylistDetail = () => {
         currentUserAvatar = currentUserFriend.avatar;
       }
     }
+
+    // Đánh dấu đang thêm ngay lập tức để button phản hồi click đầu tiên
+    setAddingSongIds((prev) => (prev.includes(songId) ? prev : [...prev, songId]));
     
     // Lấy thông tin đầy đủ từ API để có duration chính xác
     let songDetail: any = null;
@@ -1183,7 +1186,6 @@ const PlaylistDetail = () => {
       addedById: meId,
       addedByAvatar: toAbsoluteUrl(currentUserAvatar) || null,
     };
-    setAddingSongIds((prev) => (prev.includes(songId) ? prev : [...prev, songId]));
     setPlaylist((prev) => {
       if (!prev) return prev;
       if (prev.songs.some((existing) => existing.id === String(songId))) {
