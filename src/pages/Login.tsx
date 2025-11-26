@@ -261,6 +261,8 @@ const Login = () => {
     } finally {
       setIsLoading(false);
     }
+
+    setTimeout(() => {
       try {
         const params = new URLSearchParams(window.location.search);
         const redirectParam = params.get('redirect');
