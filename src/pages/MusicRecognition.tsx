@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { arcApi } from "@/services/api";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const MusicRecognition = () => {
@@ -37,7 +37,14 @@ const MusicRecognition = () => {
   const chunksRef = useRef<Blob[]>([]);
 
   // Feature limit hook for AI Search
-  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+  const {
+    canUse,
+    remaining,
+    limit,
+    limitType,
+    useFeature,
+    isLoading: isCheckingLimit,
+  } = useFeatureLimit({
     featureName: FeatureName.AI_SEARCH,
     autoCheck: true,
     onLimitReached: () => setShowLimitModal(true),
@@ -120,8 +127,8 @@ const MusicRecognition = () => {
     return;
   }
 
-  // Check feature limit - only show modal if not premium and hết lượt
-  if (!isPremium && remaining === 0) {
+  // Check feature limit - dùng canUse từ backend (backend đã xử lý tất cả logic)
+  if (!canUse) {
     setShowLimitModal(true);
     return;
   }
@@ -130,14 +137,11 @@ const MusicRecognition = () => {
   setError("");
 
   try {
-    // Use feature (increment usage count) - only if not premium
-    if (!isPremium) {
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        setIsLoading(false);
-        return;
-      }
+    const success = await useFeature();
+    if (!success) {
+      setShowLimitModal(true);
+      setIsLoading(false);
+      return;
     }
 
     const result = await arcApi.recognizeMusic(audioBlob);
@@ -286,7 +290,7 @@ const MusicRecognition = () => {
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
-                  disabled={isLoading || isCheckingLimit || !audioUrl || (!isPremium && remaining === 0)}
+                  disabled={isLoading || isCheckingLimit || !audioUrl}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   size="lg"
                 >
@@ -303,8 +307,8 @@ const MusicRecognition = () => {
                   ) : (
                     <>
                       Recognize Music
-                      {!isPremium && remaining === 0 && (
-                        <span className="ml-2 text-xs opacity-75">(Premium only)</span>
+                      {!canUse && (
+                        <span className="ml-2 text-xs opacity-75">(Limit reached)</span>
                       )}
                     </>
                   )}
@@ -355,8 +359,8 @@ const MusicRecognition = () => {
         featureName={FeatureName.AI_SEARCH}
         featureDisplayName="AI Search"
         remaining={remaining}
-        limit={0}
-        isPremium={isPremium}
+        limit={typeof limit === "number" ? limit : undefined}
+        isPremium={limitType === FeatureLimitType.UNLIMITED}
       />
     </div>
   );
