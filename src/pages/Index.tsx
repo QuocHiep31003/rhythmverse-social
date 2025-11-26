@@ -350,12 +350,6 @@ const Index = () => {
                   path: "/discover",
                 },
                 {
-                  icon: TrendingUp,
-                  color: "text-neon-pink",
-                  label: "Trending",
-                  path: "/trending",
-                },
-                {
                   icon: Music,
                   color: "text-neon-blue",
                   label: "Genres",

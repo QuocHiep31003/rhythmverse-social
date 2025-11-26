@@ -11,6 +11,7 @@ import { GenreSongsDialog } from "@/components/admin/GenreSongsDialog";
 import { genresApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { GENRE_ICON_OPTIONS } from "@/data/iconOptions";
 
 const SORT_OPTIONS = [
   { label: "Name (A-Z)", value: "name,asc" },
@@ -20,6 +21,8 @@ const SORT_OPTIONS = [
   { label: "Date modified (Newest)", value: "updatedAt,desc" },
   { label: "Date modified (Oldest)", value: "updatedAt,asc" },
 ];
+
+const isRemoteIcon = (value?: string) => !!value && /^https?:\/\//i.test(value);
 
 const AdminGenres = () => {
   const navigate = useNavigate();
@@ -203,7 +206,18 @@ const AdminGenres = () => {
                               </div>
                             </td>
                             <td className="w-28 p-3 align-top">
-                              {genre.iconUrl ? (
+                              {(() => {
+                                const preset = GENRE_ICON_OPTIONS.find((opt) => opt.value === genre.iconUrl);
+                                if (preset) {
+                                  const IconComp = preset.icon;
+                                  return (
+                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white ${preset.badgeClass ?? "bg-primary"}`}>
+                                      <IconComp className="w-6 h-6" />
+                                    </div>
+                                  );
+                                }
+                                if (isRemoteIcon(genre.iconUrl)) {
+                                  return (
                                 <div className="w-12 h-12 rounded-lg overflow-hidden border border-border/60">
                                   <img
                                     src={genre.iconUrl}
@@ -211,9 +225,10 @@ const AdminGenres = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 </div>
-                              ) : (
-                                <Badge variant="outline" className="text-muted-foreground">Không có</Badge>
-                              )}
+                                  );
+                                }
+                                return <Badge variant="outline" className="text-muted-foreground">Không có</Badge>;
+                              })()}
                             </td>
                             <td className="w-24 p-3 align-top">
                               <span className="font-medium">{formatWeight(genre.weight)}</span>
@@ -289,7 +304,21 @@ const AdminGenres = () => {
             </div>
           )}
 
-        <GenreFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedGenre} isLoading={isSubmitting} mode={formMode} />
+        <GenreFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          onSubmit={handleFormSubmit}
+          isLoading={isSubmitting}
+          mode={formMode}
+          defaultValues={
+            formMode === "edit" && selectedGenre
+              ? {
+                  name: selectedGenre.name,
+                  iconUrl: selectedGenre.iconUrl,
+                }
+              : undefined
+          }
+        />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa thể loại?" description={`Bạn có chắc muốn xóa thể loại "${selectedGenre?.name}"?`} isLoading={isSubmitting} />
         <GenreSongsDialog 
           open={songsDialogOpen} 

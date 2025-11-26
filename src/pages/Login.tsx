@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Music, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from "lucide-react";
+import { Music, Mail, Lock, User, Eye, EyeOff, Chrome } from "lucide-react";
 import { authApi } from "@/services/api";
+import { setTokens, startTokenRefreshInterval } from "@/services/api/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const Login = () => {
@@ -54,19 +55,11 @@ const Login = () => {
         throw new Error('No token received from server');
       }
 
-      // Persist token and refresh token in both storages to avoid losing auth across tabs/windows
-      try {
-        localStorage.setItem("token", response.token);
-        if (response.refreshToken) {
-          localStorage.setItem("refreshToken", response.refreshToken);
-        }
-      } catch {}
-      try {
-        sessionStorage.setItem("token", response.token);
-        if (response.refreshToken) {
-          sessionStorage.setItem("refreshToken", response.refreshToken);
-        }
-      } catch {}
+      // Persist token and refresh token using setTokens helper
+      setTokens(response.token, response.refreshToken);
+      
+      // Start automatic token refresh interval
+      startTokenRefreshInterval();
 
       // Fetch current user and persist userId for flows that rely on it
       try {
@@ -187,12 +180,9 @@ const Login = () => {
   
       // Lưu token và refresh token nếu có
       if (response.token) {
-        try {
-          localStorage.setItem("token", response.token);
-          if (response.refreshToken) {
-            localStorage.setItem("refreshToken", response.refreshToken);
-          }
-        } catch {}
+        setTokens(response.token, response.refreshToken);
+        // Start automatic token refresh interval
+        startTokenRefreshInterval();
       }
   
       setSuccess("Registration successful! Please log in.");
@@ -204,23 +194,47 @@ const Login = () => {
   };
   
 
-  const handleSocialLogin = (provider: string) => {
+  const handleSocialLogin = async (provider: string) => {
+    if (provider !== 'google') {
+      console.warn('Unsupported provider:', provider);
+      return;
+    }
+
     setIsLoading(true);
-    // Mock social login
-    setTimeout(() => {
+    try {
+      // TODO: Implement Google OAuth
+      // 1. Get Google OAuth credentials from Google Cloud Console
+      // 2. Install: npm install @react-oauth/google
+      // 3. Configure Google OAuth client ID in environment variables
+      // 4. Initialize Google OAuth in App.tsx or main.tsx
+      // 5. Use GoogleLogin component or handle OAuth flow manually
+      
+      // Example implementation (placeholder):
+      // const response = await googleAuth.signIn();
+      // const { token, email, name } = response;
+      // 
+      // // Send to backend to create/login user
+      // const authResponse = await authApi.loginWithGoogle({ token, email, name });
+      // 
+      // // Save tokens
+      // setTokens(authResponse.token, authResponse.refreshToken);
+      // startTokenRefreshInterval();
+      // 
+      // // Navigate
+      // const params = new URLSearchParams(window.location.search);
+      // const redirectParam = params.get('redirect');
+      // const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
+      // const target = redirectParam || pending || '/';
+      // navigate(target);
+
+      // Temporary: Show message that Google login is coming soon
+      alert('Google OAuth integration is in progress. Please use email/password login for now.');
+    } catch (error) {
+      console.error('Google login error:', error);
+      alert('Failed to login with Google. Please try again or use email/password login.');
+    } finally {
       setIsLoading(false);
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const redirectParam = params.get('redirect');
-        const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
-        const target = redirectParam || pending || '/';
-        try { localStorage.removeItem('pendingInviteUrl'); } catch {}
-        try { sessionStorage.removeItem('pendingInviteUrl'); } catch {}
-        navigate(target);
-      } catch {
-        navigate('/');
-      }
-    }, 1000);
+    }
   };
 
   const [resetStep, setResetStep] = useState<1 | 2>(1);
@@ -553,7 +567,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="mt-4">
                 <Button
                   variant="outline"
                   className="w-full"
@@ -561,16 +575,7 @@ const Login = () => {
                   disabled={isLoading}
                 >
                   <Chrome className="w-4 h-4 mr-2" />
-                  Google
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleSocialLogin("github")}
-                  disabled={isLoading}
-                >
-                  <Github className="w-4 h-4 mr-2" />
-                  GitHub
+                  Continue with Google
                 </Button>
               </div>
             </div>
@@ -578,12 +583,12 @@ const Login = () => {
             <div className="text-center mt-6 text-sm text-muted-foreground">
               <p>
                 By signing in, you agree to our{" "}
-                <Button variant="link" className="p-0 h-auto text-sm">
-                  Terms of Service
+                <Button variant="link" className="p-0 h-auto text-sm" asChild>
+                  <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
                 </Button>{" "}
                 and{" "}
-                <Button variant="link" className="p-0 h-auto text-sm">
-                  Privacy Policy
+                <Button variant="link" className="p-0 h-auto text-sm" asChild>
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
                 </Button>
               </p>
             </div>

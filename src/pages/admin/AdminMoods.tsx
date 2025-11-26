@@ -10,6 +10,7 @@ import { MoodSongsDialog } from "@/components/admin/MoodSongsDialog";
 import { moodsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { MOOD_ICON_OPTIONS } from "@/data/iconOptions";
 
 const SORT_OPTIONS = [
   { label: "Name (A-Z)", value: "name,asc" },
@@ -19,6 +20,8 @@ const SORT_OPTIONS = [
   { label: "Date modified (Newest)", value: "updatedAt,desc" },
   { label: "Date modified (Oldest)", value: "updatedAt,asc" },
 ];
+
+const isRemoteIcon = (value?: string) => !!value && /^https?:\/\//i.test(value);
 
 const AdminMoods = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -201,7 +204,18 @@ const AdminMoods = () => {
                               </div>
                             </td>
                             <td className="w-28 p-3 align-top">
-                              {mood.iconUrl ? (
+                              {(() => {
+                                const preset = MOOD_ICON_OPTIONS.find((opt) => opt.value === mood.iconUrl);
+                                if (preset) {
+                                  const IconComp = preset.icon;
+                                  return (
+                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white bg-gradient-to-br ${preset.gradientClass ?? "from-neon-pink to-primary"}`}>
+                                      <IconComp className="w-6 h-6" />
+                                    </div>
+                                  );
+                                }
+                                if (isRemoteIcon(mood.iconUrl)) {
+                                  return (
                                 <div className="w-12 h-12 rounded-lg overflow-hidden border border-border/60">
                                   <img
                                     src={mood.iconUrl}
@@ -209,16 +223,23 @@ const AdminMoods = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 </div>
-                              ) : (
-                                <Badge variant="outline" className="text-muted-foreground">Không có</Badge>
-                              )}
+                                  );
+                                }
+                                return <Badge variant="outline" className="text-muted-foreground">Không có</Badge>;
+                              })()}
                             </td>
                             <td className="w-1/4 p-3 text-left align-top">
                               {mood.gradient ? (
                                 <div className="flex items-center gap-2">
                                   <div
-                                    className="w-12 h-6 rounded border border-border/40"
-                                    style={{ background: mood.gradient }}
+                                    className={`w-12 h-6 rounded border border-border/40 ${
+                                      mood.gradient.includes("from-") ? `bg-gradient-to-r ${mood.gradient}` : ""
+                                    }`}
+                                    style={
+                                      mood.gradient.includes("from-")
+                                        ? undefined
+                                        : { background: mood.gradient }
+                                    }
                                   />
                                   <span className="text-sm text-muted-foreground font-mono truncate">{mood.gradient}</span>
                                 </div>
@@ -300,7 +321,22 @@ const AdminMoods = () => {
             </div>
           )}
 
-        <MoodFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedMood} isLoading={isSubmitting} mode={formMode} />
+        <MoodFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          onSubmit={handleFormSubmit}
+          isLoading={isSubmitting}
+          mode={formMode}
+          defaultValues={
+            formMode === "edit" && selectedMood
+              ? {
+                  name: selectedMood.name,
+                  iconUrl: selectedMood.iconUrl,
+                  gradient: selectedMood.gradient,
+                }
+              : undefined
+          }
+        />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa mood?" description={`Bạn có chắc muốn xóa mood "${selectedMood?.name}"?`} isLoading={isSubmitting} />
         <MoodSongsDialog 
           open={songsDialogOpen} 

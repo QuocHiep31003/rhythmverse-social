@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { toast } from "@/hooks/use-toast";
 
 export interface Song {
   id: string;
@@ -29,8 +30,11 @@ interface MusicContextType {
   playPrevious: () => void;
   addToQueue: (song: Song) => void;
   setQueue: (songs: Song[]) => void;
+  removeFromQueue: (songId: string | number) => void;
+  moveQueueItem: (fromIndex: number, toIndex: number) => void;
   toggleShuffle: () => void;
   setRepeatMode: (mode: "off" | "one" | "all") => void;
+  resetPlayer: () => void;
 }
 
 const MusicContext = createContext<MusicContextType | undefined>(undefined);
@@ -124,12 +128,69 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const addToQueue = (song: Song) => {
-    setQueue(prev => [...prev, song]);
+    let shouldAutoplayFirstSong = false;
+    setQueue(prev => {
+      const exists = prev.some((s) => String(s.id) === String(song.id));
+      if (exists) {
+        toast({
+          title: "Bài hát đã có trong danh sách phát",
+          description: `${song.songName || song.name || song.title || "Bài hát"} đã có trong danh sách đang phát.`,
+        });
+        return prev;
+      }
+      if (prev.length === 0 && !currentSong) {
+        shouldAutoplayFirstSong = true;
+      }
+      return [...prev, song];
+    });
+    if (shouldAutoplayFirstSong) {
+      playSong(song);
+    }
   };
+
+  const removeFromQueue = useCallback(
+    (songId: string | number) => {
+      setQueue(prev => {
+        const updated = prev.filter((s) => String(s.id) !== String(songId));
+        if (currentSong && String(currentSong.id) === String(songId)) {
+          if (updated.length > 0) {
+            playSong(updated[0]);
+          } else {
+            setCurrentSong(null);
+            setIsPlaying(false);
+          }
+        }
+        return updated;
+      });
+    },
+    [currentSong, playSong],
+  );
+
+  const moveQueueItem = useCallback((fromIndex: number, toIndex: number) => {
+    setQueue(prev => {
+      if (prev.length === 0) return prev;
+      const safeFrom = Math.max(0, Math.min(prev.length - 1, fromIndex));
+      const safeTo = Math.max(0, Math.min(prev.length - 1, toIndex));
+      if (safeFrom === safeTo) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(safeFrom, 1);
+      updated.splice(safeTo, 0, moved);
+      return updated;
+    });
+  }, []);
 
   const toggleShuffle = () => {
     setIsShuffled(prev => !prev);
   };
+
+  const resetPlayer = useCallback(() => {
+    console.log("[MusicContext] resetPlayer invoked");
+    setCurrentSong(null);
+    setIsPlaying(false);
+    setQueue([]);
+    setIsShuffled(false);
+    setRepeatMode("off");
+  }, []);
 
   return (
     <MusicContext.Provider
@@ -145,8 +206,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
         playPrevious,
         addToQueue,
         setQueue: setQueueWithLog,
+        removeFromQueue,
+        moveQueueItem,
         toggleShuffle,
         setRepeatMode,
+        resetPlayer,
       }}
     >
       {children}

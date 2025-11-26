@@ -28,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
 
 import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate } from "react-router-dom";
@@ -484,6 +485,10 @@ const TopBar = () => {
 
   /** ================= LOGOUT ================= **/
   const handleLogout = () => {
+    // Stop token refresh interval
+    stopTokenRefreshInterval();
+    clearTokens();
+    
     localStorage.clear();
     sessionStorage.clear();
 
