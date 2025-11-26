@@ -108,6 +108,7 @@ const App = () => (
                     <Route path="/playlists" element={<PlaylistLibrary />} />
                     <Route path="/playlist/:slug" element={<PlaylistDetail />} />
                     <Route path="/create-playlist" element={<CreatePlaylist />} />
+                    <Route path="/trending" element={<Top100 />} />
                     <Route path="/top100" element={<Top100 />} />
                     <Route path="/quiz" element={<Quiz />} />
                     <Route path="/quiz/create" element={<CreateQuiz />} />

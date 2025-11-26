@@ -19,6 +19,8 @@ import type { Song } from "@/contexts/MusicContext";
 import { callHotTodayTrending } from "@/services/api/trendingApi";
 import { Skeleton } from "@/components/ui/skeleton";
 import { mapToPlayerSong, type PlayerSong as BasePlayerSong, type ApiSong, formatDuration } from "@/lib/utils";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import type { TooltipProps } from "recharts";
 
 type TopSong = BasePlayerSong & {
   name?: string;
@@ -33,6 +35,69 @@ type TrendingApiSong = ApiSong & {
   playCount?: number;
   previousRank?: number;
   rank?: number;
+};
+
+type Top3HistoryLine = {
+  songId?: string | number;
+  songName?: string;
+  color?: string;
+  albumImageUrl?: string;
+  scoreHistory?: number[];
+};
+
+type Top3HistoryResponse = {
+  labels: string[];
+  lines: Top3HistoryLine[];
+};
+
+type ChartTooltipPayload = {
+  value?: number;
+  name?: string | number;
+  payload?: Record<string, unknown>;
+};
+
+type TooltipValue = number | string | Array<number | string>;
+type TooltipName = string | number;
+
+const generateLast24Hours = () => {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  const labels: string[] = [];
+  for (let i = 23; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 60 * 60 * 1000);
+    labels.push(`${d.getHours().toString().padStart(2, "0")}:00`);
+  }
+  return labels;
+};
+
+const CustomTop3ChartTooltip = ({ active, payload, label }: TooltipProps<TooltipValue, TooltipName>) => {
+  if (!active || !payload?.length) return null;
+  const entries: ChartTooltipPayload[] = payload.map((item) => ({
+    value: typeof item.value === "number" ? item.value : Number(item.value ?? 0),
+    name: item.name,
+    payload: item.payload as Record<string, unknown>,
+  }));
+  const sorted = [...entries].sort((a, b) => (b?.value ?? 0) - (a?.value ?? 0));
+  return (
+    <div className="rounded bg-card border p-3 shadow text-xs min-w-[200px]">
+      <div className="font-semibold mb-2">{label}</div>
+      <div className="flex flex-col gap-1">
+        {sorted.map((pl, i: number) => {
+          const nameKey = pl?.name != null ? String(pl.name) : "";
+          const meta = pl?.payload?.[`${nameKey}_meta`] as Top3HistoryLine | undefined;
+          return (
+            <div key={i} className="flex items-center gap-2">
+              {meta?.albumImageUrl && (
+                <img src={meta.albumImageUrl} className="w-5 h-5 rounded object-cover" alt="" />
+              )}
+              <span className="truncate flex-1" style={{ color: meta?.color }}>{pl?.name}</span>
+              <span className="font-bold" style={{ color: meta?.color }}>{pl?.value ?? 0}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 };
 
 const Top100 = () => {
@@ -51,6 +116,8 @@ const Top100 = () => {
     title: string;
     url: string;
   } | null>(null);
+  const [top3History, setTop3History] = useState<Top3HistoryResponse>({ labels: [], lines: [] });
+  const [isLoadingTop3Chart, setIsLoadingTop3Chart] = useState(true);
 
   // Fetch top 100 trending songs (dùng API hot-today chuẩn hóa với top=100)
   useEffect(() => {
@@ -86,6 +153,15 @@ const Top100 = () => {
       }
     };
     fetchTop100();
+  }, []);
+
+  useEffect(() => {
+    setIsLoadingTop3Chart(true);
+    fetch("http://localhost:8080/api/trending/snapshot-history-top3?limit=24")
+      .then(res => res.json())
+      .then((data: Top3HistoryResponse) => setTop3History(data))
+      .catch(() => setTop3History({ labels: [], lines: [] }))
+      .finally(() => setIsLoadingTop3Chart(false));
   }, []);
 
   const handlePlaySong = (song: TopSong) => {
@@ -214,6 +290,27 @@ const Top100 = () => {
     }
   };
 
+type ChartDataPoint = {
+  time: string;
+  [key: string]: string | number | Top3HistoryLine | undefined;
+};
+
+const chartLabels = generateLast24Hours();
+  const chartLines = Array.isArray(top3History.lines) ? top3History.lines : [];
+const chartData: ChartDataPoint[] = chartLabels.map((label: string, idx: number) => {
+  const entry: ChartDataPoint = { time: label };
+    chartLines.forEach((line, index) => {
+      const scores = Array.isArray(line?.scoreHistory) ? line.scoreHistory : [];
+    const key = line.songName || (line.songId ? String(line.songId) : `song-${index}`);
+      const offset = chartLabels.length - scores.length;
+      const localIdx = idx - Math.max(0, offset);
+      const value = localIdx >= 0 && localIdx < scores.length ? (scores[localIdx] ?? 0) : 0;
+      entry[key] = value;
+      entry[`${key}_meta`] = line;
+    });
+    return entry;
+  });
+
   return (
     <div className="min-h-screen bg-gradient-dark text-white">
       <div className="container mx-auto px-4 py-8">
@@ -222,12 +319,55 @@ const Top100 = () => {
           <div className="flex items-center gap-3 mb-4">
             <Trophy className="w-8 h-8 text-yellow-500" />
             <h1 className="text-4xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">
-              Hot Today
+              Trending
             </h1>
           </div>
           <p className="text-muted-foreground text-lg">
             The ultimate ranking of music's biggest hits
           </p>
+          <div className="mt-6 bg-card/60 border border-border/40 rounded-xl p-4">
+            <p className="text-sm text-muted-foreground mb-3">
+              Biểu đồ biến động Top 3 trong 24 giờ gần nhất
+            </p>
+            {isLoadingTop3Chart ? (
+              <Skeleton className="w-full h-[240px] rounded-lg" />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={chartData}>
+                  <XAxis
+                    dataKey="time"
+                    interval={0}
+                    minTickGap={0}
+                    allowDuplicatedCategory={false}
+                    tick={{ fontSize: 10 }}
+                    padding={{ left: 0, right: 0 }}
+                  />
+                  <YAxis allowDecimals domain={["auto", "auto"]} hide tick={false} axisLine={false} tickLine={false} width={0} />
+                  <Tooltip
+                    content={({ active, payload, label }) => (
+                      <CustomTop3ChartTooltip active={active} payload={payload} label={label} />
+                    )}
+                    cursor={{ stroke: "#9ca3af", strokeDasharray: "3 3" }}
+                  />
+                  {chartLines.map((line, index) => {
+                    const dataKey = line.songName || (line.songId ? String(line.songId) : `song-${index}`);
+                    return (
+                      <Line
+                        key={dataKey}
+                        type="monotone"
+                        dataKey={dataKey}
+                        stroke={line.color || "#facc15"}
+                        strokeWidth={3}
+                        dot={{ r: 2, stroke: line.color || "#facc15", fill: "#fff" }}
+                        activeDot={{ r: 6, stroke: line.color || "#facc15", fill: "#fff", strokeWidth: 2 }}
+                        isAnimationActive={false}
+                      />
+                    );
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
 
         <Card className="bg-card/50 border-border/50">
