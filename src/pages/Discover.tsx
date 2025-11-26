@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,8 +22,13 @@ import {
   Star,
   Headphones,
   Lock,
-  Users
+  Users,
+  Loader2,
 } from "lucide-react";
+import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
+import { songsApi as songsApiClient, moodsApi } from "@/services/api";
+import { useToast } from "@/hooks/use-toast";
 import { getTrendingComparison, TrendingSong } from "@/services/api/trendingApi";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -35,9 +40,39 @@ const Discover = () => {
   const [userType, setUserType] = useState<"guest" | "free" | "premium">("guest");
   const [hotToday, setHotToday] = useState<TrendingSong[]>([]);
   const [rankHistoryData, setRankHistoryData] = useState([]);
+  const { setQueue, playSong } = useMusic();
+  const { toast } = useToast();
+
+  const [availableMoods, setAvailableMoods] = useState<Array<{ id: number; name: string; tone: "positive" | "negative" | "neutral" }>>([]);
+  const [selectedMoodIds, setSelectedMoodIds] = useState<number[]>([]);
+  const [isLoadingMoodRecs, setIsLoadingMoodRecs] = useState(false);
 
   useEffect(() => {
     getTrendingComparison(10).then(setHotToday).catch(() => {});
+  }, []);
+
+  // Load moods for AI mood-based recommendations
+  useEffect(() => {
+    const loadMoods = async () => {
+      try {
+        const data = await moodsApi.getAll({ page: 0, size: 50, sort: "name,asc" });
+        const items = (data?.content ?? []).map((m: any) => {
+          const name: string = m.name || "";
+          const lower = name.toLowerCase();
+          let tone: "positive" | "negative" | "neutral" = "neutral";
+          if (/(vui|happy|joy|love|party|energetic|phấn khích|sôi động)/i.test(lower)) {
+            tone = "positive";
+          } else if (/(buồn|sad|đau|tâm trạng|lonely|cry|heartbreak|dark)/i.test(lower)) {
+            tone = "negative";
+          }
+          return { id: m.id as number, name, tone };
+        });
+        setAvailableMoods(items);
+      } catch (error) {
+        console.error("Failed to load moods for AI pick:", error);
+      }
+    };
+    loadMoods();
   }, []);
 
   // FE mock dữ liệu 8 điểm rank (fake dev, BE cần bổ sung API lấy chuỗi điểm history thật)
@@ -61,6 +96,107 @@ const Discover = () => {
     }));
     setRankHistoryData(data);
   }, [hotToday]);
+
+  const toneConflicts = useCallback((currentTones: Set<string>, newTone: "positive" | "negative") => {
+    if (newTone === "positive") return currentTones.has("negative");
+    if (newTone === "negative") return currentTones.has("positive");
+    return false;
+  }, []);
+
+  const handleToggleMood = useCallback((moodId: number) => {
+    setSelectedMoodIds((prev) => {
+      const already = prev.includes(moodId);
+      if (already) {
+        return prev.filter((id) => id !== moodId);
+      }
+      const mood = availableMoods.find((m) => m.id === moodId);
+      if (!mood) return prev;
+
+      const currentTones = new Set(
+        prev
+          .map((id) => availableMoods.find((m) => m.id === id)?.tone)
+          .filter(Boolean) as string[]
+      );
+
+      if (mood.tone === "positive" || mood.tone === "negative") {
+        if (toneConflicts(currentTones, mood.tone)) {
+          toast({
+            title: "Mood trái ngược nhau",
+            description: "Hạn chế chọn cùng lúc mood quá vui và quá buồn để gợi ý chính xác hơn.",
+            variant: "warning",
+          });
+          return prev;
+        }
+      }
+
+      // Khi chọn mood mới, tự loại các mood trái dấu (nếu có)
+      const filtered = prev.filter((id) => {
+        const t = availableMoods.find((m) => m.id === id)?.tone;
+        if (!t) return true;
+        if (mood.tone === "positive" && t === "negative") return false;
+        if (mood.tone === "negative" && t === "positive") return false;
+        return true;
+      });
+
+      return [...filtered, moodId];
+    });
+  }, [availableMoods, toneConflicts, toast]);
+
+  // Khi danh sách mood được chọn thay đổi, tự động gọi BE để tạo queue
+  useEffect(() => {
+    const run = async () => {
+      if (selectedMoodIds.length === 0) return;
+      try {
+        setIsLoadingMoodRecs(true);
+        // 1) Thử dùng API recommend theo multi-mood
+        const apiSongs = await songsApiClient.getRecommendationsByMoods(selectedMoodIds, 30);
+        let mapped = apiSongs.map((s) => mapToPlayerSong(s));
+
+        // 2) Nếu vẫn trống, fallback sang search theo moodId đầu tiên (ACTIVE)
+        if (mapped.length === 0 && selectedMoodIds[0] != null) {
+          try {
+            const firstMoodId = selectedMoodIds[0];
+            const fallback = await songsApiClient.getAll({
+              moodId: firstMoodId,
+              size: 30,
+              page: 0,
+              status: "ACTIVE",
+            });
+            const content = Array.isArray((fallback as any)?.content)
+              ? (fallback as any).content
+              : (fallback as any)?.songs ?? [];
+            mapped = content.map((s: any) => mapToPlayerSong(s));
+          } catch (e) {
+            console.error("Fallback mood search failed:", e);
+          }
+        }
+
+        if (mapped.length > 0) {
+          setQueue(mapped);
+          playSong(mapped[0]);
+          toast({
+            title: "Đã tạo danh sách phát theo mood",
+            description: `Đang phát: ${mapped[0].songName}`,
+          });
+        } else {
+          toast({
+            title: "Không tìm thấy bài hát phù hợp",
+            description: "Thử chọn mood khác hoặc kiểm tra lại dữ liệu mood/bài hát trong hệ thống.",
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load mood recommendations:", error);
+        toast({
+          title: "Lỗi khi gợi ý theo mood",
+          description: "Vui lòng thử lại sau.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingMoodRecs(false);
+      }
+    };
+    run();
+  }, [selectedMoodIds, playSong, setQueue, toast]);
 
   // AI Features for different user types
   const aiFeatures = {
@@ -299,6 +435,73 @@ const Discover = () => {
                 </CardContent>
               </Card>
             )}
+          </section>
+
+          {/* AI Pick For You - Mood based */}
+          <section className="mb-12">
+            <div className="text-center mb-4">
+              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2 justify-center">
+                <Brain className="w-5 h-5 text-primary" />
+                AI Pick For You
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Chọn mood hiện tại của bạn, hệ thống sẽ tự tạo danh sách phát phù hợp và phát luôn cho bạn.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2 mb-3">
+              {availableMoods.map((mood) => {
+                const isSelected = selectedMoodIds.includes(mood.id);
+                return (
+                  <Button
+                    key={mood.id}
+                    type="button"
+                    size="sm"
+                    variant={isSelected ? "default" : "outline"}
+                    className="rounded-full text-xs px-3 py-1"
+                    onClick={() => handleToggleMood(mood.id)}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span>{mood.name}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] border ${
+                          mood.tone === "positive"
+                            ? "bg-emerald-500/10 text-emerald-300 border-emerald-400/40"
+                            : mood.tone === "negative"
+                            ? "bg-rose-500/10 text-rose-300 border-rose-400/40"
+                            : "bg-blue-500/10 text-blue-200 border-blue-400/40"
+                        }`}
+                      >
+                        {mood.tone === "positive"
+                          ? "Tích cực"
+                          : mood.tone === "negative"
+                          ? "Trầm buồn"
+                          : "Nhẹ nhàng"}
+                      </span>
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              {selectedMoodIds.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Chọn ít nhất 1 mood. Hạn chế chọn cùng lúc mood quá vui và quá buồn để gợi ý chính xác hơn.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Đã chọn {selectedMoodIds.length} mood. Danh sách phát sẽ được cập nhật tự động khi bạn thay đổi mood.
+                </p>
+              )}
+              {isLoadingMoodRecs && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Đang tạo danh sách phát theo mood của bạn...
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Gợi ý sẽ xuất hiện trong trình phát ở cuối màn hình dưới dạng danh sách chờ.
+              </p>
+            </div>
           </section>
 
           {/* Advanced Search Section */}

@@ -85,7 +85,7 @@ const getAudioDuration = async (file: File): Promise<string> => {
 
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
-  releaseYear: z.coerce.number().min(1900, "Năm phát hành không hợp lệ").max(new Date().getFullYear() + 1),
+  releaseAt: z.string().min(1, "Thời gian phát hành không được để trống"),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   performerIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 ca sĩ chính"),
   featIds: z.array(z.number()).optional(),
@@ -178,7 +178,7 @@ export const SongFormDialog = ({
     resolver: zodResolver(songFormSchema),
     defaultValues: {
       name: "",
-      releaseYear: new Date().getFullYear(),
+      releaseAt: new Date().toISOString().slice(0, 16),
       genreIds: [],
       performerIds: [],
       featIds: [],
@@ -301,8 +301,8 @@ export const SongFormDialog = ({
       setGenreScores(new Map());
       setMoodScores(new Map());
       form.reset({
-        name: "",
-        releaseYear: new Date().getFullYear(),
+      name: "",
+      releaseAt: new Date().toISOString().slice(0, 16),
         genreIds: [],
         artistIds: [],
         moodIds: [],
@@ -502,14 +502,13 @@ export const SongFormDialog = ({
                     </div>
                     <FormField
                       control={form.control}
-                      name="releaseYear"
+                      name="releaseAt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Năm phát hành *</FormLabel>
+                          <FormLabel>Thời gian phát hành *</FormLabel>
                           <FormControl>
                             <Input
-                              type="number"
-                              placeholder="2024"
+                              type="datetime-local"
                               {...field}
                               className="admin-input transition-all duration-200"
                             />

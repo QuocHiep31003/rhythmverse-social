@@ -32,7 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cn, handleImageError } from "@/lib/utils";
+import { cn, handleImageError, toSeconds } from "@/lib/utils";
 import { useMusic } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
@@ -184,9 +184,10 @@ const MusicPlayer = () => {
     currentSongRef.current = currentSong;
   }, [currentSong]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+  const formatTime = (value: unknown) => {
+    const totalSeconds = toSeconds(value);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = Math.floor(totalSeconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
