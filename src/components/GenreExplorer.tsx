@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Music2, Waves, Zap, Coffee, Sun, Moon, Heart, Flame, LucideIcon } from "lucide-react";
 import { genresApi, moodsApi } from "@/services/api";
+import { GENRE_ICON_OPTIONS, MOOD_ICON_OPTIONS } from "@/data/iconOptions";
 
 interface GenreItem {
   name: string;
@@ -10,6 +11,7 @@ interface GenreItem {
   color: string;
   count?: string;
   iconUrl?: string;
+  iconKey?: string;
 }
 
 interface MoodItem {
@@ -18,6 +20,7 @@ interface MoodItem {
   gradient: string;
   iconUrl?: string;
   gradientFromBackend?: string;
+  iconKey?: string;
 }
 
 // Default icons as fallback
@@ -46,12 +49,17 @@ const GenreExplorer = () => {
     genresApi.getAll({ page: 0, size: 6, sort: "name,asc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
-          setGenres(data.content.map((genre: { name: string; iconUrl?: string }, index: number) => ({
-            name: genre.name,
-            icon: defaultGenres[index % defaultGenres.length]?.icon || Music2,
-            color: defaultGenres[index % defaultGenres.length]?.color || "bg-primary",
-            iconUrl: genre.iconUrl,
-          })));
+          setGenres(data.content.map((genre: { name: string; iconUrl?: string }, index: number) => {
+            const preset = GENRE_ICON_OPTIONS.find((option) => option.value === genre.iconUrl);
+            const fallback = defaultGenres[index % defaultGenres.length] || defaultGenres[0];
+            return {
+              name: genre.name,
+              icon: preset?.icon || fallback.icon,
+              color: preset?.badgeClass || fallback.color,
+              iconUrl: preset ? undefined : genre.iconUrl,
+              iconKey: preset?.value,
+            };
+          }));
         }
       })
       .catch(err => console.log("Error fetching genres:", err));
@@ -60,13 +68,18 @@ const GenreExplorer = () => {
     moodsApi.getAll({ page: 0, size: 4, sort: "name,asc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
-          setMoods(data.content.map((mood: { name: string; iconUrl?: string; gradient?: string }, index: number) => ({
-            name: mood.name,
-            icon: defaultMoods[index % defaultMoods.length]?.icon || Sun,
-            gradient: mood.gradient || defaultMoods[index % defaultMoods.length]?.gradient || "from-neon-pink to-primary",
-            iconUrl: mood.iconUrl,
-            gradientFromBackend: mood.gradient,
-          })));
+          setMoods(data.content.map((mood: { name: string; iconUrl?: string; gradient?: string }, index: number) => {
+            const preset = MOOD_ICON_OPTIONS.find((option) => option.value === mood.iconUrl);
+            const fallback = defaultMoods[index % defaultMoods.length] || defaultMoods[0];
+            return {
+              name: mood.name,
+              icon: preset?.icon || fallback.icon,
+              gradient: preset?.gradientClass || mood.gradient || fallback.gradient || "from-neon-pink to-primary",
+              iconUrl: preset ? undefined : mood.iconUrl,
+              gradientFromBackend: mood.gradient,
+              iconKey: preset?.value,
+            };
+          }));
         }
       })
       .catch(err => console.log("Error fetching moods:", err));

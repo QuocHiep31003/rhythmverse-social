@@ -7,7 +7,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import Footer from "@/components/Footer";
 import { 
   Edit, 
@@ -20,11 +19,7 @@ import {
   Play,
   Clock,
   TrendingUp,
-  Settings,
-  Shield,
-  Bell,
   Palette,
-  Volume2,
   Loader2,
   Phone,
   Trash2,
@@ -417,17 +412,7 @@ const Profile = () => {
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
-
-  const [preferences, setPreferences] = useState({
-    emailNotifications: true,
-    pushNotifications: true,
-    socialSharing: true,
-    publicProfile: true,
-    showListeningActivity: true,
-    autoplay: true,
-    crossfade: false,
-    normalizeVolume: true
-  });
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
 
   const stats = {
     totalListeningTime: "1,247 hours",
@@ -523,15 +508,6 @@ const Profile = () => {
   };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Password change form state
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [oldPassword, setOldPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
-  const [changePassLoading, setChangePassLoading] = useState(false);
-  const [changePassError, setChangePassError] = useState("");
-  const [changePassSuccess, setChangePassSuccess] = useState("");
 
   if (profileLoading) {
     return (
@@ -733,7 +709,6 @@ const Profile = () => {
               <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="payments">Payments</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -804,8 +779,13 @@ const Profile = () => {
                       <Clock className="w-5 h-5" />
                       Listening History
                     </CardTitle>
-                    <Button variant="outline" size="sm" onClick={handleClearAllHistory} disabled={!listeningHistory.length}>
-                      Clear Alloo
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowHistoryDialog(true)}
+                      disabled={!listeningHistory.length}
+                    >
+                      Show all
                     </Button>
                   </div>
                 </CardHeader>
@@ -832,12 +812,29 @@ const Profile = () => {
                             >
                               {item.song?.name || (item.song as any)?.songName || (item as any).songName || "Unknown Song"}
                             </p>
-                            <p className="text-sm text-muted-foreground">
-                              {item.song?.artistNames?.join(", ") ||
-                                item.song?.artists?.map((a: any) => a.name).join(", ") ||
-                                item.artistNames?.join(", ") ||
-                                "Unknown Artist"}
-                            </p>
+                            {(() => {
+                              const artistSource =
+                                (Array.isArray(item.song?.artistNames) && item.song?.artistNames) ||
+                                (Array.isArray(item.song?.artists)
+                                  ? (item.song?.artists as Array<{ name?: string }>)
+                                      .map((a) => a?.name)
+                                      .filter(Boolean)
+                                  : typeof item.song?.artists === "string"
+                                    ? item.song?.artists.split(",").map((str) => str.trim())
+                                    : undefined) ||
+                                (Array.isArray(item.artistNames) ? item.artistNames : undefined);
+
+                              const artistDisplay =
+                                artistSource && artistSource.length
+                                  ? artistSource.join(", ")
+                                  : "Unknown Artist";
+
+                              return (
+                                <p className="text-sm text-muted-foreground">
+                                  {artistDisplay}
+                                </p>
+                              );
+                            })()}
                           </div>
                           <div className="flex items-center gap-3">
                             <div className="text-right">
@@ -1029,180 +1026,6 @@ const Profile = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="settings" className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Privacy Settings */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Shield className="w-5 h-5" />
-                      Privacy Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="public-profile">Public Profile</Label>
-                      <Switch 
-                        id="public-profile"
-                        checked={preferences.publicProfile}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, publicProfile: checked})
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="show-activity">Show Listening Activity</Label>
-                      <Switch 
-                        id="show-activity"
-                        checked={preferences.showListeningActivity}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, showListeningActivity: checked})
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="social-sharing">Social Sharing</Label>
-                      <Switch 
-                        id="social-sharing"
-                        checked={preferences.socialSharing}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, socialSharing: checked})
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Notification Settings */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Bell className="w-5 h-5" />
-                      Notifications
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="email-notifications">Email Notifications</Label>
-                      <Switch 
-                        id="email-notifications"
-                        checked={preferences.emailNotifications}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, emailNotifications: checked})
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="push-notifications">Push Notifications</Label>
-                      <Switch 
-                        id="push-notifications"
-                        checked={preferences.pushNotifications}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, pushNotifications: checked})
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Playback Settings */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Volume2 className="w-5 h-5" />
-                      Playback Settings
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="autoplay">Autoplay</Label>
-                      <Switch 
-                        id="autoplay"
-                        checked={preferences.autoplay}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, autoplay: checked})
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="crossfade">Crossfade</Label>
-                      <Switch 
-                        id="crossfade"
-                        checked={preferences.crossfade}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, crossfade: checked})
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="normalize-volume">Normalize Volume</Label>
-                      <Switch 
-                        id="normalize-volume"
-                        checked={preferences.normalizeVolume}
-                        onCheckedChange={(checked) => 
-                          setPreferences({...preferences, normalizeVolume: checked})
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Account Actions */}
-                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Settings className="w-5 h-5" />
-                      Account Actions
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Chỉ giữ lại nút đổi mật khẩu */}
-                    <Button onClick={() => setShowChangePassword(v => !v)} variant="outline" className="mb-2">Đổi mật khẩu</Button>
-                    {showChangePassword && (
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          setChangePassError("");
-                          setChangePassSuccess("");
-                          if (newPassword !== confirmNewPassword) {
-                            setChangePassError("Mật khẩu mới và xác nhận không khớp!");
-                            return;
-                          }
-                          setChangePassLoading(true);
-                          try {
-                            await userApi.changePassword(oldPassword, newPassword);
-                            setChangePassSuccess("Đổi mật khẩu thành công!");
-                            toast({ title: "Thành công", description: "Đổi mật khẩu thành công!" });
-                            setOldPassword("");
-                            setNewPassword("");
-                            setConfirmNewPassword("");
-                            setTimeout(() => setShowChangePassword(false), 1000);
-                          } catch (err: any) {
-                            setChangePassError(err.message || "Đổi mật khẩu thất bại");
-                          } finally {
-                            setChangePassLoading(false);
-                          }
-                        }}
-                        className="space-y-4 mt-2"
-                      >
-                        <Label>Mật khẩu hiện tại</Label>
-                        <Input type="password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} required autoFocus />
-                        <Label>Mật khẩu mới</Label>
-                        <Input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                        <Label>Xác nhận mật khẩu mới</Label>
-                        <Input type="password" value={confirmNewPassword} onChange={e => setConfirmNewPassword(e.target.value)} required />
-                        {changePassError && <div className="text-red-600 text-sm">{changePassError}</div>}
-                        {changePassSuccess && <div className="text-green-600 text-sm">{changePassSuccess}</div>}
-                        <div className="flex gap-2">
-                          <Button type="submit" disabled={changePassLoading}>{changePassLoading ? "Đang đổi..." : "Đổi mật khẩu"}</Button>
-                          <Button type="button" variant="ghost" onClick={() => { setShowChangePassword(false); setChangePassError(""); setChangePassSuccess(""); setOldPassword(""); setNewPassword(""); setConfirmNewPassword(""); }}>Huỷ</Button>
-                        </div>
-                      </form>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
           </Tabs>
         </div>
       </div>

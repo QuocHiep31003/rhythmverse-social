@@ -5,9 +5,10 @@ import { toast } from "@/hooks/use-toast";
 
 interface AddFriendButtonProps {
   targetUserId: number;
+  onSuccess?: () => void;
 }
 
-export function AddFriendButton({ targetUserId }: AddFriendButtonProps) {
+export function AddFriendButton({ targetUserId, onSuccess }: AddFriendButtonProps) {
   const [loading, setLoading] = useState(true);
   const [friends, setFriends] = useState<any[]>([]);
   const [outgoing, setOutgoing] = useState<any[]>([]);
@@ -71,6 +72,10 @@ export function AddFriendButton({ targetUserId }: AddFriendButtonProps) {
         toast({ title: 'Đã gửi lời mời' });
         // Note: Backend should create notification for the receiver
         // Notification will be received via Firebase listener
+      }
+      // Gọi callback để đóng dialog sau khi thành công
+      if (onSuccess) {
+        onSuccess();
       }
     } catch (e: any) {
       console.error('👤 [DEBUG] Failed to send/accept friend request:', e);

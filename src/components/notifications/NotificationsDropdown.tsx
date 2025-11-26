@@ -15,6 +15,18 @@ import type { LucideIcon } from "lucide-react";
 
 const MAX_DROPDOWN_ITEMS = 5;
 
+const getStoredUserId = (): number | undefined => {
+  try {
+    const raw =
+      localStorage.getItem("userId") ||
+      sessionStorage.getItem("userId");
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const typeMeta: Record<
   string,
   {
@@ -137,27 +149,27 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
   }
 };
 
-interface Props { onClose?: () => void }
+interface Props {
+  userId?: number | null;
+  onClose?: () => void;
+}
 
-const NotificationsDropdown = ({ onClose }: Props) => {
+const NotificationsDropdown = ({ userId, onClose }: Props) => {
   // ✅ Persist notifications trong state để không mất khi chuyển trang
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const navigate = useNavigate();
   const itemsRef = useRef<NotificationDTO[]>([]); // ✅ Ref để persist
 
-  const meId = useMemo(() => {
-    try {
-      const raw = localStorage.getItem("userId");
-      const n = raw ? Number(raw) : NaN;
-      return Number.isFinite(n) ? n : undefined;
-    } catch {
-      return undefined;
+  const resolvedUserId = useMemo(() => {
+    if (typeof userId === "number" && Number.isFinite(userId)) {
+      return userId;
     }
-  }, []);
+    return getStoredUserId();
+  }, [userId]);
 
   useEffect(() => {
-    if (!meId) return;
-    const unsub = watchNotifications(meId, (list) => {
+    if (!resolvedUserId) return;
+    const unsub = watchNotifications(resolvedUserId, (list) => {
       // Chỉ filter MESSAGE, giữ lại TẤT CẢ notifications khác (kể cả trùng)
       const safe = (Array.isArray(list) ? list : []).filter((n) => n.type !== "MESSAGE");
       
@@ -182,9 +194,13 @@ const NotificationsDropdown = ({ onClose }: Props) => {
       itemsRef.current = safe;
     });
     return () => {
-      try { unsub(); } catch { /* noop */ }
+      try {
+        unsub();
+      } catch {
+        /* noop */
+      }
     };
-  }, [meId]);
+  }, [resolvedUserId]);
   
   // ✅ Restore từ ref khi component mount lại (khi quay lại từ trang khác)
   useEffect(() => {

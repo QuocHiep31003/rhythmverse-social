@@ -5,18 +5,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Upload, 
-  Mic, 
-  MicOff, 
-  Play, 
-  Pause, 
+import {
+  Upload,
+  Mic,
+  MicOff,
+  Play,
+  Pause,
   Square,
   Loader2,
   AlertCircle,
   Music
 } from "lucide-react";
 import { arcApi } from "@/services/api";
+
+/* --- Feature Limit Hook (KEEP THIS) --- */
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
@@ -36,7 +38,7 @@ const MusicRecognition = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Feature limit hook for AI Search
+  /* --- Feature Limit Logic --- */
   const {
     canUse,
     remaining,
@@ -79,8 +81,6 @@ const MusicRecognition = () => {
         setAudioUrl(url);
         setAudioUrlPreview(url);
         setError("");
-        
-        // Stop all tracks
         stream.getTracks().forEach(track => track.stop());
       };
 
@@ -104,10 +104,10 @@ const MusicRecognition = () => {
         audioRef.current.pause();
         audioRef.current.currentTime = 0;
       }
-      
+
       const audio = new Audio(audioUrlPreview);
       audioRef.current = audio;
-      
+
       audio.onended = () => setIsPlaying(false);
       audio.play();
       setIsPlaying(true);
@@ -121,68 +121,71 @@ const MusicRecognition = () => {
     }
   };
 
- const handleRecognize = async () => {
-  if (!audioBlob) {
-    setError("Please record or upload an audio file first.");
-    return;
-  }
+  const handleRecognize = async () => {
+    if (!audioBlob) {
+      setError("Please record or upload an audio file first.");
+      return;
+    }
 
-  // Check feature limit - dùng canUse từ backend (backend đã xử lý tất cả logic)
-  if (!canUse) {
-    setShowLimitModal(true);
-    return;
-  }
-
-  setIsLoading(true);
-  setError("");
-
-  try {
-    const success = await useFeature();
-    if (!success) {
+    if (!canUse) {
       setShowLimitModal(true);
-      setIsLoading(false);
       return;
     }
 
-    const result = await arcApi.recognizeMusic(audioBlob);
+    setIsLoading(true);
+    setError("");
 
-    // Check if result is valid and has actual data
-    if (!result || !result.result || result.result.length === 0) {
-      // Navigate to result page with no-result flag
+    try {
+      const success = await useFeature();
+      if (!success) {
+        setShowLimitModal(true);
+        setIsLoading(false);
+        return;
+      }
+
+      const result = await arcApi.recognizeMusic(audioBlob);
+
+      const normalizeAcrResponse = (data: unknown) => {
+        if (Array.isArray(data) || !data || typeof data !== "object") return data;
+        if ("matched" in (data as Record<string, unknown>) || "result" in (data as Record<string, unknown>)) {
+          return data;
+        }
+
+        const metadata = (data as any).metadata;
+        const musicList = metadata?.music;
+
+        if (Array.isArray(musicList) && musicList.length > 0) {
+          const first = musicList[0];
+          return {
+            matched: false,
+            score: typeof first.score === "number" ? Math.round(first.score) : undefined,
+            acrid: first.acrid,
+            musicMetadata: first,
+          };
+        }
+        return data;
+      };
+
+      const normalizedResult = normalizeAcrResponse(result);
+
       navigate("/music-recognition-result", {
-        state: { 
-          result: { 
-            status: "success", 
-            result: [] 
-          }, 
-          audioUrl: audioUrlPreview 
-        },
+        state: { result: normalizedResult, audioUrl: audioUrlPreview },
       });
-      return;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to recognize music.");
+    } finally {
+      setIsLoading(false);
     }
-
-    navigate("/music-recognition-result", {
-      state: { result, audioUrl: audioUrlPreview },
-    });
-  } catch (err: unknown) {
-    const errorMessage =
-      err instanceof Error
-        ? err.message
-        : "Failed to recognize music. Please try again.";
-    setError(errorMessage);
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
 
   return (
     <div className="min-h-screen bg-gradient-dark">
       <div className="container mx-auto px-6 py-8">
         <div className="max-w-2xl mx-auto">
+
+          {/* Title */}
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-foreground mb-4">
-              Music Recognition
-            </h1>
+            <h1 className="text-4xl font-bold text-foreground mb-4">Music Recognition</h1>
             <p className="text-muted-foreground text-lg">
               Upload an audio file or record music to identify the song
             </p>
@@ -192,66 +195,42 @@ const MusicRecognition = () => {
             <CardHeader>
               <CardTitle className="text-2xl text-foreground">Identify Music</CardTitle>
             </CardHeader>
+
             <CardContent className="space-y-6">
-              {/* File Upload */}
+
+              {/* Upload */}
               <div className="space-y-2">
-                <Label htmlFor="audio-file" className="text-foreground">
-                  Upload Audio File
-                </Label>
+                <Label htmlFor="audio-file">Upload Audio File</Label>
                 <div className="flex items-center gap-4">
-                  <Input
-                    id="audio-file"
-                    type="file"
-                    accept="audio/*"
-                    onChange={handleFileUpload}
-                    className="bg-muted border-border text-foreground"
-                  />
+                  <Input id="audio-file" type="file" accept="audio/*" onChange={handleFileUpload} />
                   <Upload className="w-5 h-5 text-muted-foreground" />
                 </div>
               </div>
 
-              {/* Recording Section */}
+              {/* Record */}
               <div className="space-y-4">
-                <Label className="text-foreground">Record Audio</Label>
+                <Label>Record Audio</Label>
                 <div className="flex items-center gap-4">
                   {!isRecording ? (
-                    <Button
-                      onClick={startRecording}
-                      variant="outline"
-                      className="bg-muted border-border hover:bg-muted/80"
-                    >
+                    <Button onClick={startRecording} variant="outline">
                       <Mic className="w-4 h-4 mr-2" />
                       Start Recording
                     </Button>
                   ) : (
-                    <Button
-                      onClick={stopRecording}
-                      variant="destructive"
-                      className="bg-red-600 hover:bg-red-700 text-white"
-                    >
+                    <Button onClick={stopRecording} variant="destructive">
                       <Square className="w-4 h-4 mr-2" />
                       Stop Recording
                     </Button>
                   )}
-                  
+
                   {audioUrlPreview && (
                     <div className="flex items-center gap-2">
                       {!isPlaying ? (
-                        <Button
-                          onClick={playAudio}
-                          variant="outline"
-                          size="sm"
-                          className="bg-muted border-border hover:bg-muted/80"
-                        >
+                        <Button onClick={playAudio} variant="outline" size="sm">
                           <Play className="w-4 h-4" />
                         </Button>
                       ) : (
-                        <Button
-                          onClick={pauseAudio}
-                          variant="outline"
-                          size="sm"
-                          className="bg-muted border-border hover:bg-muted/80"
-                        >
+                        <Button onClick={pauseAudio} variant="outline" size="sm">
                           <Pause className="w-4 h-4" />
                         </Button>
                       )}
@@ -263,7 +242,7 @@ const MusicRecognition = () => {
                 </div>
               </div>
 
-              {/* Error Display */}
+              {/* Error */}
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -271,27 +250,24 @@ const MusicRecognition = () => {
                 </Alert>
               )}
 
-              {/* URL Input (Alternative method) */}
+              {/* URL Input */}
               <div className="space-y-2">
-                <Label htmlFor="audio-url" className="text-foreground">
-                  Or enter audio URL
-                </Label>
+                <Label htmlFor="audio-url">Or enter audio URL</Label>
                 <Input
                   id="audio-url"
                   type="url"
-                  placeholder="https://example.com/audio.mp3"
                   value={audioUrl}
                   onChange={(e) => setAudioUrl(e.target.value)}
-                  className="bg-muted border-border text-foreground"
+                  placeholder="https://example.com/audio.mp3"
                 />
               </div>
 
-              {/* Action Buttons */}
+              {/* Action */}
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
                   disabled={isLoading || isCheckingLimit || !audioUrl}
-                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="flex-1 bg-primary text-primary-foreground"
                   size="lg"
                 >
                   {isLoading ? (
@@ -299,26 +275,18 @@ const MusicRecognition = () => {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Recognizing...
                     </>
-                  ) : isCheckingLimit ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Checking...
-                    </>
                   ) : (
                     <>
                       Recognize Music
-                      {!canUse && (
-                        <span className="ml-2 text-xs opacity-75">(Limit reached)</span>
-                      )}
+                      {!canUse && <span className="ml-2 text-xs opacity-75">(Limit reached)</span>}
                     </>
                   )}
                 </Button>
-                
-                {/* Demo Spotify Button */}
+
                 <Button
-                  onClick={() => window.open('https://open.spotify.com', '_blank')}
+                  onClick={() => window.open("https://open.spotify.com", "_blank")}
                   variant="outline"
-                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
+                  className="bg-green-600 text-white border-green-600"
                   size="lg"
                 >
                   <Music className="w-4 h-4 mr-2" />
@@ -326,33 +294,27 @@ const MusicRecognition = () => {
                 </Button>
               </div>
 
-              {/* Audio Element for Preview */}
-              {audioUrlPreview && (
-                <audio
-                  ref={audioRef}
-                  src={audioUrlPreview}
-                  controls
-                  className="w-full"
-                />
-              )}
+              {audioUrlPreview && <audio ref={audioRef} src={audioUrlPreview} controls className="w-full" />}
+
             </CardContent>
           </Card>
 
           {/* Instructions */}
           <Card className="mt-6 bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-lg text-foreground">How to Use</CardTitle>
+              <CardTitle className="text-lg">How to Use</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-muted-foreground">
-              <p>1. Upload an audio file (MP3, WAV, etc.) or record audio directly</p>
-              <p>2. Preview the audio to make sure it's clear</p>
-              <p>3. Click "Recognize Music" to identify the song</p>
-              <p>4. View the results with song details and streaming links</p>
+              <p>1. Upload or record audio</p>
+              <p>2. Preview before submitting</p>
+              <p>3. Click “Recognize Music”</p>
+              <p>4. View song details</p>
             </CardContent>
           </Card>
         </div>
       </div>
 
+      {/* Limit Modal */}
       <FeatureLimitModal
         open={showLimitModal}
         onOpenChange={setShowLimitModal}

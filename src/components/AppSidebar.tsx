@@ -7,7 +7,6 @@ import {
   Users, 
   Music,
   ChevronLeft,
-  TrendingUp,
   Trophy,
   Library,
   Mic
@@ -32,8 +31,7 @@ const menuItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Discover", url: "/discover", icon: Compass },
   { title: "My Library", url: "/playlists", icon: Library },
-  { title: "Trending", url: "/trending", icon: TrendingUp },
-  { title: "Top 100", url: "/top100", icon: Trophy },
+  { title: "Trending", url: "/top100", icon: Trophy },
   { title: "Playlist", url: "/playlist", icon: ListMusic },
   { title: "Music Recognition", url: "/music-recognition", icon: Mic },
   { title: "Quiz", url: "/quiz", icon: Brain },

@@ -227,7 +227,27 @@ const Social = () => {
   useEffect(() => {
     const nextTab = normalizeSocialTab(searchParams.get('tab'));
     setActiveTab(prev => (prev === nextTab ? prev : nextTab));
-  }, [searchParams]);
+    
+    // Xử lý query parameter 'friend' để chọn đúng người chat
+    const friendParam = searchParams.get('friend');
+    if (friendParam && nextTab === 'chat') {
+      const friendId = String(friendParam);
+      // Chỉ set nếu friendId hợp lệ và khác với selectedChat hiện tại
+      if (friendId && friendId !== selectedChat) {
+        setSelectedChat(friendId);
+        // Lưu vào localStorage để giữ trạng thái
+        try {
+          localStorage.setItem('lastChatFriendId', friendId);
+        } catch {
+          void 0;
+        }
+        // Xóa query parameter sau khi đã xử lý
+        const next = new URLSearchParams(searchParams.toString());
+        next.delete('friend');
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [searchParams, selectedChat, setSearchParams]);
 
   const [friends, setFriends] = useState<Friend[]>([]);
 
@@ -2758,6 +2778,10 @@ const Social = () => {
               }}
             >
               <DialogContent className="max-w-lg border border-white/10 bg-gradient-to-b from-background/95 to-background/80 p-0 backdrop-blur">
+                <DialogHeader className="sr-only">
+                  <DialogTitle>Public profile preview</DialogTitle>
+                  <DialogDescription>View user profile inside social page</DialogDescription>
+                </DialogHeader>
               {inlineProfileLoading ? (
                   <div className="p-6 space-y-5">
                     <div className="flex items-center gap-4">
@@ -2784,7 +2808,7 @@ const Social = () => {
                     </div>
                   </div>
               ) : inlineProfile ? (
-                <PublicProfileCard profile={inlineProfile} />
+                <PublicProfileCard profile={inlineProfile} onAddFriendSuccess={closeProfileModal} />
               ) : null}
               </DialogContent>
             </Dialog>

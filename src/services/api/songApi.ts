@@ -69,6 +69,16 @@ export interface SongCreateUpdateData {
 
 // Songs API sử dụng axios
 export const songsApi = {
+  getById: async (songId: number | string): Promise<Song | null> => {
+    try {
+      const response = await apiClient.get(`/songs/${songId}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching song by id:", error);
+      return null;
+    }
+  },
+
   // Lấy songs theo artist
   getByArtist: async (artistId: number): Promise<Song[]> => {
     try {
@@ -654,10 +664,12 @@ export const songsApi = {
   },
 
   // Get CloudFront HLS URL for streaming (BE trả về JSON với streamUrl)
-  getStreamUrl: async (songId: number | string): Promise<{ streamUrl: string; uuid?: string }> => {
-    const response = await apiClient.get(`/songs/${songId}/stream-url`);
-    return response.data;
-  },
+  // DEPRECATED: Không cần gọi API này nữa vì uuid đã có trong song object từ BE
+  // Dùng trực tiếp currentSong.uuid thay vì gọi API
+  // getStreamUrl: async (songId: number | string): Promise<{ streamUrl: string; uuid?: string }> => {
+  //   const response = await apiClient.get(`/songs/${songId}/stream-url`);
+  //   return response.data;
+  // },
   
   // Get playback URL from stream session (for shared songs)
   getPlaybackUrl: async (songId: number | string): Promise<{ playbackUrl: string }> => {

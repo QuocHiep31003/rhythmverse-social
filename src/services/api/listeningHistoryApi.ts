@@ -3,12 +3,18 @@ import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from './config';
 export interface ListeningHistoryPayload {
   userId: number;
   songId: number | string;
+  listenedDuration?: number;
+  songDuration?: number;
+  listenCount?: number;
 }
 
 export interface ListeningHistoryDTO {
   id?: number;
   userId: number;
   songId: number;
+  listenedDuration?: number;
+  songDuration?: number;
+  listenCount?: number;
   listenedAt?: string;
   songName?: string;
   artistNames?: string[];

@@ -3,12 +3,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Pencil, Trash2, Plus, Search, Download, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Heart } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Download, Upload, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Heart, ListMusic } from "lucide-react";
 import { MoodFormDialog } from "@/components/admin/MoodFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
+import { MoodSongsDialog } from "@/components/admin/MoodSongsDialog";
 import { moodsApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { MOOD_ICON_OPTIONS } from "@/data/iconOptions";
 
 const SORT_OPTIONS = [
   { label: "Name (A-Z)", value: "name,asc" },
@@ -19,12 +21,15 @@ const SORT_OPTIONS = [
   { label: "Date modified (Oldest)", value: "updatedAt,asc" },
 ];
 
+const isRemoteIcon = (value?: string) => !!value && /^https?:\/\//i.test(value);
+
 const AdminMoods = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [moods, setMoods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [songsDialogOpen, setSongsDialogOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<any>(null);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -182,6 +187,7 @@ const AdminMoods = () => {
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
                           <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
                           <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
@@ -198,7 +204,18 @@ const AdminMoods = () => {
                               </div>
                             </td>
                             <td className="w-28 p-3 align-top">
-                              {mood.iconUrl ? (
+                              {(() => {
+                                const preset = MOOD_ICON_OPTIONS.find((opt) => opt.value === mood.iconUrl);
+                                if (preset) {
+                                  const IconComp = preset.icon;
+                                  return (
+                                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-white bg-gradient-to-br ${preset.gradientClass ?? "from-neon-pink to-primary"}`}>
+                                      <IconComp className="w-6 h-6" />
+                                    </div>
+                                  );
+                                }
+                                if (isRemoteIcon(mood.iconUrl)) {
+                                  return (
                                 <div className="w-12 h-12 rounded-lg overflow-hidden border border-border/60">
                                   <img
                                     src={mood.iconUrl}
@@ -206,16 +223,23 @@ const AdminMoods = () => {
                                     className="w-full h-full object-cover"
                                   />
                                 </div>
-                              ) : (
-                                <Badge variant="outline" className="text-muted-foreground">Không có</Badge>
-                              )}
+                                  );
+                                }
+                                return <Badge variant="outline" className="text-muted-foreground">Không có</Badge>;
+                              })()}
                             </td>
                             <td className="w-1/4 p-3 text-left align-top">
                               {mood.gradient ? (
                                 <div className="flex items-center gap-2">
                                   <div
-                                    className="w-12 h-6 rounded border border-border/40"
-                                    style={{ background: mood.gradient }}
+                                    className={`w-12 h-6 rounded border border-border/40 ${
+                                      mood.gradient.includes("from-") ? `bg-gradient-to-r ${mood.gradient}` : ""
+                                    }`}
+                                    style={
+                                      mood.gradient.includes("from-")
+                                        ? undefined
+                                        : { background: mood.gradient }
+                                    }
                                   />
                                   <span className="text-sm text-muted-foreground font-mono truncate">{mood.gradient}</span>
                                 </div>
@@ -226,6 +250,11 @@ const AdminMoods = () => {
                             <td className="w-24 p-3 align-top">
                               <span className="font-medium">{formatWeight(mood.weight)}</span>
                             </td>
+                            <td className="w-32 p-3 align-top text-center">
+                              <Badge variant="secondary" className="font-semibold">
+                                {mood.songCount ?? 0}
+                              </Badge>
+                            </td>
                             <td className="w-40 p-3 align-top text-sm text-muted-foreground">
                               {formatDateTime(mood.createdAt)}
                             </td>
@@ -234,6 +263,18 @@ const AdminMoods = () => {
                             </td>
                             <td className="w-32 text-right p-3 align-top">
                               <div className="flex items-center justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  onClick={() => {
+                                    setSelectedMood(mood);
+                                    setSongsDialogOpen(true);
+                                  }} 
+                                  className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
+                                  title="Xem bài hát"
+                                >
+                                  <ListMusic className="w-4 h-4" />
+                                </Button>
                                 <Button variant="ghost" size="icon" onClick={() => handleEdit(mood)} className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors">
                                   <Pencil className="w-4 h-4" />
                                 </Button>
@@ -280,8 +321,29 @@ const AdminMoods = () => {
             </div>
           )}
 
-        <MoodFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedMood} isLoading={isSubmitting} mode={formMode} />
+        <MoodFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          onSubmit={handleFormSubmit}
+          isLoading={isSubmitting}
+          mode={formMode}
+          defaultValues={
+            formMode === "edit" && selectedMood
+              ? {
+                  name: selectedMood.name,
+                  iconUrl: selectedMood.iconUrl,
+                  gradient: selectedMood.gradient,
+                }
+              : undefined
+          }
+        />
         <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa mood?" description={`Bạn có chắc muốn xóa mood "${selectedMood?.name}"?`} isLoading={isSubmitting} />
+        <MoodSongsDialog 
+          open={songsDialogOpen} 
+          onOpenChange={setSongsDialogOpen} 
+          moodId={selectedMood?.id || null}
+          moodName={selectedMood?.name}
+        />
       </div>
     </div>
   );

@@ -59,6 +59,11 @@ const cleanMessageBody = (from: string, message?: string | null) => {
   return body;
 };
 
+const truncateMessageBody = (text: string, maxChars = 220) => {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars).trim()}…`;
+};
+
 const ChatBubble = () => {
   const [newMessages, setNewMessages] = useState<ChatBubbleMessage[]>([]);
   const navigate = useNavigate();
@@ -164,8 +169,10 @@ const ChatBubble = () => {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="mt-1 text-sm text-slate-800 dark:text-slate-50 break-words">
-                {cleanMessageBody(message.from, message.message)}
+              <p className="mt-1 text-sm text-slate-800 dark:text-slate-50 break-words line-clamp-2">
+                {truncateMessageBody(
+                  cleanMessageBody(message.from, message.message)
+                )}
               </p>
             </div>
           </div>
@@ -177,6 +184,15 @@ const ChatBubble = () => {
               className="h-6 text-xs px-3 border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400 dark:border-slate-500 dark:text-white dark:hover:bg-slate-800"
               onClick={(e) => {
                 e.stopPropagation();
+                // Lấy friendId từ meta để chuyển đến đúng chat
+                const friendId = message.meta?.friendId || message.meta?.friendNumericId;
+                if (friendId) {
+                  // Chuyển đến trang social với tab chat và chọn đúng người
+                  navigate(`/social?tab=chat&friend=${encodeURIComponent(String(friendId))}`);
+                } else {
+                  // Nếu không có friendId, chỉ chuyển đến trang chat
+                  navigate('/social?tab=chat');
+                }
                 dismissMessage(message.id);
               }}
             >

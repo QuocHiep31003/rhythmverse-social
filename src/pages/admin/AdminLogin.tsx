@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Music } from "lucide-react";
 import { authApi } from "@/services/api"; // ✅ Import API
 import { useEffect } from "react";
+import { setTokens, startTokenRefreshInterval } from "@/services/api/config";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
@@ -40,13 +41,13 @@ const AdminLogin = () => {
       }
 
       // Lưu token, refresh token và auth flag (phục vụ AdminLayout kiểm tra)
-      localStorage.setItem("adminToken", response.token);
-      if (response.refreshToken) {
-        localStorage.setItem("adminRefreshToken", response.refreshToken);
-      }
+      setTokens(response.token, response.refreshToken);
       localStorage.setItem("adminEmail", response.email);
       localStorage.setItem("adminRole", response.role);
       localStorage.setItem("adminAuth", "true");
+      
+      // Start automatic token refresh interval
+      startTokenRefreshInterval();
 
       toast.success("Đăng nhập thành công!");
       navigate("/admin/home");

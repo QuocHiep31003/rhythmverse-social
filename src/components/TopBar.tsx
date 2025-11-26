@@ -28,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
 
 import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -501,6 +502,10 @@ const TopBar = () => {
 
   /** ================= LOGOUT ================= **/
   const handleLogout = () => {
+    // Stop token refresh interval
+    stopTokenRefreshInterval();
+    clearTokens();
+    
     localStorage.clear();
     sessionStorage.clear();
 
@@ -691,7 +696,10 @@ const TopBar = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <NotificationsDropdown onClose={() => setNotifOpen(false)} />
+            <NotificationsDropdown
+              userId={currentUserId ?? undefined}
+              onClose={() => setNotifOpen(false)}
+            />
           </DropdownMenu>
 
           {/* Messages */}
@@ -699,7 +707,12 @@ const TopBar = () => {
             variant="ghost"
             size="icon"
             className="relative"
-            onClick={() => navigate("/social?tab=chat")}
+            onClick={() => {
+              // Reset unread count về 0 khi nhấn vào icon message
+              setUnreadMsgCount(0);
+              // Chuyển đến trang social với tab chat
+              navigate("/social?tab=chat");
+            }}
           >
             <MessageCircle className="h-5 w-5" />
             {unreadMsgCount > 0 && (

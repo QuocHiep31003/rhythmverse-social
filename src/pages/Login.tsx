@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Music, Mail, Lock, User, Eye, EyeOff, Github, Chrome } from "lucide-react";
+import { Music, Mail, Lock, User, Eye, EyeOff, Chrome } from "lucide-react";
 import { authApi } from "@/services/api";
+import { setTokens, startTokenRefreshInterval } from "@/services/api/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const Login = () => {
@@ -54,27 +55,36 @@ const Login = () => {
         throw new Error('No token received from server');
       }
 
+      // Persist token and refresh token using setTokens helper
+      setTokens(response.token, response.refreshToken);
+      
+      // Start automatic token refresh interval
+      startTokenRefreshInterval();
       // Persist token and refresh token in both storages to avoid losing auth across tabs/windows
       try {
         localStorage.setItem("token", response.token);
         if (response.refreshToken) {
           localStorage.setItem("refreshToken", response.refreshToken);
         }
-      } catch {}
+      } catch (storageError) {
+        console.warn("Failed to persist auth token in localStorage", storageError);
+      }
       try {
         sessionStorage.setItem("token", response.token);
         if (response.refreshToken) {
           sessionStorage.setItem("refreshToken", response.refreshToken);
         }
-      } catch {}
+      } catch (storageError) {
+        console.warn("Failed to persist auth token in sessionStorage", storageError);
+      }
 
       // Fetch current user and persist userId for flows that rely on it
       try {
         const me = await authApi.me();
         const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
         if (uid) {
-          try { localStorage.setItem('userId', uid); } catch {}
-          try { sessionStorage.setItem('userId', uid); } catch {}
+          try { localStorage.setItem('userId', uid); } catch (storageError) { console.warn("Failed to store userId in localStorage", storageError); }
+          try { sessionStorage.setItem('userId', uid); } catch (storageError) { console.warn("Failed to store userId in sessionStorage", storageError); }
         }
       } catch { /* ignore */ }
 
@@ -87,8 +97,8 @@ const Login = () => {
         const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
         const target = redirectParam || pending || '/';
         // Clear pending after using it
-        try { localStorage.removeItem('pendingInviteUrl'); } catch {}
-        try { sessionStorage.removeItem('pendingInviteUrl'); } catch {}
+        try { localStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from localStorage", storageError); }
+        try { sessionStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from sessionStorage", storageError); }
         navigate(target);
       } catch {
         navigate('/');
@@ -187,35 +197,79 @@ const Login = () => {
   
       // Lưu token và refresh token nếu có
       if (response.token) {
+        setTokens(response.token, response.refreshToken);
+        // Start automatic token refresh interval
+        startTokenRefreshInterval();
         try {
           localStorage.setItem("token", response.token);
           if (response.refreshToken) {
             localStorage.setItem("refreshToken", response.refreshToken);
           }
-        } catch {}
+        } catch (storageError) {
+          console.warn("Failed to persist token after OTP verification", storageError);
+        }
       }
   
       setSuccess("Registration successful! Please log in.");
       setShowOtpModal(false);
       setTimeout(() => setActiveTab("login"), 1000);
-    } catch (err: any) {
-      throw new Error(err.message || "Invalid OTP");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid OTP";
+      throw new Error(message);
     }
   };
   
 
-  const handleSocialLogin = (provider: string) => {
+  const handleSocialLogin = async (provider: string) => {
+    if (provider !== 'google') {
+      console.warn('Unsupported provider:', provider);
+      return;
+    }
+
     setIsLoading(true);
-    // Mock social login
-    setTimeout(() => {
+    try {
+      // TODO: Implement Google OAuth
+      // 1. Get Google OAuth credentials from Google Cloud Console
+      // 2. Install: npm install @react-oauth/google
+      // 3. Configure Google OAuth client ID in environment variables
+      // 4. Initialize Google OAuth in App.tsx or main.tsx
+      // 5. Use GoogleLogin component or handle OAuth flow manually
+      
+      // Example implementation (placeholder):
+      // const response = await googleAuth.signIn();
+      // const { token, email, name } = response;
+      // 
+      // // Send to backend to create/login user
+      // const authResponse = await authApi.loginWithGoogle({ token, email, name });
+      // 
+      // // Save tokens
+      // setTokens(authResponse.token, authResponse.refreshToken);
+      // startTokenRefreshInterval();
+      // 
+      // // Navigate
+      // const params = new URLSearchParams(window.location.search);
+      // const redirectParam = params.get('redirect');
+      // const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
+      // const target = redirectParam || pending || '/';
+      // navigate(target);
+
+      // Temporary: Show message that Google login is coming soon
+      alert('Google OAuth integration is in progress. Please use email/password login for now.');
+    } catch (error) {
+      console.error('Google login error:', error);
+      alert('Failed to login with Google. Please try again or use email/password login.');
+    } finally {
       setIsLoading(false);
+    }
+
+    setTimeout(() => {
       try {
         const params = new URLSearchParams(window.location.search);
         const redirectParam = params.get('redirect');
         const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
         const target = redirectParam || pending || '/';
-        try { localStorage.removeItem('pendingInviteUrl'); } catch {}
-        try { sessionStorage.removeItem('pendingInviteUrl'); } catch {}
+        try { localStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from localStorage", storageError); }
+        try { sessionStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from sessionStorage", storageError); }
         navigate(target);
       } catch {
         navigate('/');
@@ -241,8 +295,8 @@ const Login = () => {
       await authApi.sendResetPasswordOtp(resetEmail);
       setResetSuccess("OTP đã gửi thành công! Kiểm tra email của bạn.");
       setResetStep(2);
-    } catch (err: any) {
-      setResetError(err.message || "Gửi OTP thất bại.");
+    } catch (err: unknown) {
+      setResetError(err instanceof Error ? err.message : "Gửi OTP thất bại.");
     } finally {
       setResetLoading(false);
     }
@@ -257,8 +311,8 @@ const Login = () => {
       await authApi.resetPasswordWithOtp(resetEmail, resetOtp, resetNewPassword);
       setResetSuccess("Đặt lại mật khẩu thành công! Bạn có thể đăng nhập.");
       setTimeout(() => { setActiveTab("login"); }, 1500);
-    } catch (err: any) {
-      setResetError(err.message || "Đặt lại mật khẩu lỗi");
+    } catch (err: unknown) {
+      setResetError(err instanceof Error ? err.message : "Đặt lại mật khẩu lỗi");
     } finally {
       setResetLoading(false);
     }
@@ -390,6 +444,7 @@ const Login = () => {
                               type="email"
                               placeholder="Enter your email"
                               className="pl-10"
+                              autoComplete="email"
                               value={loginData.email}
                               onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                               required
@@ -406,6 +461,7 @@ const Login = () => {
                               type={showPassword ? "text" : "password"}
                               placeholder="Enter your password"
                               className="pl-10 pr-10"
+                              autoComplete="current-password"
                               value={loginData.password}
                               onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                               required
@@ -478,6 +534,7 @@ const Login = () => {
                         type="text"
                         placeholder="Enter your name"
                         className="pl-10"
+                        autoComplete="name"
                         value={registerData.name}
                         onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
                         required
@@ -492,6 +549,7 @@ const Login = () => {
                           type="email"
                           placeholder="Enter your email"
                           className="pl-10"
+                          autoComplete="email"
                           value={registerData.email}
                           onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                           required
@@ -507,6 +565,7 @@ const Login = () => {
                           type="password"
                           placeholder="Enter your password"
                           className="pl-10 pr-10"
+                          autoComplete="new-password"
                           value={registerData.password}
                           onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                           required
@@ -522,6 +581,7 @@ const Login = () => {
                           type="password"
                           placeholder="Confirm your password"
                           className="pl-10 pr-10"
+                          autoComplete="new-password"
                           value={registerData.confirmPassword}
                           onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
                           required
@@ -553,7 +613,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="mt-4">
                 <Button
                   variant="outline"
                   className="w-full"
@@ -561,16 +621,7 @@ const Login = () => {
                   disabled={isLoading}
                 >
                   <Chrome className="w-4 h-4 mr-2" />
-                  Google
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleSocialLogin("github")}
-                  disabled={isLoading}
-                >
-                  <Github className="w-4 h-4 mr-2" />
-                  GitHub
+                  Continue with Google
                 </Button>
               </div>
             </div>
@@ -578,12 +629,12 @@ const Login = () => {
             <div className="text-center mt-6 text-sm text-muted-foreground">
               <p>
                 By signing in, you agree to our{" "}
-                <Button variant="link" className="p-0 h-auto text-sm">
-                  Terms of Service
+                <Button variant="link" className="p-0 h-auto text-sm" asChild>
+                  <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
                 </Button>{" "}
                 and{" "}
-                <Button variant="link" className="p-0 h-auto text-sm">
-                  Privacy Policy
+                <Button variant="link" className="p-0 h-auto text-sm" asChild>
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
                 </Button>
               </p>
             </div>
@@ -621,8 +672,9 @@ const OtpModal = ({ open, email, onClose, onVerify }: OTPDialogProps) => {
       await onVerify(otp);
       setSuccess("âœ… Verification successful!");
       setTimeout(() => onClose(), 1500);
-    } catch (err: any) {
-      setError(err.message || "âŒ Invalid or expired OTP");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid or expired OTP";
+      setError(message);
     } finally {
       setLoading(false);
     }
