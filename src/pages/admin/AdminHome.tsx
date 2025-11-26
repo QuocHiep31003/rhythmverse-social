@@ -76,24 +76,24 @@ const AdminHome = () => {
 
   const metricCards = useMemo(
     () => [
-    {
+      {
         title: "Bài hát",
         metric: summary?.songs,
-      icon: Music,
+        icon: Music,
         color: "text-[hsl(var(--admin-primary))]",
         datasetType: "songs" as DatasetType,
-    },
-    {
-      title: "Playlists",
+      },
+      {
+        title: "Playlists",
         metric: summary?.playlists,
-      icon: ListMusic,
+        icon: ListMusic,
         color: "text-[hsl(var(--primary))]",
         datasetType: "playlists" as DatasetType,
-    },
-    {
-      title: "Lượt phát",
+      },
+      {
+        title: "Lượt phát",
         metric: summary?.plays,
-      icon: TrendingUp,
+        icon: TrendingUp,
         color: "text-[hsl(var(--admin-accent))]",
         datasetType: "plays" as DatasetType,
       },
@@ -111,57 +111,40 @@ const AdminHome = () => {
   const chartData = useMemo(() => {
     const buildSeries = (series?: TimeSeriesPointDTO[]) =>
       series?.map((point) => point.value) ?? [];
+
     const labels =
       summary?.songSeries?.map((point) =>
         new Date(point.date).toLocaleDateString("vi-VN", { day: "2-digit", month: "short" })
       ) ?? [];
 
-    const getDatasetConfig = (type: DatasetType) => {
-      switch (type) {
-        case "songs":
-          return {
-            label: "Bài hát mới",
-            data: buildSeries(summary?.songSeries),
-            borderColor: "hsl(262, 83%, 58%)",
-            backgroundColor: "hsla(262, 83%, 58%, 0.15)",
-            pointBackgroundColor: "hsl(262, 83%, 58%)",
-            pointHoverBackgroundColor: "hsl(262, 83%, 65%)",
-            shadowColor: "hsla(262, 83%, 58%, 0.3)",
-          };
-        case "playlists":
-          return {
-            label: "Playlist mới",
-            data: buildSeries(summary?.playlistSeries),
-            borderColor: "hsl(195, 100%, 65%)",
-            backgroundColor: "hsla(195, 100%, 65%, 0.15)",
-            pointBackgroundColor: "hsl(195, 100%, 65%)",
-            pointHoverBackgroundColor: "hsl(195, 100%, 72%)",
-            shadowColor: "hsla(195, 100%, 65%, 0.3)",
-          };
-        case "plays":
-          return {
-            label: "Lượt phát",
-            data: buildSeries(summary?.playSeries),
-            borderColor: "hsl(280, 100%, 65%)",
-            backgroundColor: "hsla(280, 100%, 65%, 0.15)",
-            pointBackgroundColor: "hsl(280, 100%, 65%)",
-            pointHoverBackgroundColor: "hsl(280, 100%, 72%)",
-            shadowColor: "hsla(280, 100%, 65%, 0.3)",
-          };
-        case "users":
-          return {
-            label: "Người dùng mới",
-            data: buildSeries(summary?.userSeries),
-            borderColor: "hsl(142, 76%, 36%)",
-            backgroundColor: "hsla(142, 76%, 36%, 0.15)",
-            pointBackgroundColor: "hsl(142, 76%, 36%)",
-            pointHoverBackgroundColor: "hsl(142, 76%, 42%)",
-            shadowColor: "hsla(142, 76%, 36%, 0.3)",
-          };
-      }
+    const datasetConfig = {
+      songs: {
+        label: "Bài hát mới",
+        data: buildSeries(summary?.songSeries),
+        borderColor: "hsl(262, 83%, 58%)",
+        backgroundColor: "hsla(262, 83%, 58%, 0.15)",
+      },
+      playlists: {
+        label: "Playlist mới",
+        data: buildSeries(summary?.playlistSeries),
+        borderColor: "hsl(195, 100%, 65%)",
+        backgroundColor: "hsla(195, 100%, 65%, 0.15)",
+      },
+      plays: {
+        label: "Lượt phát",
+        data: buildSeries(summary?.playSeries),
+        borderColor: "hsl(280, 100%, 65%)",
+        backgroundColor: "hsla(280, 100%, 65%, 0.15)",
+      },
+      users: {
+        label: "Người dùng mới",
+        data: buildSeries(summary?.userSeries),
+        borderColor: "hsl(142, 76%, 36%)",
+        backgroundColor: "hsla(142, 76%, 36%, 0.15)",
+      },
     };
 
-    const config = getDatasetConfig(selectedDataset);
+    const config = datasetConfig[selectedDataset];
 
     return {
       labels,
@@ -172,14 +155,8 @@ const AdminHome = () => {
           tension: 0.4,
           fill: true,
           pointRadius: 4,
-          pointHoverRadius: 7,
-          pointBorderColor: "#ffffff",
-          pointBorderWidth: 2.5,
-          pointHoverBorderColor: "#ffffff",
-          pointHoverBorderWidth: 3,
-          shadowOffsetX: 0,
-          shadowOffsetY: 2,
-          shadowBlur: 8,
+          pointBorderWidth: 2,
+          pointBackgroundColor: config.borderColor,
         },
       ],
     };
@@ -189,82 +166,20 @@ const AdminHome = () => {
     () => ({
       responsive: true,
       maintainAspectRatio: false,
-      animation: {
-        duration: 1000,
-        easing: "easeInOutQuart" as const,
-      },
-      interaction: {
-        intersect: false,
-        mode: "index" as const,
-      },
-      plugins: {
-        legend: {
-          display: false,
-        },
-        tooltip: {
-          backgroundColor: "hsla(220, 26%, 10%, 0.95)",
-          titleColor: "hsl(var(--foreground))",
-          bodyColor: "hsl(var(--foreground))",
-          borderColor: "hsl(var(--border))",
-          borderWidth: 1,
-          padding: 12,
-          cornerRadius: 8,
-          displayColors: true,
-          callbacks: {
-            label: (context: any) => {
-              const label = context.dataset.label || "";
-              const value = context.parsed.y;
-              return `${label}: ${value.toLocaleString("vi-VN")}`;
-            },
-            title: (context: any) => {
-              return context[0].label;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: "hsl(var(--muted-foreground))",
-            font: {
-              size: 11,
-            },
-          },
-          grid: {
-            color: "hsla(var(--border), 0.2)",
-            drawBorder: false,
-          },
-        },
-        y: {
-          beginAtZero: true,
-          ticks: {
-            color: "hsl(var(--muted-foreground))",
-            font: {
-              size: 11,
-            },
-            callback: function (value: any) {
-              return value.toLocaleString("vi-VN");
-            },
-          },
-          grid: {
-            color: "hsla(var(--border), 0.2)",
-            drawBorder: false,
-          },
-        },
-      },
+      plugins: { legend: { display: false } },
+      interaction: { intersect: false, mode: "index" },
     }),
     []
   );
 
   const handleApplyFilter = () => {
     if (!startDate || !endDate) {
-      setError("Vui lòng chọn đầy đủ ngày bắt đầu và kết thúc");
+      setError("Vui lòng chọn ngày bắt đầu và kết thúc");
       return;
     }
     fetchSummary(startDate, endDate, period);
   };
 
-  // Component riêng để có thể dùng hooks
   const MetricCard = ({
     title,
     metric,
@@ -275,34 +190,28 @@ const AdminHome = () => {
   }: {
     title: string;
     metric?: DashboardMetricDTO;
-    Icon?: typeof Users;
+    Icon?: any;
     color?: string;
-    datasetType?: DatasetType | null;
+    datasetType?: DatasetType;
     isSelected?: boolean;
   }) => {
     const totalCount = useCountUp(metric?.total, { duration: 1500 });
-    const newCount = useCountUp(metric?.newInPeriod ?? metric?.inRange, { duration: 1500 });
-    const oldCount = useCountUp(metric?.oldOutOfPeriod ?? metric?.outsideRange, { duration: 1500 });
+    const newCount = useCountUp(metric?.inRange, { duration: 1500 });
 
     return (
       <Card
         onClick={() => datasetType && setSelectedDataset(datasetType)}
-        className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-all duration-300 ${
-          datasetType 
-            ? `cursor-pointer hover:shadow-lg hover:border-[hsl(var(--admin-primary))] ${
-                isSelected ? "border-[hsl(var(--admin-primary))] shadow-lg ring-2 ring-[hsl(var(--admin-primary))] ring-opacity-20" : ""
-              }`
-            : "hover:shadow-lg"
-        }`}
+        className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-all cursor-pointer hover:shadow-lg
+          ${isSelected ? "ring-2 ring-[hsl(var(--admin-primary))]" : ""}`}
       >
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium text-foreground">{title}</CardTitle>
-          {Icon && <Icon className={`h-5 w-5 ${color}`} />}
+        <CardHeader className="flex flex-row justify-between pb-2">
+          <CardTitle className="text-sm">{title}</CardTitle>
+          <Icon className={`h-5 w-5 ${color}`} />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-foreground">{formatNumber(totalCount.count)}</div>
+          <div className="text-2xl font-bold">{formatNumber(totalCount.count)}</div>
           <p className="text-xs text-muted-foreground">
-            +{formatNumber(newCount.count)} trong giai đoạn &bull; {formatNumber(oldCount.count)} trước đó
+            +{formatNumber(newCount.count)} trong giai đoạn
           </p>
         </CardContent>
       </Card>
@@ -311,19 +220,20 @@ const AdminHome = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">Dashboard</h1>
-          <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold bg-gradient-admin bg-clip-text text-transparent">
+          Dashboard
+        </h1>
+        <p className="text-muted-foreground">Tổng quan hệ thống Echoverse</p>
       </div>
 
       {error && (
-        <div className="rounded-md border border-destructive bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="border border-destructive bg-destructive/10 p-3 text-destructive rounded">
           {error}
         </div>
       )}
 
+      {/* Metric Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {metricCards.map((stat) => (
           <MetricCard
@@ -338,126 +248,107 @@ const AdminHome = () => {
         ))}
       </div>
 
-      <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-lg hover:shadow-xl transition-shadow duration-300">
-        <CardHeader className="pb-4">
-          <div className="flex flex-col gap-4">
-            <div>
-              <CardTitle className="text-foreground text-xl font-semibold">Biểu đồ tăng trưởng</CardTitle>
-              <CardDescription className="text-sm mt-1">
-                {selectedDataset === "songs" && "Thống kê bài hát mới"}
-                {selectedDataset === "playlists" && "Thống kê playlist mới"}
-                {selectedDataset === "plays" && "Thống kê lượt phát"}
-                {selectedDataset === "users" && "Thống kê người dùng mới"}
-              </CardDescription>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <Input
-                type="date"
-                value={startDate}
-                max={endDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full sm:w-auto"
-              />
-              <Input
-                type="date"
-                value={endDate}
-                min={startDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full sm:w-auto"
-              />
-              <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
-                <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue placeholder="Select period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Theo ngày</SelectItem>
-                  <SelectItem value="weekly">Theo tuần</SelectItem>
-                  <SelectItem value="monthly">Theo tháng</SelectItem>
-                  <SelectItem value="yearly">Theo năm</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" onClick={() => fetchSummary(startDate, endDate, period)} disabled={loading} size="sm">
-                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                Làm mới
-              </Button>
-              <Button onClick={handleApplyFilter} disabled={loading} size="sm">
-                Áp dụng
-              </Button>
-            </div>
+      {/* Chart */}
+      <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow">
+        <CardHeader>
+          <CardTitle>Biểu đồ tăng trưởng</CardTitle>
+          <CardDescription>
+            {selectedDataset === "songs" && "Thống kê bài hát mới"}
+            {selectedDataset === "playlists" && "Thống kê playlist mới"}
+            {selectedDataset === "plays" && "Thống kê lượt phát"}
+            {selectedDataset === "users" && "Thống kê người dùng mới"}
+          </CardDescription>
+
+          <div className="flex flex-col sm:flex-row gap-2 mt-4">
+            <Input
+              type="date"
+              value={startDate}
+              max={endDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <Input
+              type="date"
+              value={endDate}
+              min={startDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+            <Select value={period} onValueChange={(v) => setPeriod(v as PeriodType)}>
+              <SelectTrigger className="w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="daily">Theo ngày</SelectItem>
+                <SelectItem value="weekly">Theo tuần</SelectItem>
+                <SelectItem value="monthly">Theo tháng</SelectItem>
+                <SelectItem value="yearly">Theo năm</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button onClick={handleApplyFilter} disabled= {loading}>Áp dụng</Button>
           </div>
         </CardHeader>
-        <CardContent className="h-[400px] px-6 pb-6">
+
+        <CardContent className="h-[400px]">
           {loading ? (
-            <Skeleton className="h-full w-full rounded-lg" />
+            <Skeleton className="w-full h-full" />
           ) : (
-            <div className="h-full w-full">
-              <Line options={chartOptions} data={chartData} />
-            </div>
+            <Line options={chartOptions} data={chartData} />
           )}
         </CardContent>
       </Card>
 
+      {/* Top songs + new users */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300">
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
-            <CardTitle className="text-foreground">Bài hát phổ biến</CardTitle>
-            <CardDescription>Top 5 bài hát được nghe nhiều nhất</CardDescription>
+            <CardTitle>Bài hát phổ biến</CardTitle>
+            <CardDescription>Top 5 được nghe nhiều</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mockSongs.slice(0, 5).map((song, index) => (
-                <div key={song.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200 cursor-pointer">
-                  <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8">
-                    {index + 1}
-                  </span>
-                  <img
-                    src={song.cover}
-                    alt={song.title}
-                    onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }}
-                    className="w-12 h-12 rounded object-cover"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate text-foreground">{song.title}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {song.artist}
-                    </p>
-                  </div>
-                  <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
-                    {song.plays}
-                  </span>
+          <CardContent className="space-y-4">
+            {mockSongs.slice(0, 5).map((song, index) => (
+              <div key={song.id} className="flex items-center gap-4 p-2 hover:bg-[hsl(var(--admin-border))] rounded">
+                <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8">
+                  {index + 1}
+                </span>
+                <img
+                  src={song.cover}
+                  onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR_URL)}
+                  className="w-12 h-12 rounded object-cover"
+                />
+                <div className="flex-1">
+                  <p className="font-medium truncate">{song.title}</p>
+                  <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                 </div>
-              ))}
-            </div>
+                <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
+                  {song.plays}
+                </span>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
-        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] hover:shadow-lg transition-all duration-300">
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
-            <CardTitle className="text-foreground">Người dùng mới</CardTitle>
+            <CardTitle>Người dùng mới</CardTitle>
             <CardDescription>Người dùng đăng ký gần đây</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {mockUsers.map((user) => (
-                <div key={user.id} className="flex items-center gap-4 p-2 rounded-lg hover:bg-[hsl(var(--admin-border))] transition-colors duration-200 cursor-pointer">
-                  <img
-                    src={user.avatar}
-                    alt={user.name}
-                    onError={(e) => { e.currentTarget.src = DEFAULT_AVATAR_URL; }}
-                    className="w-10 h-10 rounded-full ring-2 ring-[hsl(var(--admin-border))]"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate text-foreground">{user.name}</p>
-                    <p className="text-sm text-muted-foreground truncate">
-                      {user.email}
-                    </p>
-                  </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-gradient-admin text-white font-medium">
-                    {user.role}
-                  </span>
+          <CardContent className="space-y-4">
+            {mockUsers.map((user) => (
+              <div key={user.id} className="flex items-center gap-4 p-2 hover:bg-[hsl(var(--admin-border))] rounded">
+                <img
+                  src={user.avatar}
+                  onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR_URL)}
+                  className="w-10 h-10 rounded-full"
+                />
+                <div className="flex-1">
+                  <p className="font-medium truncate">{user.name}</p>
+                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                 </div>
-              ))}
-            </div>
+                <span className="text-xs px-2 py-1 rounded-full bg-gradient-admin text-white">
+                  {user.role}
+                </span>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>

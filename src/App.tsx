@@ -48,6 +48,8 @@ import AdminSnapshots from "./pages/admin/AdminSnapshots";
 import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import AdminSubscriptionPlans from "./pages/admin/AdminSubscriptionPlans";
+import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
@@ -57,6 +59,8 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentHistory from "./pages/PaymentHistory";
 
 import FriendRequestWatcher from "./components/FriendRequestWatcher";
+import ChatMessageWatcher from "./components/ChatMessageWatcher";
+import PresenceManager from "./components/PresenceManager";
 
 // ⭐ Missing import from main branch
 import InviteFriend from "./pages/InviteFriend";
@@ -93,7 +97,8 @@ const App = () => (
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
-                    <Route path="premium-subscriptions" element={<AdminPremiumSubscriptions />} />
+                    <Route path="subscription-plans" element={<AdminSubscriptionPlans />} />
+                    <Route path="premium-dashboard" element={<AdminPremiumDashboard />} />
                   </Routes>
                 </AdminLayout>
               } />
@@ -157,6 +162,8 @@ const App = () => (
             })()}
 
             <FriendRequestWatcher />
+            <ChatMessageWatcher />
+            <PresenceManager />
           </BrowserRouter>
         </TooltipProvider>
       </MusicProvider>

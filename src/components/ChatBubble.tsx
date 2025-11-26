@@ -5,18 +5,74 @@ import { X, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE_URL } from "@/services/api/config";
 import { useNavigate } from "react-router-dom";
-import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
-import { type NotificationDTO as FBNotificationDTO } from "@/services/firebase/notifications";
 import { subscribeChatBubble, type ChatBubblePayload } from "@/utils/chatBubbleBus";
 
 type ChatBubbleMessage = ChatBubblePayload & { timestamp: Date; id: string };
+
+const variantStyles: Record<
+  NonNullable<ChatBubblePayload["variant"]> | "default",
+  { light: string; dark: string }
+> = {
+  info: {
+    light:
+      "bg-white text-slate-900 border-slate-200 ring-sky-50 shadow-[0_10px_35px_rgba(15,23,42,0.12)]",
+    dark:
+      "dark:bg-slate-900 dark:text-white dark:border-slate-700 dark:ring-slate-800 dark:shadow-[0_10px_35px_rgba(0,0,0,0.45)]",
+  },
+  success: {
+    light:
+      "bg-white text-slate-900 border-emerald-100 ring-emerald-50 shadow-[0_10px_35px_rgba(16,185,129,0.14)]",
+    dark:
+      "dark:bg-slate-900 dark:text-white dark:border-emerald-500/30 dark:ring-emerald-500/15 dark:shadow-[0_10px_35px_rgba(16,185,129,0.35)]",
+  },
+  warning: {
+    light:
+      "bg-white text-slate-900 border-amber-100 ring-amber-50 shadow-[0_10px_35px_rgba(245,158,11,0.14)]",
+    dark:
+      "dark:bg-slate-900 dark:text-white dark:border-amber-400/30 dark:ring-amber-400/15 dark:shadow-[0_10px_35px_rgba(245,158,11,0.35)]",
+  },
+  error: {
+    light:
+      "bg-white text-slate-900 border-rose-100 ring-rose-50 shadow-[0_10px_35px_rgba(244,63,94,0.16)]",
+    dark:
+      "dark:bg-slate-900 dark:text-white dark:border-rose-400/30 dark:ring-rose-400/15 dark:shadow-[0_10px_35px_rgba(244,63,94,0.4)]",
+  },
+  default: {
+    light:
+      "bg-white text-slate-900 border-slate-200 ring-slate-100 shadow-[0_10px_35px_rgba(15,23,42,0.12)]",
+    dark:
+      "dark:bg-slate-900 dark:text-white dark:border-slate-700 dark:ring-slate-800 dark:shadow-[0_10px_35px_rgba(0,0,0,0.45)]",
+  },
+};
+
+const getVariantKey = (variant?: ChatBubblePayload["variant"]) => {
+  if (!variant) return "default" as const;
+  return variantStyles[variant] ? variant : "default";
+};
+
+const cleanMessageBody = (from: string, message?: string | null) => {
+  const body = (message ?? "").trim();
+  const prefix = `${from}:`;
+  if (body.toLowerCase().startsWith(prefix.toLowerCase())) {
+    return body.slice(prefix.length).trimStart();
+  }
+  return body;
+};
+
+const truncateMessageBody = (text: string, maxChars = 220) => {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars).trim()}…`;
+};
 
 const ChatBubble = () => {
   const [newMessages, setNewMessages] = useState<ChatBubbleMessage[]>([]);
   const navigate = useNavigate();
 
   const pushAndAutohide = (message: ChatBubbleMessage) => {
-    setNewMessages(prev => [...prev, message]);
+    setNewMessages(prev => {
+      const deduped = prev.filter(m => !(m.variant === message.variant && m.message === message.message && m.from === message.from));
+      return [...deduped, message];
+    });
     setTimeout(() => {
       setNewMessages(prev => prev.filter(m => m.id !== message.id));
     }, 5000);
@@ -60,41 +116,6 @@ const ChatBubble = () => {
     return unsubscribe;
   }, []);
 
-  // Only show REAL notifications from Firebase
-  useFirebaseRealtime(meId, {
-    onNotification: (n: FBNotificationDTO) => {
-      try {
-        const from = n.senderName || 'Someone';
-        const avatar = toAbsoluteUrl(n.senderAvatar ?? null);
-        const base: ChatBubbleMessage = { id: `${n.id || Date.now()}`, from, message: '', avatar, timestamp: new Date() };
-        if (n?.type === 'MESSAGE') {
-          base.id = `msg-${base.id}`;
-          base.message = String(n.body || 'New message');
-          pushAndAutohide(base);
-        } else if (n?.type === 'INVITE') {
-          const metadata = n.metadata as { playlistName?: string } | undefined;
-          const pName = metadata?.playlistName || 'a playlist';
-          base.id = `inv-${base.id}`;
-          base.message = `invited you to collaborate on "${pName}"`;
-          pushAndAutohide(base);
-        } else if (n?.type === 'SHARE') {
-          const title = (n.metadata?.playlistName as string) || (n.metadata?.songName as string) || (n.metadata?.albumName as string) || n.title || 'Shared content';
-          base.id = `share-${base.id}`;
-          base.message = `shared: ${title}`;
-          pushAndAutohide(base);
-        } else if (n?.type === 'FRIEND_REQUEST') {
-          base.id = `fr-${base.id}`;
-          base.message = 'sent you a friend request';
-          pushAndAutohide(base);
-        } else if (n?.type === 'FRIEND_REQUEST_ACCEPTED') {
-          base.id = `fr-acc-${base.id}`;
-          base.message = 'accepted your friend request';
-          pushAndAutohide(base);
-        }
-      } catch { /* ignore */ }
-    }
-  });
-
   const dismissMessage = (messageId: string) => {
     setNewMessages(prev => prev.filter(m => m.id !== messageId));
   };
@@ -107,77 +128,87 @@ const ChatBubble = () => {
 
   if (!isAuthed || newMessages.length === 0) return null;
 
-  const resolveVariant = (msg: ChatBubbleMessage) => {
-    switch (msg.variant) {
-      case 'success':
-        return "from-emerald-500/20 via-emerald-500/10 to-emerald-500/5 border-emerald-300/30 ring-emerald-400/20";
-      case 'warning':
-        return "from-amber-500/25 via-amber-500/15 to-amber-500/10 border-amber-300/40 ring-amber-400/20";
-      case 'error':
-        return "from-rose-500/25 via-rose-500/15 to-rose-500/10 border-rose-300/40 ring-rose-400/20";
-      default:
-        return "from-purple-500/15 via-fuchsia-500/10 to-indigo-500/10 border-purple-300/20 ring-purple-400/10";
-    }
-  };
-
   return (
-    <div className="fixed bottom-32 right-3 z-40 space-y-2 pointer-events-none">
-      {newMessages.slice(-1).map((message, index) => (
+    <div className="fixed bottom-32 right-3 z-40 space-y-3 pointer-events-none">
+      {newMessages.slice(-1).map((message) => (
         <div
           key={message.id}
           className={cn(
-            "pointer-events-auto rounded-2xl p-3 max-w-[280px]",
-            "bg-gradient-to-br",
-            resolveVariant(message),
-            "backdrop-blur-xl backdrop-saturate-150",
-            "border ring-1",
-            "shadow-[0_8px_30px_rgba(88,28,135,0.25)]",
-            "animate-slide-in-right transition-all duration-300 hover:shadow-2xl hover:ring-purple-400/20"
+            "pointer-events-auto rounded-3xl p-5 max-w-[400px] cursor-pointer",
+            "border ring-1 backdrop-blur-2xl backdrop-saturate-150",
+            "animate-slide-in-right transition-all duration-300",
+            "hover:shadow-2xl hover:-translate-y-0.5",
+            variantStyles[getVariantKey(message.variant)].light,
+            variantStyles[getVariantKey(message.variant)].dark
           )}
-          style={{ animationDelay: `${index * 100}ms` } as React.CSSProperties}
+          onClick={() => dismissMessage(message.id)}
         >
           <div className="flex items-start gap-3">
-            <Avatar className="h-6 w-6 flex-shrink-0 ring-2 ring-purple-400/30 ring-offset-0">
+            <Avatar className="h-8 w-8 ring-2 ring-slate-200 dark:ring-slate-500 ring-offset-0">
               <AvatarImage src={message.avatar} alt={message.from} />
-              <AvatarFallback className="text-[10px]">{message.from.charAt(0)}</AvatarFallback>
+              <AvatarFallback className="text-xs bg-slate-200 text-slate-800 dark:bg-slate-400 dark:text-slate-900">
+                {message.from.charAt(0)}
+              </AvatarFallback>
             </Avatar>
-            
+
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-medium text-xs text-purple-50/90 truncate">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-900 dark:text-white truncate max-w-[140px]">
                   {message.from}
                 </span>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-4 w-4 text-purple-200/70 hover:text-purple-50"
-                  onClick={() => dismissMessage(message.id)}
+                  className="h-6 w-6 text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dismissMessage(message.id);
+                  }}
+                  aria-label="Dismiss notification"
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-xs text-purple-100/80 break-words line-clamp-2 overflow-hidden">
-                {message.message}
+              <p className="mt-1 text-sm text-slate-800 dark:text-slate-50 break-words line-clamp-2">
+                {truncateMessageBody(
+                  cleanMessageBody(message.from, message.message)
+                )}
               </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2 pointer-events-auto">
             <Button
               variant="outline"
               size="sm"
-              className="h-5 text-[11px] px-2 border-purple-400/30 text-purple-100 hover:bg-purple-400/10 hover:border-purple-300/40"
-              onClick={() => dismissMessage(message.id)}
+              className="h-6 text-xs px-3 border-slate-300 text-slate-900 hover:bg-slate-100 hover:border-slate-400 dark:border-slate-500 dark:text-white dark:hover:bg-slate-800"
+              onClick={(e) => {
+                e.stopPropagation();
+                // Lấy friendId từ meta để chuyển đến đúng chat
+                const friendId = message.meta?.friendId || message.meta?.friendNumericId;
+                if (friendId) {
+                  // Chuyển đến trang social với tab chat và chọn đúng người
+                  navigate(`/social?tab=chat&friend=${encodeURIComponent(String(friendId))}`);
+                } else {
+                  // Nếu không có friendId, chỉ chuyển đến trang chat
+                  navigate('/social?tab=chat');
+                }
+                dismissMessage(message.id);
+              }}
             >
-              <MessageCircle className="w-3 h-3 mr-1 text-purple-200" />
+              <MessageCircle className="w-4 h-4 mr-1 text-slate-700 dark:text-white" />
               Reply
             </Button>
             {message.id.startsWith('inv-') && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-5 text-[11px] px-2 text-purple-100 hover:text-purple-50 hover:bg-purple-400/10"
-                onClick={() => { navigate('/social?tab=friends'); dismissMessage(message.id); }}
+                className="h-6 text-xs px-3 text-slate-900 hover:text-black hover:bg-slate-100 dark:text-white dark:hover:bg-slate-800"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate('/social?tab=friends');
+                  dismissMessage(message.id);
+                }}
               >
                 View
               </Button>
@@ -190,4 +221,3 @@ const ChatBubble = () => {
 };
 
 export default ChatBubble;
-

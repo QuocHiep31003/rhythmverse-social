@@ -60,14 +60,31 @@ const Login = () => {
       
       // Start automatic token refresh interval
       startTokenRefreshInterval();
+      // Persist token and refresh token in both storages to avoid losing auth across tabs/windows
+      try {
+        localStorage.setItem("token", response.token);
+        if (response.refreshToken) {
+          localStorage.setItem("refreshToken", response.refreshToken);
+        }
+      } catch (storageError) {
+        console.warn("Failed to persist auth token in localStorage", storageError);
+      }
+      try {
+        sessionStorage.setItem("token", response.token);
+        if (response.refreshToken) {
+          sessionStorage.setItem("refreshToken", response.refreshToken);
+        }
+      } catch (storageError) {
+        console.warn("Failed to persist auth token in sessionStorage", storageError);
+      }
 
       // Fetch current user and persist userId for flows that rely on it
       try {
         const me = await authApi.me();
         const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
         if (uid) {
-          try { localStorage.setItem('userId', uid); } catch {}
-          try { sessionStorage.setItem('userId', uid); } catch {}
+          try { localStorage.setItem('userId', uid); } catch (storageError) { console.warn("Failed to store userId in localStorage", storageError); }
+          try { sessionStorage.setItem('userId', uid); } catch (storageError) { console.warn("Failed to store userId in sessionStorage", storageError); }
         }
       } catch { /* ignore */ }
 
@@ -80,8 +97,8 @@ const Login = () => {
         const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
         const target = redirectParam || pending || '/';
         // Clear pending after using it
-        try { localStorage.removeItem('pendingInviteUrl'); } catch {}
-        try { sessionStorage.removeItem('pendingInviteUrl'); } catch {}
+        try { localStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from localStorage", storageError); }
+        try { sessionStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from sessionStorage", storageError); }
         navigate(target);
       } catch {
         navigate('/');
@@ -183,13 +200,22 @@ const Login = () => {
         setTokens(response.token, response.refreshToken);
         // Start automatic token refresh interval
         startTokenRefreshInterval();
+        try {
+          localStorage.setItem("token", response.token);
+          if (response.refreshToken) {
+            localStorage.setItem("refreshToken", response.refreshToken);
+          }
+        } catch (storageError) {
+          console.warn("Failed to persist token after OTP verification", storageError);
+        }
       }
   
       setSuccess("Registration successful! Please log in.");
       setShowOtpModal(false);
       setTimeout(() => setActiveTab("login"), 1000);
-    } catch (err: any) {
-      throw new Error(err.message || "Invalid OTP");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid OTP";
+      throw new Error(message);
     }
   };
   
@@ -235,6 +261,18 @@ const Login = () => {
     } finally {
       setIsLoading(false);
     }
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const redirectParam = params.get('redirect');
+        const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
+        const target = redirectParam || pending || '/';
+        try { localStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from localStorage", storageError); }
+        try { sessionStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from sessionStorage", storageError); }
+        navigate(target);
+      } catch {
+        navigate('/');
+      }
+    }, 1000);
   };
 
   const [resetStep, setResetStep] = useState<1 | 2>(1);
@@ -255,8 +293,8 @@ const Login = () => {
       await authApi.sendResetPasswordOtp(resetEmail);
       setResetSuccess("OTP đã gửi thành công! Kiểm tra email của bạn.");
       setResetStep(2);
-    } catch (err: any) {
-      setResetError(err.message || "Gửi OTP thất bại.");
+    } catch (err: unknown) {
+      setResetError(err instanceof Error ? err.message : "Gửi OTP thất bại.");
     } finally {
       setResetLoading(false);
     }
@@ -271,8 +309,8 @@ const Login = () => {
       await authApi.resetPasswordWithOtp(resetEmail, resetOtp, resetNewPassword);
       setResetSuccess("Đặt lại mật khẩu thành công! Bạn có thể đăng nhập.");
       setTimeout(() => { setActiveTab("login"); }, 1500);
-    } catch (err: any) {
-      setResetError(err.message || "Đặt lại mật khẩu lỗi");
+    } catch (err: unknown) {
+      setResetError(err instanceof Error ? err.message : "Đặt lại mật khẩu lỗi");
     } finally {
       setResetLoading(false);
     }
@@ -404,6 +442,7 @@ const Login = () => {
                               type="email"
                               placeholder="Enter your email"
                               className="pl-10"
+                              autoComplete="email"
                               value={loginData.email}
                               onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                               required
@@ -420,6 +459,7 @@ const Login = () => {
                               type={showPassword ? "text" : "password"}
                               placeholder="Enter your password"
                               className="pl-10 pr-10"
+                              autoComplete="current-password"
                               value={loginData.password}
                               onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                               required
@@ -492,6 +532,7 @@ const Login = () => {
                         type="text"
                         placeholder="Enter your name"
                         className="pl-10"
+                        autoComplete="name"
                         value={registerData.name}
                         onChange={(e) => setRegisterData({ ...registerData, name: e.target.value })}
                         required
@@ -506,6 +547,7 @@ const Login = () => {
                           type="email"
                           placeholder="Enter your email"
                           className="pl-10"
+                          autoComplete="email"
                           value={registerData.email}
                           onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
                           required
@@ -521,6 +563,7 @@ const Login = () => {
                           type="password"
                           placeholder="Enter your password"
                           className="pl-10 pr-10"
+                          autoComplete="new-password"
                           value={registerData.password}
                           onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                           required
@@ -536,6 +579,7 @@ const Login = () => {
                           type="password"
                           placeholder="Confirm your password"
                           className="pl-10 pr-10"
+                          autoComplete="new-password"
                           value={registerData.confirmPassword}
                           onChange={(e) => setRegisterData({ ...registerData, confirmPassword: e.target.value })}
                           required
@@ -626,8 +670,9 @@ const OtpModal = ({ open, email, onClose, onVerify }: OTPDialogProps) => {
       await onVerify(otp);
       setSuccess("âœ… Verification successful!");
       setTimeout(() => onClose(), 1500);
-    } catch (err: any) {
-      setError(err.message || "âŒ Invalid or expired OTP");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid or expired OTP";
+      setError(message);
     } finally {
       setLoading(false);
     }

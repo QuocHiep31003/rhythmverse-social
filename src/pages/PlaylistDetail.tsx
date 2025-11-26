@@ -8,11 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music } from "lucide-react";
+import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { songsApi } from "@/services/api/songApi";
@@ -20,6 +31,7 @@ import { songMoodApi } from "@/services/api/songMoodApi";
 import { buildJsonHeaders, API_BASE_URL } from "@/services/api";
 import { mapToPlayerSong } from "@/lib/utils";
 import { friendsApi } from "@/services/api/friendsApi";
+import { userApi } from "@/services/api/userApi";
 import { uploadImage } from "@/config/cloudinary";
 import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
 import { getPlaylistPermissions, checkIfFriends } from "@/utils/playlistPermissions";
@@ -32,10 +44,18 @@ import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 
+const getTitleFontClass = (length: number) => {
+  if (length > 80) return "text-3xl";
+  if (length > 50) return "text-4xl";
+  if (length > 30) return "text-5xl";
+  return "text-6xl";
+};
+
+
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { playSong, setQueue, isPlaying, currentSong } = useMusic();
+  const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
 
   const [isLiked, setIsLiked] = useState(false);
   const [likedSongs, setLikedSongs] = useState<string[]>([]);
@@ -57,17 +77,20 @@ const PlaylistDetail = () => {
   const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
   const [collabSearch, setCollabSearch] = useState("");
   const [collaborators, setCollaborators] = useState<Array<{ userId: number; name: string; email?: string; role?: CollaboratorRole | string }>>([]);
+  const [collaboratorAvatars, setCollaboratorAvatars] = useState<Record<number, string | null>>({});
   const [hiddenSongIds, setHiddenSongIds] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
   const [editedCoverUrl, setEditedCoverUrl] = useState("");
   const [editedVisibility, setEditedVisibility] = useState<PlaylistVisibility>(PlaylistVisibility.PUBLIC);
-  const [editedSongLimit, setEditedSongLimit] = useState<number>(500);
   const [inviteRole, setInviteRole] = useState<CollaboratorRole>(CollaboratorRole.EDITOR);
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [removingCollaboratorId, setRemovingCollaboratorId] = useState<number | null>(null);
+  const [removeCollabDialogOpen, setRemoveCollabDialogOpen] = useState(false);
+  const [pendingRemoveCollab, setPendingRemoveCollab] = useState<{ id: number; name?: string } | null>(null);
+  const [leaveCollabDialogOpen, setLeaveCollabDialogOpen] = useState(false);
   const [recommendedSongs, setRecommendedSongs] = useState<SearchSongResult[]>([]);
   const [loadingRecommended, setLoadingRecommended] = useState(false);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
@@ -91,6 +114,26 @@ const PlaylistDetail = () => {
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
   const fetchedSongCoverIdsRef = useRef<Set<string>>(new Set());
+  const friendsLoadedRef = useRef(false);
+  const lastCollaboratorsRef = useRef<string>("");
+  const lastPendingInvitesRef = useRef<string>("");
+
+  const displayTitle = playlist?.title || "Playlist";
+  const displayTitleFontClass = useMemo(
+    () => getTitleFontClass(displayTitle.length),
+    [displayTitle.length]
+  );
+  const editTitleFontClass = useMemo(
+    () => getTitleFontClass(editedTitle.length),
+    [editedTitle.length]
+  );
+  const existingSongIds = useMemo(() => {
+    return new Set(
+      (playlist?.songs ?? [])
+        .map((song) => Number(song.id))
+        .filter((id) => Number.isFinite(id))
+    );
+  }, [playlist?.songs]);
   // Normalize relative URLs from API to absolute
   const toAbsoluteUrl = useCallback((u?: string | null): string | null => {
     if (!u) return null;
@@ -172,7 +215,7 @@ const PlaylistDetail = () => {
     const seen = new Set<number>();
 
     if (playlist.ownerId) {
-      // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list
+      // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list, cuối cùng là từ cache
       let ownerAvatar = playlist.ownerAvatar;
       let ownerName = playlist.ownerName;
       
@@ -184,6 +227,11 @@ const PlaylistDetail = () => {
         }
       }
       
+      // Nếu vẫn không có avatar, thử lấy từ cache
+      if (!ownerAvatar && collaboratorAvatars[playlist.ownerId] !== undefined) {
+        ownerAvatar = collaboratorAvatars[playlist.ownerId];
+      }
+      
       entries.push({
         userId: playlist.ownerId,
         name: ownerName || "Owner",
@@ -193,6 +241,41 @@ const PlaylistDetail = () => {
         isOwner: true,
       });
       seen.add(playlist.ownerId);
+    }
+    
+    // Nếu meId là collaborator nhưng không có trong collaborators list, thêm vào
+    if (meId && typeof meId === "number" && !seen.has(meId) && playlist.ownerId !== meId) {
+      const meCollaborator = collaborators.find(c => c.userId === meId);
+      if (meCollaborator) {
+        let meAvatar = (meCollaborator as { avatar?: string | null }).avatar ?? null;
+        if (!meAvatar && friends.length > 0) {
+          const meFriend = friends.find(f => f.id === meId);
+          if (meFriend?.avatar) {
+            meAvatar = meFriend.avatar;
+          }
+        }
+        if (!meAvatar && collaboratorAvatars[meId] !== undefined) {
+          meAvatar = collaboratorAvatars[meId];
+        }
+        
+        const normalizedRole = typeof meCollaborator.role === "string" ? parseCollaboratorRole(meCollaborator.role) : meCollaborator.role;
+        const roleLabel =
+          normalizedRole === CollaboratorRole.EDITOR
+            ? "Editor"
+            : normalizedRole === CollaboratorRole.VIEWER
+              ? "Viewer"
+              : "Collaborator";
+        
+        entries.push({
+          userId: meId,
+          name: meCollaborator.name || meCollaborator.email || `User ${meId}`,
+          avatar: toAbsoluteUrl(meAvatar) || null,
+          role: normalizedRole,
+          roleLabel,
+          isOwner: false,
+        });
+        seen.add(meId);
+      }
     }
 
     collaborators.forEach((c) => {
@@ -206,13 +289,17 @@ const PlaylistDetail = () => {
             ? "Viewer"
             : "Collaborator";
       
-      // Lấy avatar: thử từ collaborator object, nếu không có thì lấy từ friends list
+      // Lấy avatar: thử từ collaborator object, nếu không có thì lấy từ friends list, cuối cùng là từ collaboratorAvatars cache
       let collaboratorAvatar = (c as { avatar?: string | null }).avatar ?? null;
       if (!collaboratorAvatar && friends.length > 0) {
         const friend = friends.find(f => f.id === idNum);
         if (friend?.avatar) {
           collaboratorAvatar = friend.avatar;
         }
+      }
+      // Nếu vẫn không có, thử lấy từ cache
+      if (!collaboratorAvatar && collaboratorAvatars[idNum] !== undefined) {
+        collaboratorAvatar = collaboratorAvatars[idNum];
       }
       
       entries.push({
@@ -227,15 +314,31 @@ const PlaylistDetail = () => {
     });
 
     return entries;
-  }, [playlist, collaborators, friends, toAbsoluteUrl]);
+  }, [playlist, collaborators, friends, collaboratorAvatars, toAbsoluteUrl, meId]);
 
   // Load recommended songs based on playlist content
-  // Ưu tiên: Genre > Mood > Artist
+  // Ưu tiên: Mood > Genre > Artist
   // Tối ưu: Giảm số lượng API calls và chạy song song
-  useEffect(() => {
-    const loadRecommended = async () => {
-      if (!playlist || playlist.songs.length === 0) {
+  // Luôn hiện recommend (không chỉ khi playlist thay đổi)
+  const loadRecommended = useCallback(async () => {
+    if (!playlist) {
         setRecommendedSongs([]);
+      setLoadingRecommended(false);
+      return;
+    }
+    
+    // Nếu playlist không có bài hát, vẫn load recommend từ popular songs
+    if (playlist.songs.length === 0) {
+      setLoadingRecommended(true);
+      try {
+        const data = await songsApi.getAll({ size: 4, page: 0 });
+        setRecommendedSongs((data.content || []).slice(0, 4));
+      } catch (error) {
+        console.error("Failed to load recommended songs:", error);
+        setRecommendedSongs([]);
+      } finally {
+        setLoadingRecommended(false);
+      }
         return;
       }
       
@@ -266,33 +369,73 @@ const PlaylistDetail = () => {
         const moodIds = new Set<number>();
         const artistIds = new Set<number>();
         
+        // Thu thập moodIds từ songMoodApi
+        const moodPromises = songsToCheck.map(async (song) => {
+          try {
+            const songId = Number(song.id);
+            if (isNaN(songId)) return null;
+            const moods = await songMoodApi.getBySongId(songId).catch(() => null);
+            return moods;
+          } catch {
+            return null;
+          }
+        });
+        const moodResults = (await Promise.all(moodPromises)).filter(Boolean);
+        
         songDetails.forEach((songDetail: any) => {
           if (!songDetail) return;
           
           // Thu thập genreIds
           if (songDetail.genreIds && Array.isArray(songDetail.genreIds)) {
-            songDetail.genreIds.slice(0, 1).forEach((id: number) => genreIds.add(id));
+            songDetail.genreIds.slice(0, 2).forEach((id: number) => genreIds.add(id));
           }
           if (songDetail.genres && Array.isArray(songDetail.genres)) {
-            songDetail.genres.slice(0, 1).forEach((g: { id?: number }) => {
+            songDetail.genres.slice(0, 2).forEach((g: { id?: number }) => {
               if (g.id) genreIds.add(g.id);
             });
           }
           
           // Thu thập artistIds
           if (songDetail.artistIds && Array.isArray(songDetail.artistIds)) {
-            songDetail.artistIds.slice(0, 1).forEach((id: number) => artistIds.add(id));
+            songDetail.artistIds.slice(0, 2).forEach((id: number) => artistIds.add(id));
           }
+        });
+        
+        // Thu thập moodIds từ moodResults
+        moodResults.forEach((moods: any) => {
+          if (!moods || !Array.isArray(moods)) return;
+          moods.slice(0, 2).forEach((m: { id?: number; moodId?: number }) => {
+            const moodId = m.id ?? m.moodId;
+            if (moodId && typeof moodId === 'number') moodIds.add(moodId);
+          });
         });
         
         // Chạy song song các API calls để tăng tốc
         const recommendationPromises: Promise<SearchSongResult[]>[] = [];
         
-        // Ưu tiên 1: Tìm bài hát theo Genre (chỉ lấy 1 genre đầu tiên)
+        // Ưu tiên 1: Tìm bài hát theo Mood
+        if (moodIds.size > 0) {
+          const moodIdArray = Array.from(moodIds).slice(0, 2);
+          moodIdArray.forEach((moodId) => {
+            recommendationPromises.push(
+              songsApi.getWithoutAlbum({ moodId, size: 8 })
+                .then(res => {
+                  const content = res.content || [];
+                  return content.filter(
+                    (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+                  ) as SearchSongResult[];
+                })
+                .catch(() => [] as SearchSongResult[])
+            );
+          });
+        }
+        
+        // Ưu tiên 2: Tìm bài hát theo Genre
         if (genreIds.size > 0) {
-          const genreId = Array.from(genreIds)[0];
+          const genreIdArray = Array.from(genreIds).slice(0, 2);
+          genreIdArray.forEach((genreId) => {
           recommendationPromises.push(
-            songsApi.getAll({ genreId, size: 8, page: 0 })
+              songsApi.getWithoutAlbum({ genreId, size: 8 })
               .then(res => {
                 const content = res.content || [];
                 return content.filter(
@@ -301,11 +444,13 @@ const PlaylistDetail = () => {
               })
               .catch(() => [] as SearchSongResult[])
           );
+          });
         }
         
-        // Ưu tiên 2: Tìm bài hát theo Artist (chỉ lấy 1 artist đầu tiên)
-        if (artistIds.size > 0 && recommended.length < 4) {
-          const artistId = Array.from(artistIds)[0];
+        // Ưu tiên 3: Tìm bài hát theo Artist
+        if (artistIds.size > 0) {
+          const artistIdArray = Array.from(artistIds).slice(0, 2);
+          artistIdArray.forEach((artistId) => {
           recommendationPromises.push(
             songsApi.getAll({ artistId, size: 8, page: 0 })
               .then(res => {
@@ -316,6 +461,7 @@ const PlaylistDetail = () => {
               })
               .catch(() => [] as SearchSongResult[])
           );
+          });
         }
         
         // Fallback: Bài hát phổ biến
@@ -339,25 +485,56 @@ const PlaylistDetail = () => {
           for (const song of result) {
             if (!allSongs.some(s => String(s.id) === String(song.id))) {
               allSongs.push(song);
-              if (allSongs.length >= 4) break;
+              if (allSongs.length >= 8) break; // Lấy nhiều hơn để có đủ sau khi filter
             }
           }
-          if (allSongs.length >= 4) break;
+          if (allSongs.length >= 8) break;
         }
         
-        setRecommendedSongs(allSongs.slice(0, 4));
+        // Filter lại để loại bỏ những bài đã có trong playlist (cập nhật lại)
+        // Đảm bảo không recommend bài hát đã có trong playlist
+        const finalSongs = allSongs.filter(
+          (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
+        );
+        
+        // Nếu không đủ 4 bài, lấy thêm từ fallback (vẫn filter bài đã có)
+        if (finalSongs.length < 4) {
+          try {
+            const fallbackData = await songsApi.getAll({ size: 50, page: 0 });
+            const fallbackSongs = (fallbackData.content || []).filter(
+              (s: SearchSongResult) => 
+                !playlistSongIds.has(String(s.id)) && 
+                !finalSongs.some(existing => String(existing.id) === String(s.id))
+            );
+            finalSongs.push(...fallbackSongs.slice(0, 4 - finalSongs.length));
+          } catch (e) {
+            console.warn('Failed to load fallback recommendations:', e);
+          }
+        }
+        
+        // Chỉ set recommend nếu có bài hát (không set empty array)
+        if (finalSongs.length > 0) {
+          setRecommendedSongs(finalSongs.slice(0, 4));
+        } else {
+          setRecommendedSongs([]);
+        }
       } catch (error) {
         console.error("Failed to load recommended songs:", error);
         setRecommendedSongs([]);
       } finally {
         setLoadingRecommended(false);
       }
-    };
-    
-    if (playlist) {
-      loadRecommended();
-    }
   }, [playlist]);
+    
+  // Load recommend khi playlist thay đổi (chỉ cho owner/editor)
+  useEffect(() => {
+    if (playlist && (permissions.canEdit || permissions.isOwner)) {
+      loadRecommended();
+    } else {
+      // Nếu không có quyền edit, clear recommendations
+      setRecommendedSongs([]);
+    }
+  }, [playlist, permissions.canEdit, permissions.isOwner, loadRecommended]);
 
   useEffect(() => {
     const load = async () => {
@@ -430,7 +607,6 @@ const PlaylistDetail = () => {
         setEditedDescription(data.description || '');
         setEditedCoverUrl(data.coverUrl || extendedData.urlImagePlaylist || '');
         setEditedVisibility(visibility);
-        setEditedSongLimit(extendedData?.songLimit ?? 500);
 
         const rawRoleCandidate =
           (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.role ??
@@ -592,6 +768,65 @@ const PlaylistDetail = () => {
     setPermissions(perms);
   }, [playlist, collaborators, meId, isFriend]);
 
+  // Listen for collab invite accepted event to refresh collaborators
+  useEffect(() => {
+    const handleCollabAccepted = async (event: CustomEvent) => {
+      const eventPlaylistId = event.detail?.playlistId;
+      const currentPlaylistId = playlist?.id;
+      
+      // Chỉ reload nếu event playlistId khớp với playlist hiện tại, hoặc không có playlistId trong event
+      if (eventPlaylistId && currentPlaylistId && Number(eventPlaylistId) !== Number(currentPlaylistId)) {
+        return; // Không phải playlist này
+      }
+      
+      // Reset fetch ID để force reload
+      collaboratorsFetchIdRef.current = null;
+      
+      // Force reload collaborators ngay lập tức
+      if (currentPlaylistId) {
+        try {
+          const list = await playlistCollaboratorsApi.list(Number(currentPlaylistId));
+          updateCollaboratorsFromRaw(list);
+          collaboratorsFetchIdRef.current = Number(currentPlaylistId);
+          
+          // Fetch avatars cho tất cả collaborators không có avatar (bao gồm cả meId nếu là collaborator)
+          const missingAvatars = list.filter((c: any) => {
+            const idNum = c.userId;
+            if (!idNum || typeof idNum !== "number") return false;
+            const hasAvatar = (c as { avatar?: string | null }).avatar ?? null;
+            const hasInFriends = friends.find(f => f.id === idNum)?.avatar;
+            const hasInCache = collaboratorAvatars[idNum] !== undefined;
+            return !hasAvatar && !hasInFriends && !hasInCache;
+          });
+          
+          // Fetch avatars từ user API cho những collaborators không có avatar
+          missingAvatars.forEach(async (c: any) => {
+            const idNum = c.userId;
+            if (!idNum || typeof idNum !== "number") return;
+            try {
+              const user = await userApi.getById(idNum);
+              if (user?.avatar) {
+                setCollaboratorAvatars(prev => ({ ...prev, [idNum]: user.avatar || null }));
+              } else {
+                setCollaboratorAvatars(prev => ({ ...prev, [idNum]: null }));
+              }
+            } catch (e) {
+              // Nếu không fetch được, đánh dấu là null để không fetch lại
+              setCollaboratorAvatars(prev => ({ ...prev, [idNum]: null }));
+            }
+          });
+        } catch (e) {
+          console.warn('[PlaylistDetail] Failed to reload collaborators after accept:', e);
+        }
+      }
+    };
+    
+    window.addEventListener('app:collab-invite-accepted', handleCollabAccepted as EventListener);
+    return () => {
+      window.removeEventListener('app:collab-invite-accepted', handleCollabAccepted as EventListener);
+    };
+  }, [playlist?.id, updateCollaboratorsFromRaw, meId]);
+
   useEffect(() => {
     if (!playlist?.id) return;
     if (collaboratorsFetchIdRef.current === playlist.id && collaborators.length) return;
@@ -602,6 +837,55 @@ const PlaylistDetail = () => {
         if (cancelled) return;
         updateCollaboratorsFromRaw(list);
         collaboratorsFetchIdRef.current = Number(playlist.id);
+        
+        // Fetch avatars cho collaborators không có avatar (bao gồm cả owner và meId nếu là collaborator)
+        // Sử dụng functional update để tránh dependency loop
+        setCollaboratorAvatars(prev => {
+          const missingAvatars = list.filter((c: any) => {
+            const idNum = c.userId;
+            if (!idNum || typeof idNum !== "number") return false;
+            const hasAvatar = (c as { avatar?: string | null }).avatar ?? null;
+            const hasInFriends = friends.find(f => f.id === idNum)?.avatar;
+            const hasInCache = prev[idNum] !== undefined;
+            return !hasAvatar && !hasInFriends && !hasInCache;
+          });
+          
+          // Nếu meId là collaborator (có trong list hoặc vừa accept), cần fetch avatar
+          if (meId && typeof meId === "number") {
+            const meInList = list.some((c: any) => c.userId === meId);
+            if (meInList) {
+              // meId có trong list, check xem có avatar chưa
+              const meCollab = list.find((c: any) => c.userId === meId);
+              const meHasAvatar = (meCollab as { avatar?: string | null })?.avatar ?? null;
+              const meHasInFriends = friends.find(f => f.id === meId)?.avatar;
+              const meHasInCache = prev[meId] !== undefined;
+              if (!meHasAvatar && !meHasInFriends && !meHasInCache) {
+                missingAvatars.push({ userId: meId });
+              }
+            }
+          }
+          
+          // Fetch avatars từ user API cho những collaborators không có avatar
+          missingAvatars.forEach(async (c: any) => {
+            const idNum = c.userId;
+            if (!idNum || typeof idNum !== "number") return;
+            try {
+              const user = await userApi.getById(idNum);
+              if (!cancelled && user?.avatar) {
+                setCollaboratorAvatars(prevState => ({ ...prevState, [idNum]: user.avatar || null }));
+              } else if (!cancelled) {
+                setCollaboratorAvatars(prevState => ({ ...prevState, [idNum]: null }));
+              }
+            } catch (e) {
+              // Nếu không fetch được, đánh dấu là null để không fetch lại
+              if (!cancelled) {
+                setCollaboratorAvatars(prevState => ({ ...prevState, [idNum]: null }));
+              }
+            }
+          });
+          
+          return prev; // Return prev để không thay đổi state ngay lập tức
+        });
       } catch (e) {
         if (!cancelled && e instanceof PlaylistPermissionError) {
           collaboratorsFetchIdRef.current = Number(playlist.id);
@@ -612,7 +896,7 @@ const PlaylistDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [playlist?.id, collaborators.length, updateCollaboratorsFromRaw]);
+  }, [playlist?.id, collaborators.length, updateCollaboratorsFromRaw, friends]);
 
   useEffect(() => {
     const loadCollabs = async () => {
@@ -705,11 +989,33 @@ const PlaylistDetail = () => {
 
   useEffect(() => {
     const fetchFriendsForDialog = async () => {
+      // Chỉ load khi dialog mở
+      if (!collabOpen) {
+        friendsLoadedRef.current = false;
+        return;
+      }
+
+      // Kiểm tra xem đã load chưa và collaborators/pendingInvites có thay đổi không
+      const collaboratorsKey = JSON.stringify(collaborators.map(c => c.userId).sort());
+      const pendingInvitesKey = JSON.stringify(pendingInvites.map(inv => inv.receiverId).sort());
+      
+      // Nếu đã load và không có thay đổi về collaborators/pendingInvites, không load lại
+      if (friendsLoadedRef.current && 
+          lastCollaboratorsRef.current === collaboratorsKey && 
+          lastPendingInvitesRef.current === pendingInvitesKey) {
+        return;
+      }
+
       try {
         setLoadingFriends(true);
         const rawUserId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
         const me = rawUserId ? Number(rawUserId) : undefined;
-        if (!me) { setFriends([]); return; }
+        if (!me) { 
+          setFriends([]); 
+          friendsLoadedRef.current = true;
+          return; 
+        }
+        
         const list = await friendsApi.getFriends(me);
         interface FriendListItem {
           friendId?: number;
@@ -726,7 +1032,7 @@ const PlaylistDetail = () => {
           ? list.map((f: FriendListItem) => ({
             id: f.friendId ?? f.userId ?? f.id ?? 0,
             name: f.friendName ?? f.name ?? f.username ?? f.email ?? `User ${f.friendId ?? f.userId ?? f.id ?? ''}`,
-            avatar: f.friendAvatar ?? f.avatar ?? null,
+            avatar: toAbsoluteUrl(f.friendAvatar ?? f.avatar ?? null) || null,
           }))
           : [];
 
@@ -743,10 +1049,17 @@ const PlaylistDetail = () => {
         });
 
         setFriends(filtered);
-      } catch { setFriends([]); }
-      finally { setLoadingFriends(false); }
+        friendsLoadedRef.current = true;
+        lastCollaboratorsRef.current = collaboratorsKey;
+        lastPendingInvitesRef.current = pendingInvitesKey;
+      } catch { 
+        setFriends([]); 
+        friendsLoadedRef.current = true;
+      } finally { 
+        setLoadingFriends(false); 
+      }
     };
-    if (collabOpen) fetchFriendsForDialog();
+    fetchFriendsForDialog();
   }, [collabOpen, playlist?.ownerId, collaborators, pendingInvites]);
 
   useEffect(() => {
@@ -754,9 +1067,8 @@ const PlaylistDetail = () => {
       const q = addSearch.trim();
       if (!q) { setAddResults([]); return; }
       try {
-        const res = await fetch(`http://localhost:8080/api/songs?search=${encodeURIComponent(q)}&size=10`, { headers: buildJsonHeaders() });
-        if (!res.ok) return;
-        const data = await res.json() as { content?: SearchSongResult[] };
+        // Dùng songsApi.getAll giống như thanh search tổng để có cùng format và ảnh
+        const data = await songsApi.getAll({ search: q, size: 10, page: 0 });
         setAddResults(data.content || []);
       } catch { setAddResults([]); }
     };
@@ -770,6 +1082,16 @@ const PlaylistDetail = () => {
         ? song.id
         : Number((song as { songId?: number }).songId);
     if (!Number.isFinite(songId)) return;
+    
+    // Kiểm tra xem bài hát đã có trong playlist chưa
+    if (playlist.songs.some((existing) => existing.id === String(songId))) {
+      toast({ 
+        title: 'Bài hát đã có trong playlist', 
+        description: 'Bài hát này đã được thêm vào playlist rồi.',
+        variant: 'destructive'
+      });
+      return;
+    }
     const previousSnapshot = playlist ? { ...playlist, songs: [...playlist.songs] } : null;
     const optimisticAddedAt = new Date().toISOString();
     // Lấy avatar của current user từ friends list hoặc từ localStorage
@@ -780,6 +1102,9 @@ const PlaylistDetail = () => {
         currentUserAvatar = currentUserFriend.avatar;
       }
     }
+
+    // Đánh dấu đang thêm ngay lập tức để button phản hồi click đầu tiên
+    setAddingSongIds((prev) => (prev.includes(songId) ? prev : [...prev, songId]));
     
     // Lấy thông tin đầy đủ từ API để có duration chính xác
     let songDetail: any = null;
@@ -834,12 +1159,26 @@ const PlaylistDetail = () => {
       }
     }
     
+    // Lấy cover giống như MusicCard (dùng mapToPlayerSong logic)
+    let coverUrl = '';
+    if (songDetail) {
+      const mapped = mapToPlayerSong(songDetail as any);
+      coverUrl = mapped.cover;
+    } else {
+      // Fallback: dùng logic từ mapToPlayerSong
+      coverUrl = (song as any).albumCoverImg ?? 
+                 (song as any).urlImageAlbum ?? 
+                 (song as any).albumImageUrl ?? 
+                 resolveSongCover(song as SearchSongResult & { songId?: number }) ?? 
+                 '';
+    }
+    
     const optimisticSong: Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null } = {
       id: String(songId),
       title: songDetail?.name || songDetail?.title || song.name,
       artist: artistName,
       album: songDetail?.album?.name || (typeof songDetail?.album === 'string' ? songDetail.album : '') || song.album?.name || '',
-      cover: resolveSongCover(songDetail || song as SearchSongResult & { songId?: number }),
+      cover: coverUrl,
       audioUrl: songDetail?.audioUrl || songDetail?.audio || songDetail?.url || song.audioUrl || '',
       duration: songDuration,
       addedAt: optimisticAddedAt,
@@ -847,7 +1186,6 @@ const PlaylistDetail = () => {
       addedById: meId,
       addedByAvatar: toAbsoluteUrl(currentUserAvatar) || null,
     };
-    setAddingSongIds((prev) => (prev.includes(songId) ? prev : [...prev, songId]));
     setPlaylist((prev) => {
       if (!prev) return prev;
       if (prev.songs.some((existing) => existing.id === String(songId))) {
@@ -865,16 +1203,12 @@ const PlaylistDetail = () => {
     try {
       await playlistsApi.addSong(playlist.id, songId);
       toast({ title: 'Added', description: 'Song added to playlist' });
-      const updated = await playlistsApi.getById(playlist.id);
-      const extendedUpdated = updated as ExtendedPlaylistDTO;
-      const mappedSongs = mapSongsFromResponse(updated.songs);
-      setPlaylist((prev) => prev ? {
-        ...prev,
-        cover: updated.coverUrl || extendedUpdated.urlImagePlaylist || prev.cover,
-        songs: mappedSongs,
-        totalSongs: Array.isArray(updated.songs) ? updated.songs.length : Array.isArray(updated.songIds) ? updated.songIds.length : mappedSongs.length,
-        updatedAt: extendedUpdated?.dateUpdate ?? extendedUpdated?.updatedAt ?? prev.updatedAt ?? optimisticAddedAt,
-      } : prev);
+      
+      // Không reload lại playlist từ API - chỉ dùng optimistic update
+      // Chỉ reload recommend để cập nhật danh sách (loại bỏ bài vừa add)
+      setTimeout(() => {
+        loadRecommended();
+      }, 500);
     } catch (e) {
       if (previousSnapshot) {
         setPlaylist(previousSnapshot);
@@ -893,11 +1227,17 @@ const PlaylistDetail = () => {
 
   const toggleSelectFriend = (fid: number) => setSelectedFriendIds((prev) => prev.includes(fid) ? prev.filter(x => x !== fid) : [...prev, fid]);
 
-  const handleRemoveCollaborator = async (collaboratorId: number, collaboratorName?: string) => {
+  const handleRemoveCollaborator = (collaboratorId: number, collaboratorName?: string) => {
     if (!playlist || !permissions.isOwner) return;
-    const confirmed = window.confirm(`Bạn có chắc muốn gỡ ${collaboratorName || "cộng tác viên này"} khỏi playlist?`);
-    if (!confirmed) return;
+    setPendingRemoveCollab({ id: collaboratorId, name: collaboratorName });
+    setRemoveCollabDialogOpen(true);
+  };
+
+  const confirmRemoveCollaborator = async () => {
+    if (!playlist || !pendingRemoveCollab) return;
+    const { id: collaboratorId, name: collaboratorName } = pendingRemoveCollab;
     setRemovingCollaboratorId(collaboratorId);
+    setRemoveCollabDialogOpen(false);
     try {
       await playlistCollaboratorsApi.remove(playlist.id, collaboratorId);
       toast({
@@ -919,13 +1259,18 @@ const PlaylistDetail = () => {
       });
     } finally {
       setRemovingCollaboratorId(null);
+      setPendingRemoveCollab(null);
     }
   };
 
-  const handleLeaveCollaboration = async () => {
+  const handleLeaveCollaboration = () => {
     if (!playlist || typeof meId !== "number" || !Number.isFinite(meId)) return;
-    const confirmed = window.confirm("Bạn có chắc muốn rời khỏi playlist này?");
-    if (!confirmed) return;
+    setLeaveCollabDialogOpen(true);
+  };
+
+  const confirmLeaveCollaboration = async () => {
+    if (!playlist || typeof meId !== "number" || !Number.isFinite(meId)) return;
+    setLeaveCollabDialogOpen(false);
     setLeaveLoading(true);
     try {
       await playlistCollaboratorsApi.leave(playlist.id);
@@ -1129,13 +1474,18 @@ const PlaylistDetail = () => {
 
   const playAllSongs = () => {
     if (!playlist || !playlist.songs.length) return;
-    setQueue(playlist.songs);
-    playSong(playlist.songs[0]);
-    toast({
-      title: `Playing ${playlist?.title}`,
-      description: `${playlist?.songs.length} songs`,
-      duration: 3000,
-    });
+    if (isPlaying) {
+      togglePlay();
+    } else {
+      // Nếu đang có bài hát trong playlist đang phát, resume bài đó
+      if (currentSong && playlist.songs.find((s) => s.id === currentSong.id)) {
+        playSong(currentSong);
+      } else {
+        // Nếu không, play bài đầu tiên
+        setQueue(playlist.songs);
+        playSong(playlist.songs[0]);
+      }
+    }
   };
 
   const handlePlaySong = (song: Song) => {
@@ -1169,6 +1519,39 @@ const PlaylistDetail = () => {
       setDeleting(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-dark text-foreground">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex flex-col lg:flex-row gap-8 mb-8">
+            <div className="flex-shrink-0">
+              <Skeleton className="w-64 h-64 lg:w-80 lg:h-80 rounded-lg" />
+            </div>
+            <div className="flex-1 space-y-4">
+              <Skeleton className="h-12 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <div className="flex items-center gap-3 mt-6">
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+                <Skeleton className="h-10 w-24" />
+              </div>
+            </div>
+          </div>
+          <Card className="bg-card/50 border-border/50">
+            <CardContent className="p-6">
+              <Skeleton className="h-10 w-full mb-4" />
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-dark text-foreground">
@@ -1216,7 +1599,7 @@ const PlaylistDetail = () => {
             />
           </div>
 
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="mb-2">
               {(() => {
                 const currentVisibility = isEditing ? editedVisibility : (playlist?.visibility || PlaylistVisibility.PUBLIC);
@@ -1244,9 +1627,50 @@ const PlaylistDetail = () => {
               })()}
             </div>
             {isEditing ? (
-              <div className="space-y-3 mb-2">
-                <Input className="text-3xl md:text-4xl font-bold" value={editedTitle} onChange={(e) => setEditedTitle(e.target.value)} placeholder="Playlist title" />
-                <Textarea value={editedDescription} onChange={(e) => setEditedDescription(e.target.value)} placeholder="Description" rows={3} />
+              <div className="space-y-3 mb-2 min-w-0">
+                <div className="space-y-2 min-w-0">
+                  <Input 
+                    className={`${editTitleFontClass} font-bold w-full min-w-0`} 
+                    value={editedTitle} 
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 100) {
+                        setEditedTitle(value);
+                      } else {
+                        toast({ 
+                          title: "Name too long", 
+                          description: "Playlist name must not exceed 100 characters", 
+                          variant: "destructive" 
+                        });
+                      }
+                    }} 
+                    placeholder="Playlist title"
+                    maxLength={100}
+                  />
+                  <p className="text-xs text-muted-foreground">{editedTitle.length}/100 characters</p>
+                </div>
+                <div className="space-y-2 min-w-0">
+                  <Textarea 
+                    value={editedDescription} 
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value.length <= 300) {
+                        setEditedDescription(value);
+                      } else {
+                        toast({ 
+                          title: "Description too long", 
+                          description: "Description must not exceed 300 characters", 
+                          variant: "destructive" 
+                        });
+                      }
+                    }} 
+                    placeholder="Description" 
+                    rows={3}
+                    maxLength={300}
+                    className="resize-none w-full min-w-0"
+                  />
+                  <p className="text-xs text-muted-foreground">{editedDescription.length}/300 characters</p>
+                </div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="visibility">Visibility</Label>
@@ -1261,21 +1685,36 @@ const PlaylistDetail = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="limit">Song limit</Label>
-                    <Input id="limit" type="number" min={1} max={1000} value={editedSongLimit} onChange={(e) => setEditedSongLimit(parseInt(e.target.value) || 500)} className="w-24" />
-                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={async () => {
                     if (!playlist) return;
+                    
+                    // Validation
+                    if (editedTitle.length > 100) {
+                      toast({ 
+                        title: "Name too long", 
+                        description: "Playlist name must not exceed 100 characters", 
+                        variant: "destructive" 
+                      });
+                      return;
+                    }
+                    
+                    if (editedDescription.length > 300) {
+                      toast({ 
+                        title: "Description too long", 
+                        description: "Description must not exceed 300 characters", 
+                        variant: "destructive" 
+                      });
+                      return;
+                    }
+                    
                     try {
                       await playlistsApi.update(playlist.id, {
                         name: editedTitle.trim() || playlist.title,
                         description: editedDescription,
                         coverUrl: editedCoverUrl || undefined,
                         visibility: editedVisibility,
-                        songLimit: editedSongLimit,
                         dateUpdate: new Date().toISOString().split('T')[0],
                         songIds: playlist.songs.map(s => Number(s.id)),
                       });
@@ -1296,12 +1735,16 @@ const PlaylistDetail = () => {
               </div>
             ) : (
               <>
-                <h1 className="text-4xl md:text-5xl font-extrabold mb-2">{playlist?.title || 'Playlist'}</h1>
-                <p className="text-sm text-muted-foreground">{playlist?.description}</p>
+                <h1 className={`${displayTitleFontClass} font-extrabold mb-2 line-clamp-2 break-words overflow-hidden min-w-0`}>
+                  {displayTitle}
+                </h1>
+                {playlist?.description && (
+                  <p className="text-sm text-muted-foreground line-clamp-2 break-words overflow-hidden min-w-0">{playlist?.description}</p>
+                )}
               </>
             )}
 
-            <div className="flex items-center gap-3 mb-6 mt-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4 mt-3">
               {(() => {
                 // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list
                 let ownerAvatar = playlist?.ownerAvatar;
@@ -1319,9 +1762,15 @@ const PlaylistDetail = () => {
                   <>
                     <Avatar className="w-9 h-9 border border-border/50">
                       {ownerAvatar ? (
-                        <AvatarImage src={toAbsoluteUrl(ownerAvatar) || undefined} alt={ownerName || "Owner"} />
+                        <AvatarImage
+                          src={toAbsoluteUrl(ownerAvatar) || undefined}
+                          alt={ownerName || "Owner"}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
                       ) : null}
-                      <AvatarFallback className="bg-gradient-primary text-white">
+                      <AvatarFallback delayMs={0} className="bg-gradient-primary text-white">
                         {ownerName 
                           ? ownerName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
                           : <UserIcon className="h-5 w-5" />
@@ -1372,7 +1821,7 @@ const PlaylistDetail = () => {
                   Collaborators
                 </span>
                 <div className="flex -space-x-2">
-                  {collaboratorEntries.map((member) => {
+                  {(collaboratorEntries.length > 5 ? collaboratorEntries.slice(0, 5) : collaboratorEntries).map((member) => {
                     const initials = member.name
                       .split(" ")
                       .map((n) => n.charAt(0))
@@ -1426,14 +1875,73 @@ const PlaylistDetail = () => {
                       </div>
                     );
                   })}
+                  {collaboratorEntries.length > 5 && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <div className="relative">
+                          <Avatar className="h-8 w-8 cursor-pointer border-2 border-background ring-2 ring-border/60 hover:scale-110 transition-transform">
+                            <AvatarFallback className="bg-muted text-muted-foreground text-xs font-semibold">
+                              +{collaboratorEntries.length - 5}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3" side="bottom" align="start">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                          {collaboratorEntries.length - 5} more collaborator{collaboratorEntries.length - 5 > 1 ? 's' : ''}
+                        </p>
+                        <div className="space-y-2 max-h-64 overflow-y-auto">
+                          {collaboratorEntries.slice(5).map((member) => {
+                            const initials = member.name
+                              .split(" ")
+                              .map((n) => n.charAt(0))
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase();
+                            const ringClass =
+                              member.isOwner
+                                ? "ring-2 ring-primary/60"
+                                : member.role === CollaboratorRole.EDITOR
+                                  ? "ring-2 ring-emerald-500/60"
+                                  : "ring-2 ring-border/60";
+                            return (
+                              <div key={member.userId} className="flex items-center gap-2">
+                                <Avatar className={`h-8 w-8 ${ringClass}`}>
+                                  {member.avatar ? (
+                                    <AvatarImage src={member.avatar} alt={member.name} />
+                                  ) : null}
+                                  <AvatarFallback className="bg-gradient-primary text-white text-xs">
+                                    {initials}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">{member.name}</p>
+                                  <p className="text-xs text-muted-foreground">{member.roleLabel}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
                 </div>
               </div>
             )}
 
             <div className="flex items-center gap-4">
               <Button size="lg" onClick={playAllSongs} className="bg-primary hover:bg-primary/90" disabled={!playlist || playlist.songs.length === 0}>
-                <Play className="w-5 h-5 mr-2" />
-                Play All
+                {isPlaying && currentSong && playlist?.songs.find((s) => s.id === currentSong.id) ? (
+                  <>
+                    <Pause className="w-5 h-5 mr-2" />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-2" />
+                    Play All
+                  </>
+                )}
               </Button>
 
               <Button
@@ -1447,7 +1955,13 @@ const PlaylistDetail = () => {
               </Button>
 
               {playlist && (
-                <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`} />
+                <ShareButton 
+                  title={playlist.title} 
+                  type="playlist" 
+                  playlistId={Number(playlist.id)} 
+                  url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`}
+                  isPrivate={playlist.visibility === PlaylistVisibility.PRIVATE}
+                />
               )}
 
               {!permissions.isOwner && isCurrentCollaborator && (
@@ -1470,11 +1984,18 @@ const PlaylistDetail = () => {
                       <Plus className="w-5 h-5 mr-2" />
                       Add Song
                     </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-h-[85vh] overflow-y-auto scrollbar-custom">
-                    <DialogHeader>
-                      <DialogTitle>Add Song to Playlist</DialogTitle>
-                    </DialogHeader>
+                </DialogTrigger>
+                <DialogContent
+                  className="max-h-[85vh] overflow-y-auto scrollbar-custom"
+                  aria-describedby="add-song-dialog-description"
+                  aria-labelledby="add-song-dialog-title"
+                >
+                  <DialogHeader>
+                    <DialogTitle id="add-song-dialog-title">Add Song to Playlist</DialogTitle>
+                    <DialogDescription id="add-song-dialog-description">
+                      Choose a song and add it to this playlist.
+                    </DialogDescription>
+                  </DialogHeader>
                     <div className="space-y-4">
                       <div className="relative">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1484,15 +2005,53 @@ const PlaylistDetail = () => {
                         {addResults.length === 0 ? (
                           <p className="text-sm text-muted-foreground">Type to search songs</p>
                         ) : (
-                          addResults.map((s: SearchSongResult) => (
-                            <div key={s.id} className="flex items-center justify-between p-2 rounded hover:bg-muted/30">
-                              <div className="min-w-0">
-                                <p className="font-medium truncate">{s.name}</p>
-                                <p className="text-xs text-muted-foreground truncate">{Array.isArray(s.artists) ? s.artists.map((a) => a.name).join(', ') : ''}</p>
+                          addResults.map((s: SearchSongResult) => {
+                            // Lấy ảnh giống như thanh search tổng (dùng urlImageAlbum)
+                            const coverUrl = (s as any).urlImageAlbum || '';
+                            const artistNames = Array.isArray(s.artists) 
+                              ? s.artists.map((a: { name?: string }) => a.name || '').filter(Boolean).join(', ')
+                              : typeof s.artists === 'string'
+                                ? s.artists
+                                : '';
+                            const numericId =
+                              typeof s.id === 'number'
+                                ? s.id
+                                : Number((s as { songId?: number }).songId ?? s.id);
+                            const alreadyInPlaylist =
+                              Number.isFinite(numericId) && existingSongIds.has(Number(numericId));
+                            const isAdding = Number.isFinite(numericId) && addingSongIds.includes(Number(numericId));
+                            return (
+                              <div key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30">
+                                <div className="flex-shrink-0">
+                                  {coverUrl ? (
+                                    <img 
+                                      src={coverUrl} 
+                                      alt={s.name || 'Song'} 
+                                      className="w-12 h-12 rounded object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
+                                      <Music className="w-6 h-6 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium truncate">{s.name || s.songName || 'Unknown Song'}</p>
+                                  {artistNames && (
+                                    <p className="text-xs text-muted-foreground truncate">{artistNames}</p>
+                                  )}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => addSongToPlaylist(s)}
+                                  disabled={alreadyInPlaylist || isAdding || !Number.isFinite(numericId)}
+                                  variant={alreadyInPlaylist ? "secondary" : undefined}
+                                >
+                                  {alreadyInPlaylist ? 'Added' : isAdding ? 'Adding...' : 'Add'}
+                                </Button>
                               </div>
-                              <Button size="sm" onClick={() => addSongToPlaylist(s)} disabled={addingSongIds.includes(Number(s.id))}>{addingSongIds.includes(Number(s.id)) ? 'Adding...' : 'Add'}</Button>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -1589,8 +2148,8 @@ const PlaylistDetail = () => {
           </CardContent>
         </Card>
 
-        {/* Recommended Section */}
-        {recommendedSongs.length > 0 && (
+        {/* Recommended Section - Chỉ hiện cho owner/editor, không hiện cho viewer */}
+        {playlist && (permissions.canEdit || permissions.isOwner) && (
           <Card className="bg-card/50 border-border/50 mt-8">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
@@ -1600,8 +2159,15 @@ const PlaylistDetail = () => {
                     Based on what's in this playlist
                   </p>
                 </div>
-                <Button variant="ghost" size="sm">
-                  Find more
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    loadRecommended();
+                  }}
+                  disabled={loadingRecommended}
+                >
+                  {loadingRecommended ? 'Loading...' : 'Find more'}
                 </Button>
               </div>
               
@@ -1609,6 +2175,10 @@ const PlaylistDetail = () => {
                 {loadingRecommended ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                  </div>
+                ) : recommendedSongs.length === 0 ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    <p className="text-sm">Không có bài hát đề xuất. Hãy thử "Find more" để tìm thêm.</p>
                   </div>
                 ) : (
                   recommendedSongs.map((song) => {
@@ -1694,6 +2264,51 @@ const PlaylistDetail = () => {
           return t ? `Bạn có chắc muốn xóa "${t}" khỏi playlist này?` : 'Bạn có chắc muốn xóa bài hát này khỏi playlist?';
         })()}
       />
+
+      {/* Dialog xác nhận gỡ collaborator */}
+      <AlertDialog open={removeCollabDialogOpen} onOpenChange={setRemoveCollabDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Gỡ cộng tác viên</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn gỡ {pendingRemoveCollab?.name || "cộng tác viên này"} khỏi playlist? Họ sẽ không còn quyền truy cập vào playlist này.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removingCollaboratorId !== null}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemoveCollaborator}
+              disabled={removingCollaboratorId !== null}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {removingCollaboratorId !== null ? "Đang xóa..." : "Xác nhận"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog xác nhận rời khỏi collaboration */}
+      <AlertDialog open={leaveCollabDialogOpen} onOpenChange={setLeaveCollabDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rời khỏi playlist</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn rời khỏi playlist này? Bạn sẽ không còn là cộng tác viên và không thể truy cập playlist này nữa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={leaveLoading}>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmLeaveCollaboration}
+              disabled={leaveLoading}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {leaveLoading ? "Đang rời..." : "Xác nhận"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Footer />
       
       {selectedSongForPlaylist && (
@@ -1717,4 +2332,5 @@ const PlaylistDetail = () => {
 };
 
 export default PlaylistDetail;
+
 

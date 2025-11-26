@@ -8,6 +8,7 @@ import ShareButton from "@/components/ShareButton";
 import type { PlaylistItem } from "@/types/playlistLibrary";
 import { PlaylistVisibility } from "@/types/playlist";
 import { parseDateSafe, createSlug } from "@/utils/playlistUtils";
+import { API_BASE_URL } from "@/services/api";
 
 interface PlaylistCardProps {
   playlist: PlaylistItem;
@@ -126,22 +127,38 @@ export const PlaylistCard = ({
           </div>
         </div>
 
-        <div className="p-4">
-          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`}>
-            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors truncate">
+        <div className="p-4 min-w-0">
+          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} className="block min-w-0">
+            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors line-clamp-2 break-words overflow-hidden min-w-0">
               {playlist.title}
             </h3>
           </Link>
           
           {playlist.isCollaborator && playlist.ownerName && (
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-              <Users className="w-3 h-3" />
-              <span>by {playlist.ownerName}</span>
+              {playlist.ownerAvatar ? (
+                <img 
+                  src={
+                    playlist.ownerAvatar.startsWith('http://') || playlist.ownerAvatar.startsWith('https://') || playlist.ownerAvatar.startsWith('/')
+                      ? playlist.ownerAvatar
+                      : `${API_BASE_URL}${playlist.ownerAvatar.startsWith('/') ? '' : '/'}${playlist.ownerAvatar}`
+                  } 
+                  alt={playlist.ownerName}
+                  className="w-5 h-5 rounded-full object-cover"
+                  onError={(e) => {
+                    // Fallback to Users icon if image fails to load
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <Users className="w-4 h-4" />
+              )}
+              <span className="truncate">by {playlist.ownerName}</span>
             </div>
           )}
           
           {playlist.description ? (
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 break-words overflow-hidden min-w-0">
               {playlist.description}
             </p>
           ) : null}
@@ -179,7 +196,7 @@ export const PlaylistCard = ({
               >
                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
               </Button>
-              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} />
+              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} isPrivate={isPrivateVisibility} />
               {playlist.isOwner && onDelete && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

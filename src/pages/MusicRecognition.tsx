@@ -109,10 +109,26 @@ const MusicRecognition = () => {
     return;
   }
 
+  // Check feature limit - only show modal if not premium and hết lượt
+  if (!isPremium && remaining === 0) {
+    setShowLimitModal(true);
+    return;
+  }
+
   setIsLoading(true);
   setError("");
 
   try {
+    // Use feature (increment usage count) - only if not premium
+    if (!isPremium) {
+      const success = await useFeature();
+      if (!success) {
+        setShowLimitModal(true);
+        setIsLoading(false);
+        return;
+      }
+    }
+
     const result = await arcApi.recognizeMusic(audioBlob);
 
     const normalizeAcrResponse = (data: unknown) => {
@@ -288,7 +304,8 @@ const MusicRecognition = () => {
               <div className="flex gap-3">
                 <Button
                   onClick={handleRecognize}
-                  disabled={isLoading || !audioBlob}
+
+                  disabled={isLoading || isCheckingLimit || !audioUrl || (!isPremium && remaining === 0)}
                   className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                   size="lg"
                 >
@@ -340,7 +357,15 @@ const MusicRecognition = () => {
           </Card>
         </div>
       </div>
-
+      <FeatureLimitModal
+        open={showLimitModal}
+        onOpenChange={setShowLimitModal}
+        featureName={FeatureName.AI_SEARCH}
+        featureDisplayName="AI Search"
+        remaining={remaining}
+        limit={0}
+        isPremium={isPremium}
+      />
     </div>
   );
 };

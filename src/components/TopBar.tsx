@@ -31,7 +31,7 @@ import {
 import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
 
 import { Badge } from "@/components/ui/badge";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 
 import { arcApi, authApi } from "@/services/api";
@@ -103,10 +103,14 @@ const TopBar = () => {
   const { firebaseReady } = useFirebaseAuth(currentUserId);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // ✅ Check nếu đang ở social/chat page - không tăng unread count
+  const isOnSocialPage = location.pathname === '/social' || location.pathname.startsWith('/social');
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -189,8 +193,8 @@ const TopBar = () => {
       return;
     }
 
-    // Check feature limit
-    if (!canUse) {
+    // Check feature limit - only show modal if not premium and hết lượt
+    if (!isPremium && remaining === 0) {
       setShowLimitModal(true);
       return;
     }
@@ -199,12 +203,14 @@ const TopBar = () => {
     setError("");
 
     try {
-      // Use feature (increment usage count)
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        setIsRecognizing(false);
-        return;
+      // Use feature (increment usage count) - only if not premium
+      if (!isPremium) {
+        const success = await useFeature();
+        if (!success) {
+          setShowLimitModal(true);
+          setIsRecognizing(false);
+          return;
+        }
       }
 
       const result = await arcApi.recognizeMusic(audioBlob);
@@ -349,7 +355,7 @@ const TopBar = () => {
         setAlertNotifications(alertNotifs);
         // Note: unreadMsgCount is now managed by Firebase rooms listener below
         // Only count notification unread here, not chat message unread
-        setUnreadAlertCount(alertNotifs.filter((n) => !n.read).length);
+        setUnreadAlertCount(alertNotifs.filter((n) => n.read !== true).length);
       }
     );
 
@@ -400,6 +406,13 @@ const TopBar = () => {
       currentUserId,
       (unreadCounts, totalUnread) => {
         lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
+        
+        // ✅ Nếu đang ở social page → không cập nhật unread count (để tránh tăng khi đang xem)
+        if (isOnSocialPage) {
+          console.log('[TopBar] Skipping unread count update - user is on social page:', totalUnread);
+          return;
+        }
+        
         console.log('[TopBar] Chat unread counts updated from Firebase:', { unreadCounts, totalUnread });
         setUnreadMsgCount(totalUnread);
       }
@@ -435,7 +448,7 @@ const TopBar = () => {
         pollInterval = null;
       }
     };
-  }, [currentUserId, firebaseReady]);
+  }, [currentUserId, firebaseReady, isOnSocialPage]); // ✅ Re-run khi location thay đổi
 
   useEffect(() => {
     if (!notifOpen || !currentUserId || !firebaseReady) return;
@@ -628,7 +641,7 @@ const TopBar = () => {
 
                       <Button
                         onClick={handleRecognize}
-                        disabled={isRecognizing || isCheckingLimit || !canUse}
+                        disabled={isRecognizing || isCheckingLimit || (!isPremium && remaining === 0)}
                         className="w-full"
                       >
                         {isRecognizing ? (
@@ -677,7 +690,10 @@ const TopBar = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <NotificationsDropdown onClose={() => setNotifOpen(false)} />
+            <NotificationsDropdown
+              userId={currentUserId ?? undefined}
+              onClose={() => setNotifOpen(false)}
+            />
           </DropdownMenu>
 
           {/* Messages */}
@@ -685,7 +701,12 @@ const TopBar = () => {
             variant="ghost"
             size="icon"
             className="relative"
-            onClick={() => navigate("/social?tab=chat")}
+            onClick={() => {
+              // Reset unread count về 0 khi nhấn vào icon message
+              setUnreadMsgCount(0);
+              // Chuyển đến trang social với tab chat
+              navigate("/social?tab=chat");
+            }}
           >
             <MessageCircle className="h-5 w-5" />
             {unreadMsgCount > 0 && (
@@ -782,6 +803,7 @@ const TopBar = () => {
         featureDisplayName="AI Search"
         remaining={remaining}
         limit={0}
+        isPremium={isPremium}
       />
     </header>
   );

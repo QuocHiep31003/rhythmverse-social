@@ -43,6 +43,16 @@ import { SocialInlineCard } from "@/components/social/SocialInlineCard";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 // Realtime notification DTO from /user/queue/notifications
@@ -167,7 +177,7 @@ const Social = () => {
 
   // Track if selectedChat was set by user click (true) or auto-select (false)
   const isUserSelectedRef = useRef<boolean>(false);
-  
+
   const [selectedChat, setSelectedChat] = useState<string | null>(() => {
     try {
       return localStorage.getItem('lastChatFriendId');
@@ -184,9 +194,17 @@ const Social = () => {
   const [newMessage, setNewMessage] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const pushBubble = useCallback((message: string, variant: "info" | "success" | "warning" | "error" = "info") => {
-    emitChatBubble({ from: "EchoVerse", message, variant });
-  }, []);
+  const pushBubble = useCallback(
+    (
+      message: string,
+      variant: "info" | "success" | "warning" | "error" = "info",
+      from?: string,
+      avatar?: string | null
+    ) => {
+      emitChatBubble({ from: from || "System", message, variant, avatar: avatar || undefined });
+    },
+    []
+  );
 
   
 
@@ -209,7 +227,27 @@ const Social = () => {
   useEffect(() => {
     const nextTab = normalizeSocialTab(searchParams.get('tab'));
     setActiveTab(prev => (prev === nextTab ? prev : nextTab));
-  }, [searchParams]);
+    
+    // Xử lý query parameter 'friend' để chọn đúng người chat
+    const friendParam = searchParams.get('friend');
+    if (friendParam && nextTab === 'chat') {
+      const friendId = String(friendParam);
+      // Chỉ set nếu friendId hợp lệ và khác với selectedChat hiện tại
+      if (friendId && friendId !== selectedChat) {
+        setSelectedChat(friendId);
+        // Lưu vào localStorage để giữ trạng thái
+        try {
+          localStorage.setItem('lastChatFriendId', friendId);
+        } catch {
+          void 0;
+        }
+        // Xóa query parameter sau khi đã xử lý
+        const next = new URLSearchParams(searchParams.toString());
+        next.delete('friend');
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [searchParams, selectedChat, setSearchParams]);
 
   const [friends, setFriends] = useState<Friend[]>([]);
 
@@ -223,6 +261,7 @@ const Social = () => {
   const typingStartTimeoutRef = useRef<number | null>(null);
   const typingStopTimeoutRef = useRef<number | null>(null);
   const mergeFirebaseMessagesRef = useRef<((friendKey: string, firebaseMessages: FirebaseMessage[]) => void) | null>(null);
+  const recentFirebaseKeysRef = useRef<Record<string, Set<string>>>({});
   const typingDebounceTimeoutRef = useRef<number | null>(null);
   const loadedHistoryRef = useRef<Set<string>>(new Set()); // ✅ Track đã load history cho từng chat
   const lastMarkedMessageIdRef = useRef<Record<string, string>>({}); // ✅ Track tin nhắn cuối cùng đã mark as read cho mỗi chat
@@ -307,6 +346,8 @@ const Social = () => {
   const [loadingCollabInvites, setLoadingCollabInvites] = useState<boolean>(false);
 
   const [expandedInviteId, setExpandedInviteId] = useState<number | null>(null);
+  const [unfriendDialogOpen, setUnfriendDialogOpen] = useState(false);
+  const [pendingUnfriend, setPendingUnfriend] = useState<{ friendId: string; friendName: string } | null>(null);
 
   // Invite link preview state
   // Legacy states removed
@@ -448,18 +489,18 @@ const Social = () => {
             }
             window.__chatRefreshPending[refreshKey] = true;
             // Fetch immediately, no setTimeout delay for better UX
-            chatApi
-              .getHistory(meId, friendNumericId)
-              .then((history) => {
-                const normalizedHistory = history.map((h) => ({
-                  ...h,
-                  contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
-                }));
+              chatApi
+                .getHistory(meId, friendNumericId)
+                .then((history) => {
+                  const normalizedHistory = history.map((h) => ({
+                    ...h,
+                    contentPlain: h.contentPlain ?? (typeof h.content === "string" ? h.content : undefined),
+                  }));
                 
-                const mapped = normalizedHistory.map((h) => parseIncomingContent(h, friendsRef.current.length ? friendsRef.current : friends));
-                setChatByFriend((prev) => {
-                  const existing = prev[friendKey] || [];
-                  const historyIds = new Set(mapped.map((m) => String(m.id)));
+                  const mapped = normalizedHistory.map((h) => parseIncomingContent(h, friendsRef.current.length ? friendsRef.current : friends));
+                  setChatByFriend((prev) => {
+                    const existing = prev[friendKey] || [];
+                    const historyIds = new Set(mapped.map((m) => String(m.id)));
                   const historyByBackendId = new Map<number, Message>();
                   mapped.forEach((msg) => {
                     if (msg.backendId) {
@@ -505,31 +546,43 @@ const Social = () => {
                     }
                   });
                   
-                  // Keep temp messages that aren't in history yet
-                  existing.forEach((msg) => {
-                    if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
+                    // Keep temp messages that aren't in history yet
+                    existing.forEach((msg) => {
+                      if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
                       const alreadyAdded = updated.some(m => m.id === msg.id);
                       if (!alreadyAdded) {
                         updated.push(msg);
                       }
-                    }
-                  });
+                      }
+                    });
                   
                   return { ...prev, [friendKey]: sortMessagesChronologically(updated) };
+                  });
+                  if (window.__chatRefreshPending) {
+                    delete window.__chatRefreshPending[refreshKey];
+                  }
+                })
+                .catch((err) => {
+                  console.warn("[Social] Failed to refresh message history:", err);
+                  if (window.__chatRefreshPending) {
+                    delete window.__chatRefreshPending[refreshKey];
+                  }
                 });
-                if (window.__chatRefreshPending) {
-                  delete window.__chatRefreshPending[refreshKey];
-                }
-              })
-              .catch((err) => {
-                console.warn("[Social] Failed to refresh message history:", err);
-                if (window.__chatRefreshPending) {
-                  delete window.__chatRefreshPending[refreshKey];
-                }
-              });
           }
         }
       }
+
+      const incomingFirebaseKeys = new Set(
+        parsed
+          .map((msg) => msg.firebaseKey)
+          .filter((key): key is string => typeof key === "string" && key.length > 0)
+      );
+      const previousFirebaseKeys = recentFirebaseKeysRef.current[friendKey] || new Set<string>();
+      const removedFirebaseKeys =
+        previousFirebaseKeys.size > 0
+          ? new Set(Array.from(previousFirebaseKeys).filter((key) => !incomingFirebaseKeys.has(key)))
+          : new Set<string>();
+      recentFirebaseKeysRef.current[friendKey] = incomingFirebaseKeys;
 
       setChatByFriend((prev) => {
         const existing = prev[friendKey] || [];
@@ -562,7 +615,20 @@ const Social = () => {
           unique.set(String(message.id), message);
         });
 
-        const sorted = sortMessagesChronologically(Array.from(unique.values()));
+        const sorted = sortMessagesChronologically(
+          Array.from(unique.values()).filter((message) => {
+            if (!message.firebaseKey) return true;
+            if (removedFirebaseKeys.has(message.firebaseKey)) {
+              console.log("[Social] Removing message due to firebase deletion:", {
+                firebaseKey: message.firebaseKey,
+                messageId: message.id,
+                backendId: message.backendId,
+              });
+              return false;
+            }
+            return true;
+          })
+        );
         const previous = prev[friendKey] || [];
         const unchanged =
           previous.length === sorted.length &&
@@ -652,20 +718,13 @@ const Social = () => {
     emitChatTabOpened({ friendId: selectedChat });
   }, [activeTab, selectedChat]);
 
-  // ✅ Mark conversation as read khi user đang xem chat (selectedChat thay đổi)
+  // ✅ Mark conversation as read ngay khi user vào chat (không delay để tránh unread tăng)
   useEffect(() => {
     if (!meId || !selectedChat || activeTab !== "chat") return;
     
-    // Mark as read khi user vào chat (có thể là click hoặc auto-select)
-    // Delay nhỏ để đảm bảo chat đã load xong
-    const timeoutId = setTimeout(() => {
-      console.log('👁️ [Social] User is viewing chat, marking as read:', selectedChat);
-      markConversationAsRead(selectedChat);
-    }, 500); // Delay 500ms để đảm bảo chat đã render
-    
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    // ✅ Mark as read ngay lập tức (không delay) để tránh unread count tăng
+    console.log('👁️ [Social] User is viewing chat, marking as read immediately:', selectedChat);
+    markConversationAsRead(selectedChat);
   }, [meId, selectedChat, activeTab, markConversationAsRead]);
 
   // ✅ Mark as read khi có tin nhắn mới đến trong chat đang xem
@@ -1040,8 +1099,30 @@ const Social = () => {
       console.log('[Social] Firebase unread counts updated:', { 
         unreadCounts, 
         unreadByFriendMap,
-        totalUnread 
+        totalUnread,
+        selectedChat: selectedChatRef.current
       });
+      
+      // ✅ Nếu đang xem chat với friend này → không cập nhật unread count (để tránh tăng)
+      const currentSelectedChat = selectedChatRef.current;
+      if (currentSelectedChat) {
+        const friendNumericId = Number(currentSelectedChat);
+        if (Number.isFinite(friendNumericId)) {
+          const roomId = getChatRoomKey(meId, friendNumericId);
+          const unreadForCurrentChat = unreadCounts[roomId] || 0;
+          if (unreadForCurrentChat > 0) {
+            console.log('[Social] User is viewing this chat, marking as read to prevent unread increase');
+            markConversationAsRead(currentSelectedChat);
+            // ✅ Trừ unread của chat đang xem khỏi total
+            const adjustedTotal = totalUnread - unreadForCurrentChat;
+            const adjustedUnreadByFriend = { ...unreadByFriendMap };
+            delete adjustedUnreadByFriend[currentSelectedChat];
+            setUnreadByFriend(adjustedUnreadByFriend);
+            setUnreadMessagesCount(Math.max(0, adjustedTotal));
+            return;
+          }
+        }
+      }
       
       setUnreadByFriend(unreadByFriendMap);
       setUnreadMessagesCount(totalUnread);
@@ -1147,13 +1228,13 @@ const Social = () => {
           // Không đếm unreadByFriend từ notification nữa
           // Unread count sẽ được đếm từ Firebase messages để tránh đếm trùng
           // Chỉ hiển thị bubble notification
-          pushBubble(`${n.senderName || 'Someone'}: ${n.body || 'New message'}`, "info");
+          pushBubble(`${n.senderName || 'Someone'}: ${n.body || 'New message'}`, "info", n.senderName || 'Someone', n.senderAvatar ?? null);
 
         } else if (n?.type === 'SHARE') {
 
           const title = n?.metadata?.playlistName || n?.metadata?.songName || n?.metadata?.albumName || n?.title || 'Shared content';
 
-          pushBubble(`${n.senderName || 'Someone'} shared: ${title}`, "info");
+          pushBubble(`${n.senderName || 'Someone'} shared: ${title}`, "info", n.senderName || 'Someone', n.senderAvatar ?? null);
 
           // Also reflect the share inside the chat thread for the receiver
 
@@ -1227,10 +1308,21 @@ const Social = () => {
             }
 
         } else if (n?.type === 'INVITE') {
-
-          pushBubble(`${n.senderName || 'Someone'} invited you to collaborate on a playlist`, "info");
+          const playlistName = n?.metadata?.playlistName || n?.body?.match(/playlist[:\s]+([^,]+)/i)?.[1] || 'playlist';
+          pushBubble(`${n.senderName || 'Someone'} mời bạn cộng tác: ${playlistName}`, "info", n.senderName || 'Someone', n.senderAvatar ?? null);
 
           loadCollabInvites().catch(() => { void 0; });
+          
+        } else if (n?.type === 'INVITE_ACCEPTED') {
+          const playlistName = n?.metadata?.playlistName || n?.body?.match(/playlist[:\s]+([^,]+)/i)?.[1] || 'playlist';
+          pushBubble(`${n.senderName || 'Someone'} đã chấp nhận lời mời cộng tác: ${playlistName}`, "success", n.senderName || 'Someone', n.senderAvatar ?? null);
+          
+          // Refresh collaborators nếu đang ở trang playlist detail
+          window.dispatchEvent(new CustomEvent('app:collab-invite-accepted', { detail: { playlistId: n?.metadata?.playlistId } }));
+          
+        } else if (n?.type === 'INVITE_REJECTED') {
+          const playlistName = n?.metadata?.playlistName || n?.body?.match(/playlist[:\s]+([^,]+)/i)?.[1] || 'playlist';
+          pushBubble(`${n.senderName || 'Someone'} đã từ chối lời mời cộng tác: ${playlistName}`, "info", n.senderName || 'Someone', n.senderAvatar ?? null);
 
         } else if (n?.type === 'FRIEND_REQUEST') {
           console.log('🔔 [DEBUG] FRIEND_REQUEST notification received:', {
@@ -1239,7 +1331,7 @@ const Social = () => {
             body: n.body
           });
 
-          pushBubble(`${n.senderName || 'Someone'} sent you a friend request`, "info");
+          pushBubble(`${n.senderName || 'Someone'} sent you a friend request`, "info", n.senderName || 'Someone', n.senderAvatar ?? null);
 
           loadPending().catch(() => { void 0; });
 
@@ -1250,7 +1342,7 @@ const Social = () => {
             body: n.body
           });
 
-          pushBubble(`${n.senderName || 'Someone'} accepted your friend request`, "success");
+          pushBubble(`${n.senderName || 'Someone'} accepted your friend request`, "success", n.senderName || 'Someone', n.senderAvatar ?? null);
 
           loadFriends().catch(() => { void 0; });
 
@@ -1424,7 +1516,7 @@ const Social = () => {
         console.log('[Social] Stopping typing indicator:', { roomId, meId });
         void chatApi.typingStop(roomId, meId).catch((error) => {
           console.warn("[Social] Failed to stop typing indicator", error?.message || error);
-        });
+      });
       }
     };
 
@@ -1432,7 +1524,7 @@ const Social = () => {
     if (typingDebounceTimeoutRef.current) {
       clearTimeout(typingDebounceTimeoutRef.current);
       typingDebounceTimeoutRef.current = null;
-    }
+      }
 
     if (trimmed.length > 0) {
       // Debounce 400ms before starting typing
@@ -1443,7 +1535,7 @@ const Social = () => {
             console.log('[Social] Starting typing indicator:', { roomId, meId });
             void chatApi.typingStart(roomId, meId).catch((error) => {
               console.warn("[Social] Failed to start typing indicator", error?.message || error);
-            });
+          });
           }
         }
         typingDebounceTimeoutRef.current = null;
@@ -1638,8 +1730,8 @@ const Social = () => {
 
   // Handler for reaction toggle
   const handleDeleteMessage = useCallback(
-    async (message: Message) => {
-      if (!meId) return;
+    async (message: Message): Promise<boolean> => {
+      if (!meId) return false;
       
       // Find messageId from message
       const messageIdFromBackend = message.backendId;
@@ -1654,7 +1746,7 @@ const Social = () => {
           backendId: messageIdFromBackend,
         });
         toast.error("Không thể xóa tin nhắn: ID không hợp lệ");
-        return;
+        return false;
       }
 
       try {
@@ -1672,10 +1764,12 @@ const Social = () => {
         }
         
         toast.success("Đã xóa tin nhắn");
+        return true;
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : "Không thể xóa tin nhắn";
         console.error('[Social] Failed to delete message:', error);
         toast.error(errorMsg);
+        return false;
       }
     },
     [meId, selectedChat]
@@ -1909,49 +2003,46 @@ const Social = () => {
 
 
   const handleAcceptCollabInvite = async (inviteId: number) => {
-
     try {
+      // Lấy thông tin invite trước khi accept để hiển thị message chi tiết
+      const invite = collabInvites.find(inv => inv.id === inviteId);
+      const playlistName = invite?.playlist?.name || invite?.playlistName || 'playlist';
 
       await playlistCollabInvitesApi.accept(inviteId);
 
-      pushBubble('Collab invite accepted', 'success');
+      pushBubble(`Đã chấp nhận lời mời cộng tác: ${playlistName}`, 'success');
 
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
 
       await loadCollabInvites();
 
+      // Dispatch event để refresh collaborators trong PlaylistDetail
+      window.dispatchEvent(new CustomEvent('app:collab-invite-accepted', { detail: { inviteId, playlistId: invite?.playlistId } }));
     } catch (e: unknown) {
-
       const msg = e instanceof Error ? e.message : String(e);
-
-      pushBubble(msg || 'Unable to accept invite', 'error');
-
+      pushBubble(msg || 'Không thể chấp nhận lời mời', 'error');
     }
-
   };
 
 
 
   const handleRejectCollabInvite = async (inviteId: number) => {
-
     try {
+      // Lấy thông tin invite trước khi reject để hiển thị message chi tiết
+      const invite = collabInvites.find(inv => inv.id === inviteId);
+      const playlistName = invite?.playlist?.name || invite?.playlistName || 'playlist';
 
       await playlistCollabInvitesApi.reject(inviteId);
 
-      pushBubble('Collab invite declined', 'info');
+      pushBubble(`Đã từ chối lời mời cộng tác: ${playlistName}`, 'info');
 
       setExpandedInviteId(prev => (prev === inviteId ? null : prev));
 
       await loadCollabInvites();
-
     } catch (e: unknown) {
-
       const msg = e instanceof Error ? e.message : String(e);
-
-      pushBubble(msg || 'Unable to decline invite', 'error');
-
+      pushBubble(msg || 'Không thể từ chối lời mời', 'error');
     }
-
   };
 
 
@@ -2071,7 +2162,7 @@ const Social = () => {
           console.log('📖 [Social] History merged, NOT marking as read (only mark when user clicks)');
         }
       } catch (error) {
-        console.error('[Social] Failed to load chat history:', error);
+          console.error('[Social] Failed to load chat history:', error);
         // Không mark là đã load nếu lỗi, để có thể retry
       }
     };
@@ -2184,7 +2275,7 @@ const Social = () => {
   };
 
   const isSelectedFriendTyping = selectedChat ? !!typingByFriend[selectedChat] : false;
-  
+
   // ✅ Removed debug typing status useEffect - gây spam log
 
   // ✅ Merge reactions into messages for selected chat - chỉ merge khi reactionsByMessage thay đổi
@@ -2555,28 +2646,112 @@ const Social = () => {
 
 
 
-  const handleUnfriend = async (friendId: string) => {
+  const handleUnfriend = (friendId: string) => {
+    const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
+    if (!me) {
+      pushBubble('Missing user id', 'error');
+      return;
+    }
+    const friend = friends.find(f => f.id === friendId);
+    if (!friend) {
+      pushBubble('Friend not found', 'error');
+      return;
+    }
+    setPendingUnfriend({ friendId, friendName: friend.name });
+    setUnfriendDialogOpen(true);
+  };
+
+  const confirmUnfriend = async () => {
+    if (!pendingUnfriend) return;
+    const { friendId, friendName } = pendingUnfriend;
+    setUnfriendDialogOpen(false);
+    
     try {
       const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
       if (!me) throw new Error('Missing user id');
       const friend = friends.find(f => f.id === friendId);
-      if (!friend) return;
-      const ok = window.confirm(`Unfriend ${friend.name}?`);
-      if (!ok) return;
+      if (!friend) {
+        pushBubble('Friend not found', 'error');
+        return;
+      }
+      
+      // friendId parameter là string của friendUserId hoặc id
+      // friend.friendUserId là userId của friend (number)
+      // friend.relationshipId là relationshipId (number)
+      // API cần friendUserId (userId của friend), không phải relationshipId
       const friendUserId = friend.friendUserId ?? Number(friendId);
-      await friendsApi.remove(Number(me), Number(friendUserId), {
+      
+      if (!friendUserId || !Number.isFinite(friendUserId)) {
+        pushBubble('Invalid friend ID', 'error');
+        return;
+      }
+      
+      console.log('[Social] Unfriending:', {
+        me: Number(me),
+        friendId: friendId,
+        friendUserId: friendUserId,
+        relationshipId: friend.relationshipId,
+        friend: friend
+      });
+      
+      await friendsApi.remove(Number(me), friendUserId, {
         relationshipId: friend.relationshipId,
       });
+      
       await loadFriends();
       if (selectedChat === friendId) setSelectedChat(null);
       pushBubble('Friend removed', 'info');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
+      console.error('[Social] Unfriend error:', e);
       pushBubble(msg || 'Failed to remove friend', 'error');
+    } finally {
+      setPendingUnfriend(null);
     }
   };
 
 
+
+  if (loadingFriends && friends.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-dark">
+        <div className="container mx-auto px-4 py-8 pb-28">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-2 mb-6 gap-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="bg-card/50 border-border/50">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <Skeleton className="h-12 w-12 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-card/50 border-border/50">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
 
@@ -2603,6 +2778,10 @@ const Social = () => {
               }}
             >
               <DialogContent className="max-w-lg border border-white/10 bg-gradient-to-b from-background/95 to-background/80 p-0 backdrop-blur">
+                <DialogHeader className="sr-only">
+                  <DialogTitle>Public profile preview</DialogTitle>
+                  <DialogDescription>View user profile inside social page</DialogDescription>
+                </DialogHeader>
               {inlineProfileLoading ? (
                   <div className="p-6 space-y-5">
                     <div className="flex items-center gap-4">
@@ -2629,7 +2808,7 @@ const Social = () => {
                     </div>
                   </div>
               ) : inlineProfile ? (
-                <PublicProfileCard profile={inlineProfile} />
+                <PublicProfileCard profile={inlineProfile} onAddFriendSuccess={closeProfileModal} />
               ) : null}
               </DialogContent>
             </Dialog>
@@ -2723,7 +2902,10 @@ const Social = () => {
                 onRejectInvite={handleRejectCollabInvite}
                 onCreateInviteLink={handleCreateInviteLink}
                 onUnfriend={handleUnfriend}
-                onSelectChat={setSelectedChat}
+                onSelectChat={(friendId) => {
+                  setActiveTab("chat");
+                  setSelectedChat(friendId);
+                }}
               />
             </TabsContent>
 
@@ -2732,6 +2914,27 @@ const Social = () => {
         </div>
 
       </div>
+
+      {/* Dialog xác nhận unfriend */}
+      <AlertDialog open={unfriendDialogOpen} onOpenChange={setUnfriendDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hủy kết bạn</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bạn có chắc muốn hủy kết bạn với {pendingUnfriend?.friendName || "người này"}? Hành động này sẽ xóa tất cả tin nhắn và lịch sử trò chuyện giữa hai bạn.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmUnfriend}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Xác nhận
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <style>{`
         /* Hide scrollbar */

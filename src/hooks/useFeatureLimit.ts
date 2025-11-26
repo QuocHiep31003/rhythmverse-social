@@ -1,7 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { featureUsageApi, FeatureName, FeatureUsageDTO } from "@/services/api/featureUsageApi";
-import { useToast } from "@/hooks/use-toast";
+
+const FEATURE_LIMITS_DISABLED = true;
+
+const buildUnlimitedUsage = (featureName: FeatureName): FeatureUsageDTO => ({
+  featureName,
+  canUse: true,
+  isPremium: false,
+  remaining: -1,
+  limit: null,
+  usageCount: 0,
+});
 
 interface UseFeatureLimitOptions {
   featureName: FeatureName;
@@ -25,14 +34,23 @@ export const useFeatureLimit = (
   options: UseFeatureLimitOptions
 ): UseFeatureLimitReturn => {
   const { featureName, autoCheck = true, onLimitReached } = options;
-  const navigate = useNavigate();
-  const { toast } = useToast();
 
-  const [usage, setUsage] = useState<FeatureUsageDTO | null>(null);
+  const unlimitedUsage = useMemo(() => buildUnlimitedUsage(featureName), [featureName]);
+
+  const [usage, setUsage] = useState<FeatureUsageDTO | null>(
+    FEATURE_LIMITS_DISABLED ? unlimitedUsage : null
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const checkUsage = useCallback(async () => {
+    if (FEATURE_LIMITS_DISABLED) {
+      setUsage(unlimitedUsage);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -45,17 +63,26 @@ export const useFeatureLimit = (
     } finally {
       setIsLoading(false);
     }
-  }, [featureName]);
+  }, [featureName, unlimitedUsage]);
 
   const useFeature = useCallback(async (): Promise<boolean> => {
+    if (FEATURE_LIMITS_DISABLED) {
+      return true;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
       const data = await featureUsageApi.useFeature(featureName);
       setUsage(data);
 
-      if (!data.canUse) {
-        // Hết lượt
+      // Check bằng remaining thay vì canUse để chính xác hơn
+      // Nếu là premium hoặc còn lượt (remaining > 0) thì cho phép
+      const isPremiumUser = data.isPremium === true;
+      const hasRemaining = (data.remaining ?? 0) > 0;
+      
+      if (!isPremiumUser && !hasRemaining) {
+        // Hết lượt (không premium và remaining = 0)
         if (onLimitReached) {
           onLimitReached();
         }
@@ -83,14 +110,21 @@ export const useFeatureLimit = (
   }, [featureName, onLimitReached]);
 
   useEffect(() => {
+    if (FEATURE_LIMITS_DISABLED) {
+      setUsage(unlimitedUsage);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     if (autoCheck) {
       checkUsage();
     }
-  }, [autoCheck, checkUsage]);
+  }, [autoCheck, checkUsage, unlimitedUsage]);
 
-  const canUse = usage?.canUse ?? false;
+  const canUse = usage?.canUse ?? true;
   const isPremium = usage?.isPremium ?? false;
-  const remaining = usage?.remaining ?? 0;
+  const remaining = usage?.remaining ?? -1;
 
   return {
     usage,
@@ -104,5 +138,8 @@ export const useFeatureLimit = (
     refresh: checkUsage,
   };
 };
+
+
+
 
 

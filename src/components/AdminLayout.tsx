@@ -1,7 +1,7 @@
 import { ReactNode, useEffect } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Crown } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
@@ -46,6 +46,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   const menuItems = [
     { icon: Home, label: "Dashboard", path: "/admin/home" },
+    { icon: Crown, label: "Premium Dashboard", path: "/admin/premium-dashboard" },
     { icon: Music, label: "Bài hát", path: "/admin/songs" },
     { icon: Disc3, label: "Albums", path: "/admin/albums" },
     { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
@@ -54,7 +55,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { icon: Music, label: "Thể loại", path: "/admin/genres" },
     { icon: Heart, label: "Mood", path: "/admin/moods" },
     { icon: Users, label: "Người dùng", path: "/admin/users" },
-    { icon: Crown, label: "Premium Subscriptions", path: "/admin/premium-subscriptions" },
+    { icon: Package, label: "Gói Đăng Ký", path: "/admin/subscription-plans" },
     { icon: TrendingUp, label: "Trending", path: "/admin/trending" },
     { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
   ];
