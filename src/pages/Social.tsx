@@ -2778,6 +2778,10 @@ const Social = () => {
               }}
             >
               <DialogContent className="max-w-lg border border-white/10 bg-gradient-to-b from-background/95 to-background/80 p-0 backdrop-blur">
+                <DialogHeader className="sr-only">
+                  <DialogTitle>Public profile preview</DialogTitle>
+                  <DialogDescription>View user profile inside social page</DialogDescription>
+                </DialogHeader>
               {inlineProfileLoading ? (
                   <div className="p-6 space-y-5">
                     <div className="flex items-center gap-4">
