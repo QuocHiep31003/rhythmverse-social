@@ -3,12 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Clock, RefreshCw } from 'lucide-react';
 import { paymentApi, OrderHistoryItem } from '@/services/api/paymentApi';
 import { useToast } from '@/hooks/use-toast';
-import AppLayout from '@/components/AppLayout';
-
 export default function PaymentHistoryPage() {
   const [allOrders, setAllOrders] = useState<OrderHistoryItem[]>([]);
   const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
@@ -121,14 +119,13 @@ export default function PaymentHistoryPage() {
   const totalAmount = successOrders.reduce((sum, o) => sum + o.amount, 0);
 
   return (
-    <AppLayout>
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Payment History</h1>
-          <p className="text-muted-foreground">
-            View all your payment transactions
-          </p>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold mb-2">Payment History</h1>
+        <p className="text-muted-foreground">
+          View all your payment transactions
+        </p>
+      </div>
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -158,114 +155,113 @@ export default function PaymentHistoryPage() {
           </Card>
         </div>
 
-        <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Transactions</CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => loadHistory()}
-                disabled={loading}
-              >
-                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
+      <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Transactions</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadHistory()}
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)} className="mb-4">
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="SUCCESS">Success</TabsTrigger>
+              <TabsTrigger value="FAILED">Failed</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={filter} onValueChange={(v) => setFilter(v as typeof filter)} className="mb-4">
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="SUCCESS">Success</TabsTrigger>
-                <TabsTrigger value="FAILED">Failed</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              </div>
-            ) : orders.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No transactions yet</p>
-              </div>
-            ) : (
-              <>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Order Code</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Date</TableHead>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">No transactions yet</p>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order Code</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.orderCode}>
+                        <TableCell className="font-medium text-muted-foreground">
+                          #{order.orderCode}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {order.description}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-semibold text-primary">
+                            {formatCurrency(order.amount)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(order)}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {order.paidAt 
+                            ? formatDate(order.paidAt)
+                            : order.failedAt
+                            ? formatDate(order.failedAt)
+                            : formatDate(order.createdAt)}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {orders.map((order) => (
-                        <TableRow key={order.orderCode}>
-                          <TableCell className="font-medium text-muted-foreground">
-                            #{order.orderCode}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {order.description}
-                          </TableCell>
-                          <TableCell>
-                            <div className="font-semibold text-primary">
-                              {formatCurrency(order.amount)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {getStatusBadge(order)}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {order.paidAt 
-                              ? formatDate(order.paidAt)
-                              : order.failedAt
-                              ? formatDate(order.failedAt)
-                              : formatDate(order.createdAt)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="text-sm text-muted-foreground">
-                      Page {page + 1} / {totalPages} ({totalElements} transactions)
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage((p) => Math.max(0, p - 1))}
-                        disabled={page === 0 || loading}
-                      >
-                        <ChevronLeft className="w-4 h-4 mr-1" />
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                        disabled={page >= totalPages - 1 || loading}
-                      >
-                        Next
-                        <ChevronRight className="w-4 h-4 ml-1" />
-                      </Button>
-                    </div>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Page {page + 1} / {totalPages} ({totalElements} transactions)
                   </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </AppLayout>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      disabled={page === 0 || loading}
+                    >
+                      <ChevronLeft className="w-4 h-4 mr-1" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                      disabled={page >= totalPages - 1 || loading}
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
