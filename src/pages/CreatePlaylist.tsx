@@ -17,7 +17,7 @@ import { PlaylistVisibility } from "@/types/playlist";
 import { createGridCover, uploadDataUrlToCloudinary } from "@/utils/imageUtils";
 import { songsApi } from "@/services/api/songApi";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import {
   Select,
@@ -97,14 +97,18 @@ const CreatePlaylist = () => {
   const {
     canUse,
     remaining,
-    isPremium,
-    useFeature,
+    refresh,
+    usage,
+    limit,
+    limitType,
     isLoading: isCheckingLimit,
   } = useFeatureLimit({
     featureName: FeatureName.PLAYLIST_CREATE,
     autoCheck: true,
     onLimitReached: () => setShowLimitModal(true),
   });
+  const modalLimit =
+    typeof limit === "number" ? limit : usage?.limit ?? undefined;
 
   useEffect(() => {
     (async () => {
@@ -216,8 +220,8 @@ const CreatePlaylist = () => {
       return;
     }
 
-    // Limit check
-    if (!isPremium && remaining === 0) {
+    // Limit check - dùng canUse từ backend (backend đã xử lý tất cả logic)
+    if (!canUse) {
       setShowLimitModal(true);
       return;
     }
@@ -225,16 +229,6 @@ const CreatePlaylist = () => {
     setIsLoading(true);
 
     try {
-      // Free users: consume usage
-      if (!isPremium) {
-        const success = await useFeature();
-        if (!success) {
-          setShowLimitModal(true);
-          setIsLoading(false);
-          return;
-        }
-      }
-
       const today = new Date().toISOString().split("T")[0];
       let uploadedCoverUrl: string | null = null;
 
@@ -305,10 +299,32 @@ const CreatePlaylist = () => {
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) throw new Error("Failed to create playlist");
+      // Kiểm tra response status và parse error nếu có
+      if (!res.ok) {
+        let errorMessage = "Failed to create playlist";
+        const status = res.status;
+        try {
+          const errorText = await res.text();
+          if (errorText) {
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.message || errorJson.error || errorMessage;
+            } catch {
+              errorMessage = errorText || errorMessage;
+            }
+          }
+        } catch {
+          // Use default error message
+        }
+        const error = new Error(errorMessage);
+        (error as any).status = status;
+        throw error;
+      }
 
       const data = await res.json();
 
+      // Đồng bộ lại usage sau khi backend đã tự tăng count
+      await refresh();
       toast({
         title: "Playlist created successfully!",
         description: `"${data.name}" has been added to your library`,
@@ -316,6 +332,10 @@ const CreatePlaylist = () => {
 
       navigate(`/playlist/${createSlug(data.name || "playlist", data.id)}`);
     } catch (err: any) {
+      if (err?.status === 403 || err?.message?.toLowerCase().includes("limit")) {
+        setShowLimitModal(true);
+        await refresh();
+      }
       toast({
         title: "Error",
         description: err?.message || "Please try again later",
@@ -562,10 +582,7 @@ const CreatePlaylist = () => {
                     onClick={handleSave}
                     className="flex-1"
                     disabled={
-                      isLoading ||
-                      isCheckingLimit ||
-                      !formData.name.trim() ||
-                      (!isPremium && remaining === 0)
+                      isLoading || isCheckingLimit || !formData.name.trim()
                     }
                   >
                     {isLoading
@@ -574,7 +591,9 @@ const CreatePlaylist = () => {
                       ? "Checking..."
                       : "Create Playlist"}
 
-                    {!isPremium && remaining > 0 && (
+                    {limitType === FeatureLimitType.LIMITED &&
+                      remaining !== undefined &&
+                      remaining > 0 && (
                       <span className="ml-2 text-xs opacity-75">
                         ({remaining} left)
                       </span>
@@ -595,8 +614,8 @@ const CreatePlaylist = () => {
         featureName={FeatureName.PLAYLIST_CREATE}
         featureDisplayName="Create Playlist"
         remaining={remaining}
-        limit={3}
-        isPremium={isPremium}
+        limit={modalLimit}
+        isPremium={limitType === FeatureLimitType.UNLIMITED}
       />
     </div>
   );

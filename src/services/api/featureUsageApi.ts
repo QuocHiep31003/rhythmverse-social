@@ -8,17 +8,34 @@ export enum FeatureName {
   CUSTOM_THEME = "CUSTOM_THEME",
 }
 
+export enum FeatureLimitType {
+  UNLIMITED = "UNLIMITED",
+  LIMITED = "LIMITED",
+  DISABLED = "DISABLED",
+}
+
+export enum FeatureLimitPeriod {
+  NONE = "NONE",
+  DAY = "DAY",
+  WEEK = "WEEK",
+  MONTH = "MONTH",
+  YEAR = "YEAR",
+}
+
 export interface FeatureUsageDTO {
   id?: number;
   userId?: number;
   featureName: FeatureName;
   featureDisplayName?: string;
   usageCount?: number;
-  limit?: number;
-  remaining?: number;
+  limit?: number | null;
+  remaining?: number | null;
   usageDate?: string;
   isPremium?: boolean;
   canUse?: boolean;
+  limitType?: FeatureLimitType;
+  limitPeriod?: FeatureLimitPeriod;
+  periodValue?: number;
 }
 
 const parseResponse = async (response: Response): Promise<any> => {
@@ -90,6 +107,11 @@ export const featureUsageApi = {
 };
 
 export default featureUsageApi;
+
+
+
+
+
 
 
 

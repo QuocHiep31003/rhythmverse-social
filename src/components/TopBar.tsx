@@ -53,7 +53,7 @@ import {
 
 import NotificationsDropdown from "@/components/notifications/NotificationsDropdown";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const TopBar = () => {
@@ -83,7 +83,14 @@ const TopBar = () => {
   const [showLimitModal, setShowLimitModal] = useState(false);
 
   // Feature limit hook for AI Search
-  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+  const {
+    canUse,
+    remaining,
+    limit,
+    limitType,
+    useFeature,
+    isLoading: isCheckingLimit,
+  } = useFeatureLimit({
     featureName: FeatureName.AI_SEARCH,
     autoCheck: true,
     onLimitReached: () => setShowLimitModal(true),
@@ -193,8 +200,8 @@ const TopBar = () => {
       return;
     }
 
-    // Check feature limit - only show modal if not premium and hết lượt
-    if (!isPremium && remaining === 0) {
+    // Check feature limit - dùng canUse từ backend (backend đã xử lý tất cả logic)
+    if (!canUse) {
       setShowLimitModal(true);
       return;
     }
@@ -203,14 +210,11 @@ const TopBar = () => {
     setError("");
 
     try {
-      // Use feature (increment usage count) - only if not premium
-      if (!isPremium) {
-        const success = await useFeature();
-        if (!success) {
-          setShowLimitModal(true);
-          setIsRecognizing(false);
-          return;
-        }
+      const success = await useFeature();
+      if (!success) {
+        setShowLimitModal(true);
+        setIsRecognizing(false);
+        return;
       }
 
       const result = await arcApi.recognizeMusic(audioBlob);
@@ -641,7 +645,7 @@ const TopBar = () => {
 
                       <Button
                         onClick={handleRecognize}
-                        disabled={isRecognizing || isCheckingLimit || (!isPremium && remaining === 0)}
+                        disabled={isRecognizing || isCheckingLimit}
                         className="w-full"
                       >
                         {isRecognizing ? (
@@ -658,8 +662,10 @@ const TopBar = () => {
                           <>
                             <Search className="h-4 w-4 mr-2" />
                             Recognize Music
-                            {!isPremium && remaining === 0 && (
-                              <span className="ml-2 text-xs opacity-75">(Premium only)</span>
+                            {!canUse && (
+                              <span className="ml-2 text-xs opacity-75">
+                                (Limit reached)
+                              </span>
                             )}
                           </>
                         )}
@@ -802,8 +808,8 @@ const TopBar = () => {
         featureName={FeatureName.AI_SEARCH}
         featureDisplayName="AI Search"
         remaining={remaining}
-        limit={0}
-        isPremium={isPremium}
+        limit={typeof limit === "number" ? limit : undefined}
+        isPremium={limitType === FeatureLimitType.UNLIMITED}
       />
     </header>
   );

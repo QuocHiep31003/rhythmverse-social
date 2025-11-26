@@ -1,15 +1,24 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { featureUsageApi, FeatureName, FeatureUsageDTO } from "@/services/api/featureUsageApi";
+import {
+  featureUsageApi,
+  FeatureName,
+  FeatureUsageDTO,
+  FeatureLimitType,
+  FeatureLimitPeriod,
+} from "@/services/api/featureUsageApi";
 
-const FEATURE_LIMITS_DISABLED = true;
+const FEATURE_LIMITS_DISABLED = false;
 
 const buildUnlimitedUsage = (featureName: FeatureName): FeatureUsageDTO => ({
   featureName,
   canUse: true,
-  isPremium: false,
-  remaining: -1,
+  isPremium: true,
+  remaining: null,
   limit: null,
   usageCount: 0,
+  limitType: FeatureLimitType.UNLIMITED,
+  limitPeriod: FeatureLimitPeriod.NONE,
+  periodValue: 0,
 });
 
 interface UseFeatureLimitOptions {
@@ -25,6 +34,9 @@ interface UseFeatureLimitReturn {
   canUse: boolean;
   isPremium: boolean;
   remaining: number;
+  limit: number | null;
+  limitType: FeatureLimitType;
+  limitPeriod: FeatureLimitPeriod;
   checkUsage: () => Promise<void>;
   useFeature: () => Promise<boolean>; // Return true nếu thành công, false nếu hết lượt
   refresh: () => Promise<void>;
@@ -76,13 +88,11 @@ export const useFeatureLimit = (
       const data = await featureUsageApi.useFeature(featureName);
       setUsage(data);
 
-      // Check bằng remaining thay vì canUse để chính xác hơn
-      // Nếu là premium hoặc còn lượt (remaining > 0) thì cho phép
-      const isPremiumUser = data.isPremium === true;
-      const hasRemaining = (data.remaining ?? 0) > 0;
+      // Dùng canUse từ backend - backend đã xử lý tất cả logic
+      const canUseFeature = data.canUse === true;
       
-      if (!isPremiumUser && !hasRemaining) {
-        // Hết lượt (không premium và remaining = 0)
+      if (!canUseFeature) {
+        // Backend đã check và không cho phép sử dụng
         if (onLimitReached) {
           onLimitReached();
         }
@@ -94,7 +104,7 @@ export const useFeatureLimit = (
       const errorMessage = err?.message || "Failed to use feature";
       setError(errorMessage);
       
-      // Nếu lỗi 403 (forbidden) - hết lượt
+      // Nếu lỗi 403 (forbidden) - backend đã check và không cho phép
       if (err?.message?.includes("limit exceeded") || err?.message?.includes("403")) {
         if (onLimitReached) {
           onLimitReached();
@@ -122,9 +132,21 @@ export const useFeatureLimit = (
     }
   }, [autoCheck, checkUsage, unlimitedUsage]);
 
+  const limitType = usage?.limitType ?? FeatureLimitType.UNLIMITED;
+  const limit = typeof usage?.limit === "number" ? usage?.limit : null;
   const canUse = usage?.canUse ?? true;
-  const isPremium = usage?.isPremium ?? false;
-  const remaining = usage?.remaining ?? -1;
+  const remaining =
+    typeof usage?.remaining === "number"
+      ? usage.remaining
+      : limitType === FeatureLimitType.UNLIMITED
+      ? -1
+      : 0;
+  const isPremium =
+    usage?.isPremium ??
+    (limitType === FeatureLimitType.UNLIMITED ||
+      limit === null ||
+      limit === undefined);
+  const limitPeriod = usage?.limitPeriod ?? FeatureLimitPeriod.NONE;
 
   return {
     usage,
@@ -133,6 +155,9 @@ export const useFeatureLimit = (
     canUse,
     isPremium,
     remaining,
+    limit,
+    limitType,
+    limitPeriod,
     checkUsage,
     useFeature,
     refresh: checkUsage,

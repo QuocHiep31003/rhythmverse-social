@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { uploadImage } from "@/config/cloudinary";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 const playlistFormSchema = z.object({
@@ -31,7 +31,7 @@ interface Song { id: number; name: string; releaseYear: number; }
 interface PlaylistFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: PlaylistFormValues) => void;
+  onSubmit: (data: PlaylistFormValues) => void | Promise<unknown>;
   defaultValues?: Partial<PlaylistFormValues>;
   isLoading?: boolean;
   mode: "create" | "edit";
@@ -46,7 +46,15 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
   const [showLimitModal, setShowLimitModal] = useState(false);
 
   // Feature limit hook (only for create mode)
-  const { canUse, remaining, isPremium, useFeature, isLoading: isCheckingLimit } = useFeatureLimit({
+  const {
+    canUse,
+    remaining,
+    refresh,
+    usage,
+    limit,
+    limitType,
+    isLoading: isCheckingLimit,
+  } = useFeatureLimit({
     featureName: FeatureName.PLAYLIST_CREATE,
     autoCheck: mode === "create",
     onLimitReached: () => setShowLimitModal(true),
@@ -115,22 +123,23 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
   };
 
   const handleSubmit = async (values: PlaylistFormValues) => {
-    // Check feature limit only for create mode - only show modal if not premium and hết lượt
-    if (mode === "create" && !isPremium && remaining === 0) {
+    // Check feature limit only for create mode - dùng canUse từ backend (backend đã xử lý tất cả logic)
+    if (mode === "create" && !canUse) {
       setShowLimitModal(true);
       return;
     }
 
-    // Use feature (increment usage count) only for create mode and if not premium
-    if (mode === "create" && !isPremium) {
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        return;
-      }
+    const result = onSubmit({ ...values, songIds: (values.songIds || []).map(Number) });
+    if (
+      result !== undefined &&
+      result !== null &&
+      typeof (result as PromiseLike<unknown>).then === "function"
+    ) {
+      await result;
     }
-
-    onSubmit({ ...values, songIds: (values.songIds || []).map(Number) });
+    if (mode === "create") {
+      await refresh();
+    }
   };
 
   const isPublic = form.watch("isPublic");
@@ -253,13 +262,16 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading || isCheckingLimit} className="bg-transparent border-gray-600 text-white hover:bg-gray-800">Hủy</Button>
-              <Button 
-                type="submit" 
-                disabled={isLoading || isCheckingLimit || (mode === "create" && !isPremium && remaining === 0)} 
+              <Button
+                type="submit"
+                disabled={isLoading || isCheckingLimit}
                 className="bg-primary hover:bg-primary/90"
               >
                 {isLoading ? "Đang lưu..." : isCheckingLimit ? "Đang kiểm tra..." : mode === "create" ? "Tạo playlist" : "Cập nhật"}
-                {mode === "create" && !isPremium && remaining > 0 && (
+                {mode === "create" &&
+                  limitType === FeatureLimitType.LIMITED &&
+                  remaining !== undefined &&
+                  remaining > 0 && (
                   <span className="ml-2 text-xs opacity-75">({remaining} lượt còn lại)</span>
                 )}
               </Button>
@@ -275,8 +287,8 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
           featureName={FeatureName.PLAYLIST_CREATE}
           featureDisplayName="Create Playlist"
           remaining={remaining}
-          limit={3}
-          isPremium={isPremium}
+          limit={typeof limit === "number" ? limit : usage?.limit ?? undefined}
+          isPremium={limitType === FeatureLimitType.UNLIMITED}
         />
       )}
     </Dialog>

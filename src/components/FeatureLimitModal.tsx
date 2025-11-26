@@ -70,6 +70,8 @@ export const FeatureLimitModal = ({
   const displayName = featureDisplayName || featureName.replace(/_/g, " ");
   const description = featureDescriptions[featureName] || "This premium feature";
   const benefits = featureBenefits[featureName] || [];
+  const limitNumber = typeof limit === "number" ? limit : 0;
+  const hasFreeQuota = limitNumber > 0 && limitNumber < 1_000_000;
 
   // Don't show modal if user is already premium
   const shouldShow = open && !isPremium;
@@ -90,10 +92,10 @@ export const FeatureLimitModal = ({
             <DialogTitle className="text-2xl">Upgrade to Premium</DialogTitle>
           </div>
           <DialogDescription className="text-base">
-            {remaining === 0
-              ? `You've reached your limit for ${displayName}. You've used all ${limit} free uses. Upgrade to Premium for unlimited access!`
-              : limit > 0
-              ? `You have ${remaining} of ${limit} ${displayName} uses remaining. Upgrade to Premium for unlimited access!`
+            {hasFreeQuota
+              ? remaining === 0
+                ? `You've reached your limit for ${displayName}. You've used all ${limitNumber} free uses. Upgrade to Premium for unlimited access!`
+                : `You have ${remaining} of ${limitNumber} ${displayName} uses remaining. Upgrade to Premium for unlimited access!`
               : `${displayName} is only available for Premium users. Upgrade to Premium to unlock this feature!`}
           </DialogDescription>
         </DialogHeader>
@@ -118,7 +120,7 @@ export const FeatureLimitModal = ({
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Free Plan</span>
               <span className="text-sm text-muted-foreground">
-                {limit > 0 ? `${limit} uses` : "Not available"}
+                {hasFreeQuota ? `${limitNumber} uses` : "Not available"}
               </span>
             </div>
             <div className="flex items-center justify-between">
