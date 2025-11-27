@@ -2646,7 +2646,7 @@ const Social = () => {
 
 
 
-  const handleUnfriend = (friendId: string) => {
+  const handleUnfriend = async (friendId: string): Promise<void> => {
     const me = localStorage.getItem('userId') || sessionStorage.getItem('userId');
     if (!me) {
       pushBubble('Missing user id', 'error');
@@ -2659,6 +2659,54 @@ const Social = () => {
     }
     setPendingUnfriend({ friendId, friendName: friend.name });
     setUnfriendDialogOpen(true);
+  };
+
+  // ✅ Cleanup tất cả watchers cho một friend cụ thể
+  const cleanupFriendWatchers = (friendId: string) => {
+    console.log('[Social] Cleaning up watchers for friend:', friendId);
+    
+    // 1. Cleanup chat messages watcher
+    if (chatWatchersRef.current[friendId]) {
+      console.log('[Social] Unsubscribing chat messages watcher for:', friendId);
+      chatWatchersRef.current[friendId]();
+      delete chatWatchersRef.current[friendId];
+    }
+    
+    // 2. Cleanup typing watcher
+    if (typingWatchersRef.current[friendId]) {
+      console.log('[Social] Unsubscribing typing watcher for:', friendId);
+      typingWatchersRef.current[friendId]();
+      delete typingWatchersRef.current[friendId];
+      // Clear typing state
+      setTypingByFriend((prev) => {
+        if (!(friendId in prev)) return prev;
+        const { [friendId]: _removed, ...rest } = prev;
+        return rest;
+      });
+    }
+    
+    // 3. Cleanup reactions watcher nếu đang watch friend này
+    if (selectedChat === friendId && reactionsWatcherRef.current) {
+      console.log('[Social] Unsubscribing reactions watcher for:', friendId);
+      reactionsWatcherRef.current();
+      reactionsWatcherRef.current = null;
+      setReactionsByMessage({});
+    }
+    
+    // 4. Clear chat messages và unread count cho friend này
+    setChatByFriend((prev) => {
+      if (!(friendId in prev)) return prev;
+      const { [friendId]: _removed, ...rest } = prev;
+      return rest;
+    });
+    
+    setUnreadByFriend((prev) => {
+      if (!(friendId in prev)) return prev;
+      const { [friendId]: _removed, ...rest } = prev;
+      return rest;
+    });
+    
+    console.log('[Social] All watchers cleaned up for friend:', friendId);
   };
 
   const confirmUnfriend = async () => {
@@ -2694,12 +2742,24 @@ const Social = () => {
         friend: friend
       });
       
+      // ✅ FIX 1: Cleanup watchers NGAY LẬP TỨC trước khi gọi API
+      cleanupFriendWatchers(friendId);
+      
+      // ✅ FIX 2: Clear selectedChat và navigate TRƯỚC KHI gọi API
+      if (selectedChat === friendId) {
+        setSelectedChat(null);
+        // Navigate về social page (clear chat view)
+        navigate('/social?tab=friends');
+      }
+      
+      // Gọi API unfriend
       await friendsApi.remove(Number(me), friendUserId, {
         relationshipId: friend.relationshipId,
       });
       
+      // Reload friends list sau khi unfriend thành công
       await loadFriends();
-      if (selectedChat === friendId) setSelectedChat(null);
+      
       pushBubble('Friend removed', 'info');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
