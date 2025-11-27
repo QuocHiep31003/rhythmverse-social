@@ -3,6 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Footer from "@/components/Footer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { 
   Check, 
   X, 
@@ -17,13 +26,30 @@ import {
   MessageCircle,
   Trophy,
   Sparkles,
-  Loader2
+  Loader2,
+  Infinity
 } from "lucide-react";
 import { paymentApi } from "@/services/api/paymentApi";
 import { userApi } from "@/services/api/userApi";
-import { subscriptionPlanApi, SubscriptionPlanDTO } from "@/services/api/subscriptionPlanApi";
+import { subscriptionPlanApi, SubscriptionPlanDTO, PlanDetailDTO } from "@/services/api/subscriptionPlanApi";
 import { FeatureName } from "@/services/api/featureUsageApi";
 import { useToast } from "@/hooks/use-toast";
+
+const cleanPlanName = (name?: string | null) =>
+  name ? name.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim() : "";
+
+const getPlanDisplayName = (plan?: SubscriptionPlanDTO | null) => {
+  if (!plan) return "Premium";
+  const planCode = plan.planCode?.toUpperCase();
+  const cleanedName = cleanPlanName(plan.planName);
+  if (planCode?.startsWith("PREMIUM") || cleanedName?.toUpperCase().includes("PREMIUM")) {
+    return "Premium";
+  }
+  return cleanedName || plan.planCode || "Premium";
+};
+
+const MONTHLY_MIN_DAYS = 28;
+const MONTHLY_MAX_DAYS = 35;
 
 const Premium = () => {
   const navigate = useNavigate();
@@ -31,6 +57,8 @@ const Premium = () => {
   const [userId, setUserId] = useState<number | null>(null);
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlanDTO[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlanDTO | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const { toast } = useToast();
 
   // Map feature name to icon và text
@@ -60,12 +88,48 @@ const Premium = () => {
   const getPlanFeatures = (plan: SubscriptionPlanDTO | null) => {
     if (!plan || !plan.features) return [];
     
-    return plan.features.map(f => ({
-      icon: getFeatureIcon(f.featureName),
-      text: f.featureDisplayName || getFeatureText(f.featureName),
-      included: !!f.isEnabled,
-      limit: f.limitValue === null ? "Unlimited" : f.limitValue
-    }));
+    // Sắp xếp theo thứ tự: unlimited trước, limited > 0, limited = 0 sau
+    const sortedFeatures = [...plan.features].sort((a, b) => {
+      const aLimit = a.limitValue;
+      const bLimit = b.limitValue;
+      
+      // Unlimited (null) trước
+      if (aLimit === null && bLimit !== null) return -1;
+      if (aLimit !== null && bLimit === null) return 1;
+      
+      // Limited > 0 trước limited = 0
+      if (aLimit !== null && bLimit !== null) {
+        if (aLimit > 0 && bLimit === 0) return -1;
+        if (aLimit === 0 && bLimit > 0) return 1;
+      }
+      
+      return 0;
+    });
+    
+    return sortedFeatures.map(f => {
+      const limitValue = f.limitValue;
+      let status: "unlimited" | "limited" | "disabled";
+      let displayText: string;
+      
+      if (limitValue === null) {
+        status = "unlimited";
+        displayText = "Không giới hạn";
+      } else if (limitValue === 0) {
+        status = "disabled";
+        displayText = "Không khả dụng";
+      } else {
+        status = "limited";
+        displayText = `${limitValue} lần`;
+      }
+      
+      return {
+        icon: getFeatureIcon(f.featureName),
+        text: f.featureDisplayName || getFeatureText(f.featureName),
+        status,
+        limitValue,
+        displayText
+      };
+    });
   };
 
   // Tìm FREE và PREMIUM plan
@@ -79,14 +143,52 @@ const Premium = () => {
   const annualPlan = otherPlans.find(p => p.planCode?.toUpperCase() === "PREMIUM_YEARLY") || null;
   const additionalPlans = otherPlans.filter(p => p.planCode?.toUpperCase() !== "PREMIUM_YEARLY");
 
+  // Lấy PlanDetail được recommend hoặc giá thấp nhất
+  const getMonthlyDetail = (plan: SubscriptionPlanDTO) => {
+    if (!plan.details || plan.details.length === 0) return null;
+    return plan.details.find(
+      d =>
+        d.isActive !== false &&
+        typeof d.durationDays === "number" &&
+        d.durationDays >= MONTHLY_MIN_DAYS &&
+        d.durationDays <= MONTHLY_MAX_DAYS
+    ) || null;
+  };
+
+  const getRecommendedDetail = (plan: SubscriptionPlanDTO) => {
+    if (!plan.details || plan.details.length === 0) return null;
+    const activeDetails = plan.details.filter(d => d.isActive !== false);
+    if (activeDetails.length === 0) return null;
+
+    // Ưu tiên gói tháng
+    const monthly = getMonthlyDetail(plan);
+    if (monthly) return monthly;
+
+    // Nếu không có gói tháng, ưu tiên recommended
+    const recommended = activeDetails.find(d => d.isRecommended);
+    if (recommended) return recommended;
+
+    const monthlyDetail = activeDetails.find(detail => {
+      const duration = detail.durationDays ?? 0;
+      return duration >= 28 && duration <= 35;
+    });
+    if (monthlyDetail) return monthlyDetail;
+    
+    return activeDetails.sort((a, b) => (a.price || 0) - (b.price || 0))[0];
+  };
+
   const formatPrice = (plan: SubscriptionPlanDTO) => {
-    if (!plan.price || plan.price <= 0) return "Miễn phí";
-    return `${Number(plan.price).toLocaleString("vi-VN")} ${plan.currency || "VND"}`;
+    if (plan.planCode?.toUpperCase() === "FREE") return "Miễn phí";
+    const detail = getRecommendedDetail(plan);
+    if (!detail || !detail.price || detail.price <= 0) return "Liên hệ";
+    return `Từ ${Number(detail.price).toLocaleString("vi-VN")} ${detail.currency || "VND"}`;
   };
 
   const getDurationLabel = (plan: SubscriptionPlanDTO) => {
-    if (!plan.durationDays || !plan.price || plan.price <= 0) return null;
-    return `Chu kỳ ${plan.durationDays.toLocaleString("vi-VN")} ngày`;
+    if (plan.planCode?.toUpperCase() === "FREE") return null;
+    const detail = getRecommendedDetail(plan);
+    if (!detail || !detail.durationDays) return null;
+    return `${detail.durationDays} ngày`;
   };
 
   const renderPlanCard = (
@@ -111,15 +213,17 @@ const Premium = () => {
     };
 
     const planFeatures = getPlanFeatures(plan);
-    const isFreePlan = !plan.price || plan.price <= 0;
-    const isButtonDisabled = options?.lockButton || isFreePlan || isUpgrading || !plan.price || plan.price <= 0;
+    const planDisplayName = getPlanDisplayName(plan);
+    const isFreePlan = plan.planCode?.toUpperCase() === "FREE";
+    const hasDetails = plan.details && plan.details.length > 0 && plan.details.some(d => d.isActive !== false);
+    const isButtonDisabled = options?.lockButton || isFreePlan || isUpgrading || !hasDetails;
     const displayBadge = options?.badge;
     const buttonText =
       isButtonDisabled && isFreePlan
         ? "Current Plan"
         : isUpgrading
         ? "Processing..."
-        : options?.buttonLabel || `Upgrade to ${plan.planName}`;
+        : options?.buttonLabel || `Upgrade to ${planDisplayName}`;
 
     const baseButtonClass =
       "mt-4 w-full rounded-2xl font-semibold tracking-wide transition-all duration-300 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
@@ -148,7 +252,7 @@ const Premium = () => {
             </div>
           )}
           <div className="space-y-1">
-            <h3 className="text-3xl font-bold text-white">{plan.planName}</h3>
+            <h3 className="text-3xl font-bold text-white">{planDisplayName}</h3>
           </div>
           <div className="mt-4 mb-2 space-y-1">
             <div className="text-4xl font-black text-white">{formatPrice(plan)}</div>
@@ -171,21 +275,33 @@ const Premium = () => {
               planFeatures.map((feature, index) => (
                 <div
                   key={`${plan.planCode}-feature-${index}`}
-                  className={`flex items-center gap-3 rounded-2xl border px-3 py-1.5 text-sm ${
-                    feature.included
-                      ? "border-white/5 bg-white/5 text-white/90"
-                      : "border-white/5 bg-white/0 text-white/50"
+                  className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-1.5 text-sm ${
+                    feature.status === "disabled"
+                      ? "border-white/5 bg-white/0 text-white/50"
+                      : "border-white/5 bg-white/5 text-white/90"
                   }`}
                 >
-                  {feature.included ? (
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                  ) : (
-                    <X className="w-4 h-4 text-rose-400 shrink-0" />
-                  )}
-                  <feature.icon className="w-4 h-4 shrink-0 text-white/70" />
-                  <span className="flex-1">
-                    {feature.text}
-                    {feature.limit !== "Unlimited" && ` (${feature.limit})`}
+                  <div className="flex items-center gap-3">
+                    {feature.status === "disabled" ? (
+                      <X className="w-4 h-4 text-rose-400 shrink-0" />
+                    ) : feature.status === "unlimited" ? (
+                      <Infinity className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Check className="w-4 h-4 text-blue-400 shrink-0" />
+                    )}
+                    <feature.icon className="w-4 h-4 shrink-0 text-white/70" />
+                    <span>{feature.text}</span>
+                  </div>
+                  <span
+                    className={`text-xs font-medium ${
+                      feature.status === "unlimited"
+                        ? "text-emerald-400"
+                        : feature.status === "limited"
+                        ? "text-blue-400"
+                        : "text-rose-400/70"
+                    }`}
+                  >
+                    {feature.displayText}
                   </span>
                 </div>
               ))
@@ -200,8 +316,9 @@ const Premium = () => {
             }`}
             disabled={isButtonDisabled}
             onClick={() => {
-              if (!isFreePlan) {
-                handleUpgrade(plan);
+              if (!isFreePlan && hasDetails) {
+                setSelectedPlan(plan);
+                setIsDetailDialogOpen(true);
               }
             }}
           >
@@ -270,24 +387,20 @@ const Premium = () => {
     }
   ];
 
-  const handleUpgrade = async (targetPlan?: SubscriptionPlanDTO) => {
+  const handleUpgrade = async (planDetail: PlanDetailDTO, plan: SubscriptionPlanDTO) => {
     try {
       setIsUpgrading(true);
+      setIsDetailDialogOpen(false);
 
-      const plan = targetPlan || premiumPlan;
-      if (!plan) {
-        throw new Error("Plan not found. Please try again.");
+      if (!planDetail || !planDetail.price || planDetail.price <= 0) {
+        throw new Error("Invalid plan detail. Please try again.");
       }
 
-      const amountVND = plan.price ? Number(plan.price) : 0;
-      if (amountVND <= 0) {
-        throw new Error("Invalid order amount. Please try again.");
-      }
-
-      const planName = plan.planName || plan.planCode || "Premium";
+      const amountVND = Number(planDetail.price);
+      const planName = getPlanDisplayName(plan);
       const rawDescription = userId
-        ? `${planName} - ${userId}`
-        : `${planName} Subscription`;
+        ? `${planName} + User ID: ${userId}`
+        : planName;
       // PayOS giới hạn mô tả 25 ký tự nên cần cắt ngắn
       const description = rawDescription.slice(0, 25);
 
@@ -349,18 +462,17 @@ const Premium = () => {
                 accent: "premium",
                 badge: "Most Popular",
                 highlight: true,
-                buttonLabel: "Upgrade to Premium",
               })}
               {renderPlanCard(annualPlan, {
                 accent: "annual",
                 badge: "Best Value",
-                buttonLabel: "Upgrade to Gói Premium 1 Năm",
+                buttonLabel: annualPlan ? `Upgrade to ${getPlanDisplayName(annualPlan)}` : undefined,
               })}
               {additionalPlans.map(plan =>
                 renderPlanCard(plan, {
                   accent: "default",
                   badge: plan.planCode,
-                  buttonLabel: `Upgrade to ${plan.planName}`,
+                  buttonLabel: `Upgrade to ${getPlanDisplayName(plan)}`,
                 })
               )}
             </div>
@@ -427,7 +539,12 @@ const Premium = () => {
             <Button 
               variant="hero" 
               size="lg" 
-              onClick={() => handleUpgrade(premiumPlan)} 
+              onClick={() => {
+                if (premiumPlan) {
+                  setSelectedPlan(premiumPlan);
+                  setIsDetailDialogOpen(true);
+                }
+              }}
               disabled={isUpgrading || !premiumPlan}
             >
               {isUpgrading ? "Processing..." : "Start Your Premium Journey"}
@@ -443,6 +560,72 @@ const Premium = () => {
         </div>
       </div>
       <Footer />
+
+      {/* Dialog chọn PlanDetail */}
+      <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
+        <DialogContent className="max-w-2xl bg-slate-950/95 border-white/10">
+          <DialogHeader>
+            <DialogTitle className="text-2xl text-white">
+              Chọn gói {getPlanDisplayName(selectedPlan)}
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
+              Chọn option giá và thời gian phù hợp với bạn
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 py-4">
+            {selectedPlan?.details
+              ?.filter(d => d.isActive !== false)
+              .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+              .map((detail, index) => (
+                <Card
+                  key={detail.id || index}
+                  className={`cursor-pointer transition-all hover:scale-105 ${
+                    detail.isRecommended
+                      ? "border-primary/50 bg-primary/10"
+                      : "border-white/10 bg-white/5"
+                  }`}
+                  onClick={() => handleUpgrade(detail, selectedPlan!)}
+                >
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="text-xl font-bold text-white">
+                            {detail.detailName}
+                          </h4>
+                          {detail.isRecommended && (
+                            <Badge className="bg-primary text-white">
+                              Recommended
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-white/70 mb-3">
+                          {detail.durationDays} ngày
+                        </p>
+                        <div className="text-3xl font-black text-white">
+                          {Number(detail.price).toLocaleString("vi-VN")} {detail.currency || "VND"}
+                        </div>
+                      </div>
+                      <Button
+                        variant={detail.isRecommended ? "default" : "outline"}
+                        className="ml-4"
+                      >
+                        Chọn
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
+              Hủy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

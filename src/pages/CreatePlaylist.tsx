@@ -17,7 +17,7 @@ import { PlaylistVisibility } from "@/types/playlist";
 import { createGridCover, uploadDataUrlToCloudinary } from "@/utils/imageUtils";
 import { songsApi } from "@/services/api/songApi";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitType, FeatureName, featureUsageApi } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import {
   Select,
@@ -109,6 +109,28 @@ const CreatePlaylist = () => {
   });
   const modalLimit =
     typeof limit === "number" ? limit : usage?.limit ?? undefined;
+
+  // Refresh usage khi window focus lại (có thể admin đã thay đổi limit)
+  useEffect(() => {
+    const handleFocus = () => {
+      refresh();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refresh]);
+
+  // Refresh usage khi quay lại từ trang premium
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [refresh]);
 
   useEffect(() => {
     (async () => {
@@ -220,8 +242,15 @@ const CreatePlaylist = () => {
       return;
     }
 
-    // Limit check - dùng canUse từ backend (backend đã xử lý tất cả logic)
-    if (!canUse) {
+    // Limit check - refresh usage trước khi check để đảm bảo có thông tin mới nhất
+    await refresh();
+    
+    // Lấy usage mới nhất sau khi refresh
+    const latestUsage = await featureUsageApi.getFeatureUsage(FeatureName.PLAYLIST_CREATE);
+    const latestCanUse = latestUsage?.canUse ?? true;
+    
+    // Check lại canUse sau khi refresh
+    if (!latestCanUse) {
       setShowLimitModal(true);
       return;
     }
@@ -615,7 +644,10 @@ const CreatePlaylist = () => {
         featureDisplayName="Create Playlist"
         remaining={remaining}
         limit={modalLimit}
+        limitType={limitType}
         isPremium={limitType === FeatureLimitType.UNLIMITED}
+        canUse={canUse}
+        onRefresh={refresh}
       />
     </div>
   );

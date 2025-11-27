@@ -11,17 +11,31 @@ export interface PlanFeatureDTO {
   updatedAt?: string;
 }
 
+export interface PlanDetailDTO {
+  id?: number;
+  planId?: number;
+  detailName: string;
+  price: number;
+  currency?: string;
+  durationDays: number;
+  isActive?: boolean;
+  displayOrder?: number;
+  isRecommended?: boolean;
+  updatedById?: number;
+  updatedByName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface SubscriptionPlanDTO {
   id?: number;
   planCode: string;
   planName: string;
   description?: string;
-  price?: number;
-  currency?: string;
-  durationDays?: number;
   isActive?: boolean;
   displayOrder?: number;
   features?: PlanFeatureDTO[];
+  details?: PlanDetailDTO[]; // Các options giá/thời gian
   updatedById?: number;
   updatedByName?: string;
   createdAt?: string;

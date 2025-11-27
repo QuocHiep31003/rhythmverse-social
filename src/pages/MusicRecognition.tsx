@@ -44,7 +44,7 @@ const MusicRecognition = () => {
     remaining,
     limit,
     limitType,
-    useFeature,
+    checkUsage,
     isLoading: isCheckingLimit,
   } = useFeatureLimit({
     featureName: FeatureName.AI_SEARCH,
@@ -136,14 +136,8 @@ const MusicRecognition = () => {
     setError("");
 
     try {
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        setIsLoading(false);
-        return;
-      }
-
       const result = await arcApi.recognizeMusic(audioBlob);
+      await checkUsage();
 
       const normalizeAcrResponse = (data: unknown) => {
         if (Array.isArray(data) || !data || typeof data !== "object") return data;
@@ -171,8 +165,14 @@ const MusicRecognition = () => {
       navigate("/music-recognition-result", {
         state: { result: normalizedResult, audioUrl: audioUrlPreview },
       });
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to recognize music.");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 403 || err?.message?.toLowerCase?.().includes("limit")) {
+        setShowLimitModal(true);
+        await checkUsage();
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to recognize music.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -322,7 +322,10 @@ const MusicRecognition = () => {
         featureDisplayName="AI Search"
         remaining={remaining}
         limit={typeof limit === "number" ? limit : undefined}
+        limitType={limitType}
         isPremium={limitType === FeatureLimitType.UNLIMITED}
+        canUse={canUse}
+        onRefresh={checkUsage}
       />
     </div>
   );

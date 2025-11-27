@@ -7,6 +7,9 @@ import { playlistsApi, PlaylistLibraryItemDTO } from "@/services/api/playlistApi
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createSlug } from "@/utils/playlistUtils";
+import { useFeatureLimit } from "@/hooks/useFeatureLimit";
+import { FeatureName, FeatureLimitType, featureUsageApi } from "@/services/api/featureUsageApi";
+import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 interface AddToPlaylistDialogProps {
   open: boolean;
@@ -32,17 +35,34 @@ export const AddToPlaylistDialog = ({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [addingToPlaylistId, setAddingToPlaylistId] = useState<number | null>(null);
   const [displayLimit, setDisplayLimit] = useState(5); // Hiển thị 5 playlist ban đầu
+  const [showLimitModal, setShowLimitModal] = useState(false);
+
+  // Feature limit check cho việc tạo playlist
+  const {
+    canUse,
+    remaining,
+    limit,
+    limitType,
+    checkUsage,
+    isLoading: isCheckingLimit,
+  } = useFeatureLimit({
+    featureName: FeatureName.PLAYLIST_CREATE,
+    autoCheck: true,
+    onLimitReached: () => setShowLimitModal(true),
+  });
 
   useEffect(() => {
     if (open) {
       loadPlaylists();
       setDisplayLimit(5); // Reset về 5 playlist khi mở lại
+      // Refresh usage khi mở dialog (có thể admin đã thay đổi limit)
+      checkUsage();
     } else {
       setSearchQuery("");
       setNewPlaylistName("");
       setShowCreateForm(false);
     }
-  }, [open]);
+  }, [open, checkUsage]);
 
   const loadPlaylists = async () => {
     setLoading(true);
@@ -113,8 +133,23 @@ export const AddToPlaylistDialog = ({
       return;
     }
 
+    if (!canUse) {
+      setShowLimitModal(true);
+      return;
+    }
+
     setCreating(true);
     try {
+      // Refresh usage trước khi tạo để đảm bảo nắm thông tin mới nhất
+      const latestUsage = await featureUsageApi.getFeatureUsage(FeatureName.PLAYLIST_CREATE);
+      const latestCanUse = latestUsage?.canUse ?? true;
+      if (!latestCanUse) {
+        setShowLimitModal(true);
+        setCreating(false);
+        await checkUsage();
+        return;
+      }
+
       // Tạo playlist trước (không có songIds để tránh vấn đề addedBy)
       const newPlaylist = await playlistsApi.create({
         name: newPlaylistName.trim(),
@@ -133,6 +168,9 @@ export const AddToPlaylistDialog = ({
         // Vẫn navigate dù có lỗi khi thêm bài hát
       }
 
+      // Refresh usage sau khi tạo thành công để cập nhật thông tin mới nhất
+      await checkUsage();
+
       toast({
         title: "Đã tạo playlist",
         description: `Playlist "${newPlaylistName}" đã được tạo và bài hát đã được thêm vào`,
@@ -141,13 +179,22 @@ export const AddToPlaylistDialog = ({
       onOpenChange(false);
       // Navigate to the new playlist
       navigate(`/playlist/${createSlug(newPlaylist.name, newPlaylist.id)}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể tạo playlist";
-      toast({
-        title: "Lỗi",
-        description: message,
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      // Nếu lỗi từ backend về feature limit, show modal
+      const errorMessage = error?.message || "";
+      if (errorMessage.includes("limit exceeded") || 
+          errorMessage.includes("Feature usage limit") ||
+          errorMessage.includes("403") ||
+          error?.status === 403) {
+        setShowLimitModal(true);
+      } else {
+        const message = error instanceof Error ? error.message : "Không thể tạo playlist";
+        toast({
+          title: "Lỗi",
+          description: message,
+          variant: "destructive",
+        });
+      }
     } finally {
       setCreating(false);
       setNewPlaylistName("");
@@ -311,6 +358,20 @@ export const AddToPlaylistDialog = ({
           </div>
         </div>
       </DialogContent>
+
+      {/* Feature Limit Modal */}
+      <FeatureLimitModal
+        open={showLimitModal}
+        onOpenChange={setShowLimitModal}
+        featureName={FeatureName.PLAYLIST_CREATE}
+        featureDisplayName="Create Playlist"
+        remaining={remaining}
+        limit={typeof limit === "number" ? limit : undefined}
+        limitType={limitType}
+        isPremium={limitType === FeatureLimitType.UNLIMITED}
+        canUse={canUse}
+        onRefresh={checkUsage}
+      />
     </Dialog>
   );
 };

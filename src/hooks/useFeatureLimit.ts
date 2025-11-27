@@ -66,8 +66,14 @@ export const useFeatureLimit = (
     setIsLoading(true);
     setError(null);
     try {
+      // Lấy thông tin usage từ backend - backend đã xử lý logic dựa trên admin config
+      // Backend sẽ kiểm tra plan của user và PlanFeature để xác định canUse
       const data = await featureUsageApi.getFeatureUsage(featureName);
       setUsage(data);
+      
+      // Nếu canUse = false và có callback, gọi callback để hiển thị modal
+      // Tuy nhiên, chỉ gọi khi user thực sự cố gắng sử dụng tính năng, không phải khi check
+      // (onLimitReached chỉ được gọi trong useFeature khi thực sự không thể dùng)
     } catch (err: any) {
       const errorMessage = err?.message || "Failed to check feature usage";
       setError(errorMessage);
@@ -88,11 +94,11 @@ export const useFeatureLimit = (
       const data = await featureUsageApi.useFeature(featureName);
       setUsage(data);
 
-      // Dùng canUse từ backend - backend đã xử lý tất cả logic
+      // Dùng canUse từ backend - backend đã xử lý tất cả logic dựa trên admin config
       const canUseFeature = data.canUse === true;
       
       if (!canUseFeature) {
-        // Backend đã check và không cho phép sử dụng
+        // Backend đã check và không cho phép sử dụng (có thể do hết lượt hoặc feature bị disabled)
         if (onLimitReached) {
           onLimitReached();
         }
@@ -104,8 +110,11 @@ export const useFeatureLimit = (
       const errorMessage = err?.message || "Failed to use feature";
       setError(errorMessage);
       
-      // Nếu lỗi 403 (forbidden) - backend đã check và không cho phép
-      if (err?.message?.includes("limit exceeded") || err?.message?.includes("403")) {
+      // Nếu lỗi 403 (forbidden) hoặc limit exceeded - backend đã check và không cho phép
+      if (err?.message?.includes("limit exceeded") || 
+          err?.message?.includes("403") || 
+          err?.message?.includes("cannot use") ||
+          err?.status === 403) {
         if (onLimitReached) {
           onLimitReached();
         }
@@ -132,9 +141,13 @@ export const useFeatureLimit = (
     }
   }, [autoCheck, checkUsage, unlimitedUsage]);
 
+  // Lấy thông tin từ usage - backend đã xử lý logic dựa trên admin config
+  // canUse từ backend phản ánh đúng trạng thái: 
+  // - true nếu feature được enable trong admin và user còn lượt (hoặc unlimited)
+  // - false nếu feature bị disable (limitValue = 0) hoặc user đã hết lượt
   const limitType = usage?.limitType ?? FeatureLimitType.UNLIMITED;
   const limit = typeof usage?.limit === "number" ? usage?.limit : null;
-  const canUse = usage?.canUse ?? true;
+  const canUse = usage?.canUse ?? true; // Default true để tránh block khi chưa load xong
   const remaining =
     typeof usage?.remaining === "number"
       ? usage.remaining

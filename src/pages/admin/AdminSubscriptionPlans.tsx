@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { subscriptionPlanApi, SubscriptionPlanDTO, PlanFeatureDTO } from "@/services/api/subscriptionPlanApi";
+import { subscriptionPlanApi, SubscriptionPlanDTO, PlanFeatureDTO, PlanDetailDTO } from "@/services/api/subscriptionPlanApi";
 import { FeatureName } from "@/services/api/featureUsageApi";
 import { Plus, Edit, Trash2, Save, X, RefreshCw, Package } from "lucide-react";
 import {
@@ -41,12 +41,10 @@ const AdminSubscriptionPlans = () => {
     planCode: "",
     planName: "",
     description: "",
-    price: 0,
-    currency: "VND",
-    durationDays: 30,
     isActive: true,
     displayOrder: 0,
     features: [],
+    details: [],
   });
 
   const formatNumber = (value?: number | null) => {
@@ -62,6 +60,22 @@ const AdminSubscriptionPlans = () => {
   useEffect(() => {
     loadPlans();
   }, []);
+
+  const ensureMonthlyRecommended = (details: PlanDetailDTO[] = []) => {
+    if (!details.length) return details;
+    if (details.some(detail => detail.isRecommended)) return details;
+    const monthlyIndex = details.findIndex(
+      detail =>
+        typeof detail.durationDays === "number" &&
+        detail.durationDays >= 28 &&
+        detail.durationDays <= 35
+    );
+    const targetIndex = monthlyIndex !== -1 ? monthlyIndex : 0;
+    return details.map((detail, index) => ({
+      ...detail,
+      isRecommended: index === targetIndex,
+    }));
+  };
 
   // Sắp xếp để FREE, PREMIUM và PREMIUM_YEARLY luôn hiển thị đầu tiên
   const sortPlansWithDefaultsFirst = (plans: SubscriptionPlanDTO[]): SubscriptionPlanDTO[] => {
@@ -144,29 +158,49 @@ const AdminSubscriptionPlans = () => {
   const handleOpenDialog = (plan?: SubscriptionPlanDTO) => {
     if (plan) {
       setEditingPlan(plan);
+      // Đảm bảo có đủ 5 tính năng, nếu thiếu thì thêm các tính năng mặc định
+      const existingFeatures = plan.features || [];
+      const allFeatures = FEATURE_OPTIONS.map(opt => {
+        const existing = existingFeatures.find(f => f.featureName === opt.value);
+        if (existing) {
+          return {
+            ...existing,
+            isEnabled: existing.isEnabled ?? true,
+            limitValue: existing.limitValue ?? null,
+          };
+        }
+        // Nếu chưa có, tạo mặc định (unlimited)
+        return {
+          featureName: opt.value,
+          limitValue: null, // null = unlimited
+          isEnabled: true,
+        };
+      });
       setFormData({
         planCode: plan.planCode,
         planName: plan.planName,
         description: plan.description || "",
-        price: plan.price || 0,
-        currency: plan.currency || "VND",
-        durationDays: plan.durationDays || 30,
         isActive: plan.isActive ?? true,
         displayOrder: plan.displayOrder || 0,
-        features: plan.features || [],
+        features: allFeatures,
+        details: ensureMonthlyRecommended(plan.details || []),
       });
     } else {
       setEditingPlan(null);
+      // Tạo mặc định 5 tính năng với unlimited
+      const defaultFeatures = FEATURE_OPTIONS.map(opt => ({
+        featureName: opt.value,
+        limitValue: null, // null = unlimited
+        isEnabled: true,
+      }));
       setFormData({
         planCode: "",
         planName: "",
         description: "",
-        price: 0,
-        currency: "VND",
-        durationDays: 30,
         isActive: true,
         displayOrder: 0,
-        features: [],
+        features: defaultFeatures,
+        details: [],
       });
     }
     setIsDialogOpen(true);
@@ -177,39 +211,116 @@ const AdminSubscriptionPlans = () => {
     setEditingPlan(null);
   };
 
-  const handleAddFeature = () => {
-    const newFeature: PlanFeatureDTO = {
-      featureName: FeatureName.PLAYLIST_CREATE,
-      limitValue: null,
-      isEnabled: true,
+  // Không cần handleAddFeature và handleRemoveFeature nữa vì luôn có đủ 5 tính năng
+
+  const handleToggleUnlimited = (index: number, isUnlimited: boolean) => {
+    const newFeatures = [...(formData.features || [])];
+    newFeatures[index] = {
+      ...newFeatures[index],
+      limitValue: isUnlimited ? null : 0, // Nếu chuyển từ unlimited sang limited, mặc định là 0
+    };
+    setFormData({ ...formData, features: newFeatures });
+  };
+
+  const handleLimitValueChange = (index: number, value: number | null) => {
+    const newFeatures = [...(formData.features || [])];
+    // Nếu nhập số > 0, tự động tắt unlimited (set limitValue)
+    // Nếu nhập 0, vẫn là limited nhưng không cho dùng
+    newFeatures[index] = {
+      ...newFeatures[index],
+      limitValue: value,
+    };
+    setFormData({ ...formData, features: newFeatures });
+  };
+
+  // Không cần sắp xếp nữa, giữ nguyên thứ tự 5 tính năng
+  const sortedFeatures = formData.features || [];
+
+  // Không cần drag and drop nữa vì luôn có đủ 5 tính năng cố định
+
+  // PlanDetail handlers
+  const handleAddDetail = () => {
+    const newDetail: PlanDetailDTO = {
+      detailName: "",
+      price: 0,
+      currency: "VND",
+      durationDays: 30,
+      isActive: true,
+      displayOrder: (formData.details?.length || 0),
+      isRecommended: false,
     };
     setFormData({
       ...formData,
-      features: [...(formData.features || []), newFeature],
+      details: ensureMonthlyRecommended([...(formData.details || []), newDetail]),
     });
   };
 
-  const handleRemoveFeature = (index: number) => {
-    const newFeatures = formData.features?.filter((_, i) => i !== index) || [];
-    setFormData({ ...formData, features: newFeatures });
+  const handleRemoveDetail = (index: number) => {
+    const newDetails = formData.details?.filter((_, i) => i !== index) || [];
+    setFormData({ ...formData, details: newDetails });
   };
 
-  const handleFeatureChange = (index: number, field: keyof PlanFeatureDTO, value: any) => {
-    const newFeatures = [...(formData.features || [])];
-    newFeatures[index] = { ...newFeatures[index], [field]: value };
-    setFormData({ ...formData, features: newFeatures });
+  const handleDetailChange = (index: number, field: keyof PlanDetailDTO, value: any) => {
+    let newDetails = [...(formData.details || [])];
+    newDetails[index] = { ...newDetails[index], [field]: value };
+
+    if (field === "isRecommended" && value === true) {
+      newDetails = newDetails.map((detail, idx) => ({
+        ...detail,
+        isRecommended: idx === index,
+      }));
+    }
+
+    setFormData({ ...formData, details: ensureMonthlyRecommended(newDetails) });
+  };
+
+  const handlePriceInputChange = (index: number, rawValue: string) => {
+    const numericValue = parseNumber(rawValue);
+    handleDetailChange(index, "price", numericValue);
   };
 
   const handleSave = async () => {
     try {
+      // Normalize features trước khi gửi - đảm bảo có đủ 5 tính năng
+      const normalizedFeatures = (formData.features || []).map(f => {
+        // Logic đơn giản:
+        // - limitValue = null → UNLIMITED
+        // - limitValue = 0 → LIMITED nhưng không cho dùng
+        // - limitValue > 0 → LIMITED với giới hạn
+        const finalLimitValue = f.limitValue;
+        
+        return {
+          featureName: f.featureName || FeatureName.PLAYLIST_CREATE,
+          limitValue: finalLimitValue,
+          isEnabled: finalLimitValue === null || (finalLimitValue !== null && finalLimitValue > 0),
+          // Giữ lại các field khác nếu có
+          ...(f.id && { id: f.id }),
+          ...(f.planId && { planId: f.planId }),
+          ...(f.featureDisplayName && { featureDisplayName: f.featureDisplayName }),
+        };
+      });
+
+      // Normalize details
+      const normalizedDetails = (formData.details || []).map(d => ({
+        detailName: d.detailName || "",
+        price: d.price || 0,
+        currency: d.currency || "VND",
+        durationDays: d.durationDays || 30,
+        isActive: d.isActive ?? true,
+        displayOrder: d.displayOrder || 0,
+        isRecommended: d.isRecommended ?? false,
+        ...(d.id && { id: d.id }),
+        ...(d.planId && { planId: d.planId }),
+      }));
+
       if (editingPlan?.id) {
         const payload: SubscriptionPlanDTO = {
           ...editingPlan,
           ...formData,
           id: editingPlan.id,
           planCode: formData.planCode || editingPlan.planCode || "",
-          currency: formData.currency || editingPlan.currency || "VND",
-          features: formData.features || [],
+          features: normalizedFeatures,
+          details: normalizedDetails,
         };
 
         await subscriptionPlanApi.updatePlan(editingPlan.id, payload);
@@ -220,8 +331,8 @@ const AdminSubscriptionPlans = () => {
       } else {
         const payload: SubscriptionPlanDTO = {
           ...formData,
-          currency: formData.currency || "VND",
-          features: formData.features || [],
+          features: normalizedFeatures,
+          details: normalizedDetails,
         } as SubscriptionPlanDTO;
 
         await subscriptionPlanApi.createPlan(payload);
@@ -271,25 +382,6 @@ const AdminSubscriptionPlans = () => {
     }
   };
 
-  const handleSeedDefaultPlans = async () => {
-    if (!confirm("Bạn có chắc chắn muốn tạo các gói mặc định (FREE, PREMIUM, PREMIUM_YEARLY)? Các gói đã tồn tại sẽ không bị ghi đè.")) return;
-
-    try {
-      await subscriptionPlanApi.seedDefaultPlans();
-      toast({
-        title: "Thành công",
-        description: "Đã tạo các gói mặc định thành công",
-      });
-      loadPlans();
-    } catch (error: any) {
-      toast({
-        title: "Lỗi",
-        description: error?.message || "Không thể tạo gói mặc định",
-        variant: "destructive",
-      });
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh] gap-3 text-muted-foreground">
@@ -330,14 +422,6 @@ const AdminSubscriptionPlans = () => {
               >
                 <RefreshCw className="h-4 w-4" />
                 Làm mới
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleSeedDefaultPlans}
-                className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]"
-              >
-                <Package className="h-4 w-4" />
-                Tạo gói mặc định
               </Button>
               <Button onClick={() => handleOpenDialog()} className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -405,18 +489,12 @@ const AdminSubscriptionPlans = () => {
                         </CardDescription>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-muted-foreground">Giá:</span>
-                            <span className="font-semibold">
-                              {plan.price?.toLocaleString("vi-VN")} {plan.currency}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Thời hạn:</span>
-                            <span>{plan.durationDays} ngày</span>
-                          </div>
-                          <div className="flex justify-between">
                             <span className="text-muted-foreground">Tính năng:</span>
                             <span>{plan.features?.length || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Options giá:</span>
+                            <span>{plan.details?.length || 0}</span>
                           </div>
                         </div>
                       </CardContent>
@@ -451,12 +529,11 @@ const AdminSubscriptionPlans = () => {
                   value={formData.planCode}
                   onChange={(e) => setFormData({ ...formData, planCode: e.target.value.toUpperCase() })}
                   placeholder="BASIC, PREMIUM, PRO"
-                  disabled={editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase())}
                   className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                 />
                 {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
                   <p className="text-xs text-muted-foreground">
-                    Mã gói mặc định không thể thay đổi
+                    Lưu ý: Thay đổi mã gói mặc định có thể ảnh hưởng đến logic hệ thống
                   </p>
                 )}
               </div>
@@ -473,50 +550,41 @@ const AdminSubscriptionPlans = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Mô tả</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="description">Mô tả</Label>
+                <span className={`text-xs ${
+                  (formData.description?.length || 0) > 270 
+                    ? "text-destructive" 
+                    : "text-muted-foreground"
+                }`}>
+                  {(formData.description?.length || 0)}/300
+                </span>
+              </div>
               <Textarea
                 id="description"
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 300) {
+                    setFormData({ ...formData, description: value });
+                  }
+                }}
                 placeholder="Mô tả về gói đăng ký..."
+                maxLength={300}
                 className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price">Giá (VND)</Label>
-                <Input
-                  id="price"
-                  inputMode="numeric"
-                  value={formatNumber(formData.price)}
-                  onChange={(e) => setFormData({ ...formData, price: parseNumber(e.target.value) })}
-                  placeholder="Ví dụ: 99.000"
-                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="durationDays">Thời hạn (ngày)</Label>
-                <Input
-                  id="durationDays"
-                  inputMode="numeric"
-                  value={formatNumber(formData.durationDays)}
-                  onChange={(e) => setFormData({ ...formData, durationDays: Math.max(parseNumber(e.target.value), 1) })}
-                  placeholder="Ví dụ: 30"
-                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="displayOrder">Thứ tự hiển thị</Label>
-                <Input
-                  id="displayOrder"
-                  inputMode="numeric"
-                  value={formatNumber(formData.displayOrder)}
-                  onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
-                  placeholder="Ví dụ: 1"
-                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="displayOrder">Thứ tự hiển thị</Label>
+              <Input
+                id="displayOrder"
+                inputMode="numeric"
+                value={formatNumber(formData.displayOrder)}
+                onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
+                placeholder="Ví dụ: 1"
+                className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+              />
             </div>
 
             <div className="flex items-center space-x-2">
@@ -530,75 +598,180 @@ const AdminSubscriptionPlans = () => {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Tính năng</Label>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddFeature}>
+                <Label>Tính năng (5 tính năng mặc định)</Label>
+                <Badge variant="secondary" className="text-xs">
+                  Tất cả gói đều có 5 tính năng này
+                </Badge>
+              </div>
+
+              {sortedFeatures.length > 0 && (
+                <div className="space-y-2">
+                  <Table className="border border-[hsl(var(--admin-border))] rounded-md table-fixed w-full">
+                    <TableHeader className="bg-[hsl(var(--admin-sidebar))]">
+                      <TableRow className="border-b border-[hsl(var(--admin-border))] hover:bg-transparent">
+                        <TableHead className="text-foreground font-semibold w-auto pr-1">Tính năng</TableHead>
+                        <TableHead className="text-foreground font-semibold w-[180px] pl-1 pr-2">Trạng thái</TableHead>
+                        <TableHead className="text-foreground font-semibold w-[220px]">Giới hạn</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody className="bg-[hsl(var(--admin-card))]">
+                      {sortedFeatures.map((feature, index) => {
+                        const isUnlimited = feature.limitValue === null;
+                        const isDisabled = feature.limitValue === 0;
+                        const isLimited = feature.limitValue !== null && feature.limitValue > 0;
+                        return (
+                        <TableRow 
+                          key={index} 
+                          className={`hover:bg-[hsl(var(--admin-hover))] ${
+                            isDisabled 
+                              ? "bg-[hsl(var(--admin-card))]/50 opacity-60" 
+                              : "bg-[hsl(var(--admin-card))]"
+                          }`}
+                        >
+                          <TableCell className="pr-1">
+                            <div className="font-medium h-[40px] flex items-center">
+                              {FEATURE_OPTIONS.find(opt => opt.value === feature.featureName)?.label || feature.featureName}
+                            </div>
+                          </TableCell>
+                          <TableCell className="w-[180px] pl-1 pr-2">
+                            <div className="h-[40px] flex items-center gap-2 w-[180px]">
+                              <Switch
+                                checked={isUnlimited}
+                                onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
+                              />
+                              <span className="text-sm whitespace-nowrap">
+                                {isUnlimited ? (
+                                  <Badge variant="default" className="bg-green-600">Không giới hạn</Badge>
+                                ) : (
+                                  <Badge variant="secondary">Có giới hạn</Badge>
+                                )}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="w-[220px]">
+                            <div className="h-[40px] flex items-center w-[220px]">
+                              {isUnlimited ? (
+                                <span className="text-sm text-muted-foreground">Không giới hạn</span>
+                              ) : (
+                                <div className="flex items-center gap-2 w-full">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Số lượt"
+                                    value={feature.limitValue || 0}
+                                    onChange={(e) => {
+                                      const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
+                                      if (numValue >= 0) {
+                                        handleLimitValueChange(index, numValue);
+                                      }
+                                    }}
+                                    className="w-32 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                                  />
+                                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                    {feature.limitValue === 0 ? "(Không cho dùng)" : "lượt"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            {/* Plan Details Section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Options Giá/Thời Gian</Label>
+                <Button type="button" variant="outline" size="sm" onClick={handleAddDetail}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Thêm tính năng
+                  Thêm Option
                 </Button>
               </div>
 
-              {formData.features && formData.features.length > 0 && (
+              {formData.details && formData.details.length > 0 && (
                 <div className="space-y-2">
                   <Table className="border border-[hsl(var(--admin-border))] rounded-md">
                     <TableHeader className="bg-[hsl(var(--admin-sidebar))]">
                       <TableRow className="border-b border-[hsl(var(--admin-border))] hover:bg-transparent">
-                        <TableHead className="text-foreground font-semibold">Tính năng</TableHead>
-                        <TableHead className="text-foreground font-semibold">Giới hạn</TableHead>
-                        <TableHead className="text-foreground font-semibold">Bật/Tắt</TableHead>
+                        <TableHead className="text-foreground font-semibold">Tên Option</TableHead>
+                        <TableHead className="text-foreground font-semibold">Giá</TableHead>
+                        <TableHead className="text-foreground font-semibold">Thời hạn</TableHead>
+                        <TableHead className="text-foreground font-semibold">Thứ tự</TableHead>
+                        <TableHead className="text-foreground font-semibold">Recommended</TableHead>
                         <TableHead className="text-foreground font-semibold">Thao tác</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="bg-[hsl(var(--admin-card))]">
-                      {formData.features.map((feature, index) => (
-                        <TableRow key={index} className="hover:bg-[hsl(var(--admin-hover))]">
-                          <TableCell>
-                            <select
-                              className="w-full p-2 border border-[hsl(var(--admin-border))] rounded-md bg-[hsl(var(--admin-card))] text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                              value={feature.featureName}
-                              onChange={(e) =>
-                                handleFeatureChange(index, "featureName", e.target.value as FeatureName)
-                              }
-                            >
-                              {FEATURE_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value} className="bg-[hsl(var(--admin-card))]">
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              min="0"
-                              placeholder="Unlimited"
-                              value={feature.limitValue === null ? "" : feature.limitValue}
-                              onChange={(e) => {
-                                const value = e.target.value === "" ? null : parseInt(e.target.value);
-                                handleFeatureChange(index, "limitValue", value);
-                              }}
-                              className="w-32 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Switch
-                              checked={feature.isEnabled ?? true}
-                              onCheckedChange={(checked) =>
-                                handleFeatureChange(index, "isEnabled", checked)
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveFeature(index)}
-                              className="hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {formData.details.map((detail, index) => {
+                        const isRecommended = detail.isRecommended ?? false;
+                        return (
+                          <TableRow
+                            key={index}
+                            className={`hover:bg-[hsl(var(--admin-hover))] transition-all ${
+                              isRecommended 
+                                ? "bg-primary/5 border-l-2 border-l-primary" 
+                                : "border-l-2 border-l-transparent"
+                            }`}
+                          >
+                            <TableCell className="w-[200px]">
+                              <Input
+                                value={detail.detailName || ""}
+                                onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
+                                placeholder="Ví dụ: 1 tháng"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[120px]">
+                              <Input
+                                inputMode="numeric"
+                                value={formatNumber(detail.price)}
+                                onChange={(e) => handlePriceInputChange(index, e.target.value)}
+                                placeholder="Giá"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[140px]">
+                              <Input
+                                type="number"
+                                value={detail.durationDays || 30}
+                                onChange={(e) => handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))}
+                                placeholder="Ngày"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[100px]">
+                              <Input
+                                type="number"
+                                value={detail.displayOrder || 0}
+                                onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
+                                placeholder="0"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[120px]">
+                              <Switch
+                                checked={isRecommended}
+                                onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
+                              />
+                            </TableCell>
+                            <TableCell className="w-[60px]">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveDetail(index)}
+                                className="hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
