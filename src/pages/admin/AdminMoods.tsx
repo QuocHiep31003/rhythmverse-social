@@ -356,6 +356,3 @@ const AdminMoods = () => {
 
 export default AdminMoods;
 
-
-export default AdminMoods;
-

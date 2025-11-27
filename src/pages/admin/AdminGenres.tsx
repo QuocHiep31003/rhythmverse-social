@@ -337,6 +337,3 @@ const AdminGenres = () => {
 };
 
 export default AdminGenres;
-
-
-export default AdminGenres;
