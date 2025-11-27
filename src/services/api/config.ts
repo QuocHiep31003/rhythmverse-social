@@ -35,10 +35,10 @@ export const decodeToken = (token: string | null): DecodedToken | null => {
 /**
  * Check if token is expired or will expire soon
  * @param token JWT token string
- * @param bufferMinutes Minutes before expiration to consider as "expiring soon" (default: 5 minutes)
+ * @param bufferMinutes Minutes before expiration to consider as "expiring soon" (default: 15 minutes)
  * @returns true if token is expired or expiring soon
  */
-export const isTokenExpiringSoon = (token: string | null, bufferMinutes: number = 5): boolean => {
+export const isTokenExpiringSoon = (token: string | null, bufferMinutes: number = 15): boolean => {
   if (!token) return true;
 
   const decoded = decodeToken(token);
@@ -181,13 +181,34 @@ export const apiClient = axios.create({
 });
 
 
-// Request interceptor để thêm token vào headers
+// Request interceptor để thêm token vào headers và check expiration trước khi gửi
 apiClient.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const token = getAuthToken();
-    if (token) {
+    
+    // Check if token is expiring soon before sending request
+    if (token && isTokenExpiringSoon(token, 15)) {
+      console.log('[apiClient] Token expiring soon, refreshing before request...');
+      try {
+        await refreshTokenIfNeeded();
+        // Get fresh token after refresh
+        const newToken = getAuthToken();
+        if (newToken) {
+          config.headers.Authorization = `Bearer ${newToken}`;
+        } else if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      } catch (error) {
+        console.error('[apiClient] Failed to refresh token before request:', error);
+        // Continue with existing token, let response interceptor handle 401
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } else if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
     return config;
   },
   (error) => {
@@ -536,8 +557,8 @@ export const refreshTokenIfNeeded = async (): Promise<boolean> => {
     return false;
   }
 
-  // Check if token is expiring soon (within 5 minutes)
-  if (!isTokenExpiringSoon(token, 5)) {
+  // Check if token is expiring soon (within 15 minutes)
+  if (!isTokenExpiringSoon(token, 15)) {
     return false; // Token is still valid, no need to refresh
   }
 
@@ -572,9 +593,48 @@ export const refreshTokenIfNeeded = async (): Promise<boolean> => {
   }
 };
 
+let manualRefreshPromise: Promise<string | null> | null = null;
+
+/**
+ * Force refresh access token immediately (used for streaming retries)
+ * @returns Fresh access token string or null if refresh failed
+ */
+export const forceRefreshAccessToken = async (): Promise<string | null> => {
+  if (manualRefreshPromise) {
+    return manualRefreshPromise;
+  }
+
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    clearTokens();
+    return null;
+  }
+
+  manualRefreshPromise = (async () => {
+    try {
+      const { authApi } = await import('./authApi');
+      const response = await authApi.refreshToken(refreshToken);
+
+      if (response.token) {
+        setTokens(response.token, response.refreshToken || refreshToken);
+        return response.token;
+      }
+
+      throw new Error('Invalid response from refresh token endpoint');
+    } catch (error) {
+      clearTokens();
+      throw error;
+    } finally {
+      manualRefreshPromise = null;
+    }
+  })();
+
+  return manualRefreshPromise;
+};
+
 /**
  * Start automatic token refresh interval
- * Checks token expiration every 2 minutes and refreshes if needed
+ * Checks token expiration every 1 minute and refreshes if needed
  */
 export const startTokenRefreshInterval = (): void => {
   // Clear existing interval if any
@@ -583,12 +643,12 @@ export const startTokenRefreshInterval = (): void => {
   // Check immediately
   refreshTokenIfNeeded();
 
-  // Then check every 2 minutes (120000ms)
+  // Then check every 1 minute (60000ms) - more frequent to catch expiration sooner
   tokenRefreshInterval = setInterval(() => {
     refreshTokenIfNeeded();
-  }, 2 * 60 * 1000); // 2 minutes
+  }, 60 * 1000); // 1 minute
 
-  console.log('[startTokenRefreshInterval] Token refresh interval started (checks every 2 minutes)');
+  console.log('[startTokenRefreshInterval] Token refresh interval started (checks every 1 minute)');
 };
 
 /**

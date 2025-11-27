@@ -42,7 +42,7 @@ const albumSchema = z.object({
   name: z.string().min(1, "Album name is required"),
   artistId: z.number().min(1, "Artist is required"),
   songIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 bài hát"),
-  releaseDate: z.string().min(1, "Release date is required"),
+  releaseDate: z.string().min(1, "Năm phát hành không được để trống"),
   coverUrl: z.string().optional().or(z.literal("")),
 });
 
@@ -402,7 +402,7 @@ export const AlbumFormDialog = ({
                 name="releaseDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-sm">Release Date *</FormLabel>
+                    <FormLabel className="text-sm">Năm phát hành *</FormLabel>
                     <FormControl>
                       <Input
                         type="date"

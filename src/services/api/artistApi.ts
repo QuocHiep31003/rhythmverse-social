@@ -23,6 +23,7 @@ export interface ArtistCreateUpdateData {
     debutYear: number;
     bio?: string;
     avatar?: string;
+    status?: string;
 }
 
 // Interface cho Song
@@ -138,6 +139,7 @@ export const artistsApi = {
                 debutYear: data.debutYear,
                 bio: data.bio,
                 avatar: data.avatar,
+                status: data.status,
             };
 
             const response = await apiClient.post('/artists', payload);
@@ -149,7 +151,7 @@ export const artistsApi = {
     },
 
     // Cập nhật artist
-    update: async (id: number, data: ArtistCreateUpdateData): Promise<Artist> => {
+    update: async (id: number, data: ArtistCreateUpdateData & { status?: string }): Promise<Artist> => {
         try {
             const payload = {
                 name: data.name,
@@ -157,12 +159,24 @@ export const artistsApi = {
                 debutYear: data.debutYear,
                 bio: data.bio,
                 avatar: data.avatar,
+                status: data.status,
             };
 
             const response = await apiClient.put(`/artists/${id}`, payload);
             return response.data;
         } catch (error) {
             console.error("Error updating artist:", error);
+            throw error;
+        }
+    },
+
+    // Lấy cảnh báo khi tắt artist
+    getDeactivationWarning: async (id: number) => {
+        try {
+            const response = await apiClient.get(`/artists/${id}/deactivation-warning`);
+            return response.data;
+        } catch (error) {
+            console.error("Error fetching deactivation warning:", error);
             throw error;
         }
     },
@@ -344,6 +358,19 @@ export const artistsApi = {
                 numberOfElements: 0
             } as PaginatedResponse<Artist>;
         }
+    },
+
+    searchPublicActive: async (query?: string, params?: PaginationParams): Promise<PaginatedResponse<Artist>> => {
+        const searchParams = new URLSearchParams();
+        if (query && query.trim().length > 0) {
+            searchParams.append("query", query.trim());
+        }
+        if (params?.page !== undefined) searchParams.append("page", params.page.toString());
+        if (params?.size !== undefined) searchParams.append("size", params.size.toString());
+        if (params?.sort) searchParams.append("sort", params.sort);
+
+        const response = await apiClient.get(`/artists/public/search?${searchParams.toString()}`);
+        return response.data;
     },
 };
 

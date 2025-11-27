@@ -1,12 +1,49 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { promotionsApi, type Promotion } from "@/services/api/promotionApi";
+import { mockPromotions } from "@/data/mockPromotions";
 
 const PromotionCarousel = () => {
+  const navigate = useNavigate();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
+
+  const handleCTAClick = (promo: Promotion) => {
+    // Sử dụng ctaUrl từ promotion nếu có
+    const ctaUrl = (promo as any).ctaUrl;
+    if (ctaUrl) {
+      navigate(ctaUrl);
+      return;
+    }
+    
+    // Fallback: logic cũ nếu không có ctaUrl
+    const title = promo.title?.toLowerCase() || "";
+    const ctaText = promo.ctaText?.toLowerCase() || "";
+    
+    // Premium banner → navigate to premium page
+    if (title.includes("premium") || title.includes("nâng cấp") || ctaText.includes("nâng cấp")) {
+      navigate("/premium");
+      return;
+    }
+    
+    // "Tìm bài hát" / "Thử ngay" → navigate to music recognition
+    if (title.includes("tìm bài hát") || title.includes("giai điệu") || ctaText.includes("thử ngay")) {
+      navigate("/music-recognition");
+      return;
+    }
+    
+    // "Khám phá" / "Trending" → navigate to discover
+    if (title.includes("khám phá") || title.includes("xu hướng") || title.includes("trending") || ctaText.includes("khám phá")) {
+      navigate("/discover");
+      return;
+    }
+    
+    // Default: navigate to discover
+    navigate("/discover");
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -14,11 +51,18 @@ const PromotionCarousel = () => {
       .getActive()
       .then((data) => {
         if (!mounted) return;
-        setPromotions(data || []);
+        // Nếu không có data từ API, dùng mock data để xem trước
+        if (data && data.length > 0) {
+          setPromotions(data);
+        } else {
+          // Fallback to mock data for preview
+          setPromotions(mockPromotions as Promotion[]);
+        }
       })
       .catch(() => {
         if (!mounted) return;
-        setPromotions([]);
+        // Fallback to mock data on error
+        setPromotions(mockPromotions as Promotion[]);
       });
     return () => {
       mounted = false;
@@ -125,6 +169,10 @@ const PromotionCarousel = () => {
                   variant="secondary" 
                   size="lg"
                   className="relative bg-white hover:bg-white text-gray-900 font-semibold px-6 md:px-8 rounded-full shadow-2xl hover:shadow-white/50 transition-all duration-300 hover:scale-105 border-2 border-white/50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCTAClick(promo);
+                  }}
                 >
                   <span className="relative z-10">{promo.ctaText || 'Listen Now'}</span>
                   <div className="absolute inset-0 bg-white/20 rounded-full blur-xl" />

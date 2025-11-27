@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Music2, Waves, Zap, Coffee, Sun, Moon, Heart, Flame, LucideIcon } from "lucide-react";
-import { genresApi, moodsApi } from "@/services/api";
+import { Music2, Waves, Zap, Coffee, Sun, Moon, Heart, Flame, LucideIcon, Play } from "lucide-react";
+import { genresApi, moodsApi, songsApi } from "@/services/api";
 import { GENRE_ICON_OPTIONS, MOOD_ICON_OPTIONS } from "@/data/iconOptions";
+import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
 
 interface GenreItem {
   name: string;
@@ -41,18 +43,25 @@ const defaultMoods: MoodItem[] = [
 ];
 
 const GenreExplorer = () => {
-  const [genres, setGenres] = useState(defaultGenres);
-  const [moods, setMoods] = useState(defaultMoods);
+  const [genres, setGenres] = useState<(GenreItem & { id?: number })[]>(defaultGenres);
+  const [moods, setMoods] = useState<(MoodItem & { id?: number })[]>(defaultMoods);
+  const { setQueue, playSong } = useMusic();
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [hoveredGenreId, setHoveredGenreId] = useState<number | null>(null);
+  const [hoveredMoodId, setHoveredMoodId] = useState<number | null>(null);
+  const [loadingGenreId, setLoadingGenreId] = useState<number | null>(null);
+  const [loadingMoodId, setLoadingMoodId] = useState<number | null>(null);
 
   useEffect(() => {
     // Fetch genres from backend
     genresApi.getAll({ page: 0, size: 6, sort: "name,asc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
-          setGenres(data.content.map((genre: { name: string; iconUrl?: string }, index: number) => {
+          setGenres(data.content.map((genre: { id: number; name: string; iconUrl?: string }, index: number) => {
             const preset = GENRE_ICON_OPTIONS.find((option) => option.value === genre.iconUrl);
             const fallback = defaultGenres[index % defaultGenres.length] || defaultGenres[0];
             return {
+              id: genre.id,
               name: genre.name,
               icon: preset?.icon || fallback.icon,
               color: preset?.badgeClass || fallback.color,
@@ -68,10 +77,11 @@ const GenreExplorer = () => {
     moodsApi.getAll({ page: 0, size: 4, sort: "name,asc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
-          setMoods(data.content.map((mood: { name: string; iconUrl?: string; gradient?: string }, index: number) => {
+          setMoods(data.content.map((mood: { id: number; name: string; iconUrl?: string; gradient?: string }, index: number) => {
             const preset = MOOD_ICON_OPTIONS.find((option) => option.value === mood.iconUrl);
             const fallback = defaultMoods[index % defaultMoods.length] || defaultMoods[0];
             return {
+              id: mood.id,
               name: mood.name,
               icon: preset?.icon || fallback.icon,
               gradient: preset?.gradientClass || mood.gradient || fallback.gradient || "from-neon-pink to-primary",
@@ -84,6 +94,90 @@ const GenreExplorer = () => {
       })
       .catch(err => console.log("Error fetching moods:", err));
   }, []);
+
+  const handleGenreHover = (genreId: number | undefined) => {
+    if (!genreId) return;
+    
+    // Clear previous timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+
+    setHoveredGenreId(genreId);
+    
+    // Delay để tránh gọi API quá nhiều khi hover nhanh
+    hoverTimeoutRef.current = setTimeout(async () => {
+      try {
+        setLoadingGenreId(genreId);
+        const songs = await songsApi.recommendByGenre(genreId, 50);
+        if (songs && songs.length > 0) {
+          // Shuffle và lấy random 1 bài để phát
+          const shuffled = [...songs].sort(() => Math.random() - 0.5);
+          const randomSong = shuffled[0];
+          const playerSong = mapToPlayerSong(randomSong);
+          
+          // Set queue với 50 bài và phát ngẫu nhiên
+          const playerSongs = shuffled.map(mapToPlayerSong);
+          setQueue(playerSongs);
+          playSong(playerSong);
+        }
+      } catch (error) {
+        console.error("Error loading genre preview:", error);
+      } finally {
+        setLoadingGenreId(null);
+      }
+    }, 500); // Delay 500ms
+  };
+
+  const handleGenreLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    setHoveredGenreId(null);
+    setLoadingGenreId(null);
+  };
+
+  const handleMoodHover = (moodId: number | undefined) => {
+    if (!moodId) return;
+    
+    // Clear previous timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+
+    setHoveredMoodId(moodId);
+    
+    // Delay để tránh gọi API quá nhiều khi hover nhanh
+    hoverTimeoutRef.current = setTimeout(async () => {
+      try {
+        setLoadingMoodId(moodId);
+        const songs = await songsApi.recommendByMood(moodId, 50);
+        if (songs && songs.length > 0) {
+          // Shuffle và lấy random 1 bài để phát
+          const shuffled = [...songs].sort(() => Math.random() - 0.5);
+          const randomSong = shuffled[0];
+          const playerSong = mapToPlayerSong(randomSong);
+          
+          // Set queue với 50 bài và phát ngẫu nhiên
+          const playerSongs = shuffled.map(mapToPlayerSong);
+          setQueue(playerSongs);
+          playSong(playerSong);
+        }
+      } catch (error) {
+        console.error("Error loading mood preview:", error);
+      } finally {
+        setLoadingMoodId(null);
+      }
+    }, 500); // Delay 500ms
+  };
+
+  const handleMoodLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    setHoveredMoodId(null);
+    setLoadingMoodId(null);
+  };
 
   return (
     <section id="genres-section" className=" bg-gradient-to-br from-background to-music-dark">
@@ -106,17 +200,31 @@ const GenreExplorer = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {genres.map((genre) => {
               const Icon = genre.icon;
+              const isHovered = hoveredGenreId === genre.id;
+              const isLoading = loadingGenreId === genre.id;
               return (
                 <Card 
                   key={genre.name}
-                  className="bg-card/50 border-border/40 hover:bg-card/80 transition-all duration-300 group cursor-pointer hover:scale-105 hover:shadow-neon"
+                  className="bg-card/50 border-border/40 hover:bg-card/80 transition-all duration-300 group cursor-pointer hover:scale-105 hover:shadow-neon relative"
+                  onMouseEnter={() => handleGenreHover(genre.id)}
+                  onMouseLeave={handleGenreLeave}
                 >
                   <CardContent className="p-6 text-center">
-                    <div className={`w-12 h-12 ${genre.color} rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform overflow-hidden`}>
+                    <div className={`w-12 h-12 ${genre.color} rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform overflow-hidden relative`}>
                       {genre.iconUrl ? (
                         <img src={genre.iconUrl} alt={genre.name} className="w-full h-full object-cover" />
                       ) : (
                         <Icon className="h-6 w-6 text-white" />
+                      )}
+                      {/* Icon play ngẫu nhiên khi hover */}
+                      {isHovered && (
+                        <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                          {isLoading ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Play className="h-5 w-5 text-white fill-white" />
+                          )}
+                        </div>
                       )}
                     </div>
                     <h4 className="font-semibold text-foreground mb-1">{genre.name}</h4>
@@ -133,20 +241,48 @@ const GenreExplorer = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {moods.map((mood) => {
               const Icon = mood.icon;
+              const isHovered = hoveredMoodId === mood.id;
+              const isLoading = loadingMoodId === mood.id;
               return (
                 <Card 
                   key={mood.name}
                   className="relative overflow-hidden group cursor-pointer hover:scale-105 transition-all duration-300 hover:shadow-glow"
+                  onMouseEnter={() => handleMoodHover(mood.id)}
+                  onMouseLeave={handleMoodLeave}
                 >
                   <div className={`absolute inset-0 bg-gradient-to-br ${mood.gradient} opacity-20 group-hover:opacity-30 transition-opacity`} />
                   <CardContent className="relative p-8 text-center">
-                    {mood.iconUrl ? (
-                      <div className="w-12 h-12 mx-auto mb-4 group-hover:scale-110 transition-transform rounded-full overflow-hidden ring-2 ring-white/10">
-                        <img src={mood.iconUrl} alt={mood.name} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <Icon className="h-12 w-12 text-primary mx-auto mb-4 group-hover:scale-110 transition-transform" />
-                    )}
+                    <div className="relative">
+                      {mood.iconUrl ? (
+                        <div className="w-12 h-12 mx-auto mb-4 group-hover:scale-110 transition-transform rounded-full overflow-hidden ring-2 ring-white/10 relative">
+                          <img src={mood.iconUrl} alt={mood.name} className="w-full h-full object-cover" />
+                          {/* Icon play ngẫu nhiên khi hover */}
+                          {isHovered && (
+                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                              {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Play className="h-5 w-5 text-white fill-white" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 mx-auto mb-4 group-hover:scale-110 transition-transform relative">
+                          <Icon className="h-12 w-12 text-primary" />
+                          {/* Icon play ngẫu nhiên khi hover */}
+                          {isHovered && (
+                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                              {isLoading ? (
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Play className="h-5 w-5 text-white fill-white" />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <h4 className="text-xl font-semibold text-foreground mb-2">{mood.name}</h4>
                     <Button variant="glass" size="sm" className="mt-4">
                       Explore
@@ -158,34 +294,6 @@ const GenreExplorer = () => {
           </div>
         </div>
 
-        {/* Trending Section */}
-        <div className="text-center">
-          <Card className="bg-gradient-glass border-border/40 max-w-4xl mx-auto">
-            <CardContent className="p-8">
-              <h3 className="text-2xl font-semibold mb-4 text-foreground">What's Trending Now</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-neon-pink mb-2">#1</div>
-                  <div className="text-foreground font-medium">Midnight Synthwave</div>
-                  <div className="text-sm text-muted-foreground">Electronic • Trending</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-neon-blue mb-2">#2</div>
-                  <div className="text-foreground font-medium">Chill Hop Beats</div>
-                  <div className="text-sm text-muted-foreground">Lo-Fi • Rising</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-neon-green mb-2">#3</div>
-                  <div className="text-foreground font-medium">Indie Rock Revival</div>
-                  <div className="text-sm text-muted-foreground">Rock • Hot</div>
-                </div>
-              </div>
-              <Button variant="hero" className="mt-6">
-                View All Trending
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </section>
   );

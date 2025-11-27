@@ -81,6 +81,58 @@ export const songsApi = {
     }
   },
 
+  searchPublic: async ({
+    query,
+    page = 0,
+    size = 10,
+    sort = "name,asc",
+  }: {
+    query: string;
+    page?: number;
+    size?: number;
+    sort?: string;
+  }): Promise<PaginatedResponse<Song>> => {
+    const trimmed = query?.trim();
+    if (!trimmed) {
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size,
+        number: page,
+        first: true,
+        last: true,
+        empty: true,
+        pageable: {
+          pageNumber: page,
+          pageSize: size,
+          sort: { empty: true, sorted: false, unsorted: true },
+          offset: page * size,
+          paged: true,
+          unpaged: false,
+        },
+        sort: { empty: true, sorted: false, unsorted: true },
+        numberOfElements: 0,
+      };
+    }
+
+    const params = new URLSearchParams();
+    params.set("query", trimmed);
+    params.set("page", page.toString());
+    params.set("size", size.toString());
+    if (sort) {
+      params.set("sort", sort);
+    }
+
+    try {
+      const response = await apiClient.get(`/songs/public/search?${params.toString()}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error searching public songs:", error);
+      throw error;
+    }
+  },
+
   // Lấy songs theo artist
   getByArtist: async (artistId: number): Promise<Song[]> => {
     try {
@@ -717,6 +769,28 @@ export const songsApi = {
       moodIds.forEach((id) => params.append("moodIds", String(id)));
       params.append("limit", String(limit));
       const response = await apiClient.get(`/songs/recommendations/by-mood?${params.toString()}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching mood recommendations:", error);
+      return [];
+    }
+  },
+
+  // Recommend songs by genre with user vector (for hover preview)
+  recommendByGenre: async (genreId: number, limit: number = 50): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/recommend/by-genre/${genreId}?limit=${limit}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching genre recommendations:", error);
+      return [];
+    }
+  },
+
+  // Recommend songs by mood with user vector (for hover preview)
+  recommendByMood: async (moodId: number, limit: number = 50): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/recommend/by-mood/${moodId}?limit=${limit}`);
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error("Error fetching mood recommendations:", error);

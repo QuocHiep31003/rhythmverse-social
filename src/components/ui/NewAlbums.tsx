@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Music, Play } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
@@ -16,6 +15,7 @@ interface Album {
   releaseDate?: string;
   songs?: any[];
   tracks?: number;
+  releaseYear?: number;
 }
 
 const NewAlbums = () => {
@@ -26,7 +26,7 @@ const NewAlbums = () => {
   useEffect(() => {
     const fetchAlbums = async () => {
       try {
-        const res = await albumsApi.getAll({ page: 0, size: 3, sort: "id,desc" }); // ✅ lấy album mới nhất
+        const res = await albumsApi.getAll({ page: 0, size: 10, sort: "id,desc" }); // Lấy nhiều hơn để scroll
         setAlbums(res?.content || []);
       } catch (error) {
         console.error("Error fetching albums:", error);
@@ -37,77 +37,95 @@ const NewAlbums = () => {
     fetchAlbums();
   }, []);
 
+  const getArtistName = (artist: any): string => {
+    if (typeof artist === 'string') return artist;
+    if (artist?.name) return artist.name;
+    return "Unknown Artist";
+  };
+
   return (
-    <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-      <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2">
-          <Music className="w-5 h-5 text-neon-blue" />
-          New Albums
-        </CardTitle>
-      </CardHeader>
+    <section className="mb-12">
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-foreground">Album mới phát hành</h2>
+      </div>
 
-      <CardContent className="space-y-3">
-        {loading && (
-          <p className="text-muted-foreground text-sm">Loading albums...</p>
-        )}
-
-        {!loading && albums.length === 0 && (
-          <p className="text-muted-foreground text-sm">No albums found.</p>
-        )}
-
-        {!loading &&
-          albums.map((album) => (
-            <div
-              key={album.id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer"
-              onClick={() => navigate(`/album/${createSlug(album.name, album.id)}`)} // ✅ nhấn để chuyển sang chi tiết album
-            >
-              <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-subtle">
-                {album.coverUrl || album.cover ? (
-                  <img
-                    src={album.coverUrl || album.cover || ""}
-                    alt={album.name || album.title || "Album cover"}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <Music className="w-6 h-6 text-white" />
-                )}
+      {/* Horizontal scrolling container */}
+      <div className="relative">
+        <div className="overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4">
+          <div className="flex gap-4 min-w-max">
+            {loading ? (
+              <div className="flex gap-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="w-[180px] flex-shrink-0">
+                    <div className="aspect-square bg-muted/20 rounded-lg animate-pulse mb-3" />
+                    <div className="h-4 bg-muted/20 rounded animate-pulse mb-2" />
+                    <div className="h-3 bg-muted/20 rounded w-3/4 animate-pulse" />
+                  </div>
+                ))}
               </div>
+            ) : albums.length === 0 ? (
+              <p className="text-muted-foreground text-sm py-8">Không có album nào.</p>
+            ) : (
+              albums.map((album) => {
+                const artistName = getArtistName(album.artist);
+                const albumName = album.name || album.title || "Unknown Album";
+                const coverImage = album.coverUrl || album.cover;
+                const releaseYear = album.releaseYear || (album.releaseDate ? new Date(album.releaseDate).getFullYear() : null);
 
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate text-sm">{album.name || album.title}</p>
-                <p className="text-xs text-muted-foreground">
-                  by {typeof album.artist === 'string' ? album.artist : album.artist?.name || "Unknown Artist"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {(album.songs?.length ?? album.tracks ?? 0)} tracks
-                </p>
-              </div>
+                return (
+                  <div
+                    key={album.id}
+                    className="w-[180px] flex-shrink-0 group cursor-pointer"
+                    onClick={() => navigate(`/album/${createSlug(albumName, album.id)}`)}
+                  >
+                    {/* Cover Art */}
+                    <div className="relative aspect-square rounded-lg overflow-hidden bg-gradient-subtle mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                      {coverImage ? (
+                        <img
+                          src={coverImage}
+                          alt={albumName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Music className="w-12 h-12 text-muted-foreground" />
+                        </div>
+                      )}
+                      
+                      {/* Play button overlay on hover */}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                        <Button
+                          size="icon"
+                          className="rounded-full w-14 h-14 bg-primary hover:bg-primary/90 shadow-lg scale-90 group-hover:scale-100 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/album/${createSlug(albumName, album.id)}`);
+                          }}
+                        >
+                          <Play className="w-6 h-6 ml-1 text-white" fill="white" />
+                        </Button>
+                      </div>
+                    </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/album/${createSlug(album.name, album.id)}`);
-                }}
-              >
-                <Play className="w-3 h-3" />
-              </Button>
-            </div>
-          ))}
-
-        <Button
-          variant="outline"
-          className="w-full mt-4"
-          size="sm"
-          onClick={() => navigate("/discover")}
-        >
-          Browse All Albums
-        </Button>
-      </CardContent>
-    </Card>
+                    {/* Album Info */}
+                    <div className="min-h-[60px]">
+                      <h3 className="font-semibold text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                        {albumName}
+                      </h3>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        {artistName}
+                        {releaseYear && ` • ${releaseYear}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 };
 

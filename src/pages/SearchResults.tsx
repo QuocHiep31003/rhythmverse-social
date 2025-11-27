@@ -23,6 +23,7 @@ import {
   Copy,
 } from "lucide-react";
 import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
+import type { Song } from "@/services/api/songApi";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
@@ -42,13 +43,24 @@ const SearchResults = () => {
   const navigate = useNavigate();
   const queryParam = searchParams.get("query") || "";
 
-  const [searchResults, setSearchResults] = useState({
+  const [searchResults, setSearchResults] = useState<{
+    songs: Song[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    artists: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    albums: any[];
+  }>({
     songs: [],
     artists: [],
     albums: [],
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [detailedResults, setDetailedResults] = useState<any>({
+  const [detailedResults, setDetailedResults] = useState<{
+    songs: Song[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    artists: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    albums: any[];
+  }>({
     songs: [],
     artists: [],
     albums: [],
@@ -57,7 +69,7 @@ const SearchResults = () => {
   const [activeFilter, setActiveFilter] = useState("all");
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [selectedSong, setSelectedSong] = useState<{ id: number; name: string; urlImageAlbum?: string } | null>(null);
-  const { playSong, addToQueue } = useMusic();
+  const { playSong, addToQueue, setQueue } = useMusic();
   
   // Debounce search - dùng useRef để tránh re-render
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -68,13 +80,15 @@ const SearchResults = () => {
     try {
       // Gọi API riêng biệt cho từng loại kết quả
       const [songsResponse, artistsResponse, albumsResponse] = await Promise.all([
-        songsApi.getAll({ search: queryParam, size: 5, page: 0 }),
+        songsApi.searchPublic({ query: queryParam, size: 5, page: 0 }),
         artistsApi.getAll({ search: queryParam, size: 4, page: 0 }),
         albumsApi.getAll({ search: queryParam, size: 4, page: 0 }),
       ]);
 
+      const publicSongs = songsResponse.content || [];
+
       setSearchResults({
-        songs: songsResponse.content || [],
+        songs: publicSongs,
         artists: artistsResponse.content || [],
         albums: albumsResponse.content || [],
       });
@@ -124,7 +138,7 @@ const SearchResults = () => {
     setLoading(true);
     try {
       if (filterId === 'songs') {
-        const data = await songsApi.getAll({ search: queryParam, size: 20, page: 0 });
+        const data = await songsApi.searchPublic({ query: queryParam, size: 20, page: 0 });
         setDetailedResults((prev) => ({ ...prev, songs: data.content || [] }));
       } else if (filterId === 'artists') {
         const data = await artistsApi.getAll({ search: queryParam, size: 20, page: 0 });
@@ -210,11 +224,10 @@ const SearchResults = () => {
   };
 
   const handlePlaySong = (song) => {
-    const formattedSongs = searchResults.songs.map(s => mapToPlayerSong(s));
-
-    setQueue(formattedSongs);
-    const currentFormatted = formattedSongs.find(s => s.id === String(song.id));
-    playSong(currentFormatted);
+    // Khi play: chỉ set queue với 1 bài hát đó thôi
+    const formattedSong = mapToPlayerSong(song);
+    setQueue([formattedSong]);
+    playSong(formattedSong);
   };
 
 

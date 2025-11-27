@@ -1,302 +1,145 @@
-import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Play,
-  Heart,
-  Share2,
-  Plus,
-  Headphones,
-  Clock,
-  TrendingUp,
+  Mic,
   Music,
-  Sparkles,
-  Zap,
-  MoreHorizontal,
-  ListPlus,
-  Users,
+  Fingerprint,
+  Search,
+  ArrowRight,
 } from "lucide-react";
-import { useMusic } from "@/contexts/MusicContext";
-import { mockSongs } from "@/data/mockData";
-import { Song } from "@/contexts/MusicContext";
-import { handleImageError, DEFAULT_AVATAR_URL } from "@/lib/utils";
-import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 
 const FeaturedMusic = () => {
-  const { playSong, setQueue } = useMusic();
-  const [activeCategory, setActiveCategory] = useState("trending");
-  const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
-  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
-  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
-  const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
-    id: string | number;
-    name: string;
-    cover?: string;
-  } | null>(null);
-  const [shareSong, setShareSong] = useState<{
-    id: string | number;
-    title: string;
-    url: string;
-  } | null>(null);
+  const navigate = useNavigate();
 
-  // toggle helper
-  const toggleSelection = (
-    current: string[],
-    item: string,
-    setter: (val: string[]) => void
-  ) => {
-    if (current.includes(item)) {
-      setter(current.filter((i) => i !== item));
-    } else {
-      setter([...current, item]);
-    }
-  };
-
-  const moods = ["Happy", "Chill", "Focus", "Party"];
-  const genres = ["Electronic", "Synthpop", "Ambient", "Pop", "Indie Pop"];
-
-  // Data
-  const featuredSongs: Record<string, Song[]> = {
-    trending: mockSongs.slice(0, 4),
-    newReleases: mockSongs.slice(4, 8),
-    aiRecommended: mockSongs.slice(6, 10),
-  };
-
-  const categories = [
-    { key: "trending", label: "Trending Now", icon: TrendingUp },
-    { key: "newReleases", label: "New Releases", icon: Sparkles },
-    { key: "aiRecommended", label: "AI Pick for You", icon: Zap },
+  const features = [
+    {
+      icon: Mic,
+      title: "Tìm kiếm bằng giai điệu",
+      description: "Hum, hát hoặc ngân nga giai điệu bạn nhớ, chúng tôi sẽ tìm bài hát cho bạn",
+      color: "from-neon-pink to-primary",
+      badge: "Humming",
+    },
+    {
+      icon: Fingerprint,
+      title: "Audio Fingerprint",
+      description: "Tải lên file audio hoặc link YouTube, hệ thống sẽ nhận diện bài hát chính xác",
+      color: "from-neon-blue to-accent",
+      badge: "Fingerprint",
+    },
+    {
+      icon: Search,
+      title: "Tìm kiếm thông minh",
+      description: "Không cần biết tên bài hát, chỉ cần nhớ giai điệu là đủ",
+      color: "from-neon-green to-primary",
+      badge: "AI Powered",
+    },
   ];
 
-  // filter logic
-  const songsInCategory = featuredSongs[activeCategory] ?? [];
-  const filteredSongs =
-    activeCategory === "aiRecommended"
-      ? songsInCategory.filter((song) => {
-          if (
-            selectedGenres.length > 0 &&
-            song.genre &&
-            !selectedGenres.includes(song.genre)
-          )
-            return false;
-          return true;
-        })
-      : songsInCategory;
-
   return (
-    <section className="py-12">
-      <div className="container px-6">
+    <section className="py-16 relative overflow-hidden">
+      {/* Background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
+      
+      <div className="container px-6 relative z-10">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-          <div>
-            <h2 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
-              Featured Music
-            </h2>
-            <p className="text-muted-foreground">
-              Discover trending tracks, new releases, and AI-curated recommendations
-            </p>
-          </div>
-          <Button variant="outline" className="mt-4 md:mt-0">
-            <Music className="w-4 h-4 mr-2" />
-            View All
-          </Button>
+        <div className="text-center mb-12">
+          <h2 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">
+            Tìm bài hát chỉ bằng giai điệu
+          </h2>
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            Bạn nhớ giai điệu nhưng quên tên bài hát? Chỉ cần hum, hát hoặc tải file audio lên, 
+            chúng tôi sẽ tìm ra bài hát bạn đang tìm kiếm!
+          </p>
         </div>
 
-        {/* Category Tabs */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          {categories.map((category) => (
-            <Button
-              key={category.key}
-              variant={activeCategory === category.key ? "default" : "outline"}
-              onClick={() => {
-                setActiveCategory(category.key);
-                setSelectedMoods([]);
-                setSelectedGenres([]);
-              }}
-              className="gap-2"
-            >
-              <category.icon className="w-4 h-4" />
-              {category.label}
-            </Button>
-          ))}
-        </div>
-
-        {/* Mood + Genre filters only for AI Pick */}
-        {activeCategory === "aiRecommended" && (
-          <>
-            <div className="mb-4">
-              <h3 className="text-sm font-medium mb-2">Select Mood</h3>
-              <div className="flex gap-2 flex-wrap">
-                {moods.map((m) => (
-                  <Button
-                    key={m}
-                    variant={
-                      selectedMoods.includes(m) ? "default" : "outline"
-                    }
-                    onClick={() =>
-                      toggleSelection(selectedMoods, m, setSelectedMoods)
-                    }
-                  >
-                    {m}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h3 className="text-sm font-medium mb-2">Select Genre</h3>
-              <div className="flex gap-2 flex-wrap">
-                {genres.map((g) => (
-                  <Button
-                    key={g}
-                    variant={
-                      selectedGenres.includes(g) ? "default" : "outline"
-                    }
-                    onClick={() =>
-                      toggleSelection(selectedGenres, g, setSelectedGenres)
-                    }
-                  >
-                    {g}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Music Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {filteredSongs.map((song) => (
-            <Card
-              key={song.id}
-              className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300 group cursor-pointer"
-              onClick={() => {
-                setQueue(filteredSongs);
-                playSong(song);
-              }}
-            >
-              <CardContent className="p-4">
-                <div className="relative mb-4">
-                  <div className="w-full aspect-square bg-gradient-primary rounded-lg flex items-center justify-center relative overflow-hidden">
-                    {song.cover ? (
-                      <img src={song.cover} alt={song.name || song.songName || "Unknown Song"} onError={handleImageError} className="w-full h-full object-cover" />
-                    ) : (
-                      <Music className="w-8 h-8 text-white/80" />
-                    )}
-
-                    {/* Play button overlay */}
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button variant="hero" size="icon" className="h-12 w-12">
-                        <Play className="w-6 h-6" />
-                      </Button>
-                    </div>
+        {/* Features Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          {features.map((feature, index) => {
+            const Icon = feature.icon;
+            return (
+              <Card
+                key={index}
+                className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:border-primary/40 transition-all duration-300 hover:shadow-glow group"
+              >
+                <CardContent className="p-8">
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-lg`}>
+                    <Icon className="w-8 h-8 text-white" />
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="font-semibold truncate">{song.name || song.songName || "Unknown Song"}</h3>
-                  <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
                   
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {Math.floor(song.duration / 60)}:{(song.duration % 60).toString().padStart(2, '0')}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Headphones className="w-3 h-3" />
-                      {song.plays}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2">
+                  <div className="flex items-center gap-2 mb-3">
                     <Badge variant="outline" className="text-xs">
-                      {song.genre}
+                      {feature.badge}
                     </Badge>
                   </div>
+                  
+                  <h3 className="text-xl font-bold mb-3 text-foreground group-hover:text-primary transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {feature.description}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
-                  <div className="flex items-center gap-1 pt-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
-                      <Heart className="w-4 h-4" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedSongForPlaylist({
-                              id: song.id,
-                              name: song.name || song.songName || "Unknown Song",
-                              cover: song.cover,
-                            });
-                            setAddToPlaylistOpen(true);
-                          }}
-                        >
-                          <ListPlus className="w-4 h-4 mr-2" />
-                          Thêm vào playlist
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShareSong({
-                              id: song.id,
-                              title: song.name || song.songName || "Unknown Song",
-                              url: `${window.location.origin}/song/${song.id}`,
-                            });
-                          }}
-                        >
-                          <Users className="w-4 h-4 mr-2" />
-                          Chia sẻ với bạn bè
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => e.stopPropagation()}>
-                      <Share2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        {/* CTA Section */}
+        <Card className="bg-gradient-to-r from-primary/20 via-primary/10 to-accent/20 border-primary/30">
+          <CardContent className="p-8 md:p-12">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-2xl md:text-3xl font-bold mb-3 text-foreground">
+                  Sẵn sàng thử ngay?
+                </h3>
+                <p className="text-muted-foreground text-lg">
+                  Hum một giai điệu hoặc tải file audio lên để tìm bài hát bạn đang tìm kiếm
+                </p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  variant="hero"
+                  size="lg"
+                  className="gap-2 min-w-[200px]"
+                  onClick={() => navigate("/music-recognition")}
+                >
+                  <Mic className="w-5 h-5" />
+                  Thử ngay
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="gap-2 min-w-[200px]"
+                  onClick={() => navigate("/discover")}
+                >
+                  <Music className="w-5 h-5" />
+                  Khám phá thêm
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Stats or Testimonials */}
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+          <div>
+            <div className="text-3xl font-bold text-primary mb-2">99%+</div>
+            <div className="text-muted-foreground">Độ chính xác</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold text-primary mb-2">Hàng triệu</div>
+            <div className="text-muted-foreground">Bài hát trong database</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold text-primary mb-2">Chỉ vài giây</div>
+            <div className="text-muted-foreground">Để tìm ra bài hát</div>
+          </div>
         </div>
       </div>
-      
-      {selectedSongForPlaylist && (
-        <AddToPlaylistDialog
-          open={addToPlaylistOpen}
-          onOpenChange={setAddToPlaylistOpen}
-          songId={selectedSongForPlaylist.id}
-          songTitle={selectedSongForPlaylist.name}
-          songCover={selectedSongForPlaylist.cover}
-        />
-      )}
-      {shareSong && (
-        <ShareButton
-          key={`share-${shareSong.id}-${Date.now()}`}
-          title={shareSong.title}
-          type="song"
-          url={shareSong.url}
-          open={true}
-          onOpenChange={(isOpen) => {
-            if (!isOpen) {
-              setShareSong(null);
-            }
-          }}
-        />
-      )}
     </section>
   );
 };

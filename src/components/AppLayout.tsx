@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import TopBar from "./TopBar";
@@ -5,6 +7,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import userPreferenceApi from "@/services/api/userPreferenceApi";
+import { getAuthToken } from "@/services/api/config";
+import { coldStartStorage } from "@/utils/coldStartStorage";
+import ArtistOnboardingModal from "@/components/onboarding/ArtistOnboardingModal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -34,11 +40,68 @@ const MobileTrigger = () => {
 };
 
 const AppLayout = ({ children }: AppLayoutProps) => {
-
-
-
-
   const isMobile = useIsMobile();
+  const location = useLocation();
+  const seedStatusRef = useRef<"unknown" | "checking" | "completed" | "required">("unknown");
+  const inflightRef = useRef(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) {
+      seedStatusRef.current = "unknown";
+      setShowOnboarding(false);
+      return;
+    }
+
+    if (coldStartStorage.isCompleted()) {
+      seedStatusRef.current = "completed";
+      setShowOnboarding(false);
+      return;
+    }
+
+    if (inflightRef.current || seedStatusRef.current === "completed") {
+      return;
+    }
+
+    let cancelled = false;
+    inflightRef.current = true;
+
+    const enforceSeed = async () => {
+      try {
+        const seed = await userPreferenceApi.getSeed();
+        if (cancelled) {
+          return;
+        }
+        const completed = Boolean(seed?.completed && seed?.initialEmbedding);
+        if (completed) {
+          coldStartStorage.markCompleted();
+          seedStatusRef.current = "completed";
+          setShowOnboarding(false);
+          return;
+        }
+        coldStartStorage.markIncomplete();
+        seedStatusRef.current = "required";
+        setShowOnboarding(true);
+      } catch (error) {
+        console.error("[AppLayout] Không kiểm tra được seed preferences:", error);
+      } finally {
+        inflightRef.current = false;
+      }
+    };
+
+    enforceSeed();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  const handleOnboardingCompleted = () => {
+    coldStartStorage.markCompleted();
+    seedStatusRef.current = "completed";
+    setShowOnboarding(false);
+  };
 
   return (
     <SidebarProvider>
@@ -60,6 +123,8 @@ const AppLayout = ({ children }: AppLayoutProps) => {
 
         <MobileTrigger />
       </div>
+
+      <ArtistOnboardingModal open={showOnboarding} onCompleted={handleOnboardingCompleted} />
     </SidebarProvider>
   );
 };

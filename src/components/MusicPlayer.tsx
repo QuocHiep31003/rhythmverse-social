@@ -38,7 +38,7 @@ import { toast } from "@/hooks/use-toast";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { lyricsApi } from "@/services/api/lyricsApi";
 import { songsApi } from "@/services/api/songApi";
-import { getAuthToken } from "@/services/api";
+import { getAuthToken, forceRefreshAccessToken } from "@/services/api";
 import { mapToPlayerSong } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import Hls from "hls.js";
@@ -101,6 +101,8 @@ const MusicPlayer = () => {
   const hasTriggeredEndedRef = useRef(false);
   const listenedSecondsRef = useRef(0);
   const hasReportedSessionRef = useRef(false);
+  const streamAuthRetryCountRef = useRef(0);
+  const streamRetryUrlRef = useRef("");
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -398,6 +400,7 @@ const MusicPlayer = () => {
     if (!audioRef.current || !currentSong) return;
 
     const audio = audioRef.current;
+    streamAuthRetryCountRef.current = 0;
 
     // Immediately pause and reset current playback
     audio.pause();
@@ -420,32 +423,116 @@ const MusicPlayer = () => {
     let safariMetadataListener: (() => void) | null = null;
     let loadErrorTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    const refreshTokenAndRetryStream = async () => {
+      try {
+        setIsLoading(true);
+        const newToken = await forceRefreshAccessToken();
+        if (!newToken) {
+          throw new Error("Không thể làm mới token");
+        }
+
+        console.log("[MusicPlayer] Access token refreshed during playback, retrying HLS load");
+        if (streamRetryUrlRef.current) {
+          try {
+            hlsInstanceRef.current?.stopLoad();
+          } catch (stopError) {
+            console.warn("[MusicPlayer] Failed to stop HLS load before retry:", stopError);
+          }
+
+          try {
+            hlsInstanceRef.current?.loadSource(streamRetryUrlRef.current);
+            hlsInstanceRef.current?.startLoad();
+          } catch (reloadError) {
+            console.error("[MusicPlayer] Failed to reload HLS source after token refresh:", reloadError);
+            throw reloadError;
+          }
+        } else {
+          console.warn("[MusicPlayer] Missing retry stream URL, skipping reload");
+        }
+      } catch (refreshError) {
+        console.error("[MusicPlayer] Failed to refresh token during playback:", refreshError);
+        toast({
+          title: "Phiên đăng nhập đã hết hạn",
+          description: "Vui lòng đăng nhập lại để tiếp tục nghe nhạc.",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 1500);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     const loadStreamUrl = async () => {
       try {
         // Dùng UUID trực tiếp từ currentSong; nếu chưa có thì fetch lại từ BE
         let songUuid = currentSong?.uuid;
+        let fallbackPlaybackUrl: string | null = null;
+
         if (!songUuid) {
           console.warn("[MusicPlayer] Song missing uuid, fetching detail from backend", currentSong.id);
-          const backendSong = await songsApi.getById(currentSong.id);
-          songUuid = backendSong?.uuid;
-          if (!songUuid) {
-            throw new Error("UUID not available from backend");
+          try {
+            const backendSong = await songsApi.getById(currentSong.id);
+            songUuid = backendSong?.uuid;
+
+            if (backendSong && songUuid) {
+              const enrichedSong = { ...currentSong, uuid: songUuid };
+              const updatedQueue = queue.map((song) =>
+                song.id === enrichedSong.id ? { ...song, uuid: songUuid } : song
+              );
+              setQueue(updatedQueue);
+              playSong(enrichedSong);
+              return;
+            }
+
+            if (!songUuid) {
+              console.warn("[MusicPlayer] Backend song still missing uuid, will use playback session fallback");
+            }
+          } catch (fetchError) {
+            console.error("[MusicPlayer] Failed to fetch song detail for uuid fallback:", fetchError);
           }
-          const enrichedSong = { ...currentSong, uuid: songUuid };
-          const updatedQueue = queue.map((song) =>
-            song.id === enrichedSong.id ? { ...song, uuid: songUuid } : song
-          );
-          setQueue(updatedQueue);
-          playSong(enrichedSong);
+        }
+
+        if (!songUuid) {
+          try {
+            const session = await songsApi.getPlaybackUrl(currentSong.id);
+            fallbackPlaybackUrl = session?.playbackUrl || null;
+          } catch (sessionError) {
+            console.error("[MusicPlayer] Failed to create playback session fallback:", sessionError);
+          }
+        }
+
+        if (!songUuid && !fallbackPlaybackUrl) {
+          setIsLoading(false);
+          toast({
+            title: "Không thể phát bài hát",
+            description: "Không tìm thấy nguồn stream hợp lệ cho bài hát này.",
+            variant: "destructive",
+          });
+          setTimeout(() => handleNextClick(), 800);
           return;
         }
 
-        // Dùng proxy endpoint thay vì CloudFront signed URL trực tiếp
-        // Proxy sẽ tự generate signed URL cho manifest và tất cả segments
-        // HLS.js sẽ tự động resolve relative segment URLs relative to playlist URL
-        const proxyBaseUrl = `/api/songs/${currentSong.id}/stream-proxy`;
-        // Request variant playlist trực tiếp (HLS.js sẽ tự load segments từ đây)
-        const finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${songUuid}_128kbps.m3u8`;
+        // Dùng proxy endpoint nếu có uuid, fallback playback URL nếu không
+        let finalStreamUrlAbsolute = fallbackPlaybackUrl;
+        if (songUuid) {
+          const proxyBaseUrl = `/api/songs/${currentSong.id}/stream-proxy`;
+          finalStreamUrlAbsolute = `${window.location.origin}${proxyBaseUrl}/${songUuid}_128kbps.m3u8`;
+        }
+
+        if (!finalStreamUrlAbsolute) {
+          setIsLoading(false);
+          toast({
+            title: "Không thể phát bài hát",
+            description: "Không tìm thấy URL stream cho bài hát.",
+            variant: "destructive",
+          });
+          setTimeout(() => handleNextClick(), 800);
+          return;
+        }
+
+        streamRetryUrlRef.current = finalStreamUrlAbsolute;
 
         console.log("Using proxy endpoint for HLS streaming:", finalStreamUrlAbsolute);
         console.log("HLS.js will automatically resolve segment URLs relative to this playlist");
@@ -592,9 +679,21 @@ const MusicPlayer = () => {
                  data.details === Hls.ErrorDetails.LEVEL_LOAD_ERROR ||
                  data.details === Hls.ErrorDetails.FRAG_LOAD_ERROR)) {
               const response = data.response;
+              const responseCode = response?.code ?? response?.status;
+
+              if (responseCode === 401) {
+                if (streamAuthRetryCountRef.current >= 2) {
+                  console.error("[MusicPlayer] Stream auth retry limit reached. Will show error.");
+                } else {
+                  streamAuthRetryCountRef.current += 1;
+                  shouldShowError = false;
+                  console.warn("[MusicPlayer] Stream request unauthorized, refreshing token...");
+                  refreshTokenAndRetryStream();
+                  return;
+                }
+              }
               // Nếu là 404 hoặc 403 (signed URL hết hạn hoặc file không tồn tại), file đã bị xóa
-              if (response && (response.code === 404 || response.status === 404 || 
-                               response.code === 403 || response.status === 403)) {
+              if (response && (responseCode === 404 || responseCode === 403)) {
                 console.error("⚠️ Audio file not found (404/403), likely deleted from S3 or CloudFront cache expired");
                 setIsLoading(false);
                 toast({

@@ -478,8 +478,8 @@ const AdminAlbums = () => {
                   <SelectContent>
                     <SelectItem value="name-asc">Name (A-Z)</SelectItem>
                     <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-                    <SelectItem value="date-newest">Release date (Newest)</SelectItem>
-                    <SelectItem value="date-oldest">Release date (Oldest)</SelectItem>
+                    <SelectItem value="date-newest">Năm phát hành (Mới nhất)</SelectItem>
+                    <SelectItem value="date-oldest">Năm phát hành (Cũ nhất)</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -508,7 +508,7 @@ const AdminAlbums = () => {
                         <th className="w-80 text-left text-sm font-medium text-muted-foreground p-3">Album</th>
                         <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Nghệ sĩ</th>
                         <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
-                        <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày phát hành</th>
+                        <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Năm phát hành</th>
                         <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
                       </tr>
                     </thead>

@@ -187,6 +187,7 @@ const AdminMoods = () => {
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
                           <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Trạng thái</th>
                           <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
                           <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
@@ -198,10 +199,7 @@ const AdminMoods = () => {
                           <tr key={mood.id} className="border-b border-border hover:bg-muted/50">
                             <td className="w-16 p-3 text-center align-top">{currentPage * pageSize + index + 1}</td>
                             <td className="w-1/4 p-3 text-left align-top">
-                              <div className="flex flex-col gap-1">
-                                <span className="font-medium">{mood.name}</span>
-                                {renderStatusBadge(mood.status)}
-                              </div>
+                              <span className="font-medium">{mood.name}</span>
                             </td>
                             <td className="w-28 p-3 align-top">
                               {(() => {
@@ -249,6 +247,11 @@ const AdminMoods = () => {
                             </td>
                             <td className="w-24 p-3 align-top">
                               <span className="font-medium">{formatWeight(mood.weight)}</span>
+                            </td>
+                            <td className="w-32 p-3 text-center">
+                              <div className="flex justify-center">
+                                {renderStatusBadge(mood.status)}
+                              </div>
                             </td>
                             <td className="w-32 p-3 align-top text-center">
                               <Badge variant="secondary" className="font-semibold">
@@ -333,6 +336,8 @@ const AdminMoods = () => {
                   name: selectedMood.name,
                   iconUrl: selectedMood.iconUrl,
                   gradient: selectedMood.gradient,
+                  status: selectedMood.status || "ACTIVE",
+                  id: selectedMood.id,
                 }
               : undefined
           }
@@ -348,6 +353,9 @@ const AdminMoods = () => {
     </div>
   );
 };
+
+export default AdminMoods;
+
 
 export default AdminMoods;
 

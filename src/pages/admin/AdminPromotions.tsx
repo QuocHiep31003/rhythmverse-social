@@ -66,11 +66,12 @@ const AdminPromotions = () => {
         subtitle: data.subtitle,
         imageUrl: data.imageUrl,
         ctaText: data.ctaText,
+        ctaUrl: (data as any).ctaUrl || "",
         active: data.active,
       };
       if (data.gradient) payload.gradient = data.gradient;
       if (data.badge) payload.badge = data.badge;
-      if (data.iconName) payload.iconName = data.iconName;
+      if ((data as any).icon) payload.icon = (data as any).icon;
 
       if (formMode === "create") {
         await promotionsApi.create(payload);
@@ -336,6 +337,7 @@ const AdminPromotions = () => {
             subtitle: (selected as any).subtitle || "",
             imageUrl: (selected as any).imageUrl || (selected as any).image || "",
             ctaText: (selected as any).ctaText || "",
+            ctaUrl: (selected as any).ctaUrl || "",
             gradient: (selected as any).gradient || "",
             badge: (selected as any).badge || "",
             iconName: (selected as any).iconName || "",

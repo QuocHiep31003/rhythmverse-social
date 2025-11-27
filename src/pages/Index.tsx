@@ -11,13 +11,11 @@ import { MobileNotifications } from "@/components/MobileNotifications";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Play,
-  Headphones,
-  Sparkles,
-  Music,
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import type { Song as PlayerSong } from "@/contexts/MusicContext";
 import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
+import AIPicksSection from "@/components/ui/AIPicksSection"; // ✅ AI Picks component
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import { formatPlayCount, mapToPlayerSong } from "@/lib/utils";
@@ -107,119 +105,22 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-gradient-dark">
       <PromotionCarousel />
+      
+      {/* Tìm bài hát chỉ bằng giai điệu - Ngay dưới banner */}
+      <FeaturedMusic />
+      
       <main className="pt-4">
         {/* Quick Features */}
         <section className="py-8">
           <div className="container px-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              {[
-                {
-                  icon: Sparkles,
-                  color: "text-primary",
-                  label: "AI Search",
-                  path: "/discover",
-                },
-                {
-                  icon: Music,
-                  color: "text-neon-blue",
-                  label: "Genres",
-                  path: "/discover",
-                },
-                {
-                  icon: Headphones,
-                  color: "text-neon-green",
-                  label: "Radio",
-                  path: "/discover",
-                },
-              ].map((item, i) => (
-                <Card
-                  key={i}
-                  className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all cursor-pointer"
-                  onClick={() => {
-                    if (item.label === "Genres") {
-                      // Scroll to genres section on the same page
-                      const genresSection = document.getElementById("genres-section");
-                      if (genresSection) {
-                        genresSection.scrollIntoView({ behavior: "smooth", block: "start" });
-                      }
-                    } else {
-                      navigate(item.path);
-                    }
-                  }}
-                >
-                  <CardContent className="p-4 text-center">
-                    <item.icon
-                      className={`w-8 h-8 ${item.color} mx-auto mb-2`}
-                    />
-                    <p className="text-sm font-medium">{item.label}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-
-            {/* AI Picks */}
-            <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-              <CardHeader className="pb-4">
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-primary" />
-                  AI Picks For You
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {aiPicks.map((song) => (
-                  <div
-                    key={song.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/5 hover:bg-muted/10 group cursor-pointer"
-                    onClick={() => {
-                      setQueue(aiPicks);
-                      playSong(song);
-                    }}
-                  >
-                    <div className="w-10 h-10 bg-gradient-neon rounded flex items-center justify-center overflow-hidden">
-                      {song.cover ? (
-                        <img
-                          src={song.cover}
-                          alt={song.name || song.songName || "Unknown Song"}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Play className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate text-sm">
-                        {song.name || song.songName || "Unknown Song"}
-                      </p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {song.artist}
-                      </p>
-                      <p className="text-xs text-primary">{song.genre}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-medium text-green-500">
-                        {song.plays}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                <Button
-                  variant="hero"
-                  className="w-full mt-4"
-                  size="sm"
-                  onClick={() => navigate("/discover")}
-                >
-                  Get More AI Picks
-                </Button>
-              </CardContent>
-            </Card>
+            {/* AI Picks For You - Smart Recommendations */}
+            <AIPicksSection />
 
             {/* Editor's Choice / New Albums */}
             <NewAlbums />
           </div>
         </section>
 
-        <FeaturedMusic />
         <GenreExplorer />
       </main>
 

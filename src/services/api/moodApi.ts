@@ -33,7 +33,7 @@ export const moodsApi = {
         }
     },
 
-    create: async (data: { name: string; iconUrl?: string; gradient?: string }) => {
+    create: async (data: { name: string; iconUrl?: string; gradient?: string; status?: string }) => {
         try {
             const response = await fetch(`${API_BASE_URL}/moods`, {
                 method: 'POST',
@@ -51,7 +51,7 @@ export const moodsApi = {
         }
     },
 
-    update: async (id: number, data: { name: string; iconUrl?: string; gradient?: string }) => {
+    update: async (id: number, data: { name: string; iconUrl?: string; gradient?: string; status?: string }) => {
         try {
             const response = await fetch(`${API_BASE_URL}/moods/${id}`, {
                 method: 'PUT',
@@ -65,6 +65,22 @@ export const moodsApi = {
             return await response.json();
         } catch (error) {
             console.error("Error updating mood:", error);
+            throw error;
+        }
+    },
+
+    getDeactivationWarning: async (id: number) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/moods/${id}/deactivation-warning`, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (!response.ok) {
+                throw new Error("Failed to fetch deactivation warning");
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("Error fetching deactivation warning:", error);
             throw error;
         }
     },

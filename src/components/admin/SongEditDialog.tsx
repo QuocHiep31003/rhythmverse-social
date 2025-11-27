@@ -66,7 +66,7 @@ import { Switch } from "@/components/ui/switch";
 
 const metadataSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
-  releaseAt: z.string().min(1, "Thời gian phát hành không được để trống"),
+  releaseAt: z.string().min(1, "Ngày phát hành không được để trống"),
   duration: z.string().optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING_RELEASE"]).default("ACTIVE"),
 });
@@ -170,6 +170,9 @@ export const SongEditDialog = ({
     id: number;
     name: string;
   } | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const contributorGroups = useMemo(() => {
     const grouped: Record<string, SongContributor[]> = {};
@@ -227,10 +230,6 @@ export const SongEditDialog = ({
   }, [songData]);
 
   const artistLookup = useMemo(() => {
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
     const map = new Map<number, { id: number; name: string; avatar?: string }>();
     allArtists.forEach((artist) => map.set(artist.id, artist));
     return map;
@@ -716,7 +715,7 @@ export const SongEditDialog = ({
                       name="releaseAt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Thời gian phát hành *</FormLabel>
+                          <FormLabel>Ngày phát hành *</FormLabel>
                           <FormControl>
                             <Input
                               type="datetime-local"
