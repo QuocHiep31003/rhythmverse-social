@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { subscriptionPlanApi, SubscriptionPlanDTO, PlanFeatureDTO, PlanDetailDTO } from "@/services/api/subscriptionPlanApi";
 import { FeatureName } from "@/services/api/featureUsageApi";
-import { Plus, Edit, Trash2, Save, X, RefreshCw, Package } from "lucide-react";
+import { Plus, Edit, Trash2, Save, X, RefreshCw, Package, Sparkles } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 
 const FEATURE_OPTIONS: { value: FeatureName; label: string }[] = [
@@ -235,6 +234,8 @@ const AdminSubscriptionPlans = () => {
 
   // Không cần sắp xếp nữa, giữ nguyên thứ tự 5 tính năng
   const sortedFeatures = formData.features || [];
+  const descriptionLength = formData.description?.length || 0;
+  const descriptionCounterClass = descriptionLength > 270 ? "text-destructive" : "text-muted-foreground";
 
   // Không cần drag and drop nữa vì luôn có đủ 5 tính năng cố định
 
@@ -408,9 +409,7 @@ const AdminSubscriptionPlans = () => {
                   <Badge variant="secondary" className="font-normal">
                     {plans.length} gói đang hiển thị
                   </Badge>
-                  <span className="text-xs hidden sm:inline-flex">
-                    FREE, PREMIUM và PREMIUM_YEARLY luôn được ưu tiên đầu danh sách
-                  </span>
+                  
                 </p>
               </div>
             </div>
@@ -432,30 +431,45 @@ const AdminSubscriptionPlans = () => {
 
           <div className="flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto scroll-smooth scrollbar-admin pb-6">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {plans.map((plan) => {
                   const isDefaultPlan = plan.planCode && DEFAULT_PLANS.includes(plan.planCode.toUpperCase());
+                  const featureCount = plan.features?.length || 0;
+                  const priceOptionsCount = plan.details?.length || 0;
+                  const isActivePlan = plan.isActive ?? true;
                   return (
-                    <Card
+                    <div
                       key={plan.id}
-                      className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] ${
-                        isDefaultPlan ? "ring-2 ring-primary/20" : ""
+                      className={`group relative rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] p-5 shadow-sm transition hover:shadow-lg hover:-translate-y-1 ${
+                        isDefaultPlan ? "border-primary/40 shadow-primary/20" : ""
                       }`}
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <CardTitle className="flex items-center gap-2">
-                              <Package className="h-5 w-5" />
-                              {plan.planName}
-                            </CardTitle>
-                            <div className="flex items-center gap-2 mt-2">
-                              <Badge variant={plan.isActive ? "default" : "secondary"}>
+                      <div
+                        className={`pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition group-hover:opacity-100 ${
+                          isDefaultPlan
+                            ? "bg-gradient-to-br from-primary/10 via-transparent to-transparent"
+                            : "bg-gradient-to-br from-[hsl(var(--admin-hover))]/10 via-transparent to-transparent"
+                        }`}
+                      />
+                      <div className="relative flex h-full flex-col gap-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2 text-lg font-semibold">
+                              <Package className="h-5 w-5 text-primary" />
+                              <span>{plan.planName}</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                              <Badge variant={isActivePlan ? "default" : "secondary"} className="uppercase tracking-wide">
                                 {plan.planCode}
                               </Badge>
-                              {isDefaultPlan && (
-                                <Badge variant="outline" className="text-xs">
+                              {isDefaultPlan ? (
+                                <Badge variant="outline" className="text-xs flex items-center gap-1">
+                                  <Sparkles className="h-3 w-3" />
                                   Gói mặc định
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs">
+                                  {isActivePlan ? "Đang hoạt động" : "Tạm ẩn"}
                                 </Badge>
                               )}
                             </div>
@@ -466,6 +480,7 @@ const AdminSubscriptionPlans = () => {
                               size="sm"
                               onClick={() => handleOpenDialog(plan)}
                               title="Chỉnh sửa"
+                              className="hover:bg-primary/10"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -482,23 +497,35 @@ const AdminSubscriptionPlans = () => {
                             )}
                           </div>
                         </div>
-                      </CardHeader>
-                      <CardContent>
-                        <CardDescription className="mb-4 min-h-[48px]">
+
+                        <p className="text-sm text-muted-foreground line-clamp-4 min-h-[64px]">
                           {plan.description || "Chưa có mô tả cho gói này."}
-                        </CardDescription>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tính năng:</span>
-                            <span>{plan.features?.length || 0}</span>
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
+                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Tính năng</p>
+                            <p className="text-2xl font-bold text-foreground">{featureCount}</p>
+                            <p className="text-xs text-muted-foreground">Tùy chỉnh giới hạn linh hoạt</p>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Options giá:</span>
-                            <span>{plan.details?.length || 0}</span>
+                          <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
+                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Options giá</p>
+                            <p className="text-2xl font-bold text-foreground">{priceOptionsCount}</p>
+                            <p className="text-xs text-muted-foreground">Kỳ thanh toán đang cấu hình</p>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
+
+                        <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
+                          <span>
+                            Cập nhật lần cuối:{" "}
+                            {plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString() : "Chưa xác định"}
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {isActivePlan ? "Có sẵn" : "Bị ẩn"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -520,263 +547,262 @@ const AdminSubscriptionPlans = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-5 py-4">
+            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="planCode">Mã gói *</Label>
+                  <Input
+                    id="planCode"
+                    value={formData.planCode}
+                    onChange={(e) => setFormData({ ...formData, planCode: e.target.value.toUpperCase() })}
+                    placeholder="BASIC, PREMIUM, PRO"
+                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                  />
+                  {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
+                    <p className="text-xs text-muted-foreground">
+                      Lưu ý: Thay đổi mã gói mặc định có thể ảnh hưởng đến logic hệ thống
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="planName">Tên gói *</Label>
+                  <Input
+                    id="planName"
+                    value={formData.planName}
+                    onChange={(e) => setFormData({ ...formData, planName: e.target.value })}
+                    placeholder="Gói Cơ Bản"
+                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="planCode">Mã gói *</Label>
-                <Input
-                  id="planCode"
-                  value={formData.planCode}
-                  onChange={(e) => setFormData({ ...formData, planCode: e.target.value.toUpperCase() })}
-                  placeholder="BASIC, PREMIUM, PRO"
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="description">Mô tả</Label>
+                  <span className={`text-xs ${descriptionCounterClass}`}>{descriptionLength}/300</span>
+                </div>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value.length <= 300) {
+                      setFormData({ ...formData, description: value });
+                    }
+                  }}
+                  placeholder="Chia sẻ nhanh lợi ích chính của gói..."
+                  maxLength={300}
                   className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                 />
-                {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
-                  <p className="text-xs text-muted-foreground">
-                    Lưu ý: Thay đổi mã gói mặc định có thể ảnh hưởng đến logic hệ thống
-                  </p>
-                )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="planName">Tên gói *</Label>
-                <Input
-                  id="planName"
-                  value={formData.planName}
-                  onChange={(e) => setFormData({ ...formData, planName: e.target.value })}
-                  placeholder="Gói Cơ Bản"
-                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="displayOrder">Thứ tự hiển thị</Label>
+                  <Input
+                    id="displayOrder"
+                    inputMode="numeric"
+                    value={formatNumber(formData.displayOrder)}
+                    onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
+                    placeholder="Ví dụ: 1"
+                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                  />
+                </div>
+                <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]/60 p-4 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-semibold">Trạng thái gói</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formData.isActive ? "Gói sẽ hiển thị cho người dùng" : "Gói đang ẩn và không thể mua"}
+                    </p>
+                  </div>
+                  <Switch
+                    id="isActive"
+                    checked={formData.isActive}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                  />
+                </div>
               </div>
-            </div>
+            </section>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="description">Mô tả</Label>
-                <span className={`text-xs ${
-                  (formData.description?.length || 0) > 270 
-                    ? "text-destructive" 
-                    : "text-muted-foreground"
-                }`}>
-                  {(formData.description?.length || 0)}/300
-                </span>
-              </div>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value.length <= 300) {
-                    setFormData({ ...formData, description: value });
-                  }
-                }}
-                placeholder="Mô tả về gói đăng ký..."
-                maxLength={300}
-                className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="displayOrder">Thứ tự hiển thị</Label>
-              <Input
-                id="displayOrder"
-                inputMode="numeric"
-                value={formatNumber(formData.displayOrder)}
-                onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
-                placeholder="Ví dụ: 1"
-                className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="isActive"
-                checked={formData.isActive}
-                onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-              />
-              <Label htmlFor="isActive">Gói đang hoạt động</Label>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Tính năng (5 tính năng mặc định)</Label>
+            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Label className="font-semibold">Tính năng mặc định</Label>
+                  <p className="text-xs text-muted-foreground">Mỗi gói luôn có đầy đủ 5 tính năng, chỉ tùy chỉnh giới hạn.</p>
+                </div>
                 <Badge variant="secondary" className="text-xs">
                   Tất cả gói đều có 5 tính năng này
                 </Badge>
               </div>
 
-              {sortedFeatures.length > 0 && (
-                <div className="space-y-2">
-                  <Table className="border border-[hsl(var(--admin-border))] rounded-md table-fixed w-full">
-                    <TableHeader className="bg-[hsl(var(--admin-sidebar))]">
-                      <TableRow className="border-b border-[hsl(var(--admin-border))] hover:bg-transparent">
-                        <TableHead className="text-foreground font-semibold w-auto pr-1">Tính năng</TableHead>
-                        <TableHead className="text-foreground font-semibold w-[180px] pl-1 pr-2">Trạng thái</TableHead>
-                        <TableHead className="text-foreground font-semibold w-[220px]">Giới hạn</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="bg-[hsl(var(--admin-card))]">
-                      {sortedFeatures.map((feature, index) => {
-                        const isUnlimited = feature.limitValue === null;
-                        const isDisabled = feature.limitValue === 0;
-                        const isLimited = feature.limitValue !== null && feature.limitValue > 0;
-                        return (
-                        <TableRow 
-                          key={index} 
-                          className={`hover:bg-[hsl(var(--admin-hover))] ${
-                            isDisabled 
-                              ? "bg-[hsl(var(--admin-card))]/50 opacity-60" 
-                              : "bg-[hsl(var(--admin-card))]"
-                          }`}
-                        >
-                          <TableCell className="pr-1">
-                            <div className="font-medium h-[40px] flex items-center">
-                              {FEATURE_OPTIONS.find(opt => opt.value === feature.featureName)?.label || feature.featureName}
-                            </div>
-                          </TableCell>
-                          <TableCell className="w-[180px] pl-1 pr-2">
-                            <div className="h-[40px] flex items-center gap-2 w-[180px]">
-                              <Switch
-                                checked={isUnlimited}
-                                onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
-                              />
-                              <span className="text-sm whitespace-nowrap">
-                                {isUnlimited ? (
-                                  <Badge variant="default" className="bg-green-600">Không giới hạn</Badge>
-                                ) : (
-                                  <Badge variant="secondary">Có giới hạn</Badge>
-                                )}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="w-[220px]">
-                            <div className="h-[40px] flex items-center w-[220px]">
-                              {isUnlimited ? (
-                                <span className="text-sm text-muted-foreground">Không giới hạn</span>
-                              ) : (
-                                <div className="flex items-center gap-2 w-full">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    placeholder="Số lượt"
-                                    value={feature.limitValue || 0}
-                                    onChange={(e) => {
-                                      const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
-                                      if (numValue >= 0) {
-                                        handleLimitValueChange(index, numValue);
-                                      }
-                                    }}
-                                    className="w-32 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                                  />
-                                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                    {feature.limitValue === 0 ? "(Không cho dùng)" : "lượt"}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </div>
+              {sortedFeatures.length > 0 ? (
+                <div className="space-y-3">
+                  {sortedFeatures.map((feature, index) => {
+                    const isUnlimited = feature.limitValue === null;
+                    const isDisabled = feature.limitValue === 0;
+                    const featureLabel = FEATURE_OPTIONS.find(opt => opt.value === feature.featureName)?.label || feature.featureName;
 
-            {/* Plan Details Section */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Options Giá/Thời Gian</Label>
+                    return (
+                      <div
+                        key={index}
+                        className={`rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]/60 p-4 transition ${
+                          isDisabled ? "opacity-60" : ""
+                        }`}
+                      >
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                          <div className="flex-1">
+                            <p className="font-medium">{featureLabel}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {isUnlimited ? "Đang mở hoàn toàn cho người dùng." : "Giới hạn số lượt sử dụng trong gói này."}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+                            <Switch
+                              checked={isUnlimited}
+                              onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
+                            />
+                            <Badge variant={isUnlimited ? "default" : "secondary"} className={isUnlimited ? "bg-green-600" : ""}>
+                              {isUnlimited ? "Không giới hạn" : "Có giới hạn"}
+                            </Badge>
+                          </div>
+                          <div className="w-full md:w-56">
+                            {isUnlimited ? (
+                              <div className="text-sm text-muted-foreground text-right md:text-left">Không giới hạn</div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="Số lượt"
+                                  value={feature.limitValue || 0}
+                                  onChange={(e) => {
+                                    const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
+                                    if (numValue >= 0) {
+                                      handleLimitValueChange(index, numValue);
+                                    }
+                                  }}
+                                  className="flex-1 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                                />
+                                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {feature.limitValue === 0 ? "(Không cho dùng)" : "lượt"}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Không tìm thấy tính năng nào cho gói này.</p>
+              )}
+            </section>
+
+            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Label className="font-semibold">Options Giá/Thời Gian</Label>
+                  <p className="text-xs text-muted-foreground">Thêm nhiều lựa chọn thanh toán để tối ưu tỉ lệ chuyển đổi.</p>
+                </div>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddDetail}>
                   <Plus className="h-4 w-4 mr-2" />
                   Thêm Option
                 </Button>
               </div>
 
-              {formData.details && formData.details.length > 0 && (
-                <div className="space-y-2">
-                  <Table className="border border-[hsl(var(--admin-border))] rounded-md">
-                    <TableHeader className="bg-[hsl(var(--admin-sidebar))]">
-                      <TableRow className="border-b border-[hsl(var(--admin-border))] hover:bg-transparent">
-                        <TableHead className="text-foreground font-semibold">Tên Option</TableHead>
-                        <TableHead className="text-foreground font-semibold">Giá</TableHead>
-                        <TableHead className="text-foreground font-semibold">Thời hạn</TableHead>
-                        <TableHead className="text-foreground font-semibold">Thứ tự</TableHead>
-                        <TableHead className="text-foreground font-semibold">Recommended</TableHead>
-                        <TableHead className="text-foreground font-semibold">Thao tác</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody className="bg-[hsl(var(--admin-card))]">
-                      {formData.details.map((detail, index) => {
-                        const isRecommended = detail.isRecommended ?? false;
-                        return (
-                          <TableRow
-                            key={index}
-                            className={`hover:bg-[hsl(var(--admin-hover))] transition-all ${
-                              isRecommended 
-                                ? "bg-primary/5 border-l-2 border-l-primary" 
-                                : "border-l-2 border-l-transparent"
-                            }`}
+              {formData.details && formData.details.length > 0 ? (
+                <div className="space-y-3">
+                  {formData.details.map((detail, index) => {
+                    const isRecommended = detail.isRecommended ?? false;
+                    return (
+                      <div
+                        key={index}
+                        className={`rounded-xl border p-4 space-y-4 transition ${
+                          isRecommended ? "border-primary/60 bg-primary/5" : "border-[hsl(var(--admin-border))]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold">Option #{index + 1}</p>
+                          {isRecommended && (
+                            <Badge variant="default" className="text-xs bg-primary text-primary-foreground">
+                              Recommended
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-4">
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Tên Option</Label>
+                            <Input
+                              value={detail.detailName || ""}
+                              onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
+                              placeholder="Ví dụ: 1 tháng"
+                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Giá</Label>
+                            <Input
+                              inputMode="numeric"
+                              value={formatNumber(detail.price)}
+                              onChange={(e) => handlePriceInputChange(index, e.target.value)}
+                              placeholder="99.000"
+                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Thời hạn (ngày)</Label>
+                            <Input
+                              type="number"
+                              value={detail.durationDays || 30}
+                              onChange={(e) =>
+                                handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))
+                              }
+                              placeholder="30"
+                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs text-muted-foreground">Thứ tự hiển thị</Label>
+                            <Input
+                              type="number"
+                              value={detail.displayOrder || 0}
+                              onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
+                              placeholder="0"
+                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <Switch
+                              checked={isRecommended}
+                              onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
+                            />
+                            <span className="text-sm text-muted-foreground">
+                              {isRecommended ? "Đang được ưu tiên hiển thị" : "Bật để gợi ý option này cho người dùng"}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveDetail(index)}
+                            className="hover:bg-destructive/10 hover:text-destructive"
                           >
-                            <TableCell className="w-[200px]">
-                              <Input
-                                value={detail.detailName || ""}
-                                onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
-                                placeholder="Ví dụ: 1 tháng"
-                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                              />
-                            </TableCell>
-                            <TableCell className="w-[120px]">
-                              <Input
-                                inputMode="numeric"
-                                value={formatNumber(detail.price)}
-                                onChange={(e) => handlePriceInputChange(index, e.target.value)}
-                                placeholder="Giá"
-                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                              />
-                            </TableCell>
-                            <TableCell className="w-[140px]">
-                              <Input
-                                type="number"
-                                value={detail.durationDays || 30}
-                                onChange={(e) => handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))}
-                                placeholder="Ngày"
-                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                              />
-                            </TableCell>
-                            <TableCell className="w-[100px]">
-                              <Input
-                                type="number"
-                                value={detail.displayOrder || 0}
-                                onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
-                                placeholder="0"
-                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                              />
-                            </TableCell>
-                            <TableCell className="w-[120px]">
-                              <Switch
-                                checked={isRecommended}
-                                onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
-                              />
-                            </TableCell>
-                            <TableCell className="w-[60px]">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveDetail(index)}
-                                className="hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-[hsl(var(--admin-border))] p-6 text-center text-sm text-muted-foreground">
+                  Chưa có option nào. Nhấn “Thêm Option” để tạo lựa chọn giá đầu tiên.
                 </div>
               )}
-            </div>
+            </section>
           </div>
 
           <DialogFooter>

@@ -395,6 +395,12 @@ const Premium = () => {
       if (!planDetail || !planDetail.price || planDetail.price <= 0) {
         throw new Error("Invalid plan detail. Please try again.");
       }
+      if (!planDetail.id) {
+        throw new Error("Missing plan option ID. Please contact support.");
+      }
+      if (!plan.planCode) {
+        throw new Error("Missing plan code. Please contact support.");
+      }
 
       const amountVND = Number(planDetail.price);
       const planName = getPlanDisplayName(plan);
@@ -404,9 +410,20 @@ const Premium = () => {
       // PayOS giới hạn mô tả 25 ký tự nên cần cắt ngắn
       const description = rawDescription.slice(0, 25);
 
+      console.log("Creating order with data:", {
+        amount: amountVND,
+        description,
+        planCode: plan.planCode.toUpperCase(),
+        planDetailId: planDetail.id,
+        planDetail,
+        plan
+      });
+
       const result = await paymentApi.createOrder({
         amount: amountVND,
         description,
+        planCode: plan.planCode.toUpperCase(),
+        planDetailId: planDetail.id,
       });
 
       if (result?.checkoutUrl) {

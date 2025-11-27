@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,15 +28,17 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  CreditCard
+  CreditCard,
+  ReceiptText
 } from "lucide-react";
 import { listeningHistoryApi, ListeningHistoryDTO } from "@/services/api/listeningHistoryApi";
 import { userApi, UserDTO } from "@/services/api/userApi";
 import { toast } from "@/hooks/use-toast";
 import { songsApi } from "@/services/api/songApi";
-import { paymentApi, OrderHistoryItem } from "@/services/api/paymentApi";
+import { paymentApi, OrderHistoryItem, PlanFeatureSnapshot } from "@/services/api/paymentApi";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
@@ -56,6 +58,8 @@ const Profile = () => {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'SUCCESS' | 'FAILED'>('all');
   const [premiumSubscription, setPremiumSubscription] = useState<PremiumSubscriptionDTO | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<OrderHistoryItem | null>(null);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   
   useEffect(() => {
     fetchProfile();
@@ -337,6 +341,92 @@ const Profile = () => {
     }).format(amount);
   };
 
+  const formatCurrencyWithCode = (amount?: number | null, currencyCode?: string | null) => {
+    if (amount === undefined || amount === null) {
+      return '—';
+    }
+    const currency = (currencyCode || 'VND').toUpperCase();
+    try {
+      return new Intl.NumberFormat('vi-VN', {
+        style: 'currency',
+        currency,
+      }).format(amount);
+    } catch {
+      return `${amount.toLocaleString('vi-VN')} ${currency}`;
+    }
+  };
+
+  const parsePlanFeatureSnapshot = (raw?: string | null): PlanFeatureSnapshot[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      return [];
+    } catch (error) {
+      console.warn('Failed to parse plan feature snapshot', error);
+      return [];
+    }
+  };
+
+  const formatFeatureName = (value?: string | null) => {
+    if (!value) return 'Unknown feature';
+    return value
+      .toLowerCase()
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  };
+
+  const formatPeriodLabel = (period?: string | null, periodValue?: number | null) => {
+    if (!period || period.toUpperCase() === 'NONE') {
+      return '';
+    }
+    const normalized = period.toUpperCase();
+    const base = normalized === 'DAY'
+      ? 'ngày'
+      : normalized === 'WEEK'
+        ? 'tuần'
+        : normalized === 'MONTH'
+          ? 'tháng'
+          : normalized === 'YEAR'
+            ? 'năm'
+            : normalized.toLowerCase();
+    if (!periodValue || periodValue <= 1) {
+      return base;
+    }
+    return `${periodValue} ${base}`;
+  };
+
+  const formatFeatureLimit = (feature: PlanFeatureSnapshot) => {
+    const limitType = feature.limitType?.toUpperCase();
+    if (feature.isEnabled === false || limitType === 'DISABLED') {
+      return 'Không khả dụng trong gói này';
+    }
+    if (limitType === 'UNLIMITED') {
+      return 'Không giới hạn';
+    }
+    if (limitType === 'LIMITED') {
+      const limitValue = feature.limitValue ?? 0;
+      const period = formatPeriodLabel(feature.limitPeriod, feature.periodValue);
+      return period ? `${limitValue} lượt / ${period}` : `${limitValue} lượt`;
+    }
+    return 'Không xác định';
+  };
+
+  const selectedOrderFeatures = useMemo(() => {
+    const features = parsePlanFeatureSnapshot(selectedOrder?.planFeatureSnapshot);
+    return features.slice().sort((a, b) => {
+      const isADisabled = a.isEnabled === false || a.limitType?.toUpperCase() === 'DISABLED';
+      const isBDisabled = b.isEnabled === false || b.limitType?.toUpperCase() === 'DISABLED';
+      if (isADisabled !== isBDisabled) {
+        return isADisabled ? 1 : -1; // enabled first
+      }
+      return 0;
+    });
+  }, [selectedOrder?.planFeatureSnapshot]);
+
   const getPaymentStatusBadge = (order: OrderHistoryItem) => {
     if (order.status === 'SUCCESS') {
       return (
@@ -395,6 +485,11 @@ const Profile = () => {
     } finally {
       setPaymentLoading(false);
     }
+  };
+
+  const handleOpenInvoice = (order: OrderHistoryItem) => {
+    setSelectedOrder(order);
+    setIsInvoiceDialogOpen(true);
   };
   
   const [profileData, setProfileData] = useState({
@@ -813,14 +908,15 @@ const Profile = () => {
                               {item.song?.name || (item.song as any)?.songName || (item as any).songName || "Unknown Song"}
                             </p>
                             {(() => {
+                              const artistsField = (item.song as any)?.artists;
                               const artistSource =
                                 (Array.isArray(item.song?.artistNames) && item.song?.artistNames) ||
-                                (Array.isArray(item.song?.artists)
-                                  ? (item.song?.artists as Array<{ name?: string }>)
+                                (Array.isArray(artistsField)
+                                  ? (artistsField as Array<{ name?: string }>)
                                       .map((a) => a?.name)
                                       .filter(Boolean)
-                                  : typeof item.song?.artists === "string"
-                                    ? item.song?.artists.split(",").map((str) => str.trim())
+                                  : typeof artistsField === "string"
+                                    ? artistsField.split(",").map((str) => str.trim())
                                     : undefined) ||
                                 (Array.isArray(item.artistNames) ? item.artistNames : undefined);
 
@@ -933,6 +1029,7 @@ const Profile = () => {
                               <TableHead>Amount</TableHead>
                               <TableHead>Status</TableHead>
                               <TableHead>Date</TableHead>
+                              <TableHead className="text-right">Invoice</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -958,6 +1055,17 @@ const Profile = () => {
                                     : order.failedAt
                                     ? formatPaymentDate(order.failedAt)
                                     : formatPaymentDate(order.createdAt)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-primary hover:text-primary"
+                                    onClick={() => handleOpenInvoice(order)}
+                                  >
+                                    <ReceiptText className="w-4 h-4 mr-1" />
+                                    View
+                                  </Button>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -1029,6 +1137,126 @@ const Profile = () => {
           </Tabs>
         </div>
       </div>
+      <Dialog
+        open={isInvoiceDialogOpen}
+        onOpenChange={(open) => {
+          setIsInvoiceDialogOpen(open);
+          if (!open) {
+            setSelectedOrder(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl bg-gradient-glass border-white/10">
+          <DialogHeader>
+            <DialogTitle>
+              Invoice {selectedOrder ? `#${selectedOrder.orderCode}` : ""}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Chi tiết gói được cố định tại thời điểm bạn thanh toán.
+            </p>
+          </DialogHeader>
+          {!selectedOrder ? (
+            <div className="text-sm text-muted-foreground">Không có dữ liệu đơn hàng.</div>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase text-muted-foreground tracking-wide">
+                    Plan snapshot
+                  </p>
+                  <div className="text-lg font-semibold">
+                    {selectedOrder.planName || selectedOrder.planCode || selectedOrder.description || "Không xác định"}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Mã gói: <span className="text-foreground font-medium">{selectedOrder.planCode || "—"}</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Option: <span className="text-foreground font-medium">{selectedOrder.planDetailName || "Không có"}</span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Thời hạn:{" "}
+                    <span className="text-foreground font-medium">
+                      {selectedOrder.planDurationDaysSnapshot
+                        ? `${selectedOrder.planDurationDaysSnapshot} ngày`
+                        : "Không xác định"}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xs uppercase text-muted-foreground tracking-wide">
+                    Payment info
+                  </p>
+                  <div className="text-lg font-semibold">
+                    {formatCurrencyWithCode(
+                      selectedOrder.planPriceSnapshot ?? selectedOrder.amount,
+                      selectedOrder.planCurrencySnapshot ?? selectedOrder.currency
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {getPaymentStatusBadge(selectedOrder)}
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                      {selectedOrder.status}
+                    </span>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Ngày thanh toán:{" "}
+                    <span className="text-foreground font-medium">
+                      {formatPaymentDate(selectedOrder.paidAt ?? selectedOrder.failedAt ?? selectedOrder.createdAt)}
+                    </span>
+                  </div>
+                  {selectedOrder.reference && (
+                    <div className="text-sm text-muted-foreground">
+                      Reference: <span className="text-foreground font-medium">{selectedOrder.reference}</span>
+                    </div>
+                  )}
+                  {selectedOrder.failureReason && (
+                    <div className="text-sm text-destructive">
+                      Lý do thất bại: {selectedOrder.failureReason}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase text-muted-foreground tracking-wide mb-2">
+                  Quyền lợi tại thời điểm mua
+                </p>
+                {selectedOrderFeatures.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Không có dữ liệu quyền lợi (có thể là gói miễn phí hoặc dữ liệu đã bị xóa).
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                    {selectedOrderFeatures.map((feature, index) => (
+                      <div
+                        key={`${feature.featureName}-${index}`}
+                        className="flex items-center justify-between gap-4 rounded-lg bg-white/5 px-3 py-2"
+                      >
+                        <div>
+                          <div className="font-medium">
+                            {formatFeatureName(feature.featureName)}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatFeatureLimit(feature)}
+                          </div>
+                        </div>
+                        <Badge variant={feature.isEnabled === false ? "outline" : "default"}>
+                          {feature.limitType || (feature.isEnabled === false ? "Disabled" : "Enabled")}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Thông tin trên được lưu cố định trong database (`payment_orders` và `premium_subscription_features`)
+                để đảm bảo bạn luôn nhận đúng quyền lợi đã thanh toán, kể cả khi admin chỉnh sửa gói về sau.
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Footer />
     </div>
   );
