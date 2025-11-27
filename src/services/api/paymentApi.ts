@@ -4,6 +4,8 @@ import { verifyPayosSignature, verifyPayosWebhookPayload } from '@/utils/payosSi
 export interface CreateOrderRequest {
   amount: number;
   description: string;
+  planCode: string;
+  planDetailId: number;
   buyerEmail?: string;
   returnUrl: string;
   cancelUrl: string;
@@ -16,6 +18,15 @@ export interface CreateOrderResponse {
     orderCode: number;
     checkoutUrl: string;
   };
+}
+
+export interface PlanFeatureSnapshot {
+  featureName?: string;
+  limitType?: string;
+  limitValue?: number | null;
+  limitPeriod?: string | null;
+  periodValue?: number | null;
+  isEnabled?: boolean | null;
 }
 
 export interface OrderStatus {
@@ -61,6 +72,14 @@ export interface OrderHistoryItem {
   failedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  planCode?: string | null;
+  planName?: string | null;
+  planDetailId?: number | null;
+  planDetailName?: string | null;
+  planDurationDaysSnapshot?: number | null;
+  planPriceSnapshot?: number | null;
+  planCurrencySnapshot?: string | null;
+  planFeatureSnapshot?: string | null;
 }
 
 export interface OrderHistoryResponse {
@@ -95,6 +114,8 @@ export const paymentApi = {
   createOrder: async (data: {
     amount: number;
     description: string;
+    planCode: string;
+    planDetailId: number;
     buyerEmail?: string;
   }): Promise<CreateOrderResponse['data']> => {
     const baseUrl = getFrontendBaseUrl();
