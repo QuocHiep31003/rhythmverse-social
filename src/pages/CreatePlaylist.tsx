@@ -17,7 +17,7 @@ import { PlaylistVisibility } from "@/types/playlist";
 import { createGridCover, uploadDataUrlToCloudinary } from "@/utils/imageUtils";
 import { songsApi } from "@/services/api/songApi";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitType, FeatureName, featureUsageApi } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import {
   Select,
@@ -242,8 +242,15 @@ const CreatePlaylist = () => {
       return;
     }
 
-    // Limit check - dùng canUse từ backend (backend đã xử lý tất cả logic)
-    if (!canUse) {
+    // Limit check - refresh usage trước khi check để đảm bảo có thông tin mới nhất
+    await refresh();
+    
+    // Lấy usage mới nhất sau khi refresh
+    const latestUsage = await featureUsageApi.getFeatureUsage(FeatureName.PLAYLIST_CREATE);
+    const latestCanUse = latestUsage?.canUse ?? true;
+    
+    // Check lại canUse sau khi refresh
+    if (!latestCanUse) {
       setShowLimitModal(true);
       return;
     }

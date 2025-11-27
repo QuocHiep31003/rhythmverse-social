@@ -61,6 +61,22 @@ const AdminSubscriptionPlans = () => {
     loadPlans();
   }, []);
 
+  const ensureMonthlyRecommended = (details: PlanDetailDTO[] = []) => {
+    if (!details.length) return details;
+    if (details.some(detail => detail.isRecommended)) return details;
+    const monthlyIndex = details.findIndex(
+      detail =>
+        typeof detail.durationDays === "number" &&
+        detail.durationDays >= 28 &&
+        detail.durationDays <= 35
+    );
+    const targetIndex = monthlyIndex !== -1 ? monthlyIndex : 0;
+    return details.map((detail, index) => ({
+      ...detail,
+      isRecommended: index === targetIndex,
+    }));
+  };
+
   // Sắp xếp để FREE, PREMIUM và PREMIUM_YEARLY luôn hiển thị đầu tiên
   const sortPlansWithDefaultsFirst = (plans: SubscriptionPlanDTO[]): SubscriptionPlanDTO[] => {
     const defaultPlans: SubscriptionPlanDTO[] = [];
@@ -167,7 +183,7 @@ const AdminSubscriptionPlans = () => {
         isActive: plan.isActive ?? true,
         displayOrder: plan.displayOrder || 0,
         features: allFeatures,
-        details: plan.details || [],
+        details: ensureMonthlyRecommended(plan.details || []),
       });
     } else {
       setEditingPlan(null);
@@ -235,7 +251,7 @@ const AdminSubscriptionPlans = () => {
     };
     setFormData({
       ...formData,
-      details: [...(formData.details || []), newDetail],
+      details: ensureMonthlyRecommended([...(formData.details || []), newDetail]),
     });
   };
 
@@ -245,9 +261,22 @@ const AdminSubscriptionPlans = () => {
   };
 
   const handleDetailChange = (index: number, field: keyof PlanDetailDTO, value: any) => {
-    const newDetails = [...(formData.details || [])];
+    let newDetails = [...(formData.details || [])];
     newDetails[index] = { ...newDetails[index], [field]: value };
-    setFormData({ ...formData, details: newDetails });
+
+    if (field === "isRecommended" && value === true) {
+      newDetails = newDetails.map((detail, idx) => ({
+        ...detail,
+        isRecommended: idx === index,
+      }));
+    }
+
+    setFormData({ ...formData, details: ensureMonthlyRecommended(newDetails) });
+  };
+
+  const handlePriceInputChange = (index: number, rawValue: string) => {
+    const numericValue = parseNumber(rawValue);
+    handleDetailChange(index, "price", numericValue);
   };
 
   const handleSave = async () => {
@@ -521,12 +550,27 @@ const AdminSubscriptionPlans = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">Mô tả</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="description">Mô tả</Label>
+                <span className={`text-xs ${
+                  (formData.description?.length || 0) > 270 
+                    ? "text-destructive" 
+                    : "text-muted-foreground"
+                }`}>
+                  {(formData.description?.length || 0)}/300
+                </span>
+              </div>
               <Textarea
                 id="description"
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value.length <= 300) {
+                    setFormData({ ...formData, description: value });
+                  }
+                }}
                 placeholder="Mô tả về gói đăng ký..."
+                maxLength={300}
                 className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
               />
             </div>
@@ -562,12 +606,12 @@ const AdminSubscriptionPlans = () => {
 
               {sortedFeatures.length > 0 && (
                 <div className="space-y-2">
-                  <Table className="border border-[hsl(var(--admin-border))] rounded-md">
+                  <Table className="border border-[hsl(var(--admin-border))] rounded-md table-fixed w-full">
                     <TableHeader className="bg-[hsl(var(--admin-sidebar))]">
                       <TableRow className="border-b border-[hsl(var(--admin-border))] hover:bg-transparent">
-                        <TableHead className="text-foreground font-semibold">Tính năng</TableHead>
-                        <TableHead className="text-foreground font-semibold">Trạng thái</TableHead>
-                        <TableHead className="text-foreground font-semibold">Giới hạn</TableHead>
+                        <TableHead className="text-foreground font-semibold w-auto pr-1">Tính năng</TableHead>
+                        <TableHead className="text-foreground font-semibold w-[180px] pl-1 pr-2">Trạng thái</TableHead>
+                        <TableHead className="text-foreground font-semibold w-[220px]">Giới hạn</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="bg-[hsl(var(--admin-card))]">
@@ -584,49 +628,51 @@ const AdminSubscriptionPlans = () => {
                               : "bg-[hsl(var(--admin-card))]"
                           }`}
                         >
-                          <TableCell>
-                            <div className="font-medium">
+                          <TableCell className="pr-1">
+                            <div className="font-medium h-[40px] flex items-center">
                               {FEATURE_OPTIONS.find(opt => opt.value === feature.featureName)?.label || feature.featureName}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
+                          <TableCell className="w-[180px] pl-1 pr-2">
+                            <div className="h-[40px] flex items-center gap-2 w-[180px]">
                               <Switch
                                 checked={isUnlimited}
                                 onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
                               />
-                              <span className="text-sm">
+                              <span className="text-sm whitespace-nowrap">
                                 {isUnlimited ? (
-                                  <Badge variant="default" className="bg-green-600">Unlimited</Badge>
+                                  <Badge variant="default" className="bg-green-600">Không giới hạn</Badge>
                                 ) : (
-                                  <Badge variant="secondary">Limited</Badge>
+                                  <Badge variant="secondary">Có giới hạn</Badge>
                                 )}
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell>
-                            {isUnlimited ? (
-                              <span className="text-sm text-muted-foreground">Không giới hạn</span>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  placeholder="Số lượt"
-                                  value={feature.limitValue || 0}
-                                  onChange={(e) => {
-                                    const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
-                                    if (numValue >= 0) {
-                                      handleLimitValueChange(index, numValue);
-                                    }
-                                  }}
-                                  className="w-32 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                                />
-                                <span className="text-xs text-muted-foreground">
-                                  {feature.limitValue === 0 ? "(Không cho dùng)" : "lượt"}
-                                </span>
-                              </div>
-                            )}
+                          <TableCell className="w-[220px]">
+                            <div className="h-[40px] flex items-center w-[220px]">
+                              {isUnlimited ? (
+                                <span className="text-sm text-muted-foreground">Không giới hạn</span>
+                              ) : (
+                                <div className="flex items-center gap-2 w-full">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    placeholder="Số lượt"
+                                    value={feature.limitValue || 0}
+                                    onChange={(e) => {
+                                      const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
+                                      if (numValue >= 0) {
+                                        handleLimitValueChange(index, numValue);
+                                      }
+                                    }}
+                                    className="w-32 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                                  />
+                                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                    {feature.limitValue === 0 ? "(Không cho dùng)" : "lượt"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                         );
@@ -661,61 +707,71 @@ const AdminSubscriptionPlans = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody className="bg-[hsl(var(--admin-card))]">
-                      {formData.details.map((detail, index) => (
-                        <TableRow key={index} className="hover:bg-[hsl(var(--admin-hover))]">
-                          <TableCell>
-                            <Input
-                              value={detail.detailName || ""}
-                              onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
-                              placeholder="Ví dụ: 1 tháng"
-                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={detail.price || 0}
-                              onChange={(e) => handleDetailChange(index, "price", parseNumber(e.target.value))}
-                              placeholder="Giá"
-                              className="w-32 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={detail.durationDays || 30}
-                              onChange={(e) => handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))}
-                              placeholder="Ngày"
-                              className="w-24 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={detail.displayOrder || 0}
-                              onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
-                              placeholder="0"
-                              className="w-20 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Switch
-                              checked={detail.isRecommended ?? false}
-                              onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveDetail(index)}
-                              className="hover:bg-destructive/10 hover:text-destructive"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {formData.details.map((detail, index) => {
+                        const isRecommended = detail.isRecommended ?? false;
+                        return (
+                          <TableRow
+                            key={index}
+                            className={`hover:bg-[hsl(var(--admin-hover))] transition-all ${
+                              isRecommended 
+                                ? "bg-primary/5 border-l-2 border-l-primary" 
+                                : "border-l-2 border-l-transparent"
+                            }`}
+                          >
+                            <TableCell className="w-[200px]">
+                              <Input
+                                value={detail.detailName || ""}
+                                onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
+                                placeholder="Ví dụ: 1 tháng"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[120px]">
+                              <Input
+                                inputMode="numeric"
+                                value={formatNumber(detail.price)}
+                                onChange={(e) => handlePriceInputChange(index, e.target.value)}
+                                placeholder="Giá"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[140px]">
+                              <Input
+                                type="number"
+                                value={detail.durationDays || 30}
+                                onChange={(e) => handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))}
+                                placeholder="Ngày"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[100px]">
+                              <Input
+                                type="number"
+                                value={detail.displayOrder || 0}
+                                onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
+                                placeholder="0"
+                                className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                              />
+                            </TableCell>
+                            <TableCell className="w-[120px]">
+                              <Switch
+                                checked={isRecommended}
+                                onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
+                              />
+                            </TableCell>
+                            <TableCell className="w-[60px]">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveDetail(index)}
+                                className="hover:bg-destructive/10 hover:text-destructive"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>

@@ -35,6 +35,22 @@ import { subscriptionPlanApi, SubscriptionPlanDTO, PlanDetailDTO } from "@/servi
 import { FeatureName } from "@/services/api/featureUsageApi";
 import { useToast } from "@/hooks/use-toast";
 
+const cleanPlanName = (name?: string | null) =>
+  name ? name.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim() : "";
+
+const getPlanDisplayName = (plan?: SubscriptionPlanDTO | null) => {
+  if (!plan) return "Premium";
+  const planCode = plan.planCode?.toUpperCase();
+  const cleanedName = cleanPlanName(plan.planName);
+  if (planCode?.startsWith("PREMIUM") || cleanedName?.toUpperCase().includes("PREMIUM")) {
+    return "Premium";
+  }
+  return cleanedName || plan.planCode || "Premium";
+};
+
+const MONTHLY_MIN_DAYS = 28;
+const MONTHLY_MAX_DAYS = 35;
+
 const Premium = () => {
   const navigate = useNavigate();
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -97,13 +113,13 @@ const Premium = () => {
       
       if (limitValue === null) {
         status = "unlimited";
-        displayText = "Unlimited";
+        displayText = "Không giới hạn";
       } else if (limitValue === 0) {
         status = "disabled";
-        displayText = "Not available";
+        displayText = "Không khả dụng";
       } else {
         status = "limited";
-        displayText = `${limitValue} times`;
+        displayText = `${limitValue} lần`;
       }
       
       return {
@@ -128,14 +144,35 @@ const Premium = () => {
   const additionalPlans = otherPlans.filter(p => p.planCode?.toUpperCase() !== "PREMIUM_YEARLY");
 
   // Lấy PlanDetail được recommend hoặc giá thấp nhất
+  const getMonthlyDetail = (plan: SubscriptionPlanDTO) => {
+    if (!plan.details || plan.details.length === 0) return null;
+    return plan.details.find(
+      d =>
+        d.isActive !== false &&
+        typeof d.durationDays === "number" &&
+        d.durationDays >= MONTHLY_MIN_DAYS &&
+        d.durationDays <= MONTHLY_MAX_DAYS
+    ) || null;
+  };
+
   const getRecommendedDetail = (plan: SubscriptionPlanDTO) => {
     if (!plan.details || plan.details.length === 0) return null;
     const activeDetails = plan.details.filter(d => d.isActive !== false);
     if (activeDetails.length === 0) return null;
-    
-    // Ưu tiên recommended, nếu không có thì lấy giá thấp nhất
+
+    // Ưu tiên gói tháng
+    const monthly = getMonthlyDetail(plan);
+    if (monthly) return monthly;
+
+    // Nếu không có gói tháng, ưu tiên recommended
     const recommended = activeDetails.find(d => d.isRecommended);
     if (recommended) return recommended;
+
+    const monthlyDetail = activeDetails.find(detail => {
+      const duration = detail.durationDays ?? 0;
+      return duration >= 28 && duration <= 35;
+    });
+    if (monthlyDetail) return monthlyDetail;
     
     return activeDetails.sort((a, b) => (a.price || 0) - (b.price || 0))[0];
   };
@@ -176,6 +213,7 @@ const Premium = () => {
     };
 
     const planFeatures = getPlanFeatures(plan);
+    const planDisplayName = getPlanDisplayName(plan);
     const isFreePlan = plan.planCode?.toUpperCase() === "FREE";
     const hasDetails = plan.details && plan.details.length > 0 && plan.details.some(d => d.isActive !== false);
     const isButtonDisabled = options?.lockButton || isFreePlan || isUpgrading || !hasDetails;
@@ -185,7 +223,7 @@ const Premium = () => {
         ? "Current Plan"
         : isUpgrading
         ? "Processing..."
-        : options?.buttonLabel || `Upgrade to ${plan.planName}`;
+        : options?.buttonLabel || `Upgrade to ${planDisplayName}`;
 
     const baseButtonClass =
       "mt-4 w-full rounded-2xl font-semibold tracking-wide transition-all duration-300 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950";
@@ -214,7 +252,7 @@ const Premium = () => {
             </div>
           )}
           <div className="space-y-1">
-            <h3 className="text-3xl font-bold text-white">{plan.planName}</h3>
+            <h3 className="text-3xl font-bold text-white">{planDisplayName}</h3>
           </div>
           <div className="mt-4 mb-2 space-y-1">
             <div className="text-4xl font-black text-white">{formatPrice(plan)}</div>
@@ -237,39 +275,34 @@ const Premium = () => {
               planFeatures.map((feature, index) => (
                 <div
                   key={`${plan.planCode}-feature-${index}`}
-                  className={`flex items-center gap-3 rounded-2xl border px-3 py-1.5 text-sm ${
+                  className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-1.5 text-sm ${
                     feature.status === "disabled"
                       ? "border-white/5 bg-white/0 text-white/50"
                       : "border-white/5 bg-white/5 text-white/90"
                   }`}
                 >
-                  {feature.status === "disabled" ? (
-                    <X className="w-4 h-4 text-rose-400 shrink-0" />
-                  ) : feature.status === "unlimited" ? (
-                    <Infinity className="w-4 h-4 text-emerald-400 shrink-0" />
-                  ) : (
-                    <Check className="w-4 h-4 text-blue-400 shrink-0" />
-                  )}
-                  <feature.icon className="w-4 h-4 shrink-0 text-white/70" />
-                  <span className="flex-1">
-                    {feature.text}
+                  <div className="flex items-center gap-3">
+                    {feature.status === "disabled" ? (
+                      <X className="w-4 h-4 text-rose-400 shrink-0" />
+                    ) : feature.status === "unlimited" ? (
+                      <Infinity className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Check className="w-4 h-4 text-blue-400 shrink-0" />
+                    )}
+                    <feature.icon className="w-4 h-4 shrink-0 text-white/70" />
+                    <span>{feature.text}</span>
+                  </div>
+                  <span
+                    className={`text-xs font-medium ${
+                      feature.status === "unlimited"
+                        ? "text-emerald-400"
+                        : feature.status === "limited"
+                        ? "text-blue-400"
+                        : "text-rose-400/70"
+                    }`}
+                  >
+                    {feature.displayText}
                   </span>
-                  {feature.status === "unlimited" && (
-                    <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                      <Infinity className="w-3 h-3" />
-                      Unlimited
-                    </span>
-                  )}
-                  {feature.status === "limited" && (
-                    <span className="text-xs text-blue-400 font-medium">
-                      {feature.limitValue} lần
-                    </span>
-                  )}
-                  {feature.status === "disabled" && (
-                    <span className="text-xs text-rose-400/70 font-medium">
-                      Không khả dụng
-                    </span>
-                  )}
                 </div>
               ))
             ) : (
@@ -364,11 +397,10 @@ const Premium = () => {
       }
 
       const amountVND = Number(planDetail.price);
-      const planName = plan.planName || plan.planCode || "Premium";
-      const detailName = planDetail.detailName || "";
+      const planName = getPlanDisplayName(plan);
       const rawDescription = userId
-        ? `${planName} ${detailName} - ${userId}`
-        : `${planName} ${detailName}`;
+        ? `${planName} + User ID: ${userId}`
+        : planName;
       // PayOS giới hạn mô tả 25 ký tự nên cần cắt ngắn
       const description = rawDescription.slice(0, 25);
 
@@ -430,18 +462,17 @@ const Premium = () => {
                 accent: "premium",
                 badge: "Most Popular",
                 highlight: true,
-                buttonLabel: "Upgrade to Premium",
               })}
               {renderPlanCard(annualPlan, {
                 accent: "annual",
                 badge: "Best Value",
-                buttonLabel: "Upgrade to Gói Premium 1 Năm",
+                buttonLabel: annualPlan ? `Upgrade to ${getPlanDisplayName(annualPlan)}` : undefined,
               })}
               {additionalPlans.map(plan =>
                 renderPlanCard(plan, {
                   accent: "default",
                   badge: plan.planCode,
-                  buttonLabel: `Upgrade to ${plan.planName}`,
+                  buttonLabel: `Upgrade to ${getPlanDisplayName(plan)}`,
                 })
               )}
             </div>
@@ -535,7 +566,7 @@ const Premium = () => {
         <DialogContent className="max-w-2xl bg-slate-950/95 border-white/10">
           <DialogHeader>
             <DialogTitle className="text-2xl text-white">
-              Chọn gói {selectedPlan?.planName}
+              Chọn gói {getPlanDisplayName(selectedPlan)}
             </DialogTitle>
             <DialogDescription className="text-white/70">
               Chọn option giá và thời gian phù hợp với bạn

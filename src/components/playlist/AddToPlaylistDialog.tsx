@@ -8,7 +8,7 @@ import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { createSlug } from "@/utils/playlistUtils";
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
-import { FeatureName, FeatureLimitType } from "@/services/api/featureUsageApi";
+import { FeatureName, FeatureLimitType, featureUsageApi } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
 interface AddToPlaylistDialogProps {
@@ -43,7 +43,6 @@ export const AddToPlaylistDialog = ({
     remaining,
     limit,
     limitType,
-    useFeature,
     checkUsage,
     isLoading: isCheckingLimit,
   } = useFeatureLimit({
@@ -134,7 +133,6 @@ export const AddToPlaylistDialog = ({
       return;
     }
 
-    // Check feature limit trước khi tạo playlist
     if (!canUse) {
       setShowLimitModal(true);
       return;
@@ -142,12 +140,13 @@ export const AddToPlaylistDialog = ({
 
     setCreating(true);
     try {
-      // Sử dụng feature trước khi tạo playlist (sẽ tăng usage count)
-      const canUseAfterCheck = await useFeature();
-      if (!canUseAfterCheck) {
-        // Nếu không thể sử dụng sau khi check, show modal
+      // Refresh usage trước khi tạo để đảm bảo nắm thông tin mới nhất
+      const latestUsage = await featureUsageApi.getFeatureUsage(FeatureName.PLAYLIST_CREATE);
+      const latestCanUse = latestUsage?.canUse ?? true;
+      if (!latestCanUse) {
         setShowLimitModal(true);
         setCreating(false);
+        await checkUsage();
         return;
       }
 
@@ -168,6 +167,9 @@ export const AddToPlaylistDialog = ({
         console.error("Failed to add song to new playlist:", addError);
         // Vẫn navigate dù có lỗi khi thêm bài hát
       }
+
+      // Refresh usage sau khi tạo thành công để cập nhật thông tin mới nhất
+      await checkUsage();
 
       toast({
         title: "Đã tạo playlist",

@@ -56,6 +56,18 @@ import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 
+const cleanPlanLabel = (label?: string | null) =>
+  label ? label.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim() : "";
+
+const resolvePlanLabel = (planName?: string | null, planCode?: string | null) => {
+  const cleaned = cleanPlanLabel(planName);
+  const codeUpper = planCode?.toUpperCase();
+  if (codeUpper?.startsWith("PREMIUM") || cleaned?.toUpperCase().includes("PREMIUM")) {
+    return "Premium";
+  }
+  return cleaned || planCode || "Premium";
+};
+
 const TopBar = () => {
   const [searchText, setSearchText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -88,7 +100,6 @@ const TopBar = () => {
     remaining,
     limit,
     limitType,
-    useFeature,
     checkUsage,
     isLoading: isCheckingLimit,
   } = useFeatureLimit({
@@ -211,26 +222,26 @@ const TopBar = () => {
     setError("");
 
     try {
-      const success = await useFeature();
-      if (!success) {
-        setShowLimitModal(true);
-        setIsRecognizing(false);
-        return;
-      }
-
       const result = await arcApi.recognizeMusic(audioBlob);
+      await checkUsage();
       navigate("/music-recognition-result", {
         state: {
           result,
           audioUrl,
         },
       });
-    } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "Failed to recognize music. Please try again.";
-      setError(errorMessage);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 403 || err?.message?.toLowerCase?.().includes("limit")) {
+        setShowLimitModal(true);
+        await checkUsage();
+      } else {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to recognize music. Please try again.";
+        setError(errorMessage);
+      }
     } finally {
       setIsRecognizing(false);
     }
@@ -295,21 +306,10 @@ const TopBar = () => {
 
               if (active) {
                 setProfileIsPremium(true);
-                let rawPlanLabel =
-                  subscription.planName ||
-                    subscription.planCode ||
-                    (me as any)?.plan ||
-                    "Premium";
-                
-                // Convert Vietnamese plan names to English
-                const planLabel = rawPlanLabel
-                  ?.replace(/Premium\s*1\s*tháng/gi, "Premium Monthly")
-                  ?.replace(/Premium\s*3\s*tháng/gi, "Premium Quarterly")
-                  ?.replace(/Premium\s*1\s*năm/gi, "Premium Yearly")
-                  ?.replace(/Premium\s*tháng/gi, "Premium Monthly")
-                  ?.replace(/Premium\s*năm/gi, "Premium Yearly")
-                  || "Premium";
-                
+                const planLabel = resolvePlanLabel(
+                  subscription.planName || (me as any)?.plan,
+                  subscription.planCode
+                );
                 setProfilePlanLabel(planLabel);
               }
             }
