@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, memo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Users, Music, ListMusic, TrendingUp } from "lucide-react";
+import { RefreshCw, Users, Music, ListMusic, TrendingUp, X, BarChart3 } from "lucide-react";
 import { mockSongs, mockUsers } from "@/data/mockData";
 import { dashboardApi } from "@/services/api/dashboardApi";
 import type { DashboardStatsResponse, DashboardMetricDTO, TimeSeriesPointDTO } from "@/types/dashboard";
@@ -24,11 +24,12 @@ import {
   Tooltip,
   Legend,
   Filler,
+  ArcElement,
 } from "chart.js";
-import { Line } from "react-chartjs-2";
+import { Line, Doughnut } from "react-chartjs-2";
 import { Skeleton } from "@/components/ui/skeleton";
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTitle, Tooltip, Legend, Filler);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTitle, Tooltip, Legend, Filler, ArcElement);
 
 const DEFAULT_AVATAR_URL =
   "https://res-console.cloudinary.com/dhylbhwvb/thumbnails/v1/image/upload/v1759805930/eG5vYjR5cHBjbGhzY2VrY3NzNWU";
@@ -52,14 +53,26 @@ const AdminHome = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedDataset, setSelectedDataset] = useState<DatasetType>("songs");
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState<DatasetType | null>(null);
+  const [deepAnalysisData, setDeepAnalysisData] = useState<{
+    genre?: Array<{ name: string; count: number }>;
+    mood?: Array<{ name: string; count: number }>;
+  } | null>(null);
+  const [loadingDeepAnalysis, setLoadingDeepAnalysis] = useState(false);
+  
+  // Dùng ref để track xem đã fetch lần đầu chưa
+  const hasFetchedInitial = useRef(false);
+  const currentFilters = useRef({ startDate, endDate, period });
 
   const fetchSummary = useCallback(
     async (start: string, end: string, periodValue: PeriodType) => {
+      console.log("[Dashboard] fetchSummary called", { start, end, periodValue });
       try {
         setLoading(true);
         setError(null);
         const data = await dashboardApi.getSummary({ startDate: start, endDate: end, period: periodValue });
         setSummary(data);
+        console.log("[Dashboard] fetchSummary completed");
       } catch (err) {
         console.error("[Dashboard] load failed", err);
         setError(err instanceof Error ? err.message : "Không thể tải dữ liệu dashboard");
@@ -70,9 +83,18 @@ const AdminHome = () => {
     []
   );
 
+  // Chỉ fetch khi mount lần đầu - không fetch lại khi state thay đổi
   useEffect(() => {
-    fetchSummary(last30Iso, todayIso, period);
-  }, [fetchSummary, period]);
+    if (!hasFetchedInitial.current) {
+      console.log("[Dashboard] Initial fetch");
+      hasFetchedInitial.current = true;
+      fetchSummary(startDate, endDate, period);
+      currentFilters.current = { startDate, endDate, period };
+    } else {
+      console.log("[Dashboard] Skipping fetch - already fetched");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Chỉ chạy 1 lần khi mount
 
   const metricCards = useMemo(
     () => [
@@ -112,10 +134,26 @@ const AdminHome = () => {
     const buildSeries = (series?: TimeSeriesPointDTO[]) =>
       series?.map((point) => point.value) ?? [];
 
-    const labels =
-      summary?.songSeries?.map((point) =>
-        new Date(point.date).toLocaleDateString("vi-VN", { day: "2-digit", month: "short" })
-      ) ?? [];
+    // Lấy labels và data tương ứng với selectedDataset
+    const getSeriesForDataset = (dataset: DatasetType) => {
+      switch (dataset) {
+        case "songs":
+          return summary?.songSeries;
+        case "playlists":
+          return summary?.playlistSeries;
+        case "plays":
+          return summary?.playSeries;
+        case "users":
+          return summary?.userSeries;
+        default:
+          return summary?.songSeries;
+      }
+    };
+
+    const series = getSeriesForDataset(selectedDataset);
+    const labels = series?.map((point) =>
+      new Date(point.date).toLocaleDateString("vi-VN", { day: "2-digit", month: "short" })
+    ) ?? [];
 
     const datasetConfig = {
       songs: {
@@ -151,6 +189,7 @@ const AdminHome = () => {
       datasets: [
         {
           ...config,
+          data: buildSeries(series), // Dùng data từ series tương ứng
           borderWidth: 2.5,
           tension: 0.4,
           fill: true,
@@ -177,16 +216,79 @@ const AdminHome = () => {
       setError("Vui lòng chọn ngày bắt đầu và kết thúc");
       return;
     }
+    // Cập nhật ref và fetch
+    currentFilters.current = { startDate, endDate, period };
     fetchSummary(startDate, endDate, period);
   };
 
-  const MetricCard = ({
+  // Fetch phân tích sâu theo genre/mood
+  const fetchDeepAnalysis = useCallback(async (datasetType: DatasetType) => {
+    if (datasetType !== "songs") {
+      // Chỉ hỗ trợ phân tích sâu cho songs
+      return;
+    }
+    
+    try {
+      setLoadingDeepAnalysis(true);
+      // Gọi API để lấy thống kê theo genre và mood
+      const [genreStats, moodStats] = await Promise.all([
+        dashboardApi.getSongsByGenre(),
+        dashboardApi.getSongsByMood(),
+      ]);
+      
+      // Convert từ object sang array và sort theo count
+      const genreArray = Object.entries(genreStats)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+      
+      const moodArray = Object.entries(moodStats)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+      
+      setDeepAnalysisData({
+        genre: genreArray,
+        mood: moodArray,
+      });
+    } catch (err) {
+      console.error("Failed to fetch deep analysis", err);
+      // Fallback về empty data nếu API fail
+      setDeepAnalysisData({ genre: [], mood: [] });
+    } finally {
+      setLoadingDeepAnalysis(false);
+    }
+  }, []);
+
+  const handleCardClick = useCallback((datasetType: DatasetType) => {
+    console.log("[Dashboard] Card clicked:", datasetType, "- NOT fetching summary");
+    setSelectedDataset(datasetType);
+    // Mở panel phân tích sâu nếu là songs
+    if (datasetType === "songs") {
+      setShowDeepAnalysis((prev) => {
+        if (prev === datasetType) {
+          // Đóng nếu đã mở
+          setDeepAnalysisData(null);
+          return null;
+        } else {
+          // Mở và fetch data
+          fetchDeepAnalysis(datasetType);
+          return datasetType;
+        }
+      });
+    } else {
+      // Đóng panel nếu click vào card khác
+      setShowDeepAnalysis(null);
+      setDeepAnalysisData(null);
+    }
+  }, [fetchDeepAnalysis]);
+
+  const MetricCard = memo(({
     title,
     metric,
     Icon,
     color,
     datasetType,
     isSelected,
+    onCardClick,
   }: {
     title: string;
     metric?: DashboardMetricDTO;
@@ -194,13 +296,20 @@ const AdminHome = () => {
     color?: string;
     datasetType?: DatasetType;
     isSelected?: boolean;
+    onCardClick: (datasetType: DatasetType) => void;
   }) => {
     const totalCount = useCountUp(metric?.total, { duration: 1500 });
     const newCount = useCountUp(metric?.inRange, { duration: 1500 });
 
+    const handleClick = useCallback(() => {
+      if (datasetType) {
+        onCardClick(datasetType);
+      }
+    }, [datasetType, onCardClick]);
+
     return (
       <Card
-        onClick={() => datasetType && setSelectedDataset(datasetType)}
+        onClick={handleClick}
         className={`border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-all cursor-pointer hover:shadow-lg
           ${isSelected ? "ring-2 ring-[hsl(var(--admin-primary))]" : ""}`}
       >
@@ -216,7 +325,7 @@ const AdminHome = () => {
         </CardContent>
       </Card>
     );
-  };
+  });
 
   return (
     <div className="space-y-6">
@@ -244,6 +353,7 @@ const AdminHome = () => {
             color={stat.color}
             datasetType={stat.datasetType}
             isSelected={stat.datasetType === selectedDataset}
+            onCardClick={handleCardClick}
           />
         ))}
       </div>
@@ -352,6 +462,212 @@ const AdminHome = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Panel phân tích sâu */}
+      {showDeepAnalysis === "songs" && (
+        <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-lg">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  Phân tích sâu: Bài hát
+                </CardTitle>
+                <CardDescription>
+                  Phân loại bài hát theo thể loại (Genre) và tâm trạng (Mood)
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setShowDeepAnalysis(null);
+                  setDeepAnalysisData(null);
+                }}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingDeepAnalysis ? (
+              <div className="flex items-center justify-center h-[400px]">
+                <Skeleton className="w-full h-full" />
+              </div>
+            ) : deepAnalysisData ? (
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Biểu đồ tròn theo Genre */}
+                {deepAnalysisData.genre && deepAnalysisData.genre.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Phân bố theo Genre</h3>
+                    <div className="h-[300px] flex items-center justify-center">
+                      <Doughnut
+                        data={{
+                          labels: deepAnalysisData.genre.map((g) => g.name),
+                          datasets: [
+                            {
+                              data: deepAnalysisData.genre.map((g) => g.count),
+                              backgroundColor: [
+                                "hsl(262, 83%, 58%)",
+                                "hsl(195, 100%, 65%)",
+                                "hsl(280, 100%, 65%)",
+                                "hsl(142, 76%, 36%)",
+                                "hsl(24, 95%, 53%)",
+                                "hsl(0, 84%, 60%)",
+                              ],
+                              borderWidth: 2,
+                              borderColor: "hsl(var(--admin-card))",
+                            },
+                          ],
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: {
+                              position: "bottom",
+                              labels: {
+                                padding: 15,
+                                usePointStyle: true,
+                              },
+                            },
+                            tooltip: {
+                              callbacks: {
+                                label: (context) => {
+                                  const label = context.label || "";
+                                  const value = context.parsed || 0;
+                                  const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                                  const percentage = ((value / total) * 100).toFixed(1);
+                                  return `${label}: ${value} (${percentage}%)`;
+                                },
+                              },
+                            },
+                          },
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {deepAnalysisData.genre.map((item, index) => {
+                        const total = deepAnalysisData.genre!.reduce((sum, g) => sum + g.count, 0);
+                        const percentage = ((item.count / total) * 100).toFixed(1);
+                        return (
+                          <div key={item.name} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{
+                                  backgroundColor: [
+                                    "hsl(262, 83%, 58%)",
+                                    "hsl(195, 100%, 65%)",
+                                    "hsl(280, 100%, 65%)",
+                                    "hsl(142, 76%, 36%)",
+                                    "hsl(24, 95%, 53%)",
+                                    "hsl(0, 84%, 60%)",
+                                  ][index % 6],
+                                }}
+                              />
+                              <span>{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium">{item.count}</span>
+                              <span className="text-muted-foreground">{percentage}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Biểu đồ tròn theo Mood */}
+                {deepAnalysisData.mood && deepAnalysisData.mood.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Phân bố theo Mood</h3>
+                    <div className="h-[300px] flex items-center justify-center">
+                      <Doughnut
+                        data={{
+                          labels: deepAnalysisData.mood.map((m) => m.name),
+                          datasets: [
+                            {
+                              data: deepAnalysisData.mood.map((m) => m.count),
+                              backgroundColor: [
+                                "hsl(142, 76%, 36%)",
+                                "hsl(217, 91%, 60%)",
+                                "hsl(24, 95%, 53%)",
+                                "hsl(195, 100%, 65%)",
+                                "hsl(280, 100%, 65%)",
+                              ],
+                              borderWidth: 2,
+                              borderColor: "hsl(var(--admin-card))",
+                            },
+                          ],
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: {
+                              position: "bottom",
+                              labels: {
+                                padding: 15,
+                                usePointStyle: true,
+                              },
+                            },
+                            tooltip: {
+                              callbacks: {
+                                label: (context) => {
+                                  const label = context.label || "";
+                                  const value = context.parsed || 0;
+                                  const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+                                  const percentage = ((value / total) * 100).toFixed(1);
+                                  return `${label}: ${value} (${percentage}%)`;
+                                },
+                              },
+                            },
+                          },
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {deepAnalysisData.mood.map((item, index) => {
+                        const total = deepAnalysisData.mood!.reduce((sum, m) => sum + m.count, 0);
+                        const percentage = ((item.count / total) * 100).toFixed(1);
+                        return (
+                          <div key={item.name} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{
+                                  backgroundColor: [
+                                    "hsl(142, 76%, 36%)",
+                                    "hsl(217, 91%, 60%)",
+                                    "hsl(24, 95%, 53%)",
+                                    "hsl(195, 100%, 65%)",
+                                    "hsl(280, 100%, 65%)",
+                                  ][index % 5],
+                                }}
+                              />
+                              <span>{item.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium">{item.count}</span>
+                              <span className="text-muted-foreground">{percentage}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[400px] text-muted-foreground">
+                Không có dữ liệu phân tích
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

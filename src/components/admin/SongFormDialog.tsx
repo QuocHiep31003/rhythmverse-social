@@ -85,7 +85,7 @@ const getAudioDuration = async (file: File): Promise<string> => {
 
 const songFormSchema = z.object({
   name: z.string().min(1, "Tên bài hát không được để trống").max(200),
-  releaseAt: z.string().min(1, "Thời gian phát hành không được để trống"),
+  releaseAt: z.string().min(1, "Ngày phát hành không được để trống"),
   genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
   performerIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 ca sĩ chính"),
   featIds: z.array(z.number()).optional(),
@@ -505,7 +505,7 @@ export const SongFormDialog = ({
                       name="releaseAt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Thời gian phát hành *</FormLabel>
+                          <FormLabel>Ngày phát hành *</FormLabel>
                           <FormControl>
                             <Input
                               type="datetime-local"

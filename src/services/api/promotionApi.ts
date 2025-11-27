@@ -18,6 +18,10 @@ export interface PaginationParams {
   search?: string;
 }
 
+export interface PromotionFilterParams extends PaginationParams {
+  status?: "all" | "active" | "inactive";
+}
+
 export interface PaginatedResponse<T> {
   content: T[];
   totalElements: number;
@@ -27,12 +31,15 @@ export interface PaginatedResponse<T> {
 }
 
 export const promotionsApi = {
-  getAll: async (params?: PaginationParams): Promise<PaginatedResponse<PromotionDTO>> => {
+  getAll: async (params?: PromotionFilterParams): Promise<PaginatedResponse<PromotionDTO>> => {
     const query = new URLSearchParams();
     if (params?.page !== undefined) query.append("page", String(params.page));
     if (params?.size !== undefined) query.append("size", String(params.size));
     if (params?.sort) query.append("sort", params.sort);
     if (params?.search) query.append("search", params.search);
+    if (params?.status && params.status !== "all") {
+      query.append("active", params.status === "active" ? "true" : "false");
+    }
     const res = await fetch(`${API_BASE_URL}/promotions?${query.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch promotions");
     return res.json();

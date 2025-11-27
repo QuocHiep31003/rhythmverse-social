@@ -74,6 +74,11 @@ const schema = z.object({
     .max(24, "Tối đa 24 ký tự")
     .optional()
     .or(z.literal("")),
+  ctaUrl: z
+    .string()
+    .max(200, "Tối đa 200 ký tự")
+    .optional()
+    .or(z.literal("")),
   gradient: z.string().optional().or(z.literal("")),
   badge: z
     .string()
@@ -106,6 +111,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
       subtitle: "",
       imageUrl: "",
       ctaText: "",
+      ctaUrl: "",
       gradient: "",
       badge: "",
       icon: "",
@@ -121,6 +127,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
         subtitle: defaultValues?.subtitle || "",
         imageUrl: defaultValues?.imageUrl || "",
         ctaText: defaultValues?.ctaText || "",
+        ctaUrl: (defaultValues as any)?.ctaUrl || "",
         gradient: defaultValues?.gradient || "",
         badge: defaultValues?.badge || "",
         icon: (defaultValues as any)?.icon || "",
@@ -259,11 +266,29 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                   <FormItem>
                     <FormLabel className="text-sm">CTA Text</FormLabel>
                     <FormControl>
-                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="e.g. Listen now" />
+                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="e.g. Listen now, Thử ngay, Nâng cấp" />
                     </FormControl>
                     <div className="flex justify-between text-xs text-gray-500 mt-0.5">
                       <span>Max 24 characters</span>
                       <span>{(form.watch("ctaText") || "").length}/24</span>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="ctaUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm">CTA URL (Đích đến khi click)</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="e.g. /premium, /discover, /music-recognition" />
+                    </FormControl>
+                    <div className="flex justify-between text-xs text-gray-500 mt-0.5">
+                      <span>URL để navigate khi click CTA button</span>
+                      <span>{(form.watch("ctaUrl") || "").length}/200</span>
                     </div>
                     <FormMessage />
                   </FormItem>

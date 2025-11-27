@@ -226,6 +226,25 @@ export const albumsApi = {
     }
   },
 
+  searchPublicActive: async (
+    query?: string,
+    params?: PaginationParams
+  ): Promise<PaginatedResponse<any>> => {
+    const queryParams = new URLSearchParams();
+    if (query && query.trim().length > 0) {
+      queryParams.append("query", query.trim());
+    }
+    queryParams.append("page", String(params?.page ?? 0));
+    queryParams.append("size", String(params?.size ?? 12));
+    queryParams.append("sort", params?.sort ?? "name,asc");
+
+    const response = await fetch(`${API_BASE_URL}/albums/public/search?${queryParams.toString()}`);
+    if (!response.ok) {
+      throw new Error("Failed to load active albums");
+    }
+    return response.json();
+  },
+
 
   // ✅ Xoá album
   delete: async (id: number) => {

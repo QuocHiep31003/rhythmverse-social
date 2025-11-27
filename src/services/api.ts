@@ -2,7 +2,7 @@
 export { API_BASE_URL } from './api/config';
 
 // Re-export common utilities
-export { buildJsonHeaders, parseErrorResponse, getAuthToken } from './api/config';
+export { buildJsonHeaders, parseErrorResponse, getAuthToken, forceRefreshAccessToken } from './api/config';
 
 // Re-export shared interfaces
 export type { PaginationParams, PaginatedResponse } from './api/config';
@@ -190,7 +190,7 @@ export const genresApi = {
     }
   },
 
-  create: async (data: { name: string; description?: string; iconUrl?: string }) => {
+  create: async (data: { name: string; description?: string; iconUrl?: string; status?: string }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres`, {
         method: 'POST',
@@ -204,7 +204,7 @@ export const genresApi = {
     }
   },
 
-  update: async (id: number, data: { name: string; description?: string; iconUrl?: string }) => {
+  update: async (id: number, data: { name: string; description?: string; iconUrl?: string; status?: string }) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/${id}`, {
         method: 'PUT',
@@ -214,6 +214,22 @@ export const genresApi = {
       return await response.json();
     } catch (error) {
       console.error("Error updating genre:", error);
+      throw error;
+    }
+  },
+
+  getDeactivationWarning: async (id: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/genres/${id}/deactivation-warning`, {
+        method: 'GET',
+        headers: buildJsonHeaders(),
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch deactivation warning");
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching deactivation warning:", error);
       throw error;
     }
   },

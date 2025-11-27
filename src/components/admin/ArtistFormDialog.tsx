@@ -21,8 +21,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Upload, X } from "lucide-react";
 import { uploadImage } from "@/config/cloudinary";
+import { artistsApi } from "@/services/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const artistFormSchema = z.object({
   name: z.string().min(1, "Tên nghệ sĩ không được để trống").max(200),
@@ -30,6 +42,7 @@ const artistFormSchema = z.object({
   debutYear: z.coerce.number().min(1900, "Năm debut không hợp lệ").max(new Date().getFullYear()),
   description: z.string().max(1000).optional().or(z.literal("")),
   avatar: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
+  status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
 });
 
 type ArtistFormValues = z.infer<typeof artistFormSchema>;
@@ -38,7 +51,7 @@ interface ArtistFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: ArtistFormValues) => void;
-  defaultValues?: Partial<ArtistFormValues>;
+  defaultValues?: Partial<ArtistFormValues> & { id?: number };
   isLoading?: boolean;
   mode: "create" | "edit";
 }
@@ -53,6 +66,9 @@ export const ArtistFormDialog = ({
 }: ArtistFormDialogProps) => {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [showDeactivationWarning, setShowDeactivationWarning] = useState(false);
+  const [deactivationWarning, setDeactivationWarning] = useState<{ message: string; affectedSongsCount: number } | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<"ACTIVE" | "INACTIVE" | null>(null);
 
   const form = useForm<ArtistFormValues>({
     resolver: zodResolver(artistFormSchema),
@@ -62,13 +78,17 @@ export const ArtistFormDialog = ({
       debutYear: new Date().getFullYear(),
       description: "",
       avatar: "",
+      status: "ACTIVE",
       ...defaultValues,
     },
   });
 
   useEffect(() => {
     if (open && defaultValues) {
-      form.reset(defaultValues);
+      form.reset({
+        ...defaultValues,
+        status: (defaultValues.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+      });
       setPreviewUrl(defaultValues.avatar || "");
     } else if (open) {
       form.reset({
@@ -77,6 +97,7 @@ export const ArtistFormDialog = ({
         debutYear: new Date().getFullYear(),
         description: "",
         avatar: "",
+        status: "ACTIVE",
       });
       setPreviewUrl("");
     }
@@ -101,6 +122,45 @@ export const ArtistFormDialog = ({
   const handleRemoveImage = () => {
     setPreviewUrl("");
     form.setValue("avatar", "");
+  };
+
+  const handleStatusChange = async (checked: boolean) => {
+    const newStatus = checked ? "ACTIVE" : "INACTIVE";
+    const currentStatus = form.getValues("status");
+    
+    // Nếu đang chuyển từ ACTIVE sang INACTIVE và đang edit mode, hiển thị cảnh báo
+    if (currentStatus === "ACTIVE" && newStatus === "INACTIVE" && mode === "edit" && defaultValues?.id) {
+      try {
+        const warning = await artistsApi.getDeactivationWarning(defaultValues.id);
+        setDeactivationWarning({
+          message: warning.message || "",
+          affectedSongsCount: warning.affectedSongsCount || 0,
+        });
+        setPendingStatusChange(newStatus);
+        setShowDeactivationWarning(true);
+      } catch (error) {
+        console.error("Error fetching deactivation warning:", error);
+        // Nếu không lấy được cảnh báo, vẫn cho phép thay đổi
+        form.setValue("status", newStatus);
+      }
+    } else {
+      form.setValue("status", newStatus);
+    }
+  };
+
+  const handleConfirmDeactivation = () => {
+    if (pendingStatusChange) {
+      form.setValue("status", pendingStatusChange);
+    }
+    setShowDeactivationWarning(false);
+    setPendingStatusChange(null);
+    setDeactivationWarning(null);
+  };
+
+  const handleCancelDeactivation = () => {
+    setShowDeactivationWarning(false);
+    setPendingStatusChange(null);
+    setDeactivationWarning(null);
   };
 
   const handleSubmit = (data: ArtistFormValues) => {
@@ -230,6 +290,34 @@ export const ArtistFormDialog = ({
               )}
             />
 
+            {/* Status Switch - Chỉ hiển thị khi edit */}
+            {mode === "edit" && (
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Trạng thái</FormLabel>
+                    <FormControl>
+                      <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {field.value === "ACTIVE" ? "Đang hoạt động" : "Tạm ẩn"}
+                          </p>
+                        </div>
+                        <Switch
+                          checked={field.value === "ACTIVE"}
+                          onCheckedChange={handleStatusChange}
+                          className="data-[state=checked]:bg-green-500"
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <DialogFooter>
               <Button
                 type="button"
@@ -245,6 +333,30 @@ export const ArtistFormDialog = ({
             </DialogFooter>
           </form>
         </Form>
+
+        {/* Deactivation Warning Dialog */}
+        <AlertDialog open={showDeactivationWarning} onOpenChange={setShowDeactivationWarning}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Cảnh báo khi tắt hoạt động</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deactivationWarning?.message || "Khi tắt artist này, các bài hát liên quan sẽ bị ảnh hưởng."}
+                <br />
+                <br />
+                <strong>Số bài hát sẽ bị ảnh hưởng: {deactivationWarning?.affectedSongsCount || 0}</strong>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={handleCancelDeactivation}>Hủy</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmDeactivation}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Xác nhận tắt
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );
