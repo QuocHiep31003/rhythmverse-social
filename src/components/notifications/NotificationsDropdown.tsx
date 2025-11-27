@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
+import { subscribeTempNotification } from "@/utils/notificationBus";
 import { BellRing, CheckCircle2, Share2, UserPlus, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -201,6 +202,34 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
       }
     };
   }, [resolvedUserId]);
+  
+  // ✅ Listen to temporary notifications (e.g., friend requests from FriendRequestWatcher)
+  useEffect(() => {
+    const unsubscribe = subscribeTempNotification((notification) => {
+      // Chỉ thêm notification tạm thời nếu chưa có trong danh sách
+      setItems((prev) => {
+        // Kiểm tra xem notification đã tồn tại chưa (dựa vào senderId và type)
+        // Đối với FRIEND_REQUEST, kiểm tra dựa vào senderId
+        const exists = prev.some((n) => {
+          if (notification.type === 'FRIEND_REQUEST') {
+            return n.type === 'FRIEND_REQUEST' && n.senderId === notification.senderId;
+          }
+          // Đối với các loại notification khác, kiểm tra dựa vào id
+          return n.id === notification.id;
+        });
+        if (exists) {
+          return prev;
+        }
+        // Thêm notification mới vào đầu danh sách
+        const updated = [notification, ...prev];
+        itemsRef.current = updated;
+        return updated;
+      });
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
   
   // ✅ Restore từ ref khi component mount lại (khi quay lại từ trang khác)
   useEffect(() => {
