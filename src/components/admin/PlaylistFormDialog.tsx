@@ -288,7 +288,10 @@ export const PlaylistFormDialog = ({ open, onOpenChange, onSubmit, defaultValues
           featureDisplayName="Create Playlist"
           remaining={remaining}
           limit={typeof limit === "number" ? limit : usage?.limit ?? undefined}
+          limitType={limitType}
           isPremium={limitType === FeatureLimitType.UNLIMITED}
+          canUse={canUse}
+          onRefresh={refresh}
         />
       )}
     </Dialog>

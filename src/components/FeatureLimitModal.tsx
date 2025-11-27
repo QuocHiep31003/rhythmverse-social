@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Crown, X, Sparkles } from "lucide-react";
+import { Crown, X, Sparkles, ArrowRight } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureName, FeatureLimitType } from "@/services/api/featureUsageApi";
 
 interface FeatureLimitModalProps {
   open: boolean;
@@ -18,7 +18,10 @@ interface FeatureLimitModalProps {
   featureDisplayName?: string;
   remaining?: number;
   limit?: number;
+  limitType?: FeatureLimitType;
   isPremium?: boolean;
+  canUse?: boolean;
+  onRefresh?: () => void | Promise<void>; // Callback để refresh usage sau khi đóng modal
 }
 
 const featureDescriptions: Record<FeatureName, string> = {
@@ -64,25 +67,53 @@ export const FeatureLimitModal = ({
   featureDisplayName,
   remaining = 0,
   limit = 0,
+  limitType,
   isPremium = false,
+  canUse = false,
+  onRefresh,
 }: FeatureLimitModalProps) => {
   const navigate = useNavigate();
   const displayName = featureDisplayName || featureName.replace(/_/g, " ");
   const description = featureDescriptions[featureName] || "This premium feature";
   const benefits = featureBenefits[featureName] || [];
   const limitNumber = typeof limit === "number" ? limit : 0;
-  const hasFreeQuota = limitNumber > 0 && limitNumber < 1_000_000;
+  const isUnlimited = limitType === FeatureLimitType.UNLIMITED || limit === null;
+  const isDisabled = limitType === FeatureLimitType.DISABLED || (limitNumber === 0 && !isUnlimited);
+  const hasFreeQuota = !isUnlimited && !isDisabled && limitNumber > 0 && limitNumber < 1_000_000;
 
-  // Don't show modal if user is already premium
-  const shouldShow = open && !isPremium;
+  // Chỉ hiển thị modal nếu:
+  // 1. open = true
+  // 2. canUse = false (không thể sử dụng tính năng)
+  // 3. Không phải unlimited (nếu unlimited thì không cần show modal)
+  const shouldShow = open && !canUse && !isUnlimited;
+
+  const handleClose = async () => {
+    onOpenChange(false);
+    // Refresh usage sau khi đóng modal để lấy thông tin mới nhất từ backend
+    // (có thể admin đã thay đổi limit trong lúc user đang xem modal)
+    if (onRefresh) {
+      try {
+        await onRefresh();
+      } catch (error) {
+        console.error("Failed to refresh feature usage:", error);
+      }
+    }
+  };
 
   const handleUpgrade = () => {
     onOpenChange(false);
+    // Navigate to premium page - user có thể chọn plan phù hợp
     navigate("/premium");
   };
 
   return (
-    <Dialog open={shouldShow} onOpenChange={onOpenChange}>
+    <Dialog open={shouldShow} onOpenChange={(open) => {
+      if (!open) {
+        handleClose();
+      } else {
+        onOpenChange(open);
+      }
+    }}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
@@ -92,7 +123,9 @@ export const FeatureLimitModal = ({
             <DialogTitle className="text-2xl">Upgrade to Premium</DialogTitle>
           </div>
           <DialogDescription className="text-base">
-            {hasFreeQuota
+            {isDisabled
+              ? `${displayName} is not available in your current plan. Upgrade to Premium to unlock this feature!`
+              : hasFreeQuota
               ? remaining === 0
                 ? `You've reached your limit for ${displayName}. You've used all ${limitNumber} free uses. Upgrade to Premium for unlimited access!`
                 : `You have ${remaining} of ${limitNumber} ${displayName} uses remaining. Upgrade to Premium for unlimited access!`
@@ -118,9 +151,13 @@ export const FeatureLimitModal = ({
 
           <div className="p-4 rounded-lg bg-muted/50">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium">Free Plan</span>
+              <span className="text-sm font-medium">Current Plan</span>
               <span className="text-sm text-muted-foreground">
-                {hasFreeQuota ? `${limitNumber} uses` : "Not available"}
+                {isDisabled 
+                  ? "Not available" 
+                  : hasFreeQuota 
+                  ? `${limitNumber} uses` 
+                  : "Limited access"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -128,7 +165,8 @@ export const FeatureLimitModal = ({
                 <Crown className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                 Premium Plan
               </span>
-              <span className="text-sm font-semibold text-purple-600 dark:text-purple-400">
+              <span className="text-sm font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
                 Unlimited
               </span>
             </div>
@@ -138,17 +176,18 @@ export const FeatureLimitModal = ({
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={handleClose}
             className="w-full sm:w-auto"
           >
             Maybe Later
           </Button>
           <Button
             onClick={handleUpgrade}
-            className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+            className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all"
           >
             <Crown className="h-4 w-4 mr-2" />
             Upgrade to Premium
+            <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         </DialogFooter>
       </DialogContent>

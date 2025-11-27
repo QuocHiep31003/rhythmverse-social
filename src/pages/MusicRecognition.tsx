@@ -45,6 +45,7 @@ const MusicRecognition = () => {
     limit,
     limitType,
     useFeature,
+    checkUsage,
     isLoading: isCheckingLimit,
   } = useFeatureLimit({
     featureName: FeatureName.AI_SEARCH,
@@ -322,7 +323,10 @@ const MusicRecognition = () => {
         featureDisplayName="AI Search"
         remaining={remaining}
         limit={typeof limit === "number" ? limit : undefined}
+        limitType={limitType}
         isPremium={limitType === FeatureLimitType.UNLIMITED}
+        canUse={canUse}
+        onRefresh={checkUsage}
       />
     </div>
   );

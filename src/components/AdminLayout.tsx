@@ -1,7 +1,7 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown, ChevronDown, ChevronRight } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
@@ -44,9 +44,19 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   }
 
 
+  const [premiumMenuOpen, setPremiumMenuOpen] = useState(false);
+
   const menuItems = [
     { icon: Home, label: "Dashboard", path: "/admin/home" },
-    { icon: Crown, label: "Premium Dashboard", path: "/admin/premium-dashboard" },
+    { 
+      icon: Crown, 
+      label: "Premium", 
+      path: null, 
+      children: [
+        { label: "Premium Dashboard", path: "/admin/premium-dashboard" },
+        { label: "Gói Đăng Ký", path: "/admin/subscription-plans" },
+      ]
+    },
     { icon: Music, label: "Bài hát", path: "/admin/songs" },
     { icon: Disc3, label: "Albums", path: "/admin/albums" },
     { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
@@ -55,10 +65,18 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     { icon: Music, label: "Thể loại", path: "/admin/genres" },
     { icon: Heart, label: "Mood", path: "/admin/moods" },
     { icon: Users, label: "Người dùng", path: "/admin/users" },
-    { icon: Package, label: "Gói Đăng Ký", path: "/admin/subscription-plans" },
     { icon: TrendingUp, label: "Trending", path: "/admin/trending" },
     { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
   ];
+
+  // Check if current path is in premium menu
+  useEffect(() => {
+    const isPremiumPath = location.pathname === "/admin/premium-dashboard" || 
+                          location.pathname === "/admin/subscription-plans";
+    if (isPremiumPath) {
+      setPremiumMenuOpen(true);
+    }
+  }, [location.pathname]);
 
   const Sidebar = () => (
 
@@ -84,9 +102,60 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       <nav className="flex-1 p-4 space-y-2">
         {menuItems.map((item) => {
           const Icon = item.icon;
+          
+          // Menu có children (dropdown)
+          if (item.children) {
+            const hasActiveChild = item.children.some(child => location.pathname === child.path);
+            return (
+              <div key={item.label} className="space-y-1">
+                <Button
+                  variant="ghost"
+                  onClick={() => setPremiumMenuOpen(!premiumMenuOpen)}
+                  className={`w-full justify-between transition-all duration-200 ${
+                    hasActiveChild
+                      ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold"
+                      : "hover:bg-[hsl(var(--admin-hover))]"
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <Icon className="w-4 h-4 mr-3" />
+                    {item.label}
+                  </div>
+                  {premiumMenuOpen ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                </Button>
+                {premiumMenuOpen && (
+                  <div className="ml-4 space-y-1">
+                    {item.children.map((child) => {
+                      const isActive = location.pathname === child.path;
+                      return (
+                        <Link key={child.path} to={child.path}>
+                          <Button
+                            variant="ghost"
+                            className={`w-full justify-start transition-all duration-200 text-sm ${
+                              isActive
+                                ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold"
+                                : "hover:bg-[hsl(var(--admin-hover))]"
+                            }`}
+                          >
+                            {child.label}
+                          </Button>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+          
+          // Menu thường
           const isActive = location.pathname === item.path;
           return (
-            <Link key={item.path} to={item.path}>
+            <Link key={item.path} to={item.path!}>
               <Button
                 variant="ghost"
                 className={`w-full justify-start transition-all duration-200 ${isActive

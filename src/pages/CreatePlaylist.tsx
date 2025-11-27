@@ -110,6 +110,28 @@ const CreatePlaylist = () => {
   const modalLimit =
     typeof limit === "number" ? limit : usage?.limit ?? undefined;
 
+  // Refresh usage khi window focus lại (có thể admin đã thay đổi limit)
+  useEffect(() => {
+    const handleFocus = () => {
+      refresh();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [refresh]);
+
+  // Refresh usage khi quay lại từ trang premium
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refresh();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [refresh]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -615,7 +637,10 @@ const CreatePlaylist = () => {
         featureDisplayName="Create Playlist"
         remaining={remaining}
         limit={modalLimit}
+        limitType={limitType}
         isPremium={limitType === FeatureLimitType.UNLIMITED}
+        canUse={canUse}
+        onRefresh={refresh}
       />
     </div>
   );
