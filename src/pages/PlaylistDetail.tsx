@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music } from "lucide-react";
+import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music, Shuffle, Share2, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
@@ -41,15 +41,60 @@ import type { SearchSongResult, ExtendedPlaylistDTO, PendingInvite, PlaylistStat
 import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromResponse, formatDateDisplay, parseSlug, createSlug } from "@/utils/playlistUtils";
 import { parseCollaboratorRole, normalizeCollaborators } from "@/utils/collaboratorUtils";
 import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
+import { useFavoritePlaylist } from "@/hooks/useFavorites";
+import { favoritesApi } from "@/services/api/favoritesApi";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import "./PlaylistDetail.css";
 
 const getTitleFontClass = (length: number) => {
-  if (length > 80) return "text-3xl";
-  if (length > 50) return "text-4xl";
-  if (length > 30) return "text-5xl";
-  return "text-6xl";
+  // Responsive font-size theo độ dài tên playlist
+  if (length > 80) return "text-2xl md:text-3xl";
+  if (length > 50) return "text-3xl md:text-4xl";
+  if (length > 30) return "text-4xl md:text-5xl";
+  return "text-5xl md:text-6xl";
 };
+
+/* ========== Helper: Lấy màu và định dạng thời gian ========== */
+async function getDominantColor(url: string): Promise<{ r: number; g: number; b: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = url;
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve({ r: 36, g: 36, b: 44 });
+      const w = 32, h = 32;
+      canvas.width = w; canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let r = 0, g = 0, b = 0, count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a < 200) continue;
+        r += data[i]; g += data[i + 1]; b += data[i + 2]; count++;
+      }
+      if (!count) return resolve({ r: 36, g: 36, b: 44 });
+      resolve({ r: Math.round(r / count), g: Math.round(g / count), b: Math.round(b / count) });
+    };
+    img.onerror = () => resolve({ r: 36, g: 36, b: 44 });
+  });
+}
+function clamp(n: number, min = 0, max = 255) {
+  return Math.max(min, Math.min(max, n));
+}
+function mix(a: number, b: number, t: number) {
+  return Math.round(a * (1 - t) + b * t);
+}
+function makePalette(rgb: { r: number; g: number; b: number }) {
+  const base = { r: clamp(rgb.r), g: clamp(rgb.g), b: clamp(rgb.b) };
+  return {
+    primary: `rgb(${mix(base.r, 255, 0.25)}, ${mix(base.g, 255, 0.25)}, ${mix(base.b, 255, 0.25)})`,
+    surfaceTop: `rgb(${mix(base.r, 30, 0.55)}, ${mix(base.g, 30, 0.55)}, ${mix(base.b, 30, 0.55)})`,
+    surfaceBottom: `rgb(${mix(base.r, 10, 0.75)}, ${mix(base.g, 10, 0.75)}, ${mix(base.b, 10, 0.75)})`,
+  };
+}
 
 
 const PlaylistDetail = () => {
@@ -57,8 +102,6 @@ const PlaylistDetail = () => {
   const navigate = useNavigate();
   const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
 
-  const [isLiked, setIsLiked] = useState(false);
-  const [likedSongs, setLikedSongs] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState<boolean>(true);
   const [playlist, setPlaylist] = useState<PlaylistState | null>(null);
@@ -110,6 +153,35 @@ const PlaylistDetail = () => {
     isOwner: false,
     userRole: undefined,
   });
+  const [palette, setPalette] = useState<{
+    primary: string;
+    surfaceTop: string;
+    surfaceBottom: string;
+  } | null>(null);
+  const [playlistLikeCount, setPlaylistLikeCount] = useState<number | null>(null);
+  const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
+  const defaultTop = "rgb(43, 17, 96)";
+  const defaultBottom = "rgb(5, 1, 15)";
+  const defaultPrimary = "rgb(167, 139, 250)";
+
+  const heroGradient = useMemo(() => {
+    const top = palette?.surfaceTop ?? defaultTop;
+    const bottom = palette?.surfaceBottom ?? defaultBottom;
+    const glow = "rgba(167, 139, 250, 0.55)";
+    const accent = "rgba(59, 130, 246, 0.4)";
+    return `
+      radial-gradient(circle at 20% 20%, ${glow}, transparent 55%),
+      radial-gradient(circle at 80% 15%, ${accent}, transparent 45%),
+      linear-gradient(180deg, ${top} 0%, ${bottom} 70%, rgba(3,7,18,0.95) 100%)
+    `;
+  }, [palette, defaultTop, defaultBottom]);
+
+  const pageGradient = useMemo(() => {
+    const primary = palette?.primary ?? defaultPrimary;
+    const match = primary.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
+    const [r, g, b] = match ? match.slice(1).map(Number) : [168, 85, 247];
+    return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
+  }, [palette?.primary, defaultPrimary]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
@@ -134,6 +206,25 @@ const PlaylistDetail = () => {
         .filter((id) => Number.isFinite(id))
     );
   }, [playlist?.songs]);
+  const playlistNumericId = useMemo(() => {
+    if (playlist?.id != null) {
+      const numeric = Number(playlist.id);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+    if (slug) {
+      const parsed = parseSlug(slug);
+      if (parsed.id && Number.isFinite(parsed.id)) {
+        return Number(parsed.id);
+      }
+    }
+    return undefined;
+  }, [playlist?.id, slug]);
+  const {
+    isFavorite: isPlaylistSaved,
+    pending: playlistFavoritePending,
+    loading: playlistFavoriteLoading,
+    toggleFavorite: togglePlaylistFavorite,
+  } = useFavoritePlaylist(playlistNumericId);
   // Normalize relative URLs from API to absolute
   const toAbsoluteUrl = useCallback((u?: string | null): string | null => {
     if (!u) return null;
@@ -536,9 +627,31 @@ const PlaylistDetail = () => {
     }
   }, [playlist, permissions.canEdit, permissions.isOwner, loadRecommended]);
 
+  const isCreateMode = slug === "create";
+  
   useEffect(() => {
     const load = async () => {
       if (!slug) return;
+      
+      // Create mode: không load playlist, chỉ set editing mode
+      if (isCreateMode) {
+        setLoading(false);
+        setIsEditing(true);
+        setEditedTitle("");
+        setEditedDescription("");
+        setEditedCoverUrl("");
+        setEditedVisibility(PlaylistVisibility.PUBLIC);
+        setPermissions({
+          canView: true,
+          canEdit: true,
+          canDelete: false,
+          canManageCollaborators: true,
+          isOwner: true,
+          userRole: undefined,
+        });
+        return;
+      }
+      
       setLoading(true);
       try {
         // Parse slug từ URL - nếu có ID thì dùng, nếu không thì cần tìm bằng slug
@@ -607,6 +720,28 @@ const PlaylistDetail = () => {
         setEditedDescription(data.description || '');
         setEditedCoverUrl(data.coverUrl || extendedData.urlImagePlaylist || '');
         setEditedVisibility(visibility);
+        
+        // Lấy màu từ ảnh cover
+        if (playlistCover) {
+          try {
+            const dom = await getDominantColor(playlistCover);
+            setPalette(makePalette(dom));
+          } catch (e) {
+            console.warn('Failed to extract color from cover:', e);
+            setPalette(null);
+          }
+        } else {
+          setPalette(null);
+        }
+        
+        // Lấy số lượt thích
+        try {
+          const likeCountRes = await favoritesApi.getPlaylistLikeCount(playlistId);
+          setPlaylistLikeCount(likeCountRes.count);
+        } catch (e) {
+          console.warn('Failed to load playlist like count:', e);
+          setPlaylistLikeCount(null);
+        }
 
         const rawRoleCandidate =
           (extendedData as { role?: unknown; collaboratorRole?: unknown; userRole?: unknown } | undefined)?.role ??
@@ -657,7 +792,7 @@ const PlaylistDetail = () => {
       }
     };
     load();
-  }, [slug, meId, navigate, updateCollaboratorsFromRaw]);
+  }, [slug, meId, navigate, updateCollaboratorsFromRaw, isCreateMode]);
 
   useEffect(() => {
     const songs = playlist?.songs ?? [];
@@ -1456,22 +1591,6 @@ const PlaylistDetail = () => {
     return playlist.songs.reduce((acc, song) => acc + toSeconds(song.duration), 0);
   }, [playlist]);
 
-  const togglePlaylistLike = () => {
-    setIsLiked(!isLiked);
-    toast({
-      title: isLiked ? "Removed from your playlists" : "Added to your playlists",
-      duration: 2000,
-    });
-  };
-
-  const toggleSongLike = (songId: string) => {
-    setLikedSongs(prev =>
-      prev.includes(songId)
-        ? prev.filter(id => id !== songId)
-        : [...prev, songId]
-    );
-  };
-
   const playAllSongs = () => {
     if (!playlist || !playlist.songs.length) return;
     if (isPlaying) {
@@ -1488,11 +1607,32 @@ const PlaylistDetail = () => {
     }
   };
 
-  const handlePlaySong = (song: Song) => {
-    if (!playlist) return;
-    setQueue(playlist.songs);
-    playSong(song);
-  };
+const shufflePlaylistSongs = () => {
+  if (!playlist || !playlist.songs.length) return;
+  const shuffled = [...playlist.songs].sort(() => Math.random() - 0.5);
+  setQueue(shuffled);
+  playSong(shuffled[0]);
+};
+
+const handleDownloadPlaylist = () => {
+  toast({
+    title: "Tải playlist",
+    description: "Tính năng tải playlist sẽ sớm ra mắt.",
+  });
+};
+
+const handlePlaylistActionComingSoon = () => {
+  toast({
+    title: "Tính năng sắp ra mắt",
+    description: "Chúng tôi đang hoàn thiện trải nghiệm này.",
+  });
+};
+
+const handlePlaySong = (song: Song) => {
+  if (!playlist) return;
+  setQueue(playlist.songs);
+  playSong(song);
+};
 
   const confirmRemoveSong = (songId: string) => {
     setPendingDeleteSongId(songId);
@@ -1522,26 +1662,147 @@ const PlaylistDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-dark text-foreground">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col lg:flex-row gap-8 mb-8">
-            <div className="flex-shrink-0">
-              <Skeleton className="w-64 h-64 lg:w-80 lg:h-80 rounded-lg" />
-            </div>
+      <div className="min-h-screen text-white playlist-page-background">
+        <section className="relative overflow-hidden border-b border-white/10">
+          <div className="absolute inset-0 playlist-hero-overlay" />
+          <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
+            <Skeleton className="w-52 h-52 md:w-64 md:h-64 rounded-3xl" />
             <div className="flex-1 space-y-4">
+              <Skeleton className="h-6 w-32" />
               <Skeleton className="h-12 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
-              <div className="flex items-center gap-3 mt-6">
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-24" />
-                <Skeleton className="h-10 w-24" />
+              <div className="flex gap-3 mt-6">
+                <Skeleton className="h-11 w-24 rounded-full" />
+                <Skeleton className="h-11 w-11 rounded-full" />
+                <Skeleton className="h-11 w-11 rounded-full" />
               </div>
+
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-6 w-full">
+              <Dialog
+                open={addDialogOpen}
+                onOpenChange={(open) => {
+                  if (!permissions.canEdit) {
+                    if (open) {
+                      toast({
+                        title: "Không thể thêm bài hát",
+                        description: "Bạn không có quyền chỉnh sửa playlist này.",
+                        variant: "destructive",
+                      });
+                    }
+                    return;
+                  }
+                  setAddDialogOpen(open);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    disabled={!permissions.canEdit}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Thêm bài hát
+                  </Button>
+                </DialogTrigger>
+                <DialogContent
+                  className="max-h-[85vh] overflow-y-auto scrollbar-custom"
+                  aria-describedby="add-song-dialog-description"
+                  aria-labelledby="add-song-dialog-title"
+                >
+                  <DialogHeader>
+                    <DialogTitle id="add-song-dialog-title">Add Song to Playlist</DialogTitle>
+                    <DialogDescription id="add-song-dialog-description">Choose a song and add it to this playlist.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Search for songs..." className="pl-10" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto space-y-2 scrollbar-custom">
+                      {addResults.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Type to search songs</p>
+                      ) : (
+                        addResults.map((s: SearchSongResult) => {
+                          const coverUrl = (s as { urlImageAlbum?: string }).urlImageAlbum || "";
+                          const artistNames = Array.isArray(s.artists)
+                            ? s.artists.map((a: { name?: string }) => a.name || "").filter(Boolean).join(", ")
+                            : typeof s.artists === "string"
+                              ? s.artists
+                              : "";
+                          const numericId = typeof s.id === "number" ? s.id : Number((s as { songId?: number }).songId ?? s.id);
+                          const alreadyInPlaylist = Number.isFinite(numericId) && existingSongIds.has(Number(numericId));
+                          const isAdding = Number.isFinite(numericId) && addingSongIds.includes(Number(numericId));
+                          return (
+                            <div key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30">
+                              <div className="flex-shrink-0">
+                                {coverUrl ? (
+                                  <img src={coverUrl} alt={s.name || "Song"} className="w-12 h-12 rounded object-cover" />
+                                ) : (
+                                  <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
+                                    <Music className="w-6 h-6 text-muted-foreground" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{s.name || s.songName || "Unknown Song"}</p>
+                                {artistNames && <p className="text-xs text-muted-foreground truncate">{artistNames}</p>}
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => addSongToPlaylist(s)}
+                                disabled={alreadyInPlaylist || isAdding || !Number.isFinite(numericId)}
+                                variant={alreadyInPlaylist ? "secondary" : undefined}
+                              >
+                                {alreadyInPlaylist ? "Added" : isAdding ? "Adding..." : "Add"}
+                              </Button>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+              <Button
+                variant="outline"
+                className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                onClick={() => {
+                  if (!permissions.isOwner) {
+                    toast({
+                      title: "Không thể chỉnh sửa playlist",
+                      description: "Chỉ chủ sở hữu mới có quyền chỉnh sửa playlist này.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setIsEditing(true);
+                }}
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Edit playlist
+              </Button>
+              {!permissions.isOwner && isCurrentCollaborator && (
+                <Button
+                  variant="outline"
+                  onClick={handleLeaveCollaboration}
+                  disabled={leaveLoading}
+                  className="border-destructive/40 text-destructive hover:text-destructive hover:border-destructive/60"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  {leaveLoading ? "Đang rời..." : "Rời khỏi"}
+                </Button>
+              )}
+            </div>
             </div>
           </div>
-          <Card className="bg-card/50 border-border/50">
-            <CardContent className="p-6">
-              <Skeleton className="h-10 w-full mb-4" />
-              <div className="space-y-2">
+        </section>
+        <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
+            <CardContent className="p-0">
+              <div className="px-6 py-3 border-b border-white/10">
+                <Skeleton className="h-4 w-full" />
+              </div>
+              <div className="space-y-2 px-6 py-4">
                 {[1, 2, 3, 4, 5].map((i) => (
                   <Skeleton key={i} className="h-16 w-full" />
                 ))}
@@ -1554,9 +1815,10 @@ const PlaylistDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-dark text-foreground">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-8 mb-8">
+    <div className="min-h-screen text-white playlist-page-background" style={{ background: pageGradient }}>
+      <section className="relative overflow-hidden border-b border-white/10">
+        <div className="absolute inset-0 playlist-hero-overlay" style={{ backgroundImage: heroGradient }} />
+        <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col lg:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div className="flex-shrink-0">
             <div
               className={`relative w-64 h-64 lg:w-80 lg:h-80 rounded-lg overflow-hidden bg-gradient-to-br from-primary to-primary-glow shadow-2xl ${isEditing ? 'cursor-pointer hover:opacity-95' : ''}`}
@@ -1627,10 +1889,10 @@ const PlaylistDetail = () => {
               })()}
             </div>
             {isEditing ? (
-              <div className="space-y-3 mb-2 min-w-0">
+              <div className="space-y-3 mb-2 min-w-0 max-w-full">
                 <div className="space-y-2 min-w-0">
                   <Input 
-                    className={`${editTitleFontClass} font-bold w-full min-w-0`} 
+                    className="text-base font-medium w-full min-w-0" 
                     value={editedTitle} 
                     onChange={(e) => {
                       const value = e.target.value;
@@ -1688,9 +1950,16 @@ const PlaylistDetail = () => {
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={async () => {
-                    if (!playlist) return;
-                    
                     // Validation
+                    if (!editedTitle.trim()) {
+                      toast({ 
+                        title: "Playlist name required", 
+                        description: "Please enter a name for your playlist", 
+                        variant: "destructive" 
+                      });
+                      return;
+                    }
+                    
                     if (editedTitle.length > 100) {
                       toast({ 
                         title: "Name too long", 
@@ -1710,27 +1979,75 @@ const PlaylistDetail = () => {
                     }
                     
                     try {
-                      await playlistsApi.update(playlist.id, {
-                        name: editedTitle.trim() || playlist.title,
-                        description: editedDescription,
-                        coverUrl: editedCoverUrl || undefined,
-                        visibility: editedVisibility,
-                        dateUpdate: new Date().toISOString().split('T')[0],
-                        songIds: playlist.songs.map(s => Number(s.id)),
-                      });
-                      setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, visibility: editedVisibility });
-                      setIsEditing(false);
-                      toast({ title: 'Playlist updated' });
+                      if (isCreateMode) {
+                        // Create new playlist
+                        const today = new Date().toISOString().split('T')[0];
+                        const body: any = {
+                          name: editedTitle.trim(),
+                          description: editedDescription,
+                          visibility: editedVisibility,
+                          songIds: [],
+                          dateUpdate: today,
+                          coverUrl: editedCoverUrl || undefined,
+                        };
+                        
+                        if (meId) body.ownerId = meId;
+                        
+                        const headers = buildJsonHeaders();
+                        const res = await fetch(`${API_BASE_URL}/playlists`, {
+                          method: "POST",
+                          headers,
+                          body: JSON.stringify(body),
+                        });
+                        
+                        if (!res.ok) {
+                          const errorText = await res.text();
+                          let errorMessage = "Failed to create playlist";
+                          try {
+                            const errorJson = JSON.parse(errorText);
+                            errorMessage = errorJson.message || errorJson.error || errorMessage;
+                          } catch {
+                            errorMessage = errorText || errorMessage;
+                          }
+                          throw new Error(errorMessage);
+                        }
+                        
+                        const data = await res.json();
+                        toast({ title: 'Playlist created successfully!' });
+                        navigate(`/playlist/${createSlug(data.name || "playlist", data.id)}`);
+                      } else {
+                        // Update existing playlist
+                        if (!playlist) return;
+                        await playlistsApi.update(playlist.id, {
+                          name: editedTitle.trim() || playlist.title,
+                          description: editedDescription,
+                          coverUrl: editedCoverUrl || undefined,
+                          visibility: editedVisibility,
+                          dateUpdate: new Date().toISOString().split('T')[0],
+                          songIds: playlist.songs.map(s => Number(s.id)),
+                        });
+                        setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, visibility: editedVisibility });
+                        setIsEditing(false);
+                        toast({ title: 'Playlist updated' });
+                      }
                     } catch (e) {
                       if (e instanceof PlaylistPermissionError) {
                         toast({ title: 'Access Denied', description: e.message, variant: 'destructive' });
                       } else {
-                        const message = e instanceof Error ? e.message : 'Failed to update playlist';
+                        const message = e instanceof Error ? e.message : 'Failed to save playlist';
                         toast({ title: 'Error', description: message, variant: 'destructive' });
                       }
                     }
-                  }}>Save</Button>
-                  <Button size="sm" variant="outline" onClick={() => { setIsEditing(false); setEditedTitle(playlist?.title || ''); setEditedDescription(playlist?.description || ''); }}>Cancel</Button>
+                  }}>{isCreateMode ? 'Create' : 'Save'}</Button>
+                  <Button size="sm" variant="outline" onClick={() => { 
+                    if (isCreateMode) {
+                      navigate('/playlists');
+                    } else {
+                      setIsEditing(false); 
+                      setEditedTitle(playlist?.title || ''); 
+                      setEditedDescription(playlist?.description || ''); 
+                    }
+                  }}>Cancel</Button>
                 </div>
               </div>
             ) : (
@@ -1744,7 +2061,8 @@ const PlaylistDetail = () => {
               </>
             )}
 
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4 mt-3">
+            {!isEditing && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground mb-4 mt-3">
               {(() => {
                 // Lấy avatar và name của owner: thử từ playlist, nếu không có thì lấy từ friends list
                 let ownerAvatar = playlist?.ownerAvatar;
@@ -1801,6 +2119,15 @@ const PlaylistDetail = () => {
                   <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
                 </>
               )}
+              {playlistLikeCount !== null && (
+                <>
+                  <span className="text-muted-foreground">•</span>
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Heart className="w-3 h-3" />
+                    {playlistLikeCount.toLocaleString()}
+                  </span>
+                </>
+              )}
               {(() => {
                 const d = playlist?.updatedAt;
                 const t = d ? new Date(d) : null;
@@ -1813,8 +2140,9 @@ const PlaylistDetail = () => {
                 ) : null;
               })()}
             </div>
+            )}
 
-            {collaboratorEntries.length > 0 && (
+            {!isEditing && collaboratorEntries.length > 0 && (
               <div className="mb-6 flex items-center gap-2">
                 <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
                   <Users className="w-3 h-3" />
@@ -1929,173 +2257,108 @@ const PlaylistDetail = () => {
               </div>
             )}
 
-            <div className="flex items-center gap-4">
-              <Button size="lg" onClick={playAllSongs} className="bg-primary hover:bg-primary/90" disabled={!playlist || playlist.songs.length === 0}>
-                {isPlaying && currentSong && playlist?.songs.find((s) => s.id === currentSong.id) ? (
-                  <>
-                    <Pause className="w-5 h-5 mr-2" />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-5 h-5 mr-2" />
-                    Play All
-                  </>
+            {!isEditing && (
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-6 w-full">
+                {permissions.canEdit && (
+                  <Button
+                    variant="outline"
+                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    onClick={() => setAddDialogOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Thêm bài hát
+                  </Button>
                 )}
-              </Button>
+                {(permissions.canManageCollaborators || permissions.isOwner) && (
+                  <Button
+                    variant="outline"
+                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    onClick={() => setCollabOpen(true)}
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    Collaborators
+                  </Button>
+                )}
+                {!permissions.isOwner && isCurrentCollaborator && (
+                  <Button
+                    variant="outline"
+                    onClick={handleLeaveCollaboration}
+                    disabled={leaveLoading}
+                    className="border-destructive/40 text-destructive hover:text-destructive hover:border-destructive/60"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    {leaveLoading ? "Đang rời..." : "Rời khỏi"}
+                  </Button>
+                )}
+                {permissions.isOwner && (
+                  <Button
+                    variant="outline"
+                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit playlist
+                  </Button>
+                )}
+              </div>
+            )}
 
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={togglePlaylistLike}
-                className={isLiked ? "text-red-500 border-red-500" : ""}
-              >
-                <Heart className={`w-5 h-5 mr-2 ${isLiked ? 'fill-current' : ''}`} />
-                {isLiked ? 'Liked' : 'Like'}
-              </Button>
-
-              {playlist && (
-                <ShareButton 
-                  title={playlist.title} 
-                  type="playlist" 
-                  playlistId={Number(playlist.id)} 
-                  url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`}
-                  isPrivate={playlist.visibility === PlaylistVisibility.PRIVATE}
-                />
-              )}
-
-              {!permissions.isOwner && isCurrentCollaborator && (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={handleLeaveCollaboration}
-                  disabled={leaveLoading}
-                  className="border-destructive/40 text-destructive hover:text-destructive hover:border-destructive/60"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  {leaveLoading ? "Đang rời..." : "Rời khỏi"}
-                </Button>
-              )}
-
-              {permissions.canEdit && (
-                <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="lg">
-                      <Plus className="w-5 h-5 mr-2" />
-                      Add Song
-                    </Button>
-                </DialogTrigger>
-                <DialogContent
-                  className="max-h-[85vh] overflow-y-auto scrollbar-custom"
-                  aria-describedby="add-song-dialog-description"
-                  aria-labelledby="add-song-dialog-title"
-                >
-                  <DialogHeader>
-                    <DialogTitle id="add-song-dialog-title">Add Song to Playlist</DialogTitle>
-                    <DialogDescription id="add-song-dialog-description">
-                      Choose a song and add it to this playlist.
-                    </DialogDescription>
-                  </DialogHeader>
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input placeholder="Search for songs..." className="pl-10" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
-                      </div>
-                      <div className="max-h-64 overflow-y-auto space-y-2 scrollbar-custom">
-                        {addResults.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">Type to search songs</p>
-                        ) : (
-                          addResults.map((s: SearchSongResult) => {
-                            // Lấy ảnh giống như thanh search tổng (dùng urlImageAlbum)
-                            const coverUrl = (s as any).urlImageAlbum || '';
-                            const artistNames = Array.isArray(s.artists) 
-                              ? s.artists.map((a: { name?: string }) => a.name || '').filter(Boolean).join(', ')
-                              : typeof s.artists === 'string'
-                                ? s.artists
-                                : '';
-                            const numericId =
-                              typeof s.id === 'number'
-                                ? s.id
-                                : Number((s as { songId?: number }).songId ?? s.id);
-                            const alreadyInPlaylist =
-                              Number.isFinite(numericId) && existingSongIds.has(Number(numericId));
-                            const isAdding = Number.isFinite(numericId) && addingSongIds.includes(Number(numericId));
-                            return (
-                              <div key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30">
-                                <div className="flex-shrink-0">
-                                  {coverUrl ? (
-                                    <img 
-                                      src={coverUrl} 
-                                      alt={s.name || 'Song'} 
-                                      className="w-12 h-12 rounded object-cover"
-                                    />
-                                  ) : (
-                                    <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
-                                      <Music className="w-6 h-6 text-muted-foreground" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium truncate">{s.name || s.songName || 'Unknown Song'}</p>
-                                  {artistNames && (
-                                    <p className="text-xs text-muted-foreground truncate">{artistNames}</p>
-                                  )}
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => addSongToPlaylist(s)}
-                                  disabled={alreadyInPlaylist || isAdding || !Number.isFinite(numericId)}
-                                  variant={alreadyInPlaylist ? "secondary" : undefined}
-                                >
-                                  {alreadyInPlaylist ? 'Added' : isAdding ? 'Adding...' : 'Add'}
-                                </Button>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              )}
-
-              <CollaboratorDialog
-                open={collabOpen}
-                onOpenChange={(open) => {
-                  setCollabOpen(open);
-                  if (!open) {
-                    setSelectedFriendIds([]);
-                    setCollabSearch("");
-                  }
-                }}
-                canManage={permissions.canManageCollaborators}
-                isOwner={permissions.isOwner}
-                collaborators={collaboratorEntries}
-                friends={friends}
-                loadingFriends={loadingFriends}
-                selectedFriendIds={selectedFriendIds}
-                onToggleFriend={toggleSelectFriend}
-                onRemoveCollaborator={handleRemoveCollaborator}
-                onSendInvites={sendInvites}
-                sendingInvites={sendingInvites}
-                removingCollaboratorId={removingCollaboratorId}
-                inviteRole={inviteRole}
-                onRoleChange={setInviteRole}
-                searchQuery={collabSearch}
-                onSearchChange={setCollabSearch}
-              />
-
-              {permissions.isOwner && (
-                <Button variant="outline" onClick={() => setIsEditing(true)}>
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit
-                </Button>
-              )}
-            </div>
           </div>
         </div>
+      </section>
 
-        <Card className="bg-card/50 border-border/50">
+      <section className="container mx-auto max-w-6xl px-4 md:px-8 py-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <Button
+              size="icon"
+              className={`h-16 w-16 rounded-full text-white shadow-2xl transition duration-200 ${
+                isPlaying ? "bg-[#c084fc] hover:bg-[#c084fc]/90" : "bg-[#a855f7] hover:bg-[#9333ea]"
+              }`}
+              onClick={playAllSongs}
+              disabled={!playlist?.songs.length}
+            >
+              {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2 border-white/20 bg-white/5 text-white hover:bg-white/10"
+              onClick={shufflePlaylistSongs}
+              disabled={!playlist?.songs.length}
+            >
+              <Shuffle className="w-4 h-4" />
+              Ngẫu nhiên
+            </Button>
+            <Button variant="ghost" className="text-white/80 hover:text-white" onClick={() => navigate("/playlists")}>
+              Về thư viện
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handleDownloadPlaylist} disabled={!playlist?.songs.length}>
+              <Download className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`text-white/80 hover:text-white ${isPlaylistSaved ? "text-red-500" : ""}`}
+              onClick={togglePlaylistFavorite}
+              disabled={!playlistNumericId || playlistFavoritePending || playlistFavoriteLoading}
+              aria-label={isPlaylistSaved ? "Đã lưu playlist này" : "Lưu playlist vào thư viện"}
+            >
+              <Heart className={`w-5 h-5 ${isPlaylistSaved ? "fill-current" : ""}`} />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={() => setSharePlaylistOpen(true)}>
+              <Share2 className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+              <MoreHorizontal className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <div className="container mx-auto max-w-6xl px-4 md:px-8 pb-12 space-y-8">
+        <Card className="border-white/10 bg-black/40 backdrop-blur">
           <CardContent className="p-6">
             <div className="relative mb-6">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -2132,12 +2395,9 @@ const PlaylistDetail = () => {
                     index={index}
                     isActive={currentSong?.id === song.id}
                     isPlaying={isPlaying}
-                    isLiked={likedSongs.includes(song.id)}
                     onPlay={() => handlePlaySong(song)}
-                    onToggleLike={() => toggleSongLike(song.id)}
                     onRemove={permissions.canEdit ? () => confirmRemoveSong(song.id) : undefined}
                     onHide={meId && isCurrentCollaborator ? () => setHiddenSongIds(prev => prev.includes(song.id) ? prev : [...prev, song.id]) : undefined}
-                    onCollab={permissions.isOwner ? () => setCollabOpen(true) : undefined}
                     canEdit={permissions.canEdit}
                     isCollaborator={isCurrentCollaborator}
                     meId={meId}
@@ -2150,7 +2410,7 @@ const PlaylistDetail = () => {
 
         {/* Recommended Section - Chỉ hiện cho owner/editor, không hiện cho viewer */}
         {playlist && (permissions.canEdit || permissions.isOwner) && (
-          <Card className="bg-card/50 border-border/50 mt-8">
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -2253,6 +2513,7 @@ const PlaylistDetail = () => {
           </Card>
         )}
       </div>
+
       <DeleteConfirmDialog
         open={deleteOpen}
         onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); if (!o) setPendingDeleteSongId(null); }}
@@ -2309,6 +2570,32 @@ const PlaylistDetail = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      <CollaboratorDialog
+        open={collabOpen}
+        onOpenChange={(open) => {
+          setCollabOpen(open);
+          if (!open) {
+            setSelectedFriendIds([]);
+            setCollabSearch("");
+          }
+        }}
+        canManage={permissions.canManageCollaborators}
+        isOwner={permissions.isOwner}
+        collaborators={collaboratorEntries}
+        friends={friends}
+        loadingFriends={loadingFriends}
+        selectedFriendIds={selectedFriendIds}
+        onToggleFriend={toggleSelectFriend}
+        onRemoveCollaborator={handleRemoveCollaborator}
+        onSendInvites={sendInvites}
+        sendingInvites={sendingInvites}
+        removingCollaboratorId={removingCollaboratorId}
+        inviteRole={inviteRole}
+        onRoleChange={setInviteRole}
+        searchQuery={collabSearch}
+        onSearchChange={setCollabSearch}
+      />
+
       <Footer />
       
       {selectedSongForPlaylist && (
@@ -2320,17 +2607,91 @@ const PlaylistDetail = () => {
           songCover={selectedSongForPlaylist.urlImageAlbum}
         />
       )}
-      
+
+      <Dialog open={addDialogOpen} onOpenChange={(open) => setAddDialogOpen(permissions.canEdit ? open : false)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto scrollbar-custom" aria-describedby="add-song-dialog-description" aria-labelledby="add-song-dialog-title">
+          <DialogHeader>
+            <DialogTitle id="add-song-dialog-title">Add Song to Playlist</DialogTitle>
+            <DialogDescription id="add-song-dialog-description">Choose a song and add it to this playlist.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Search for songs..." className="pl-10" value={addSearch} onChange={(e) => setAddSearch(e.target.value)} />
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-2 scrollbar-custom">
+              {addResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Type to search songs</p>
+              ) : (
+                addResults.map((s: SearchSongResult) => {
+                  const coverUrl = (s as { urlImageAlbum?: string }).urlImageAlbum || "";
+                  const artistNames = Array.isArray(s.artists)
+                    ? s.artists.map((a: { name?: string }) => a.name || "").filter(Boolean).join(", ")
+                    : typeof s.artists === "string"
+                      ? s.artists
+                      : "";
+                  const numericId = typeof s.id === "number" ? s.id : Number((s as { songId?: number }).songId ?? s.id);
+                  const alreadyInPlaylist = Number.isFinite(numericId) && existingSongIds.has(Number(numericId));
+                  const isAdding = Number.isFinite(numericId) && addingSongIds.includes(Number(numericId));
+                  return (
+                    <div key={s.id} className="flex items-center gap-3 p-2 rounded hover:bg-muted/30">
+                      <div className="flex-shrink-0">
+                        {coverUrl ? (
+                          <img src={coverUrl} alt={s.name || "Song"} className="w-12 h-12 rounded object-cover" />
+                        ) : (
+                          <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
+                            <Music className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{s.name || s.songName || "Unknown Song"}</p>
+                        {artistNames && <p className="text-xs text-muted-foreground truncate">{artistNames}</p>}
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => addSongToPlaylist(s)}
+                        disabled={alreadyInPlaylist || isAdding || !Number.isFinite(numericId)}
+                        variant={alreadyInPlaylist ? "secondary" : undefined}
+                      >
+                        {alreadyInPlaylist ? "Added" : isAdding ? "Adding..." : "Add"}
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <ShareButton
+        title={playlist?.title || "Playlist"}
+        type="playlist"
+        playlistId={playlist ? Number(playlist.id) : undefined}
+        url={playlist ? `${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}` : undefined}
+        isPrivate={playlist?.visibility === PlaylistVisibility.PRIVATE}
+        open={sharePlaylistOpen}
+        onOpenChange={setSharePlaylistOpen}
+      />
+
       <style>{`
-      .bar { display:inline-block; width:2px; height:8px; background:${isPlaying ? 'hsl(var(--primary))' : 'transparent'}; animation:${isPlaying ? 'ev 1s ease-in-out infinite' : 'none'}; }
-      .bar.delay-100{animation-delay:.12s}
-      .bar.delay-200{animation-delay:.24s}
-      @keyframes ev{0%{height:4px}50%{height:14px}100%{height:4px}}
-    `}</style>
+        .bar {
+          display:inline-block;
+          width:2px;
+          height:8px;
+          background:${isPlaying ? (palette?.primary ?? "rgb(167, 139, 250)") : "transparent"};
+          animation:${isPlaying ? "pl-eq 1s ease-in-out infinite" : "none"};
+        }
+        .bar.delay-100{animation-delay:.12s}
+        .bar.delay-200{animation-delay:.24s}
+        @keyframes pl-eq{0%{height:4px}50%{height:14px}100%{height:4px}}
+      `}</style>
     </div>
   );
 };
 
 export default PlaylistDetail;
+
 
 

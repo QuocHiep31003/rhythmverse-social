@@ -322,7 +322,7 @@ const ShareButton = ({ title, type, url, playlistId, albumId, open: controlledOp
             <Send className="w-4 h-4 mr-2" />
             {isSharing
               ? "Sharing…"
-              : `${type === 'playlist' ? 'Invite' : 'Share'} with ${selectedFriends.length} friend${selectedFriends.length !== 1 ? 's' : ''}`}
+              : `Share with ${selectedFriends.length} friend${selectedFriends.length !== 1 ? 's' : ''}`}
           </Button>
         </div>
       </DialogContent>

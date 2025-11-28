@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -8,18 +8,16 @@ import { Song } from "@/contexts/MusicContext";
 import { formatDateDisplay, msToMMSS, toSeconds } from "@/utils/playlistUtils";
 import { AddToPlaylistDialog } from "./AddToPlaylistDialog";
 import ShareButton from "@/components/ShareButton";
+import { useFavoriteSong } from "@/hooks/useFavorites";
 
 interface PlaylistSongItemProps {
   song: Song & { addedBy?: string; addedAt?: string; addedByAvatar?: string | null; addedById?: number };
   index: number;
   isActive: boolean;
   isPlaying: boolean;
-  isLiked: boolean;
   onPlay: () => void;
-  onToggleLike: () => void;
   onRemove?: () => void;
   onHide?: () => void;
-  onCollab?: () => void;
   canEdit: boolean;
   isCollaborator: boolean;
   meId?: number;
@@ -30,12 +28,9 @@ export const PlaylistSongItem = ({
   index,
   isActive,
   isPlaying,
-  isLiked,
   onPlay,
-  onToggleLike,
   onRemove,
   onHide,
-  onCollab,
   canEdit,
   isCollaborator,
   meId,
@@ -46,6 +41,17 @@ export const PlaylistSongItem = ({
     title: string;
     url: string;
   } | null>(null);
+  const numericSongId = useMemo(() => {
+    if (typeof song.id === "number" && Number.isFinite(song.id)) return song.id;
+    if (typeof song.id === "string") {
+      const parsed = Number(song.id);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  }, [song.id]);
+  const favoriteHook = useFavoriteSong(numericSongId, { disableToast: false });
+  const resolvedLiked = numericSongId ? favoriteHook.isFavorite : false;
+  const likePending = favoriteHook.pending;
 
   return (
     <>
@@ -128,10 +134,16 @@ export const PlaylistSongItem = ({
         <Button
           variant="ghost"
           size="icon"
-          onClick={(e) => { e.stopPropagation(); onToggleLike(); }}
-          className={`h-8 w-8 ${isLiked ? 'text-red-500' : 'text-muted-foreground opacity-0 group-hover:opacity-100'}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            favoriteHook.toggleFavorite();
+          }}
+          disabled={likePending || !numericSongId}
+          className={`h-8 w-8 ${
+            resolvedLiked ? "text-red-500" : "text-muted-foreground opacity-0 group-hover:opacity-100"
+          }`}
         >
-          <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
+          <Heart className={`w-4 h-4 ${resolvedLiked ? "fill-current" : ""}`} />
         </Button>
 
         <span className="text-sm text-muted-foreground w-12 text-right">

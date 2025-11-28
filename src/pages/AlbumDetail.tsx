@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal, Users, ListPlus } from "lucide-react";
+import { Play, Pause, Heart, Clock, Calendar, Music, MoreHorizontal, Users, ListPlus, Plus, Shuffle, Share2, Download } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { useMusic } from "@/contexts/MusicContext";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
@@ -18,11 +18,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-
-
-
-        import { mapToPlayerSong } from "@/lib/utils";
+import { mapToPlayerSong } from "@/lib/utils";
 import { parseSlug, createSlug } from "@/utils/playlistUtils";
+import { useFavoriteAlbum, useFavoriteSong } from "@/hooks/useFavorites";
+import { favoritesApi } from "@/services/api/favoritesApi";
+import { toast } from "@/hooks/use-toast";
+import "./AlbumDetail.css";
 
 /* ========== Helper: Lấy màu và định dạng thời gian ========== */
 async function getDominantColor(url: string): Promise<{ r: number; g: number; b: number }> {
@@ -103,6 +104,123 @@ function formatTotalDuration(seconds: number) {
   return `${m}m`;
 }
 
+interface AlbumSongRowProps {
+  song: any;
+  index: number;
+  active: boolean;
+  isPlaying: boolean;
+  onPlay: () => void;
+  releaseDate?: string | null;
+  onAddToPlaylist: () => void;
+  onShare: () => void;
+}
+
+const AlbumSongRow = ({
+  song,
+  index,
+  active,
+  isPlaying,
+  onPlay,
+  releaseDate,
+  onAddToPlaylist,
+  onShare,
+}: AlbumSongRowProps) => {
+  const numericSongId = useMemo(() => {
+    if (typeof song.id === "number" && Number.isFinite(song.id)) return song.id;
+    if (typeof song.id === "string") {
+      const parsed = Number(song.id);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  }, [song.id]);
+  const favoriteHook = useFavoriteSong(numericSongId, { disableToast: false });
+
+  return (
+    <div
+      className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
+        items-center gap-3 px-6 py-3 cursor-pointer transition-colors
+        ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}
+      onClick={onPlay}
+    >
+      <div className="flex justify-center">
+        {active ? (
+          isPlaying ? (
+            <span className="flex gap-0.5 h-4 items-end">
+              <i className="bar" />
+              <i className="bar delay-100" />
+              <i className="bar delay-200" />
+            </span>
+          ) : (
+            <Play className="w-4 h-4" />
+          )
+        ) : (
+          <span>{song.index ?? index + 1}</span>
+        )}
+      </div>
+
+      <div>
+        <div className={`truncate font-medium ${active ? "text-primary" : ""}`}>
+          {song.name || song.songName || "Unknown Song"}
+        </div>
+        <div className="text-sm text-muted-foreground truncate">
+          {song.artist}
+        </div>
+      </div>
+
+      <div className="hidden sm:flex justify-center text-sm">
+        {releaseDate ? new Date(releaseDate).toLocaleDateString() : "—"}
+      </div>
+      <div className="flex justify-center text-sm">
+        {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : "-"}
+      </div>
+      <div className="flex justify-center gap-2">
+        <Button
+          size="icon"
+          variant="ghost"
+          className={`h-8 w-8 rounded-full ${
+            favoriteHook.isFavorite ? "text-red-500" : ""
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            favoriteHook.toggleFavorite();
+          }}
+          disabled={favoriteHook.pending || !numericSongId}
+        >
+          <Heart className={`w-4 h-4 ${favoriteHook.isFavorite ? "fill-current" : ""}`} />
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToPlaylist();
+              }}
+            >
+              <ListPlus className="w-4 h-4 mr-2" />
+              Thêm vào playlist
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onShare();
+              }}
+            >
+              <Users className="w-4 h-4 mr-2" />
+              Chia sẻ với bạn bè
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  );
+};
+
 /* ========== Component chính ========== */
 const AlbumDetail = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -112,7 +230,6 @@ const AlbumDetail = () => {
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);
   const [related, setRelated] = useState<any[]>([]);
-  const [liked, setLiked] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
@@ -125,11 +242,46 @@ const AlbumDetail = () => {
     title: string;
     url: string;
   } | null>(null);
+  const [shareAlbumOpen, setShareAlbumOpen] = useState(false);
   const [palette, setPalette] = useState({
     primary: "rgb(140,140,160)",
     surfaceTop: "rgb(28,28,34)",
     surfaceBottom: "rgb(12,12,16)",
   });
+  const [albumLikeCount, setAlbumLikeCount] = useState<number | null>(null);
+  const heroGradient = useMemo(() => {
+    const glow = "rgba(167, 139, 250, 0.65)";
+    const accent = "rgba(59, 130, 246, 0.45)";
+    return `
+      radial-gradient(circle at 20% 20%, ${glow}, transparent 50%),
+      radial-gradient(circle at 80% 10%, ${accent}, transparent 45%),
+      linear-gradient(180deg, ${palette.surfaceTop} 0%, ${palette.surfaceBottom} 65%, rgba(2,4,12,0.98) 100%)
+    `;
+  }, [palette.surfaceTop, palette.surfaceBottom]);
+  const pageGradient = useMemo(() => {
+    const match = palette.primary.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
+    const [r, g, b] = match ? match.slice(1).map(Number) : [168, 85, 247];
+    return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
+  }, [palette.primary]);
+  const albumNumericId = useMemo(() => {
+    if (album?.id != null) {
+      const numeric = Number(album.id);
+      if (Number.isFinite(numeric)) return numeric;
+    }
+    if (slug) {
+      const parsed = parseSlug(slug);
+      if (parsed.id && Number.isFinite(parsed.id)) {
+        return Number(parsed.id);
+      }
+    }
+    return undefined;
+  }, [album?.id, slug]);
+  const {
+    isFavorite: isAlbumSaved,
+    pending: albumFavoritePending,
+    loading: albumFavoriteLoading,
+    toggleFavorite: toggleAlbumFavorite,
+  } = useFavoriteAlbum(albumNumericId);
 
   const totalDuration = useMemo(() => {
     return songs.reduce((acc, cur) => acc + toSeconds(cur.duration), 0);
@@ -158,6 +310,7 @@ const AlbumDetail = () => {
           cover: res.coverUrl ?? "/placeholder-album.jpg",
           releaseDate: res.releaseDate ?? "",
           songs: res.songs ?? [],
+          likes: res.likes ?? res.favoriteCount ?? 0,
         };
         const songList = norm.songs.map((s: any, i: number) => ({
           ...mapToPlayerSong({
@@ -175,6 +328,15 @@ const AlbumDetail = () => {
 
         const dom = await getDominantColor(norm.cover);
         setPalette(makePalette(dom));
+
+        // Lấy số lượt thích
+        try {
+          const likeCountRes = await favoritesApi.getAlbumLikeCount(albumId);
+          setAlbumLikeCount(likeCountRes.count);
+        } catch (e) {
+          console.warn('Failed to load album like count:', e);
+          setAlbumLikeCount(null);
+        }
 
         // lấy related albums
         if (norm.artistId) {
@@ -203,6 +365,27 @@ const AlbumDetail = () => {
     }
   };
 
+  const handleShuffleAlbum = () => {
+    if (!songs.length) return;
+    const shuffled = [...songs].sort(() => Math.random() - 0.5);
+    setQueue(shuffled);
+    playSong(shuffled[0]);
+  };
+
+  const handleDownloadAlbum = () => {
+    toast({
+      title: "Tải album",
+      description: "Tính năng tải album sẽ ra mắt sớm.",
+    });
+  };
+
+  const handleActionComingSoon = () => {
+    toast({
+      title: "Tính năng sắp ra mắt",
+      description: "Chúng tôi đang hoàn thiện trải nghiệm này.",
+    });
+  };
+
   const headerStyle = useMemo(
     () => ({
       backgroundImage: `linear-gradient(180deg, ${palette.surfaceTop} 0%, ${palette.surfaceBottom} 100%)`,
@@ -212,26 +395,27 @@ const AlbumDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen transition-colors duration-500 text-foreground bg-background">
-        <div className="w-full border-b border-border bg-gradient-to-b from-background/95 to-background/80">
-          <div className="container mx-auto px-4 py-10 md:py-14 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
-            <Skeleton className="w-52 h-52 md:w-60 md:h-60 rounded-2xl" />
+      <div className="min-h-screen text-white album-page-background">
+        <section className="relative overflow-hidden border-b border-white/10">
+          <div className="absolute inset-0 album-hero-overlay" />
+          <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
+            <Skeleton className="w-52 h-52 md:w-64 md:h-64 rounded-3xl" />
             <div className="flex-1 space-y-4">
-              <Skeleton className="h-6 w-20" />
-              <Skeleton className="h-12 w-3/4" />
+              <Skeleton className="h-6 w-24" />
+              <Skeleton className="h-14 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
               <div className="flex gap-3 mt-6">
-                <Skeleton className="h-11 w-24" />
+                <Skeleton className="h-11 w-24 rounded-full" />
                 <Skeleton className="h-11 w-11 rounded-full" />
                 <Skeleton className="h-11 w-11 rounded-full" />
               </div>
             </div>
           </div>
-        </div>
-        <div className="container mx-auto px-4 py-8">
-          <Card className="border-border bg-card backdrop-blur-md">
+        </section>
+        <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardContent className="p-0">
-              <div className="px-6 py-3 border-b border-border">
+              <div className="px-6 py-3 border-b border-white/10">
                 <Skeleton className="h-4 w-full" />
               </div>
               <div className="space-y-2 px-6 py-4">
@@ -247,197 +431,159 @@ const AlbumDetail = () => {
   }
 
   return (
-    <div className="min-h-screen transition-colors duration-500 text-foreground bg-background">
-      {/* header */}
-      <div className="w-full border-b border-border" style={headerStyle}>
-        <div className="container mx-auto px-4 py-10 md:py-14 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
-          <div
-            className="relative w-52 h-52 md:w-60 md:h-60 rounded-2xl overflow-hidden shadow-xl flex items-center justify-center bg-black/10 dark:bg-black/30"
-            style={{
-              boxShadow: `0 0 0 1px rgba(255,255,255,0.08), 0 0 24px 2px ${palette.primary}`,
-            }}
-          >
+    <div className="min-h-screen text-white album-page-background" style={{ background: pageGradient }}>
+      <section className="relative overflow-hidden border-b border-white/10">
+        <div className="absolute inset-0 album-hero-overlay" style={{ backgroundImage: heroGradient }} />
+        <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
+          <div className="relative w-52 h-52 md:w-64 md:h-64 rounded-3xl overflow-hidden shadow-[0_25px_45px_rgba(8,8,35,0.45)] ring-1 ring-white/10 flex items-center justify-center bg-black/20">
             <img
               src={album?.cover}
               alt={album?.title}
               className="w-full h-full object-cover object-center"
             />
           </div>
-
           <div className="flex-1 flex flex-col justify-end text-center md:text-left">
-            <Badge className="w-fit mb-3 bg-primary/20 text-primary">
-              ALBUM
+            <Badge className="w-fit mx-auto md:mx-0 mb-3 bg-white/15 text-white uppercase tracking-[0.4em] rounded-full px-4 py-1 text-[11px]">
+              Album
             </Badge>
-            <h1 className="text-4xl md:text-5xl font-extrabold">
+            <h1 className="text-4xl md:text-6xl font-black drop-shadow-sm">
               {album?.title}
             </h1>
-            <div className="mt-2 text-muted-foreground flex flex-wrap justify-center md:justify-start gap-2 items-center">
-              <span>{album?.artist}</span>
-              <span>•</span>
+            <p className="mt-2 text-white/80 text-lg">{album?.artist}</p>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-4 text-sm text-white/80">
+              <span>{songs.length} bài hát</span>
+              <span className="text-white/40">•</span>
+              <span>{formatTotalDuration(totalDuration)}</span>
+              <span className="text-white/40">•</span>
               <span>
                 {album?.releaseDate
-                  ? new Date(album.releaseDate).getFullYear()
-                  : "-"}
+                  ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "short", year: "numeric" }).format(
+                      new Date(album.releaseDate)
+                    )
+                  : "—"}
               </span>
-              <span>• {songs.length} songs</span>
-              {songs.length > 0 && (
+              {albumLikeCount !== null && (
                 <>
-                  <span>•</span>
-                  <span>{formatTotalDuration(totalDuration)}</span>
+                  <span className="text-white/40">•</span>
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-4 h-4" />
+                    {albumLikeCount.toLocaleString()}
+                  </span>
                 </>
               )}
             </div>
-
-            <div className="mt-6 flex justify-center md:justify-start gap-3">
-              <Button
-                onClick={handlePlayAlbum}
-                className="rounded-full px-6 h-11 font-semibold text-black dark:text-white"
-                style={{ background: palette.primary }}
-              >
-                {isPlaying ? (
-                  <Pause className="w-5 h-5 mr-2" />
-                ) : (
-                  <Play className="w-5 h-5 mr-2" />
-                )}
-                {isPlaying ? "Pause" : "Play"}
-              </Button>
-
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full border-border hover:bg-primary/10"
-              >
-                <Heart className="w-5 h-5" />
-              </Button>
-              <ShareButton title={album?.title || "Album"} type="album" url={`${window.location.origin}/album/${createSlug(album?.title || album?.name || 'album', album?.id ?? (slug ? parseSlug(slug).id : undefined))}`} albumId={Number(album?.id ?? (slug ? parseSlug(slug).id : undefined))} />
-            </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      <section className="container mx-auto max-w-6xl px-4 md:px-8 py-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <Button
+              size="icon"
+                  className={`h-16 w-16 rounded-full text-white shadow-2xl transition duration-200 ${
+                    isPlaying ? "bg-[#c084fc] hover:bg-[#c084fc]/90" : "bg-[#a855f7] hover:bg-[#9333ea]"
+              }`}
+              onClick={handlePlayAlbum}
+              disabled={!songs.length}
+            >
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-2 border-white/20 bg-white/5 text-white hover:bg-white/10"
+              onClick={handleShuffleAlbum}
+              disabled={!songs.length}
+            >
+              <Shuffle className="w-4 h-4" />
+              Ngẫu nhiên
+            </Button>
+            <Button variant="ghost" className="text-white/80 hover:text-white" onClick={() => navigate("/albums")}>
+              Về thư viện
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/80 hover:text-white"
+              onClick={handleDownloadAlbum}
+              disabled={!songs.length}
+            >
+              <Download className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`text-white/80 hover:text-white ${isAlbumSaved ? "text-red-500" : ""}`}
+              onClick={toggleAlbumFavorite}
+              disabled={!albumNumericId || albumFavoritePending || albumFavoriteLoading}
+              aria-label={isAlbumSaved ? "Đã lưu album này" : "Lưu album vào thư viện"}
+            >
+              <Heart className={`w-5 h-5 ${isAlbumSaved ? "fill-current" : ""}`} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/80 hover:text-white"
+              onClick={() => setShareAlbumOpen(true)}
+            >
+              <Share2 className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-white/80 hover:text-white"
+              onClick={handleActionComingSoon}
+            >
+              <MoreHorizontal className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      </section>
 
       {/* song list */}
-      <div className="container mx-auto px-4 py-8">
-        <Card className="border-border bg-card backdrop-blur-md">
+      <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
+        <Card className="border-white/10 bg-black/40 backdrop-blur">
           <CardContent className="p-0">
-            <div className="grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px] px-6 py-3 text-xs uppercase text-muted-foreground border-b border-border">
+            <div className="grid grid-cols-[56px_minmax(0,1fr)_130px_110px_120px] md:grid-cols-[72px_minmax(0,1fr)_180px_130px_140px] px-6 py-3 text-xs uppercase text-white/70 border-b border-border">
               <div className="text-center">#</div>
               <div>Title</div>
-              <div className="text-center hidden sm:block">Released</div>
+              <div className="hidden sm:block text-center">Released</div>
               <div className="text-center">Duration</div>
               <div className="text-center">Actions</div>
             </div>
 
             {songs.length ? (
-              songs.map((song) => {
+              songs.map((song, index) => {
                 const active = currentSong?.id === song.id;
                 return (
-                  <div
+                  <AlbumSongRow
                     key={song.id}
-                    onClick={() =>
+                    song={song}
+                    index={index}
+                    active={active}
+                    isPlaying={isPlaying}
+                    releaseDate={album?.releaseDate ?? null}
+                    onPlay={() =>
                       active && isPlaying ? togglePlay() : playSong(song)
                     }
-                    className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
-                      items-center gap-3 px-6 py-3 cursor-pointer transition-colors
-                      ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}
-                  >
-                    <div className="flex justify-center">
-                      {active ? (
-                        isPlaying ? (
-                          <span className="flex gap-0.5 h-4 items-end">
-                            <i className="bar" />
-                            <i className="bar delay-100" />
-                            <i className="bar delay-200" />
-                          </span>
-                        ) : (
-                          <Play className="w-4 h-4" />
-                        )
-                      ) : (
-                        <span>{song.index}</span>
-                      )}
-                    </div>
-
-                    <div>
-                      <div
-                        className={`truncate font-medium ${
-                          active ? "text-primary" : ""
-                        }`}
-                      >
-                        {song.name || song.songName || "Unknown Song"}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate">
-                        {song.artist}
-                      </div>
-                    </div>
-
-                    <div className="hidden sm:flex justify-center text-sm">
-                      {album?.releaseDate
-                        ? new Date(album.releaseDate).toLocaleDateString()
-                        : "—"}
-                    </div>
-                    <div className="flex justify-center text-sm">
-                      {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : "-"}
-                    </div>
-                    <div className="flex justify-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className={`h-8 w-8 rounded-full ${
-                          liked.includes(song.id) ? "text-red-500" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLiked((prev) =>
-                            prev.includes(song.id)
-                              ? prev.filter((x) => x !== song.id)
-                              : [...prev, song.id]
-                          );
-                        }}
-                      >
-                        <Heart
-                          className={`w-4 h-4 ${
-                            liked.includes(song.id) ? "fill-current" : ""
-                          }`}
-                        />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedSongForPlaylist({
-                                id: song.id,
-                                name: song.name || song.songName || "Unknown Song",
-                                cover: song.urlImageAlbum || song.cover,
-                              });
-                              setAddToPlaylistOpen(true);
-                            }}
-                          >
-                            <ListPlus className="w-4 h-4 mr-2" />
-                            Thêm vào playlist
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShareSong({
-                                id: song.id,
-                                title: song.name || song.songName || "Unknown Song",
-                                url: `${window.location.origin}/song/${song.id}`,
-                              });
-                            }}
-                          >
-                            <Users className="w-4 h-4 mr-2" />
-                            Chia sẻ với bạn bè
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
+                    onAddToPlaylist={() => {
+                      setSelectedSongForPlaylist({
+                        id: song.id,
+                        name: song.name || song.songName || "Unknown Song",
+                        cover: song.urlImageAlbum || song.cover,
+                      });
+                      setAddToPlaylistOpen(true);
+                    }}
+                    onShare={() => {
+                      setShareSong({
+                        id: song.id,
+                        title: song.name || song.songName || "Unknown Song",
+                        url: `${window.location.origin}/song/${song.id}`,
+                      });
+                    }}
+                  />
                 );
               })
             ) : (
@@ -451,7 +597,7 @@ const AlbumDetail = () => {
 
       {/* related albums */}
       {related.length > 0 && (
-        <div className="container mx-auto px-4 pb-16">
+        <div className="container mx-auto max-w-6xl px-4 md:px-8 pb-16">
           <h2 className="text-2xl font-semibold mb-5">
             More from {album?.artist}
           </h2>
@@ -471,11 +617,22 @@ const AlbumDetail = () => {
                 </div>
                 <CardContent className="p-3">
                   <p className="font-medium truncate">{rel.name}</p>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {rel.releaseDate
-                      ? new Date(rel.releaseDate).getFullYear()
-                      : ""}
+                  <p className="text-sm text-muted-foreground truncate mb-2">
+                    {rel.artist?.name || "Unknown Artist"}
                   </p>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {rel.releaseDate && (
+                      <span>
+                        {new Date(rel.releaseDate).getFullYear()}
+                      </span>
+                    )}
+                    {rel.likes !== undefined && rel.likes !== null && (
+                      <span className="flex items-center gap-1">
+                        <Heart className="w-3 h-3" />
+                        {rel.likes}
+                      </span>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -509,6 +666,17 @@ const AlbumDetail = () => {
           songCover={selectedSongForPlaylist.cover}
         />
       )}
+      <ShareButton
+        title={album?.title || "Album"}
+        type="album"
+        url={`${window.location.origin}/album/${createSlug(
+          album?.title || album?.name || "album",
+          album?.id ?? (slug ? parseSlug(slug).id : undefined)
+        )}`}
+        albumId={Number(album?.id ?? (slug ? parseSlug(slug).id : undefined))}
+        open={shareAlbumOpen}
+        onOpenChange={setShareAlbumOpen}
+      />
       {shareSong && (
         <ShareButton
           key={`share-${shareSong.id}-${Date.now()}`}
