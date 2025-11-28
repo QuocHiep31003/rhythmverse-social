@@ -29,7 +29,7 @@ import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import { songsApi as songsApiClient, moodsApi, genresApi } from "@/services/api";
 import { useToast } from "@/hooks/use-toast";
-import { getTrendingComparison, TrendingSong } from "@/services/api/trendingApi";
+import { getTrendingComparison, TrendingSong, callHotTodayTrending } from "@/services/api/trendingApi";
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 const Discover = () => {
@@ -182,71 +182,130 @@ const Discover = () => {
       return;
     }
 
-    try {
-      setIsLoadingMoodRecs(true);
-      let mapped: any[] = [];
+    setIsLoadingMoodRecs(true);
+    const TARGET_COUNT = 50;
+    const MIN_COUNT = 3;
 
-      // Nếu có moods, ưu tiên dùng API recommendations theo moods
-      if (selectedMoodIds.length > 0) {
-        try {
-          const apiSongs = await songsApiClient.getRecommendationsByMoods(selectedMoodIds, 50);
-          mapped = apiSongs.map((s) => mapToPlayerSong(s));
-        } catch (e) {
-          console.error("Failed to get mood recommendations:", e);
-        }
+    const fetchVectorCombos = async () => {
+      const combos: Array<{ genres?: number[]; moods?: number[] }> = [];
+      if (selectedGenreIds.length || selectedMoodIds.length) {
+        combos.push({ genres: selectedGenreIds, moods: selectedMoodIds });
+      }
+      if (selectedGenreIds.length && selectedMoodIds.length) {
+        combos.push({ genres: selectedGenreIds, moods: [] });
+        combos.push({ genres: [], moods: selectedMoodIds });
       }
 
-      // Nếu có genres, filter hoặc lấy thêm bài hát theo genres
-      if (selectedGenreIds.length > 0) {
+      const songMap = new Map<number | string, any>();
+      for (const combo of combos) {
+        if (!combo.genres?.length && !combo.moods?.length) continue;
         try {
-          // Lấy bài hát theo genre đầu tiên (hoặc merge với kết quả mood nếu có)
-          const genreSongs = await songsApiClient.getAll({
-            genreId: selectedGenreIds[0],
-            size: 50,
-            page: 0,
-            status: "ACTIVE",
+          const vectorSongs = await songsApiClient.recommendByFilters({
+            genreIds: combo.genres && combo.genres.length ? combo.genres : undefined,
+            moodIds: combo.moods && combo.moods.length ? combo.moods : undefined,
+            limit: TARGET_COUNT,
           });
-          const content = Array.isArray((genreSongs as any)?.content)
-            ? (genreSongs as any).content
-            : [];
-          const genreMapped = content.map((s: any) => mapToPlayerSong(s));
-
-          // Nếu đã có kết quả từ mood, merge và filter theo genres đã chọn
-          if (mapped.length > 0) {
-            // Merge và loại bỏ duplicate
-            const merged = [...mapped, ...genreMapped];
-            const unique = merged.filter((song, index, self) =>
-              index === self.findIndex((s) => s.songId === song.songId)
-            );
-            mapped = unique;
-          } else {
-            mapped = genreMapped;
+          vectorSongs.forEach((song) => {
+            const key = song.id ?? song.songId;
+            if (key != null && !songMap.has(key)) {
+              songMap.set(key, song);
+            }
+          });
+          if (songMap.size >= TARGET_COUNT) {
+            break;
           }
-        } catch (e) {
-          console.error("Failed to get genre songs:", e);
+        } catch (error) {
+          console.error("[Discover] Vector recommendation failed:", error);
+        }
+      }
+      return Array.from(songMap.values());
+    };
+
+    try {
+      let mapped = (await fetchVectorCombos()).map((s) => mapToPlayerSong(s));
+      const usedSongIds = new Set(mapped.map((song) => song.songId).filter(Boolean));
+
+      if (mapped.length < TARGET_COUNT) {
+        try {
+          const hotTodaySongs = await callHotTodayTrending(TARGET_COUNT);
+          const hotTodayMapped = hotTodaySongs
+            .filter((song) => {
+              const songId = song.songId || song.id;
+              return songId && !usedSongIds.has(songId);
+            })
+            .slice(0, TARGET_COUNT - mapped.length)
+            .map((song) => {
+              const songId = song.songId || song.id;
+              if (songId) {
+                usedSongIds.add(songId);
+              }
+              return mapToPlayerSong({
+                id: songId,
+                name: song.songName || song.name,
+                songName: song.songName || song.name,
+                artists: song.artists || "Unknown",
+                urlImageAlbum: song.albumImageUrl,
+                uuid: song.uuid,
+              } as any);
+            });
+          mapped = [...mapped, ...hotTodayMapped];
+        } catch (error) {
+          console.error("[Discover] Failed to get Hot Today songs:", error);
         }
       }
 
-      // Fallback: nếu vẫn trống và có mood, thử search theo moodId đầu tiên
-      if (mapped.length === 0 && selectedMoodIds.length > 0) {
+      if (mapped.length < TARGET_COUNT) {
         try {
-          const firstMoodId = selectedMoodIds[0];
-          const fallback = await songsApiClient.getAll({
-            moodId: firstMoodId,
-            size: 30,
+          const top5Songs = await songsApiClient.getTop5Trending();
+          const top5Mapped = (Array.isArray(top5Songs) ? top5Songs : [])
+            .filter((song: any) => {
+              const songId = song.songId || song.id;
+              return songId && !usedSongIds.has(songId);
+            })
+            .slice(0, TARGET_COUNT - mapped.length)
+            .map((song: any) => {
+              const songId = song.songId || song.id;
+              if (songId) {
+                usedSongIds.add(songId);
+              }
+              return mapToPlayerSong(song);
+            });
+          mapped = [...mapped, ...top5Mapped];
+        } catch (error) {
+          console.error("[Discover] Failed to get Top 5 songs:", error);
+        }
+      }
+
+      if (mapped.length < MIN_COUNT) {
+        try {
+          const backup = await songsApiClient.getAll({
+            size: MIN_COUNT * 2,
             page: 0,
             status: "ACTIVE",
           });
-          const content = Array.isArray((fallback as any)?.content)
-            ? (fallback as any).content
-            : (fallback as any)?.songs ?? [];
-          mapped = content.map((s: any) => mapToPlayerSong(s));
-        } catch (e) {
-          console.error("Fallback mood search failed:", e);
+          const backupContent = Array.isArray((backup as any)?.content) ? (backup as any).content : [];
+          const backupMapped = backupContent
+            .filter((song: any) => {
+              const songId = song.id || song.songId;
+              return songId && !usedSongIds.has(songId);
+            })
+            .slice(0, MIN_COUNT - mapped.length)
+            .map((song: any) => {
+              const songId = song.id || song.songId;
+              if (songId) {
+                usedSongIds.add(songId);
+              }
+              return mapToPlayerSong(song);
+            });
+          mapped = [...mapped, ...backupMapped];
+        } catch (error) {
+          console.error("[Discover] Final fallback failed:", error);
         }
       }
 
-      if (mapped.length > 0) {
+      mapped = mapped.sort(() => Math.random() - 0.5);
+
+      if (mapped.length >= MIN_COUNT) {
         setQueue(mapped);
         playSong(mapped[0]);
         const moodText = selectedMoodIds.length > 0 ? `${selectedMoodIds.length} mood` : "";
@@ -258,8 +317,9 @@ const Discover = () => {
         });
       } else {
         toast({
-          title: "Không tìm thấy bài hát phù hợp",
-          description: "Thử chọn mood/genre khác hoặc kiểm tra lại dữ liệu trong hệ thống.",
+          title: "Không tìm thấy đủ bài hát",
+          description: `Chỉ tìm thấy ${mapped.length} bài. Thử chọn mood/genre khác hoặc kiểm tra lại dữ liệu trong hệ thống.`,
+          variant: "destructive",
         });
       }
     } catch (error) {

@@ -31,6 +31,19 @@ export interface TrendingSong {
     snapshotCreatedAt: string; // ISO date string
 }
 
+export interface ResultDetailDTO {
+    songId: number;
+    songName: string;
+    albumImageUrl?: string;
+    artists?: string;
+    rank?: number;
+    totalPoints?: number;
+    oldRank?: number;
+    uuid?: string;
+    id?: number;
+    name?: string;
+}
+
 export const getTrendingComparison = async (limit = 10): Promise<TrendingSong[]> => {
     const response = await api.get<any>('/trending/comparison', {
         params: { limit },

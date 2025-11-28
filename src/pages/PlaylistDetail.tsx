@@ -148,6 +148,50 @@ const PlaylistDetail = () => {
     return `${base}/${u}`;
   }, []);
 
+  const mapVectorSongToSearchResult = useCallback((song: any): SearchSongResult | null => {
+    if (!song) return null;
+    const rawId = typeof song.id === "number" ? song.id : Number(song.id ?? song.songId);
+    if (!Number.isFinite(rawId)) {
+      return null;
+    }
+
+    const normalizeArtists = () => {
+      const rawArtists = song.artists;
+      if (Array.isArray(rawArtists)) {
+        return rawArtists
+          .map((artist: any) => {
+            if (!artist) return null;
+            if (typeof artist === "string") {
+              const name = artist.trim();
+              return name ? { name } : null;
+            }
+            if (typeof artist.name === "string") {
+              return { id: artist.id, name: artist.name };
+            }
+            return null;
+          })
+          .filter((artist): artist is { id?: number; name: string } => Boolean(artist));
+      }
+      if (typeof rawArtists === "string" && rawArtists.trim().length > 0) {
+        return rawArtists
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean)
+          .map((name) => ({ name }));
+      }
+      return undefined;
+    };
+
+    return {
+      id: Number(rawId),
+      name: song.name ?? song.songName ?? song.title ?? "Unknown Song",
+      artists: normalizeArtists(),
+      urlImageAlbum: song.urlImageAlbum ?? song.albumImageUrl ?? song.cover ?? song.coverUrl ?? song.imageUrl ?? null,
+      audioUrl: song.audioUrl ?? song.streamPath ?? song.url ?? song.audio ?? undefined,
+      duration: song.durationSeconds ?? song.duration,
+    };
+  }, []);
+
   const ownerDisplayName = useMemo(() => {
     const raw = playlist?.ownerName;
     if (typeof raw === "string" && raw.trim().length > 0) return raw.trim();
@@ -322,209 +366,120 @@ const PlaylistDetail = () => {
   // Luôn hiện recommend (không chỉ khi playlist thay đổi)
   const loadRecommended = useCallback(async () => {
     if (!playlist) {
-        setRecommendedSongs([]);
+      setRecommendedSongs([]);
       setLoadingRecommended(false);
       return;
     }
-    
-    // Nếu playlist không có bài hát, vẫn load recommend từ popular songs
-    if (playlist.songs.length === 0) {
-      setLoadingRecommended(true);
-      try {
+
+    setLoadingRecommended(true);
+    try {
+      if (playlist.songs.length === 0) {
         const data = await songsApi.getAll({ size: 4, page: 0 });
-        setRecommendedSongs((data.content || []).slice(0, 4));
-      } catch (error) {
-        console.error("Failed to load recommended songs:", error);
-        setRecommendedSongs([]);
-      } finally {
-        setLoadingRecommended(false);
-      }
+        const content = Array.isArray(data?.content) ? data.content : [];
+        const mapped = content
+          .map((song: any) => mapVectorSongToSearchResult(song))
+          .filter(Boolean) as SearchSongResult[];
+        setRecommendedSongs(mapped.slice(0, 4));
         return;
       }
-      
-      setLoadingRecommended(true);
-      try {
-        const playlistSongIds = new Set(playlist.songs.map(s => String(s.id)));
-        const recommended: SearchSongResult[] = [];
-        
-        // Thu thập genres, moods, và artists từ các bài hát trong playlist
-        // Chỉ lấy từ 2-3 bài hát đầu tiên để giảm API calls
-        const songsToCheck = playlist.songs.slice(0, 3);
-        const songDetailPromises = songsToCheck.map(async (song) => {
-          try {
-            const songId = Number(song.id);
-            if (isNaN(songId)) return null;
-            
-            // Chỉ lấy songDetail, bỏ qua moods để giảm API calls
-            const songDetail = await songsApi.getById(String(songId)).catch(() => null);
-            return songDetail;
-          } catch (error) {
-            return null;
+
+      const playlistSongIds = new Set(playlist.songs.map((s) => String(s.id)));
+      const pushSong = (song: any, target: SearchSongResult[]) => {
+        const mapped = mapVectorSongToSearchResult(song);
+        if (!mapped) return;
+        if (playlistSongIds.has(String(mapped.id))) return;
+        if (target.some((existing) => existing.id === mapped.id)) return;
+        target.push(mapped);
+      };
+
+      const collected: SearchSongResult[] = [];
+      const songsToCheck = playlist.songs.slice(0, 3);
+
+      const songDetailPromises = songsToCheck
+        .map((song) => {
+          const songId = Number(song.id);
+          if (!Number.isFinite(songId)) return null;
+          return songsApi.getById(String(songId)).catch(() => null);
+        })
+        .filter(Boolean) as Promise<any>[];
+      const songDetails = (await Promise.all(songDetailPromises)).filter(Boolean);
+
+      const genreIds = new Set<number>();
+      const moodIds = new Set<number>();
+
+      songDetails.forEach((detail: any) => {
+        if (!detail) return;
+        if (Array.isArray(detail.genreIds)) {
+          detail.genreIds.slice(0, 2).forEach((id: number) => genreIds.add(id));
+        }
+        if (Array.isArray(detail.genres)) {
+          detail.genres
+            .slice(0, 2)
+            .forEach((genre: { id?: number }) => genre?.id && genreIds.add(genre.id));
+        }
+      });
+
+      const moodPromises = songsToCheck
+        .map((song) => {
+          const songId = Number(song.id);
+          if (!Number.isFinite(songId)) return null;
+          return songMoodApi.getBySongId(songId).catch(() => null);
+        })
+        .filter(Boolean) as Promise<any>[];
+      const moodResults = (await Promise.all(moodPromises)).filter(Boolean);
+      moodResults.forEach((moods: any) => {
+        if (!Array.isArray(moods)) return;
+        moods.slice(0, 2).forEach((mood) => {
+          const moodId = mood?.id ?? mood?.moodId;
+          if (typeof moodId === "number") {
+            moodIds.add(moodId);
           }
         });
-        
-        const songDetails = (await Promise.all(songDetailPromises)).filter(Boolean);
-        
-        const genreIds = new Set<number>();
-        const moodIds = new Set<number>();
-        const artistIds = new Set<number>();
-        
-        // Thu thập moodIds từ songMoodApi
-        const moodPromises = songsToCheck.map(async (song) => {
-          try {
-            const songId = Number(song.id);
-            if (isNaN(songId)) return null;
-            const moods = await songMoodApi.getBySongId(songId).catch(() => null);
-            return moods;
-          } catch {
-            return null;
-          }
-        });
-        const moodResults = (await Promise.all(moodPromises)).filter(Boolean);
-        
-        songDetails.forEach((songDetail: any) => {
-          if (!songDetail) return;
-          
-          // Thu thập genreIds
-          if (songDetail.genreIds && Array.isArray(songDetail.genreIds)) {
-            songDetail.genreIds.slice(0, 2).forEach((id: number) => genreIds.add(id));
-          }
-          if (songDetail.genres && Array.isArray(songDetail.genres)) {
-            songDetail.genres.slice(0, 2).forEach((g: { id?: number }) => {
-              if (g.id) genreIds.add(g.id);
-            });
-          }
-          
-          // Thu thập artistIds
-          if (songDetail.artistIds && Array.isArray(songDetail.artistIds)) {
-            songDetail.artistIds.slice(0, 2).forEach((id: number) => artistIds.add(id));
-          }
-        });
-        
-        // Thu thập moodIds từ moodResults
-        moodResults.forEach((moods: any) => {
-          if (!moods || !Array.isArray(moods)) return;
-          moods.slice(0, 2).forEach((m: { id?: number; moodId?: number }) => {
-            const moodId = m.id ?? m.moodId;
-            if (moodId && typeof moodId === 'number') moodIds.add(moodId);
+      });
+
+      if (genreIds.size > 0 || moodIds.size > 0) {
+        try {
+          const vectorSongs = await songsApi.recommendByFilters({
+            genreIds: genreIds.size ? Array.from(genreIds) : undefined,
+            moodIds: moodIds.size ? Array.from(moodIds) : undefined,
+            limit: 40,
           });
-        });
-        
-        // Chạy song song các API calls để tăng tốc
-        const recommendationPromises: Promise<SearchSongResult[]>[] = [];
-        
-        // Ưu tiên 1: Tìm bài hát theo Mood
-        if (moodIds.size > 0) {
-          const moodIdArray = Array.from(moodIds).slice(0, 2);
-          moodIdArray.forEach((moodId) => {
-            recommendationPromises.push(
-              songsApi.getWithoutAlbum({ moodId, size: 8 })
-                .then(res => {
-                  const content = res.content || [];
-                  return content.filter(
-                    (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                  ) as SearchSongResult[];
-                })
-                .catch(() => [] as SearchSongResult[])
-            );
-          });
+          vectorSongs.forEach((song: any) => pushSong(song, collected));
+        } catch (error) {
+          console.error("Failed to load vector recommendations:", error);
         }
-        
-        // Ưu tiên 2: Tìm bài hát theo Genre
-        if (genreIds.size > 0) {
-          const genreIdArray = Array.from(genreIds).slice(0, 2);
-          genreIdArray.forEach((genreId) => {
-          recommendationPromises.push(
-              songsApi.getWithoutAlbum({ genreId, size: 8 })
-              .then(res => {
-                const content = res.content || [];
-                return content.filter(
-                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                ) as SearchSongResult[];
-              })
-              .catch(() => [] as SearchSongResult[])
-          );
-          });
-        }
-        
-        // Ưu tiên 3: Tìm bài hát theo Artist
-        if (artistIds.size > 0) {
-          const artistIdArray = Array.from(artistIds).slice(0, 2);
-          artistIdArray.forEach((artistId) => {
-          recommendationPromises.push(
-            songsApi.getAll({ artistId, size: 8, page: 0 })
-              .then(res => {
-                const content = res.content || [];
-                return content.filter(
-                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                ) as SearchSongResult[];
-              })
-              .catch(() => [] as SearchSongResult[])
-          );
-          });
-        }
-        
-        // Fallback: Bài hát phổ biến
-        recommendationPromises.push(
-          songsApi.getAll({ size: 8, page: 0 })
-            .then(res => {
-              const content = res.content || [];
-              return content.filter(
-                (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-              ) as SearchSongResult[];
-            })
-            .catch(() => [] as SearchSongResult[])
-        );
-        
-        // Chạy tất cả song song
-        const results = await Promise.all(recommendationPromises);
-        
-        // Gộp kết quả và loại bỏ trùng lặp
-        const allSongs: SearchSongResult[] = [];
-        for (const result of results) {
-          for (const song of result) {
-            if (!allSongs.some(s => String(s.id) === String(song.id))) {
-              allSongs.push(song);
-              if (allSongs.length >= 8) break; // Lấy nhiều hơn để có đủ sau khi filter
-            }
-          }
-          if (allSongs.length >= 8) break;
-        }
-        
-        // Filter lại để loại bỏ những bài đã có trong playlist (cập nhật lại)
-        // Đảm bảo không recommend bài hát đã có trong playlist
-        const finalSongs = allSongs.filter(
-          (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-        );
-        
-        // Nếu không đủ 4 bài, lấy thêm từ fallback (vẫn filter bài đã có)
-        if (finalSongs.length < 4) {
-          try {
-            const fallbackData = await songsApi.getAll({ size: 50, page: 0 });
-            const fallbackSongs = (fallbackData.content || []).filter(
-              (s: SearchSongResult) => 
-                !playlistSongIds.has(String(s.id)) && 
-                !finalSongs.some(existing => String(existing.id) === String(s.id))
-            );
-            finalSongs.push(...fallbackSongs.slice(0, 4 - finalSongs.length));
-          } catch (e) {
-            console.warn('Failed to load fallback recommendations:', e);
-          }
-        }
-        
-        // Chỉ set recommend nếu có bài hát (không set empty array)
-        if (finalSongs.length > 0) {
-          setRecommendedSongs(finalSongs.slice(0, 4));
-        } else {
-          setRecommendedSongs([]);
-        }
-      } catch (error) {
-        console.error("Failed to load recommended songs:", error);
-        setRecommendedSongs([]);
-      } finally {
-        setLoadingRecommended(false);
       }
-  }, [playlist]);
+
+      if (collected.length < 4) {
+        const seedSongId = Number(playlist.songs[0]?.id);
+        if (Number.isFinite(seedSongId)) {
+          try {
+            const seedRecommendations = await songsApi.getRecommendations(seedSongId, 40);
+            seedRecommendations.forEach((song: any) => pushSong(song, collected));
+          } catch (error) {
+            console.error("Failed to load seed recommendations:", error);
+          }
+        }
+      }
+
+      if (collected.length < 4) {
+        try {
+          const fallback = await songsApi.getAll({ size: 40, page: 0 });
+          const content = Array.isArray(fallback?.content) ? fallback.content : [];
+          content.forEach((song: any) => pushSong(song, collected));
+        } catch (error) {
+          console.warn("Failed to load fallback recommendations:", error);
+        }
+      }
+
+      setRecommendedSongs(collected.slice(0, 4));
+    } catch (error) {
+      console.error("Failed to load recommended songs:", error);
+      setRecommendedSongs([]);
+    } finally {
+      setLoadingRecommended(false);
+    }
+  }, [playlist, mapVectorSongToSearchResult]);
     
   // Load recommend khi playlist thay đổi (chỉ cho owner/editor)
   useEffect(() => {

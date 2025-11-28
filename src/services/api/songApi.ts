@@ -776,6 +776,33 @@ export const songsApi = {
     }
   },
 
+  // Recommend songs bằng vector tổng hợp từ nhiều genre/mood
+  recommendByFilters: async ({
+    genreIds,
+    moodIds,
+    limit = 50,
+  }: {
+    genreIds?: number[];
+    moodIds?: number[];
+    limit?: number;
+  }): Promise<Song[]> => {
+    try {
+      if ((!genreIds || genreIds.length === 0) && (!moodIds || moodIds.length === 0)) {
+        return [];
+      }
+      const params = new URLSearchParams();
+      genreIds?.forEach((id) => params.append("genreIds", String(id)));
+      moodIds?.forEach((id) => params.append("moodIds", String(id)));
+      params.append("limit", String(limit));
+
+      const response = await apiClient.get(`/songs/recommendations/by-filters?${params.toString()}`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching vector recommendations:", error);
+      return [];
+    }
+  },
+
   // Recommend songs by genre with user vector (for hover preview)
   recommendByGenre: async (genreId: number, limit: number = 50): Promise<Song[]> => {
     try {

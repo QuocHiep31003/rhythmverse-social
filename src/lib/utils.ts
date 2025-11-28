@@ -81,6 +81,7 @@ export interface ApiSong {
   urlImageAlbum?: string;
   cover?: string;
   duration?: string | number;
+  durationSeconds?: number;
   audioUrl?: string;
   audio?: string;
   url?: string;
@@ -130,7 +131,12 @@ export function mapToPlayerSong(song: ApiSong): PlayerSong {
   }
 
   // Duration: convert sang số giây
-  const duration = toSeconds(song.duration);
+  const durationSource =
+    song.durationSeconds ??
+    song.duration ??
+    (song as { length?: number }).length ??
+    (song as { playbackDuration?: number }).playbackDuration;
+  const duration = toSeconds(durationSource);
 
   // Cover: ưu tiên albumCoverImg (field chính thức), sau đó urlImageAlbum, albumImageUrl, cuối cùng cover
   const cover = song.albumCoverImg ?? song.urlImageAlbum ?? song.albumImageUrl ?? song.cover ?? "";

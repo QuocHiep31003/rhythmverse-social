@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Upload, Play, Plus, Trash2, Edit2, X, ChevronsUpDown, Check, Search } from "lucide-react";
+import { Loader2, Upload, Play, Plus, Trash2, Edit2, X, ChevronsUpDown, Check, Search, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -53,9 +53,11 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { songsApi, artistsApi, genresApi, moodsApi, songContributorApi, songGenreApi, songMoodApi } from "@/services/api";
+import { lyricsApi } from "@/services/api/lyricsApi";
 import { toast } from "@/hooks/use-toast";
 import { API_BASE_URL, fetchWithAuth } from "@/services/api/config";
 import type { SongContributor } from "@/services/api/songContributorApi";
@@ -99,12 +101,14 @@ type SongMetadataUpdate = Partial<SongCreateUpdateData> & { status?: string; fil
 
 type MetadataFormValues = z.infer<typeof metadataSchema>;
 
+type AdminTab = "metadata" | "contributor" | "genre-mood" | "lyrics";
+
 interface SongEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   songId: number;
   onSuccess?: () => void;
-  initialTab?: "metadata" | "contributor" | "genre" | "mood" | "genre-mood";
+  initialTab?: "metadata" | "contributor" | "genre" | "mood" | "genre-mood" | "lyrics";
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -140,7 +144,11 @@ export const SongEditDialog = ({
   const [allArtists, setAllArtists] = useState<{ id: number, name: string, avatar?: string }[]>([]);
   const [allGenres, setAllGenres] = useState<{ id: number, name: string }[]>([]);
   const [allMoods, setAllMoods] = useState<{ id: number, name: string }[]>([]);
-  const [activeTab, setActiveTab] = useState<"metadata" | "contributor" | "genre-mood">(initialTab === "genre" || initialTab === "mood" ? "genre-mood" : initialTab);
+  const [activeTab, setActiveTab] = useState<AdminTab>(
+    initialTab === "genre" || initialTab === "mood"
+      ? "genre-mood"
+      : (initialTab as AdminTab) || "metadata"
+  );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [showAddContributor, setShowAddContributor] = useState(false);
@@ -173,6 +181,11 @@ export const SongEditDialog = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [lyricsText, setLyricsText] = useState("");
+  const [isLyricsLoading, setIsLyricsLoading] = useState(false);
+  const [isLyricsSaving, setIsLyricsSaving] = useState(false);
+  const [lyricsStatus, setLyricsStatus] = useState<null | "success" | "error">(null);
+  const [lyricsStatusMessage, setLyricsStatusMessage] = useState("");
 
   const contributorGroups = useMemo(() => {
     const grouped: Record<string, SongContributor[]> = {};
@@ -235,6 +248,30 @@ export const SongEditDialog = ({
     return map;
   }, [allArtists]);
 
+  const convertSegmentsToPlainText = useCallback(
+    (segments?: Array<{ text?: string }>) => {
+      if (!Array.isArray(segments) || segments.length === 0) {
+        return songData?.lyrics && typeof songData.lyrics === "string" ? songData.lyrics : "";
+      }
+      return segments
+        .map((segment) => (segment?.text ?? "").toString().trim())
+        .filter((line) => line.length > 0)
+        .join("\n");
+    },
+    [songData?.lyrics]
+  );
+
+  const convertPlainTextToSegments = (text: string) => {
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line, index) => ({
+        time: index * 5,
+        text: line,
+      }));
+  };
+
   const form = useForm<MetadataFormValues>({
     resolver: zodResolver(metadataSchema),
     defaultValues: {
@@ -266,8 +303,30 @@ export const SongEditDialog = ({
       setMoodScoreDraft("");
       setIsSavingGenre(false);
       setIsSavingMood(false);
+    setLyricsText("");
+    setLyricsStatus(null);
+    setLyricsStatusMessage("");
     }
   }, [open]);
+
+  const loadLyrics = useCallback(async () => {
+    if (!songId) return;
+    setIsLyricsLoading(true);
+    setLyricsStatus(null);
+    setLyricsStatusMessage("");
+    try {
+      const raw = await lyricsApi.getLyrics(String(songId));
+      setLyricsText(convertSegmentsToPlainText(raw));
+    } catch (error) {
+      console.error("[SongEditDialog] Failed to load lyrics:", error);
+      const message = error instanceof Error ? error.message : "Không thể tải lyrics.";
+      setLyricsText("");
+      setLyricsStatus("error");
+      setLyricsStatusMessage(message);
+    } finally {
+      setIsLyricsLoading(false);
+    }
+  }, [convertSegmentsToPlainText, songId]);
 
   const loadData = useCallback(async () => {
     try {
@@ -324,9 +383,14 @@ export const SongEditDialog = ({
   useEffect(() => {
     if (open && songId) {
       loadData();
-      setActiveTab(initialTab === "genre" || initialTab === "mood" ? "genre-mood" : initialTab);
+      setActiveTab(
+        initialTab === "genre" || initialTab === "mood"
+          ? "genre-mood"
+          : (initialTab as AdminTab) || "metadata"
+      );
+      loadLyrics();
     }
-  }, [open, songId, initialTab, loadData]);
+  }, [open, songId, initialTab, loadData, loadLyrics]);
 
   const handleSaveMetadata = async (data: MetadataFormValues) => {
     try {
@@ -396,6 +460,42 @@ export const SongEditDialog = ({
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveLyrics = async () => {
+    if (!songId) return;
+    const segments = convertPlainTextToSegments(lyricsText);
+    if (segments.length === 0) {
+      setLyricsStatus("error");
+      setLyricsStatusMessage("Vui lòng nhập lyrics trước khi lưu.");
+      return;
+    }
+    setIsLyricsSaving(true);
+    setLyricsStatus(null);
+    setLyricsStatusMessage("");
+    try {
+      await lyricsApi.saveLyrics(String(songId), segments as Array<{ time: number; text: string }>);
+      setLyricsStatus("success");
+      const successMessage = "Đã lưu lyrics thành công. Hệ thống sẽ tái tính vector cho bài hát.";
+      setLyricsStatusMessage(successMessage);
+      toast({
+        title: "Đã lưu lyrics",
+        description: "Lyrics mới sẽ được dùng cho đồng bộ và gợi ý.",
+      });
+    } catch (error) {
+      console.error("[SongEditDialog] Failed to save lyrics:", error);
+      const message =
+        error instanceof Error ? error.message : "Không thể lưu lyrics, vui lòng thử lại.";
+      setLyricsStatus("error");
+      setLyricsStatusMessage(message);
+      toast({
+        title: "Lỗi",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLyricsSaving(false);
     }
   };
 
@@ -667,15 +767,14 @@ export const SongEditDialog = ({
 
         <Tabs
           value={activeTab}
-          onValueChange={(value) =>
-            setActiveTab(value as "metadata" | "contributor" | "genre-mood")
-          }
+          onValueChange={(value) => setActiveTab(value as AdminTab)}
           className="flex-1 flex flex-col overflow-hidden"
         >
           <TabsList className="mx-6 mt-4 mb-0">
             <TabsTrigger value="metadata">Metadata</TabsTrigger>
             <TabsTrigger value="contributor">Contributor</TabsTrigger>
             <TabsTrigger value="genre-mood">Genre và Mood</TabsTrigger>
+            <TabsTrigger value="lyrics">Lyrics</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">

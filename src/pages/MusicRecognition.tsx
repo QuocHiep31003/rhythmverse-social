@@ -283,15 +283,6 @@ const MusicRecognition = () => {
                   )}
                 </Button>
 
-                <Button
-                  onClick={() => window.open("https://open.spotify.com", "_blank")}
-                  variant="outline"
-                  className="bg-green-600 text-white border-green-600"
-                  size="lg"
-                >
-                  <Music className="w-4 h-4 mr-2" />
-                  Spotify
-                </Button>
               </div>
 
               {audioUrlPreview && <audio ref={audioRef} src={audioUrlPreview} controls className="w-full" />}

@@ -103,22 +103,14 @@ const FeaturedMusic = () => {
                 <Button
                   variant="hero"
                   size="lg"
-                  className="gap-2 min-w-[200px]"
+                  className="gap-2 min-w-[100px]"
                   onClick={() => navigate("/music-recognition")}
                 >
                   <Mic className="w-5 h-5" />
-                  Thử ngay
-                  <ArrowRight className="w-4 h-4" />
+                  
+               
                 </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="gap-2 min-w-[200px]"
-                  onClick={() => navigate("/discover")}
-                >
-                  <Music className="w-5 h-5" />
-                  Khám phá thêm
-                </Button>
+          
               </div>
             </div>
           </CardContent>

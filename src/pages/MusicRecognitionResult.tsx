@@ -15,7 +15,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Headphones
+  Headphones,
+  Loader2
 } from "lucide-react";
 import { songsApi } from "@/services/api";
 import { searchYouTubeMusicVideoId } from "@/services/ytmusic";
@@ -401,6 +402,7 @@ type EchoverseSong = NonNullable<
   external_metadata?: AcrExternalMetadata;
   songLink?: string;
   song_link?: string;
+  lyrics?: string;
 };
 
 type RecognizeItem = {
