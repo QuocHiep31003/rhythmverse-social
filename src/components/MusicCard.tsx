@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -11,6 +11,7 @@ import { Play, Heart, MoreHorizontal, Clock, Share2, ListPlus, Download } from "
 import { useNavigate } from "react-router-dom";
 import { createSlug } from "@/utils/playlistUtils";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import { useFavoriteSong } from "@/hooks/useFavorites";
 
 interface MusicCardProps {
   title: string;
@@ -20,7 +21,8 @@ interface MusicCardProps {
   imageUrl?: string;
   isPlaying?: boolean;
   variant?: "default" | "compact" | "featured";
-  songId?: string;
+  songId?: string | number;
+  likes?: number;
 }
 
 const MusicCard = ({ 
@@ -31,12 +33,24 @@ const MusicCard = ({
   imageUrl, 
   isPlaying = false,
   variant = "default",
-  songId
+  songId,
+  likes = 0
 }: MusicCardProps) => {
   const navigate = useNavigate();
-  const [isLiked, setIsLiked] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  
+  const numericSongId = useMemo(() => {
+    if (!songId) return undefined;
+    if (typeof songId === "number" && Number.isFinite(songId)) return songId;
+    if (typeof songId === "string") {
+      const parsed = Number(songId);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  }, [songId]);
+  
+  const favoriteHook = useFavoriteSong(numericSongId, { disableToast: false });
 
   const handleCardClick = () => {
     if (songId) {
@@ -122,13 +136,16 @@ const MusicCard = ({
             <Button
               variant="glass"
               size="icon"
-              className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+              className={`h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity ${
+                favoriteHook.isFavorite ? 'text-red-500' : ''
+              }`}
               onClick={(e) => {
                 e.stopPropagation();
-                setIsLiked(!isLiked);
+                favoriteHook.toggleFavorite();
               }}
+              disabled={favoriteHook.pending || !numericSongId}
             >
-              <Heart className={`h-4 w-4 ${isLiked ? 'fill-neon-pink text-neon-pink' : ''}`} />
+              <Heart className={`h-4 w-4 ${favoriteHook.isFavorite ? 'fill-current' : ''}`} />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -166,9 +183,20 @@ const MusicCard = ({
           {album && <p className="text-xs text-muted-foreground truncate">{album}</p>}
         </div>
 
-        {/* Duration */}
+        {/* Duration and Likes */}
         <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
-          <span>{duration}</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              <span>{duration}</span>
+            </div>
+            {likes > 0 && (
+              <div className="flex items-center gap-1">
+                <Heart className="h-3 w-3" />
+                <span>{likes}</span>
+              </div>
+            )}
+          </div>
           {variant === "featured" && (
             <span className="bg-gradient-primary text-primary-foreground px-2 py-1 rounded-full text-xs font-medium">
               Featured

@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+﻿import { useEffect, useMemo, useState, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,10 +29,182 @@ import { friendsApi } from "@/services/api/friendsApi";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CollaboratorRole, PlaylistVisibility } from "@/types/playlist";
 import type { PlaylistItem, UserResponse, SongDTO, FriendDTO, PlaylistFormValues } from "@/types/playlistLibrary";
-import { toSeconds, formatTotal, parseDateSafe } from "@/utils/playlistUtils";
+import { toSeconds, formatTotal, parseDateSafe, createSlug } from "@/utils/playlistUtils";
 import { PlaylistCard } from "@/components/playlist/PlaylistCard";
+import { favoritesApi, FavoriteSongDTO, FavoritePlaylistDTO, FavoriteAlbumDTO, FavoriteError } from "@/services/api/favoritesApi";
+import { AlbumCard } from "@/components/AlbumCard";
+import { useFavoriteAlbum, useFavoritePlaylist } from "@/hooks/useFavorites";
+
+const toPlaylistItemFromFavorite = (dto: FavoritePlaylistDTO): PlaylistItem => {
+  const cover =
+    dto.coverUrl ||
+    (dto as PlaylistDTO & { urlImagePlaylist?: string }).urlImagePlaylist ||
+    "";
+  const songCount = Array.isArray(dto.songIds)
+    ? dto.songIds.length
+    : (dto as { songCount?: number }).songCount ?? 0;
+  const totalDuration = (dto as { totalDuration?: string }).totalDuration ?? "--";
+  const updatedAt =
+    (dto as { updatedAt?: string }).updatedAt ??
+    dto.dateUpdate ??
+    (dto as { createdAt?: string }).createdAt ??
+    null;
+
+  return {
+    id: String(dto.id),
+    title: dto.name ?? "Playlist",
+    description: dto.description ?? "",
+    cover,
+    songCount,
+    totalDuration,
+    isPublic: dto.visibility === PlaylistVisibility.PUBLIC,
+    visibility: dto.visibility ?? null,
+    likes: (dto as { likes?: number }).likes ?? 0,
+    createdAt: (dto as { createdAt?: string }).createdAt ?? null,
+    updatedAt,
+    ownerId: dto.ownerId,
+    ownerName: dto.ownerName ?? dto.owner?.name,
+    ownerAvatar: dto.ownerAvatar ?? (dto.owner as { avatar?: string | null })?.avatar ?? null,
+    isOwner: false,
+    isCollaborator: false,
+  };
+};
+
+type PlaylistCardLayout = "grid" | "carousel";
+
+const PlaylistCardWithFavoriteInLibrary = ({ 
+  playlist, 
+  onPlay,
+  formatNumber,
+  getCollaboratorBadgeText,
+  playlistMeta,
+  duration,
+  onDelete,
+  onRemove,
+  layout = "carousel",
+}: { 
+  playlist: PlaylistItem;
+  onPlay?: (playlist: PlaylistItem) => void;
+  formatNumber?: (num: number) => string;
+  getCollaboratorBadgeText?: (role?: import("@/types/playlist").CollaboratorRole) => string;
+  playlistMeta?: { songCount?: number; updatedAt?: string | null; visibility?: import("@/types/playlist").PlaylistVisibility | string | null };
+  duration?: string;
+  onDelete?: () => void;
+  onRemove?: () => void;
+  layout?: PlaylistCardLayout;
+}) => {
+  const numericId = Number(playlist.id);
+  const favoriteHook = useFavoritePlaylist(Number.isFinite(numericId) ? numericId : undefined, { disableToast: false });
+  
+  const defaultFormatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
+  };
+  
+  const defaultGetCollaboratorBadgeText = (role?: import("@/types/playlist").CollaboratorRole) => {
+    if (role === "EDITOR") return "Editor";
+    if (role === "VIEWER") return "Viewer";
+    return "Collaborator";
+  };
+  
+  const handleToggle = async () => {
+    const wasFavorite = favoriteHook.isFavorite;
+    const success = await favoriteHook.toggleFavorite();
+    // Nếu đang bỏ thích và có callback, gọi để remove khỏi danh sách
+    if (wasFavorite && success && onRemove) {
+      onRemove();
+    }
+  };
+  
+  const containerClass =
+    layout === "grid"
+      ? "snap-start w-full"
+      : "snap-start min-w-[240px] max-w-[260px]";
+
+  return (
+    <div className={containerClass}>
+      <PlaylistCard
+        playlist={playlist}
+        playlistMeta={playlistMeta}
+        duration={duration || playlist.totalDuration}
+        isLiked={favoriteHook.isFavorite}
+        likePending={favoriteHook.pending}
+        onLike={handleToggle}
+        onPlay={onPlay ? () => onPlay(playlist) : undefined}
+        onDelete={onDelete}
+        getCollaboratorBadgeText={getCollaboratorBadgeText || defaultGetCollaboratorBadgeText}
+        formatNumber={formatNumber || defaultFormatNumber}
+      />
+    </div>
+  );
+};
+
+const FavoriteAlbumCard = ({
+  album,
+  onRemove,
+}: {
+  album: FavoriteAlbumDTO;
+  onRemove: () => void;
+}) => {
+  const albumNumericId = useMemo(() => {
+    if (typeof album.id === "number" && Number.isFinite(album.id)) return album.id;
+    if (typeof album.id === "string") {
+      const parsed = Number(album.id);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  }, [album.id]);
+  
+  const favoriteHook = useFavoriteAlbum(albumNumericId, { disableToast: false });
+  
+  // Đảm bảo card hiển thị là đã thích ngay khi render danh sách
+  useEffect(() => {
+    if (albumNumericId) {
+      favoriteHook.setFavoriteLocally(true);
+    }
+  }, [albumNumericId, favoriteHook]);
+  
+  const handleToggleFavorite = useCallback(async () => {
+    if (!albumNumericId) return;
+    const wasFavorite = favoriteHook.isFavorite;
+    const success = await favoriteHook.toggleFavorite();
+    if (wasFavorite && success) {
+      onRemove();
+    }
+  }, [albumNumericId, favoriteHook, onRemove]);
+  
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
+  };
+  
+  return (
+    <AlbumCard
+      album={{
+        id: album.id,
+        name: album.name,
+        artistName: album.artistName,
+        coverUrl: album.coverUrl,
+        songCount: album.songCount,
+        totalDuration: album.totalDuration,
+        likes: album.likes,
+        releaseDate: album.releaseDate,
+        releaseYear: album.releaseDate ? new Date(album.releaseDate).getFullYear() : undefined,
+      }}
+      formatNumber={formatNumber}
+      favoriteState={{
+        isFavorite: favoriteHook.isFavorite,
+        pending: favoriteHook.pending,
+        onToggle: handleToggleFavorite,
+      }}
+    />
+  );
+};
 
 const PlaylistLibrary = () => {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [likedPlaylists, setLikedPlaylists] = useState<string[]>([]);
@@ -51,6 +223,12 @@ const PlaylistLibrary = () => {
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
   const [inviteRole, setInviteRole] = useState<"VIEWER" | "EDITOR">("EDITOR");
   const [sendingInvites, setSendingInvites] = useState(false);
+  const [favoriteSongsPreview, setFavoriteSongsPreview] = useState<FavoriteSongDTO[]>([]);
+  const [favoriteSongsTotal, setFavoriteSongsTotal] = useState(0);
+  const [favoritePlaylists, setFavoritePlaylists] = useState<FavoritePlaylistDTO[]>([]);
+  const [favoriteAlbums, setFavoriteAlbums] = useState<FavoriteAlbumDTO[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
+  const [favoritesError, setFavoritesError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -96,6 +274,11 @@ const PlaylistLibrary = () => {
                 : Array.isArray(p.songIds)
                 ? p.songIds.length
                 : undefined;
+              const rawRoleValue = (p as { role?: string | null }).role;
+              const normalizedRoleValue =
+                typeof rawRoleValue === "string"
+                  ? (rawRoleValue.toUpperCase() as "OWNER" | "EDITOR" | "VIEWER")
+                  : null;
               return {
                 playlistId: p.id,
                 name: p.name,
@@ -106,7 +289,7 @@ const PlaylistLibrary = () => {
                 // Note: Nếu ownerAvatar vẫn null, có thể cần fetch từ user API (sẽ làm sau nếu cần)
                 isOwner: ownerId === currentUserId,
                 isCollaborator: ownerId !== currentUserId,
-                role: (p as { role?: string | null }).role ?? null,
+                role: normalizedRoleValue,
                 description: p.description ?? null,
                 visibility: p.visibility ?? null,
                 songCount: songsCount,
@@ -358,48 +541,49 @@ const PlaylistLibrary = () => {
     if (collabOpen) fetchFriends();
   }, [collabOpen]);
 
-  const favoriteSongs = [
-    {
-      id: "fav1",
-      title: "Blinding Lights",
-      artist: "The Weeknd",
-      album: "After Hours",
-      duration: "3:20",
-      cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-      likedAt: "2024-01-23"
-    },
-    {
-      id: "fav2", 
-      title: "Watermelon Sugar",
-      artist: "Harry Styles",
-      album: "Fine Line",
-      duration: "2:54",
-      cover: "https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=400&h=400&fit=crop",
-      likedAt: "2024-01-22"
-    },
-    {
-      id: "fav3",
-      title: "Levitating",
-      artist: "Dua Lipa", 
-      album: "Future Nostalgia",
-      duration: "3:23",
-      cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop",
-      likedAt: "2024-01-21"
-    },
-    {
-      id: "fav4",
-      title: "Good 4 U",
-      artist: "Olivia Rodrigo",
-      album: "SOUR",
-      duration: "2:58",
-      cover: "https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&h=400&fit=crop",
-      likedAt: "2024-01-20"
+  const loadFavorites = useCallback(async () => {
+    setFavoritesLoading(true);
+    setFavoritesError(null);
+    try {
+      const [songsRes, playlistsRes, albumsRes] = await Promise.all([
+        favoritesApi.listSongs({ page: 0, size: 6, sort: "createdAt,desc" }).catch(() => ({
+          content: [],
+          totalElements: 0,
+        })),
+        favoritesApi.listPlaylists({ page: 0, size: 12, sort: "createdAt,desc" }).catch(() => ({
+          content: [],
+        })),
+        favoritesApi.listAlbums({ page: 0, size: 12, sort: "createdAt,desc" }).catch(() => ({
+          content: [],
+        })),
+      ]);
+      setFavoriteSongsPreview(songsRes.content ?? []);
+      setFavoriteSongsTotal(
+        typeof songsRes.totalElements === "number"
+          ? songsRes.totalElements
+          : songsRes.content?.length ?? 0
+      );
+      setFavoritePlaylists(playlistsRes.content ?? []);
+      setFavoriteAlbums(albumsRes.content ?? []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Không thể tải danh sách yêu thích";
+      setFavoritesError(message);
+    } finally {
+      setFavoritesLoading(false);
     }
-  ];
+  }, []);
+
+  useEffect(() => {
+    loadFavorites();
+  }, [loadFavorites]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const ownedPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isOwner === true), [playlists]);
   const collabPlaylists = useMemo(() => playlists.filter((playlist) => playlist.isCollaborator === true), [playlists]);
+  const favoritePlaylistItems = useMemo(
+    () => favoritePlaylists.map((playlist) => toPlaylistItemFromFavorite(playlist)),
+    [favoritePlaylists]
+  );
 
   const filteredOwnedPlaylists = useMemo(() => {
     if (!normalizedSearch) return ownedPlaylists;
@@ -421,13 +605,6 @@ const PlaylistLibrary = () => {
       );
     });
   }, [collabPlaylists, normalizedSearch]);
-
-  const filteredFavorites = normalizedSearch
-    ? favoriteSongs.filter((song) =>
-        (song.name || song.songName || "").toLowerCase().includes(normalizedSearch) ||
-        song.artist.toLowerCase().includes(normalizedSearch)
-      )
-    : favoriteSongs;
 
   const toggleLike = (playlistId: string) => {
     setLikedPlaylists(prev =>
@@ -617,9 +794,14 @@ const PlaylistLibrary = () => {
       setDeleteOpen(false);
       setPlaylists((prev) => prev.filter((p) => p.id !== selected.id));
       setSelected(null);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[PlaylistLibrary] Failed to delete playlist:", error);
-      let errorMessage = error?.message || error?.toString() || "Failed to delete playlist";
+      let errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Failed to delete playlist";
       
       // Cải thiện thông báo lỗi cho foreign key constraint
       if (errorMessage.includes("foreign key constraint") || errorMessage.includes("still referenced")) {
@@ -702,11 +884,11 @@ const PlaylistLibrary = () => {
           <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:grid-cols-3">
             <TabsTrigger value="my-playlists">My Playlists</TabsTrigger>
             <TabsTrigger value="collab-playlists">Collaborations</TabsTrigger>
-            <TabsTrigger value="favorites">Favorite Songs</TabsTrigger>
+            <TabsTrigger value="favorites">Favorie</TabsTrigger>
           </TabsList>
 
           <TabsContent value="my-playlists">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
               {filteredOwnedPlaylists.length === 0 ? (
                 <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-border/40 bg-card/40 py-12 text-center text-muted-foreground">
                   <Users className="h-10 w-10 mb-3 opacity-60" />
@@ -717,17 +899,16 @@ const PlaylistLibrary = () => {
                 </div>
               ) : (
                 filteredOwnedPlaylists.map((playlist) => (
-                  <PlaylistCard
+                  <PlaylistCardWithFavoriteInLibrary
                     key={playlist.id}
                     playlist={playlist}
                     playlistMeta={playlistMeta[playlist.id]}
                     duration={durations[playlist.id]}
-                    isLiked={likedPlaylists.includes(playlist.id)}
-                    onLike={() => toggleLike(playlist.id)}
                     onPlay={() => playPlaylist(playlist)}
                     onDelete={playlist.isOwner ? () => openDelete(playlist) : undefined}
                     getCollaboratorBadgeText={getCollaboratorBadgeText}
                     formatNumber={formatNumber}
+                    layout="grid"
                   />
               ))
               )}
@@ -735,7 +916,7 @@ const PlaylistLibrary = () => {
           </TabsContent>
 
           <TabsContent value="collab-playlists">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
               {filteredCollabPlaylists.length === 0 ? (
                 <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-border/40 bg-card/40 py-12 text-center text-muted-foreground">
                   <Music className="h-10 w-10 mb-3 opacity-60" />
@@ -746,15 +927,15 @@ const PlaylistLibrary = () => {
                 </div>
               ) : (
                 filteredCollabPlaylists.map((playlist) => (
-                  <PlaylistCard
+                  <PlaylistCardWithFavoriteInLibrary
                     key={playlist.id}
                     playlist={playlist}
                     playlistMeta={playlistMeta[playlist.id]}
                     duration={durations[playlist.id]}
-                    isLiked={likedPlaylists.includes(playlist.id)}
-                    onLike={() => toggleLike(playlist.id)}
                     onPlay={() => playPlaylist(playlist)}
                     getCollaboratorBadgeText={getCollaboratorBadgeText}
+                    formatNumber={formatNumber}
+                    layout="grid"
                   />
               ))
               )}
@@ -762,72 +943,150 @@ const PlaylistLibrary = () => {
           </TabsContent>
 
           <TabsContent value="favorites">
-            <div className="space-y-4">
-              {filteredFavorites.map((song, index) => (
-                <Card key={song.id} className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-8 text-center">
-                        <span className="group-hover:hidden text-muted-foreground">{index + 1}</span>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="hidden group-hover:flex w-8 h-8"
-                          onClick={() => toast({
-                            title: `Playing ${song.name || song.songName || "Unknown Song"}`,
-                            description: `by ${song.artist}`,
-                            duration: 3000,
-                          })}
-                        >
-                          <Play className="w-4 h-4" />
-                        </Button>
+            <div className="space-y-8">
+              <div className="relative flex flex-col md:flex-row items-center gap-6 rounded-2xl border border-pink-500/30 bg-gradient-to-r from-pink-500/10 via-pink-500/5 to-transparent p-6 shadow-lg">
+                <div className="flex-1 w-full">
+                  <p className="text-xs uppercase tracking-[0.2em] text-pink-300/80">Pinned</p>
+                  <h3 className="mt-1 text-3xl font-semibold text-foreground">Favorie hub</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {favoriteSongsTotal
+                      ? `Bạn đang lưu ${favoriteSongsTotal} bài hát yêu thích.`
+                      : "Hiện chưa có bài hát yêu thích nào. Hãy lưu một bài để bắt đầu!"}
+                  </p>
+                  {favoriteSongsPreview.length > 0 && (
+                    <div className="mt-4 flex items-center gap-3 flex-wrap">
+                      <div className="flex -space-x-2">
+                        {favoriteSongsPreview.slice(0, 3).map((song) => (
+                          <Avatar key={song.id} className="border-2 border-background">
+                            <AvatarImage
+                              src={song.coverUrl || song.urlImageAlbum || song.albumCoverImg || undefined}
+                              alt={song.name || song.title || "Song"}
+                            />
+                            <AvatarFallback>{(song.name || song.title || "?").charAt(0)}</AvatarFallback>
+                          </Avatar>
+                        ))}
                       </div>
-
-                      <Avatar className="w-12 h-12">
-                        <AvatarImage src={song.cover} alt={song.name || song.songName || "Unknown Song"} />
-                        <AvatarFallback>{(song.name || song.songName || "?").charAt(0)}</AvatarFallback>
-                      </Avatar>
-
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium truncate text-foreground">{song.name || song.songName || "Unknown Song"}</h4>
-                        <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                      </div>
-
-                      <div className="hidden md:block flex-1 min-w-0">
-                        <p className="text-sm text-muted-foreground truncate">{song.album}</p>
-                      </div>
-
-                      <div className="hidden lg:block w-32">
-                        <p className="text-sm text-muted-foreground">
-                          Liked {new Date(song.likedAt).toLocaleDateString()}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-red-500"
-                        >
-                          <Heart className="w-4 h-4 fill-current" />
-                        </Button>
-
-                        <span className="text-sm text-muted-foreground w-12 text-right">
-                          {song.duration}
-                        </span>
-
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="bg-white/10 border border-white/20 text-white hover:bg-white/20"
+                        onClick={() => navigate("/favorites/songs")}
+                      >
+                        Xem bài hát yêu thích
+                      </Button>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                  )}
+                </div>
+                <div className="relative">
+                  <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-pink-500/25 flex items-center justify-center shadow-[0_0_40px_rgba(244,114,182,0.45)]">
+                    <Heart className="w-16 h-16 text-pink-400 fill-pink-500 drop-shadow-lg" />
+                  </div>
+                </div>
+              </div>
+
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">Playlist yêu thích</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Giữ playlist từ bạn bè hoặc cộng đồng để nghe lại sau.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {favoritesError && favoritePlaylistItems.length === 0 && (
+                      <span className="text-xs text-destructive">{favoritesError}</span>
+                    )}
+                    <Button variant="ghost" size="sm" onClick={loadFavorites} disabled={favoritesLoading}>
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+                {favoritesLoading && favoritePlaylistItems.length === 0 ? (
+                  <div className="flex gap-4 overflow-x-auto pb-4">
+                    {[0, 1, 2].map((skeleton) => (
+                      <Card
+                        key={`favorite-skel-${skeleton}`}
+                        className="bg-card/40 border-border/30 h-48 min-w-[220px] animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : favoritePlaylistItems.length === 0 ? (
+                  <div className="rounded-xl border border-border/40 bg-card/40 p-8 text-center text-muted-foreground">
+                    <p className="font-medium text-foreground mb-1">Chưa có playlist yêu thích</p>
+                    <p className="text-sm">Hãy lưu một playlist để xuất hiện tại đây.</p>
+                  </div>
+                ) : (
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-custom snap-x snap-mandatory">
+                    {favoritePlaylistItems.map((playlist) => {
+                      const numericId = Number(playlist.id);
+                      const playlistIdKey = String(playlist.id);
+                      return (
+                        <PlaylistCardWithFavoriteInLibrary
+                          key={`favorite-playlist-${playlist.id}`}
+                          playlist={playlist}
+                          onPlay={playPlaylist}
+                          formatNumber={formatNumber}
+                          getCollaboratorBadgeText={getCollaboratorBadgeText}
+                          onRemove={() => {
+                            setFavoritePlaylists((prev) =>
+                              prev.filter((p) => String(p.id) !== playlistIdKey)
+                            );
+                          }}
+                          duration={
+                            (durations[playlistIdKey] as string | undefined) ??
+                            playlist.totalDuration
+                          }
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold">Album yêu thích</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Những album bạn đã ghim để nghe lại nhanh chóng.
+                    </p>
+                  </div>
+                </div>
+                {favoritesLoading && favoriteAlbums.length === 0 ? (
+                  <div className="flex gap-4 overflow-x-auto pb-4">
+                    {[0, 1, 2].map((skeleton) => (
+                      <Card
+                        key={`favorite-album-skel-${skeleton}`}
+                        className="bg-card/40 border-border/30 h-40 min-w-[220px] animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : favoriteAlbums.length === 0 ? (
+                  <div className="rounded-xl border border-border/40 bg-card/40 p-8 text-center text-muted-foreground">
+                    <p className="font-medium text-foreground mb-1">Chưa có album yêu thích</p>
+                    <p className="text-sm">Lưu album để chúng xuất hiện tại đây.</p>
+                  </div>
+                ) : (
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-custom snap-x snap-mandatory">
+                    {favoriteAlbums.map((album) => (
+                  <div
+                    key={album.id}
+                    className="snap-start min-w-[240px] max-w-[260px]"
+                  >
+                        <FavoriteAlbumCard
+                          album={album}
+                          onRemove={() => {
+                            const idKey = String(album.id);
+                            setFavoriteAlbums((prev) =>
+                              prev.filter((a) => String(a.id) !== idKey)
+                            );
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
             </div>
           </TabsContent>
       </Tabs>

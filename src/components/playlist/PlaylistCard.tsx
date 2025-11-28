@@ -9,6 +9,9 @@ import type { PlaylistItem } from "@/types/playlistLibrary";
 import { PlaylistVisibility } from "@/types/playlist";
 import { parseDateSafe, createSlug } from "@/utils/playlistUtils";
 import { API_BASE_URL } from "@/services/api";
+import { favoritesApi } from "@/services/api/favoritesApi";
+import { useState, useEffect, useMemo } from "react";
+import { toSeconds, formatTotal } from "@/utils/playlistUtils";
 
 interface PlaylistCardProps {
   playlist: PlaylistItem;
@@ -20,6 +23,7 @@ interface PlaylistCardProps {
   duration?: string;
   isLiked: boolean;
   onLike: () => void;
+  likePending?: boolean;
   onPlay: () => void;
   onDelete?: () => void;
   getCollaboratorBadgeText?: (role?: import("@/types/playlist").CollaboratorRole) => string;
@@ -32,6 +36,7 @@ export const PlaylistCard = ({
   duration,
   isLiked,
   onLike,
+  likePending,
   onPlay,
   onDelete,
   getCollaboratorBadgeText,
@@ -44,7 +49,17 @@ export const PlaylistCard = ({
       ? playlist.songCount
       : 0;
   const songLabel = computedSongCount === 1 ? 'song' : 'songs';
-  const durationLabel = duration || playlist.totalDuration || '--';
+  const durationLabel = useMemo(() => {
+    const raw = duration ?? playlist.totalDuration;
+    const seconds = toSeconds(raw);
+    if (seconds > 0) {
+      return formatTotal(seconds);
+    }
+    if (typeof raw === "string" && raw.trim().length > 0) {
+      return raw;
+    }
+    return "--";
+  }, [duration, playlist.totalDuration]);
   const rawVisibility =
     playlistMeta?.visibility ??
     playlist.visibility ??
@@ -63,10 +78,25 @@ export const PlaylistCard = ({
     (!isPublicVisibility && !isFriendsOnlyVisibility && playlist.isPublic === false);
   const updatedSource = playlistMeta?.updatedAt ?? playlist.updatedAt ?? playlist.createdAt ?? null;
   const updatedDate = parseDateSafe(updatedSource);
+  
+  const playlistNumericId = useMemo(() => {
+    const num = Number(playlist.id);
+    return Number.isFinite(num) ? num : undefined;
+  }, [playlist.id]);
+  
+  const [likeCount, setLikeCount] = useState<number | null>(null);
+  
+  useEffect(() => {
+    if (playlistNumericId && isPublicVisibility) {
+      favoritesApi.getPlaylistLikeCount(playlistNumericId)
+        .then(res => setLikeCount(res.count))
+        .catch(() => setLikeCount(null));
+    }
+  }, [playlistNumericId, isPublicVisibility]);
 
   return (
-    <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
-      <CardContent className="p-0">
+    <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group h-full flex flex-col">
+      <CardContent className="p-0 flex flex-col flex-1">
         <div className="relative aspect-square">
           {playlist.cover ? (
             <img
@@ -127,27 +157,28 @@ export const PlaylistCard = ({
           </div>
         </div>
 
-        <div className="p-4 min-w-0">
-          <Link to={`/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} className="block min-w-0">
-            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors line-clamp-2 break-words overflow-hidden min-w-0">
+        <div className="p-4 min-w-0 flex flex-col flex-1">
+          <Link to={`/playlist/${createSlug(playlist.title, playlist.id)}`} className="block min-w-0 flex-shrink-0">
+            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors line-clamp-1 break-words overflow-hidden min-w-0">
               {playlist.title}
             </h3>
           </Link>
           
-          {playlist.isCollaborator && playlist.ownerName && (
+          {playlist.ownerName && (
             <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
               {playlist.ownerAvatar ? (
-                <img 
+                <img
                   src={
-                    playlist.ownerAvatar.startsWith('http://') || playlist.ownerAvatar.startsWith('https://') || playlist.ownerAvatar.startsWith('/')
+                    playlist.ownerAvatar.startsWith("http://") ||
+                    playlist.ownerAvatar.startsWith("https://") ||
+                    playlist.ownerAvatar.startsWith("/")
                       ? playlist.ownerAvatar
-                      : `${API_BASE_URL}${playlist.ownerAvatar.startsWith('/') ? '' : '/'}${playlist.ownerAvatar}`
-                  } 
+                      : `${API_BASE_URL}${playlist.ownerAvatar.startsWith("/") ? "" : "/"}${playlist.ownerAvatar}`
+                  }
                   alt={playlist.ownerName}
                   className="w-5 h-5 rounded-full object-cover"
                   onError={(e) => {
-                    // Fallback to Users icon if image fails to load
-                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.style.display = "none";
                   }}
                 />
               ) : (
@@ -158,29 +189,33 @@ export const PlaylistCard = ({
           )}
           
           {playlist.description ? (
-            <p className="text-sm text-muted-foreground mb-3 line-clamp-2 break-words overflow-hidden min-w-0">
+            <p className="text-sm text-muted-foreground mb-2 line-clamp-1 break-words overflow-hidden min-w-0">
               {playlist.description}
             </p>
           ) : null}
 
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
             <div className="flex items-center gap-1">
               <Music className="w-4 h-4" />
               {computedSongCount} {songLabel}
             </div>
+            <span className="text-muted-foreground/50">•</span>
             <div className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
               {durationLabel}
             </div>
-            {isPublicVisibility && (
-              <div className="flex items-center gap-1">
-                <Heart className="w-4 h-4" />
-                {formatNumber ? formatNumber(playlist.likes) : playlist.likes}
-              </div>
+            {isPublicVisibility && likeCount !== null && (
+              <>
+                <span className="text-muted-foreground/50">•</span>
+                <div className="flex items-center gap-1">
+                  <Heart className="w-4 h-4" />
+                  {formatNumber ? formatNumber(likeCount) : likeCount.toLocaleString()}
+                </div>
+              </>
             )}
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mt-auto">
             {updatedDate ? (
               <p className="text-xs text-muted-foreground">
                 Updated {updatedDate.toLocaleDateString()}
@@ -192,11 +227,12 @@ export const PlaylistCard = ({
                 variant="ghost"
                 size="icon"
                 onClick={onLike}
+                disabled={likePending}
                 className={`h-8 w-8 ${isLiked ? 'text-red-500' : ''}`}
               >
                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
               </Button>
-              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title || playlist.name, playlist.id)}`} isPrivate={isPrivateVisibility} />
+              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`} isPrivate={isPrivateVisibility} />
               {playlist.isOwner && onDelete && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
