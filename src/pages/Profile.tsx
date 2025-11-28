@@ -60,6 +60,7 @@ const Profile = () => {
   const [premiumSubscription, setPremiumSubscription] = useState<PremiumSubscriptionDTO | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<OrderHistoryItem | null>(null);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
+  const [pendingTick, setPendingTick] = useState(0);
   
   useEffect(() => {
     fetchProfile();
@@ -68,7 +69,14 @@ const Profile = () => {
 
   useEffect(() => {
     fetchPaymentHistory();
-  }, [paymentPage, paymentFilter]);
+  }, [paymentPage, paymentFilter, pendingTick]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setPendingTick((tick) => tick + 1);
+    }, 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const isSubscriptionActive = (subscription: PremiumSubscriptionDTO | null) => {
     if (!subscription) return false;
@@ -427,8 +435,51 @@ const Profile = () => {
     });
   }, [selectedOrder?.planFeatureSnapshot]);
 
+  const PENDING_TIMEOUT_MS = 5 * 60 * 1000;
+
+  const getOrderDisplayState = (order: OrderHistoryItem): 'success' | 'pending' | 'failed' => {
+    const backendStatus = order.status?.toUpperCase();
+    if (backendStatus === 'SUCCESS') {
+      return 'success';
+    }
+    if (backendStatus === 'FAILED') {
+      return 'failed';
+    }
+
+    if (order.failureReason) {
+      return 'failed';
+    }
+
+    const isPendingState =
+      backendStatus === 'PENDING' ||
+      backendStatus === 'PROCESSING' ||
+      backendStatus === 'WAITING' ||
+      backendStatus === undefined ||
+      backendStatus === null ||
+      backendStatus === '';
+
+    if (!isPendingState) {
+      return 'failed';
+    }
+
+    const referenceTime = order.updatedAt || order.createdAt;
+    if (referenceTime) {
+      const timestamp = new Date(referenceTime).getTime();
+      if (!Number.isNaN(timestamp)) {
+        const elapsed = Date.now() - timestamp;
+        if (elapsed >= PENDING_TIMEOUT_MS) {
+          return 'failed';
+        }
+      }
+    }
+
+    return 'pending';
+  };
+
   const getPaymentStatusBadge = (order: OrderHistoryItem) => {
-    if (order.status === 'SUCCESS') {
+    const displayState = getOrderDisplayState(order);
+
+    if (displayState === 'success') {
       return (
         <Badge variant="default" className="bg-green-500 hover:bg-green-600">
           <CheckCircle2 className="w-3 h-3 mr-1" />
@@ -437,9 +488,7 @@ const Profile = () => {
       );
     }
 
-    const isPending = order.payosCode?.toUpperCase() === 'PENDING' && !order.failureReason;
-
-    if (isPending) {
+    if (displayState === 'pending') {
       return (
         <Badge variant="outline" className="border-amber-500 text-amber-500">
           <Clock className="w-3 h-3 mr-1" />
@@ -456,6 +505,24 @@ const Profile = () => {
     );
   };
 
+  const paymentAggregates = useMemo(() => {
+    let success = 0;
+    let failed = 0;
+    let successAmount = 0;
+
+    allPaymentOrders.forEach((order) => {
+      const state = getOrderDisplayState(order);
+      if (state === 'success') {
+        success += 1;
+        successAmount += order.amount;
+      } else if (state === 'failed') {
+        failed += 1;
+      }
+    });
+
+    return { success, failed, successAmount };
+  }, [allPaymentOrders, pendingTick]);
+
   const fetchPaymentHistory = async () => {
     try {
       setPaymentLoading(true);
@@ -465,11 +532,12 @@ const Profile = () => {
 
       let filteredOrders = result.content;
       if (paymentFilter !== 'all') {
-        if (paymentFilter === 'SUCCESS') {
-          filteredOrders = result.content.filter((order) => order.status === 'SUCCESS');
-        } else if (paymentFilter === 'FAILED') {
-          filteredOrders = result.content.filter((order) => order.status !== 'SUCCESS');
-        }
+        filteredOrders = result.content.filter((order) => {
+          const displayState = getOrderDisplayState(order);
+          return paymentFilter === 'SUCCESS'
+            ? displayState === 'success'
+            : displayState === 'failed';
+        });
       }
       
       setPaymentOrders(filteredOrders);
@@ -957,7 +1025,7 @@ const Profile = () => {
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardContent className="pt-6">
                     <div className="text-2xl font-bold text-green-500">
-                      {allPaymentOrders.filter(o => o.status === 'SUCCESS').length}
+                      {paymentAggregates.success}
                     </div>
                     <p className="text-sm text-muted-foreground">Successful</p>
                   </CardContent>
@@ -965,7 +1033,7 @@ const Profile = () => {
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardContent className="pt-6">
                     <div className="text-2xl font-bold text-red-500">
-                      {allPaymentOrders.filter(o => o.status !== 'SUCCESS').length}
+                      {paymentAggregates.failed}
                     </div>
                     <p className="text-sm text-muted-foreground">Failed</p>
                   </CardContent>
@@ -973,11 +1041,7 @@ const Profile = () => {
                 <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                   <CardContent className="pt-6">
                     <div className="text-2xl font-bold">
-                      {formatCurrency(
-                        allPaymentOrders
-                          .filter(o => o.status === 'SUCCESS')
-                          .reduce((sum, o) => sum + o.amount, 0)
-                      )}
+                      {formatCurrency(paymentAggregates.successAmount)}
                     </div>
                     <p className="text-sm text-muted-foreground">Total Paid</p>
                   </CardContent>

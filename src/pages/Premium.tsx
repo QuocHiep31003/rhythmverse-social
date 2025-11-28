@@ -142,6 +142,12 @@ const Premium = () => {
   );
   const annualPlan = otherPlans.find(p => p.planCode?.toUpperCase() === "PREMIUM_YEARLY") || null;
   const additionalPlans = otherPlans.filter(p => p.planCode?.toUpperCase() !== "PREMIUM_YEARLY");
+  const availablePlanCount = [
+    freePlan || null,
+    premiumPlan || null,
+    annualPlan,
+    ...additionalPlans
+  ].filter(Boolean).length;
 
   // Lấy PlanDetail được recommend hoặc giá thấp nhất
   const getMonthlyDetail = (plan: SubscriptionPlanDTO) => {
@@ -445,6 +451,11 @@ const Premium = () => {
     }
   };
 
+  const planGridClass =
+    availablePlanCount <= 2
+      ? "grid gap-6 grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto auto-rows-fr justify-items-stretch"
+      : "grid gap-3 lg:grid-cols-3 max-w-6xl mx-auto auto-rows-fr";
+
   return (
     <div className="min-h-screen bg-gradient-dark">
       <div className="container mx-auto px-4 py-8">
@@ -468,7 +479,7 @@ const Premium = () => {
           </div>
         ) : (
           <div className="mb-12">
-            <div className="grid gap-3 lg:grid-cols-3 max-w-6xl mx-auto auto-rows-fr">
+            <div className={planGridClass}>
               {renderPlanCard(freePlan || null, {
                 accent: "free",
                 badge: "Starter Plan",
