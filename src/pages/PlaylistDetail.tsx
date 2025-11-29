@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+﻿﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -567,7 +567,7 @@ const PlaylistDetail = () => {
           });
         }
         
-        // Fallback: B�i h�t ph? bi?n
+        // Fallback: Bài hát phổ biến
         recommendationPromises.push(
           songsApi.getAll({ size: 8, page: 0 })
             .then(res => {
@@ -1710,7 +1710,7 @@ const handlePlaySong = (song: Song) => {
                   if (!permissions.canEdit) {
                     if (open) {
                       toast({
-                        title: "Kh�ng th? th�m b�i h�t",
+                        title: "Kh�ng th? ThÃªm bÃ i hÃ¡t",
                         description: "B?n kh�ng c� quy?n ch?nh s?a playlist n�y.",
                         variant: "destructive",
                       });
@@ -1727,7 +1727,7 @@ const handlePlaySong = (song: Song) => {
                     disabled={!permissions.canEdit}
                   >
                     <Plus className="w-4 h-4 mr-2" />
-                    Th�m b�i h�t
+                    Add songs
                   </Button>
                 </DialogTrigger>
                 <DialogContent
@@ -2137,17 +2137,17 @@ const handlePlaySong = (song: Song) => {
                   </>
                 );
               })()}
-              <span className="text-muted-foreground">�</span>
+              <span className="text-muted-foreground">·</span>
               <span className="text-muted-foreground">{(playlist?.songs.length || 0) > 0 ? playlist?.songs.length : (playlist?.totalSongs ?? 0)} songs</span>
               {playlist && playlist.songs.length > 0 && (
                 <>
-                  <span className="text-muted-foreground">�</span>
+                  <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
                 </>
               )}
               {playlistLikeCount !== null && (
                 <>
-                  <span className="text-muted-foreground">�</span>
+                  <span className="text-muted-foreground">·</span>
                   <span className="text-muted-foreground flex items-center gap-1">
                     <Heart className="w-3 h-3" />
                     {playlistLikeCount.toLocaleString()}
@@ -2160,7 +2160,7 @@ const handlePlaySong = (song: Song) => {
                 const valid = t && !isNaN(t.getTime());
                 return valid ? (
                   <>
-                    <span className="text-muted-foreground">�</span>
+                    <span className="text-muted-foreground">·</span>
                     <span className="text-muted-foreground">Updated {t.toLocaleDateString()}</span>
                   </>
                 ) : null;
@@ -2292,7 +2292,7 @@ const handlePlaySong = (song: Song) => {
                     onClick={() => setAddDialogOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
-                    Th�m b�i h�t
+                    Add songs
                   </Button>
                 )}
                 {(permissions.canManageCollaborators || permissions.isOwner) && (
@@ -2398,7 +2398,7 @@ const handlePlaySong = (song: Song) => {
 
             <div className="space-y-2">
               {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => {
-                // L?y avatar c?a ngu?i th�m b�i h�t t? friends list
+                // L?y avatar c?a ngu?i ThÃªm bÃ i hÃ¡t t? friends list
                 let addedByAvatar: string | null = null;
                 if ((song as { addedById?: number }).addedById && friends.length > 0) {
                   const addedByFriend = friends.find(f => f.id === (song as { addedById?: number }).addedById);
@@ -2552,7 +2552,7 @@ const handlePlaySong = (song: Song) => {
         })()}
       />
 
-      {/* Dialog x�c nh?n g? collaborator */}
+      {/* Dialog Confirm g? collaborator */}
       <AlertDialog open={removeCollabDialogOpen} onOpenChange={setRemoveCollabDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2568,13 +2568,13 @@ const handlePlaySong = (song: Song) => {
               disabled={removingCollaboratorId !== null}
               className="bg-destructive hover:bg-destructive/90"
             >
-              {removingCollaboratorId !== null ? "�ang x�a..." : "X�c nh?n"}
+              {removingCollaboratorId !== null ? "�ang x�a..." : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog x�c nh?n Leave playlist collaboration */}
+      {/* Dialog Confirm Leave playlist collaboration */}
       <AlertDialog open={leaveCollabDialogOpen} onOpenChange={setLeaveCollabDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -2590,7 +2590,7 @@ const handlePlaySong = (song: Song) => {
               disabled={leaveLoading}
               className="bg-destructive hover:bg-destructive/90"
             >
-              {leaveLoading ? "Leaving..." : "X�c nh?n"}
+              {leaveLoading ? "Leaving..." : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2779,6 +2779,11 @@ const handlePlaySong = (song: Song) => {
 };
 
 export default PlaylistDetail;
+
+
+
+
+
 
 
 

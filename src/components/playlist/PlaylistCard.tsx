@@ -97,12 +97,13 @@ export const PlaylistCard = ({
   return (
     <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group h-full flex flex-col">
       <CardContent className="p-0 flex flex-col flex-1">
-        <div className="relative aspect-square">
+        <div className="relative aspect-square overflow-hidden">
           {playlist.cover ? (
             <img
               src={playlist.cover}
               alt={playlist.title}
               className="w-full h-full object-cover rounded-t-lg"
+              style={{ objectFit: 'cover', objectPosition: 'center' }}
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg">
