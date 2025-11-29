@@ -171,8 +171,8 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[760px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-zinc-800">
-          <DialogTitle className="text-2xl font-bold">{mode === "create" ? "Tạo Promotion mới" : "Chỉnh sửa Promotion"}</DialogTitle>
-          <DialogDescription className="text-gray-400">Fill in the promotion details. You can edit later.</DialogDescription>
+          <DialogTitle className="text-2xl font-bold">{mode === "create" ? "Create New Banner" : "Edit Banner"}</DialogTitle>
+          <DialogDescription className="text-gray-400">Fill in the banner details. You can edit later.</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -230,7 +230,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                   <FormItem>
                     <FormLabel className="text-sm">Title *</FormLabel>
                     <FormControl>
-                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="Enter promotion title..." />
+                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="Enter banner title..." />
                     </FormControl>
                     <div className="flex justify-between text-xs text-gray-500 mt-0.5">
                       <span>Max 60 characters</span>
@@ -350,8 +350,8 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                     : isLoading
                     ? "Saving..."
                     : mode === "create"
-                    ? "Create Promotion"
-                    : "Update Promotion"}
+                    ? "Create Banner"
+                    : "Update Banner"}
                 </Button>
               </DialogFooter>
             </div>

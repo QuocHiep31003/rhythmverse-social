@@ -1472,26 +1472,28 @@ const PlaylistDetail = () => {
     );
   };
 
-  const playAllSongs = () => {
+  const playAllSongs = async () => {
     if (!playlist || !playlist.songs.length) return;
     if (isPlaying) {
       togglePlay();
     } else {
       // Nếu đang có bài hát trong playlist đang phát, resume bài đó
       if (currentSong && playlist.songs.find((s) => s.id === currentSong.id)) {
-        playSong(currentSong);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(currentSong, playSong, setQueue);
       } else {
         // Nếu không, play bài đầu tiên
-        setQueue(playlist.songs);
-        playSong(playlist.songs[0]);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(playlist.songs[0], playSong, setQueue);
       }
     }
   };
 
-  const handlePlaySong = (song: Song) => {
+  const handlePlaySong = async (song: Song) => {
     if (!playlist) return;
-    setQueue(playlist.songs);
-    playSong(song);
+    // Dùng helper để phát nhạc với /play-now
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(song, playSong, setQueue);
   };
 
   const confirmRemoveSong = (songId: string) => {
@@ -2197,9 +2199,8 @@ const PlaylistDetail = () => {
                             if (isNaN(songId)) return;
                             const fullSong = await songsApi.getById(String(songId));
                             if (fullSong) {
-                              const mapped = mapToPlayerSong(fullSong);
-                              setQueue([mapped]);
-                              playSong(mapped);
+                              const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                              await playSongWithStreamUrl(fullSong, playSong, setQueue);
                             }
                           } catch (error) {
                             console.error("Failed to play song:", error);

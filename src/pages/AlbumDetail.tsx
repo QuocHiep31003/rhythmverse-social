@@ -193,13 +193,14 @@ const AlbumDetail = () => {
   }, [slug, navigate]);
 
   /* ========== Play / Pause logic chuẩn ========== */
-  const handlePlayAlbum = () => {
+  const handlePlayAlbum = async () => {
     if (!songs.length) return;
     if (isPlaying) togglePlay();
     else {
+      const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
       if (currentSong && songs.find((s) => s.id === currentSong.id))
-        playSong(currentSong); // resume đúng bài
-      else playSong(songs[0]); // play bài đầu
+        await playSongWithStreamUrl(currentSong, playSong, setQueue); // resume đúng bài
+      else await playSongWithStreamUrl(songs[0], playSong, setQueue); // play bài đầu
     }
   };
 
@@ -333,9 +334,14 @@ const AlbumDetail = () => {
                 return (
                   <div
                     key={song.id}
-                    onClick={() =>
-                      active && isPlaying ? togglePlay() : playSong(song)
-                    }
+                    onClick={async () => {
+                      if (active && isPlaying) {
+                        togglePlay();
+                      } else {
+                        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                        await playSongWithStreamUrl(song, playSong, setQueue);
+                      }
+                    }}
                     className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
                       items-center gap-3 px-6 py-3 cursor-pointer transition-colors
                       ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}

@@ -403,11 +403,11 @@ const AdminSubscriptionPlans = () => {
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
-                  Quản lý Gói Đăng Ký
+                  Subscription Plan Management
                 </h1>
                 <p className="text-muted-foreground flex items-center gap-2 mt-1">
                   <Badge variant="secondary" className="font-normal">
-                    {plans.length} gói đang hiển thị
+                    {plans.length} plan{plans.length !== 1 ? 's' : ''} displayed
                   </Badge>
                   
                 </p>
@@ -420,11 +420,11 @@ const AdminSubscriptionPlans = () => {
                 className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]"
               >
                 <RefreshCw className="h-4 w-4" />
-                Làm mới
+                Refresh
               </Button>
               <Button onClick={() => handleOpenDialog()} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Tạo gói mới
+                Create New Plan
               </Button>
             </div>
           </div>
@@ -479,7 +479,7 @@ const AdminSubscriptionPlans = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenDialog(plan)}
-                              title="Chỉnh sửa"
+                              title="Edit"
                               className="hover:bg-primary/10"
                             >
                               <Edit className="h-4 w-4" />
@@ -489,7 +489,7 @@ const AdminSubscriptionPlans = () => {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => plan.id && handleDelete(plan.id, plan.planCode)}
-                                title="Xóa"
+                                title="Delete"
                                 className="text-destructive hover:bg-destructive/10"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -509,7 +509,7 @@ const AdminSubscriptionPlans = () => {
                             <p className="text-xs text-muted-foreground">Tùy chỉnh giới hạn linh hoạt</p>
                           </div>
                           <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Options giá</p>
+                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Price options</p>
                             <p className="text-2xl font-bold text-foreground">{priceOptionsCount}</p>
                             <p className="text-xs text-muted-foreground">Kỳ thanh toán đang cấu hình</p>
                           </div>
@@ -517,11 +517,11 @@ const AdminSubscriptionPlans = () => {
 
                         <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
                           <span>
-                            Cập nhật lần cuối:{" "}
-                            {plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString() : "Chưa xác định"}
+                            Last updated:{" "}
+                            {plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString() : "Not specified"}
                           </span>
                           <span className="font-medium text-foreground">
-                            {isActivePlan ? "Có sẵn" : "Bị ẩn"}
+                            {isActivePlan ? "Available" : "Hidden"}
                           </span>
                         </div>
                       </div>
@@ -538,12 +538,12 @@ const AdminSubscriptionPlans = () => {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]">
           <DialogHeader>
             <DialogTitle>
-              {editingPlan ? "Chỉnh sửa Gói" : "Tạo Gói Mới"}
+              {editingPlan ? "Edit Plan" : "Create New Plan"}
             </DialogTitle>
             <DialogDescription>
               {editingPlan
-                ? "Cập nhật thông tin gói đăng ký"
-                : "Tạo gói đăng ký mới với các tính năng và giới hạn"}
+                ? "Update subscription plan information"
+                : "Create a new subscription plan with features and limits"}
             </DialogDescription>
           </DialogHeader>
 
@@ -551,7 +551,7 @@ const AdminSubscriptionPlans = () => {
             <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="planCode">Mã gói *</Label>
+                  <Label htmlFor="planCode">Plan Code *</Label>
                   <Input
                     id="planCode"
                     value={formData.planCode}
@@ -561,12 +561,12 @@ const AdminSubscriptionPlans = () => {
                   />
                   {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
                     <p className="text-xs text-muted-foreground">
-                      Lưu ý: Thay đổi mã gói mặc định có thể ảnh hưởng đến logic hệ thống
+                      Note: Changing default plan code may affect system logic
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="planName">Tên gói *</Label>
+                  <Label htmlFor="planName">Plan Name *</Label>
                   <Input
                     id="planName"
                     value={formData.planName}
@@ -579,7 +579,7 @@ const AdminSubscriptionPlans = () => {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="description">Mô tả</Label>
+                  <Label htmlFor="description">Description</Label>
                   <span className={`text-xs ${descriptionCounterClass}`}>{descriptionLength}/300</span>
                 </div>
                 <Textarea
@@ -733,16 +733,16 @@ const AdminSubscriptionPlans = () => {
                         </div>
                         <div className="grid gap-3 md:grid-cols-4">
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Tên Option</Label>
+                            <Label className="text-xs text-muted-foreground">Option Name</Label>
                             <Input
                               value={detail.detailName || ""}
                               onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
-                              placeholder="Ví dụ: 1 tháng"
+                              placeholder="e.g., 1 month"
                               className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Giá</Label>
+                            <Label className="text-xs text-muted-foreground">Price</Label>
                             <Input
                               inputMode="numeric"
                               value={formatNumber(detail.price)}
@@ -799,7 +799,7 @@ const AdminSubscriptionPlans = () => {
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-[hsl(var(--admin-border))] p-6 text-center text-sm text-muted-foreground">
-                  Chưa có option nào. Nhấn “Thêm Option” để tạo lựa chọn giá đầu tiên.
+                  No options yet. Click "Add Option" to create the first price option.
                 </div>
               )}
             </section>
@@ -807,11 +807,11 @@ const AdminSubscriptionPlans = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseDialog}>
-              Hủy
+              Cancel
             </Button>
             <Button onClick={handleSave}>
               <Save className="h-4 w-4 mr-2" />
-              Lưu
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

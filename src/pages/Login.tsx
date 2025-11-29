@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Music, Mail, Lock, User, Eye, EyeOff, Chrome } from "lucide-react";
 import { authApi } from "@/services/api";
-import { setTokens, startTokenRefreshInterval } from "@/services/api/config";
+import { setTokens, startTokenRefreshInterval, getAuthToken, isTokenExpiringSoon, clearTokens } from "@/services/api/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const Login = () => {
@@ -55,27 +55,32 @@ const Login = () => {
         throw new Error('No token received from server');
       }
 
-      // Persist token and refresh token using setTokens helper
+      // Persist token and refresh token using setTokens helper (chỉ dùng sessionStorage)
       setTokens(response.token, response.refreshToken);
       
       // Start automatic token refresh interval
       startTokenRefreshInterval();
-      // Persist token and refresh token in both storages to avoid losing auth across tabs/windows
-      try {
-        localStorage.setItem("token", response.token);
-        if (response.refreshToken) {
-          localStorage.setItem("refreshToken", response.refreshToken);
+      
+      // Broadcast token to other tabs via BroadcastChannel (vì sessionStorage không share giữa tab)
+      if (typeof window !== 'undefined' && window.BroadcastChannel) {
+        try {
+          const authChannel = new BroadcastChannel('auth_channel');
+          authChannel.postMessage({
+            type: 'TOKEN_UPDATED',
+            token: response.token,
+            refreshToken: response.refreshToken,
+            timestamp: Date.now()
+          });
+          setTimeout(() => authChannel.close(), 200); // Close after sending
+          console.log('[Login] ✅ Broadcasted token to other tabs');
+        } catch (error) {
+          console.warn('[Login] Failed to broadcast token:', error);
         }
-      } catch (storageError) {
-        console.warn("Failed to persist auth token in localStorage", storageError);
       }
-      try {
-        sessionStorage.setItem("token", response.token);
-        if (response.refreshToken) {
-          sessionStorage.setItem("refreshToken", response.refreshToken);
-        }
-      } catch (storageError) {
-        console.warn("Failed to persist auth token in sessionStorage", storageError);
+      
+      // Dispatch custom event to notify TopBar and other components in same tab
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('tokenUpdated'));
       }
 
       // Fetch current user and persist userId for flows that rely on it
@@ -83,8 +88,25 @@ const Login = () => {
         const me = await authApi.me();
         const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
         if (uid) {
-          try { localStorage.setItem('userId', uid); } catch (storageError) { console.warn("Failed to store userId in localStorage", storageError); }
-          try { sessionStorage.setItem('userId', uid); } catch (storageError) { console.warn("Failed to store userId in sessionStorage", storageError); }
+          try { 
+            // DÙNG localStorage để chia sẻ giữa các tab
+            const oldUserId = localStorage.getItem('userId');
+            localStorage.setItem('userId', uid); 
+            
+            // Broadcast userId change to other tabs via BroadcastChannel
+            if (typeof window !== 'undefined' && window.BroadcastChannel) {
+              const channel = new BroadcastChannel('auth_channel');
+              channel.postMessage({ type: 'USER_CHANGED', userId: uid, oldUserId });
+              setTimeout(() => channel.close(), 100); // Close after a short delay to ensure message is sent
+            }
+            
+            // Storage event will be automatically fired by browser when sessionStorage changes from another tab
+            if (oldUserId && oldUserId !== uid) {
+              console.log('[Login] User changed, broadcasting to other tabs:', { oldUserId, newUserId: uid });
+            }
+          } catch (storageError) { 
+            console.warn("Failed to store userId in sessionStorage", storageError); 
+          }
         }
       } catch { /* ignore */ }
 
@@ -195,18 +217,15 @@ const Login = () => {
         otp
       });
   
-      // Lưu token và refresh token nếu có
+      // Lưu token và refresh token nếu có (chỉ dùng sessionStorage)
       if (response.token) {
         setTokens(response.token, response.refreshToken);
         // Start automatic token refresh interval
         startTokenRefreshInterval();
-        try {
-          localStorage.setItem("token", response.token);
-          if (response.refreshToken) {
-            localStorage.setItem("refreshToken", response.refreshToken);
-          }
-        } catch (storageError) {
-          console.warn("Failed to persist token after OTP verification", storageError);
+        
+        // Dispatch custom event to notify TopBar and other components
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('tokenUpdated'));
         }
       }
   
@@ -284,6 +303,30 @@ const Login = () => {
   const [resetResetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetSuccess, setResetSuccess] = useState("");
+
+  // Check if user is already authenticated and redirect to home
+  useEffect(() => {
+    const checkAuthAndRedirect = async () => {
+      const token = getAuthToken();
+      
+      if (token && !isTokenExpiringSoon(token, 0)) {
+        // Token exists and is not expired, verify it's valid by checking user info
+        try {
+          const me = await authApi.me();
+          if (me && (me.id || me.userId)) {
+            // User is authenticated, redirect to home
+            console.log('[Login] User already authenticated, redirecting to home');
+            navigate('/', { replace: true });
+          }
+        } catch (error) {
+          // Token might be invalid, clear it and stay on login page
+          console.warn('[Login] Token exists but invalid, staying on login page');
+        }
+      }
+    };
+
+    checkAuthAndRedirect();
+  }, [navigate]);
 
   // Logic gửi OTP
   const handleSendOtpReset = async (e: React.FormEvent) => {

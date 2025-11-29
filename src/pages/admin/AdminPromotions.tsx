@@ -52,9 +52,9 @@ const AdminPromotions = () => {
     try {
       await promotionsApi.setActive(id, value);
       setItems((prev) => prev.map((p) => (p.id === id ? { ...p, active: value } : p)));
-      toast.success(value ? "Đã bật Active" : "Đã tắt Active");
+      toast.success(value ? "Active enabled" : "Active disabled");
     } catch (e) {
-      toast.error("Cập nhật trạng thái thất bại");
+      toast.error("Failed to update status");
     }
   };
 
@@ -75,15 +75,15 @@ const AdminPromotions = () => {
 
       if (formMode === "create") {
         await promotionsApi.create(payload);
-        toast.success("Đã tạo promotion");
+        toast.success("Banner created");
       } else if (formMode === "edit" && selected) {
         await promotionsApi.update(selected.id, payload);
-        toast.success("Đã cập nhật promotion");
+        toast.success("Banner updated");
       }
       setOpenForm(false);
       load();
     } catch (e: any) {
-      toast.error(e?.message || (formMode === "create" ? "Tạo promotion thất bại" : "Cập nhật thất bại"));
+      toast.error(e?.message || (formMode === "create" ? "Failed to create banner" : "Failed to update banner"));
     } finally {
       setSubmitting(false);
     }
@@ -116,7 +116,7 @@ const AdminPromotions = () => {
     try {
       setSubmitting(true);
       await promotionsApi.delete(selected.id);
-      toast.success("Đã xoá promotion");
+      toast.success("Banner deleted");
       setDeleteOpen(false);
       load();
     } catch (e) {
@@ -131,7 +131,7 @@ const AdminPromotions = () => {
     try {
       setSubmitting(true);
       await promotionsApi.deleteMany(selectedIds);
-      toast.success("Đã xoá promotions đã chọn");
+      toast.success("Selected banners deleted");
       setSelectedIds([]);
       load();
     } catch (e) {
@@ -156,7 +156,7 @@ const AdminPromotions = () => {
     try {
       setImporting(true);
       const msg = await promotionsApi.import(file);
-      toast.success(msg || "Đã import promotions");
+      toast.success(msg || "Banners imported successfully");
       load();
     } catch (err: any) {
       toast.error(err?.message || "Import thất bại");
@@ -175,7 +175,7 @@ const AdminPromotions = () => {
               <Tag className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Promotions</h1>
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Banner Management</h1>
               <p className="text-muted-foreground mt-1">Hiển thị nhãn Active và cho phép bật/tắt</p>
             </div>
           </div>
@@ -185,14 +185,14 @@ const AdminPromotions = () => {
               <RefreshCw className="w-4 h-4" /> Refresh
             </Button>
             <Button variant="outline" onClick={handleClickImport} disabled={importing} className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]">
-              <UploadIcon className="w-4 h-4" /> {importing ? "Đang import..." : "Import"}
+              <UploadIcon className="w-4 h-4" /> {importing ? "Importing..." : "Import"}
             </Button>
            
             <Button variant="destructive" disabled={selectedIds.length === 0} onClick={handleDeleteSelected} className="gap-2">
-              <Trash2 className="w-4 h-4" /> Xoá đã chọn ({selectedIds.length})
+              <Trash2 className="w-4 h-4" /> Delete Selected ({selectedIds.length})
             </Button>
             <Button onClick={() => setOpenForm(true)} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg">
-              <Plus className="w-4 h-4" /> Tạo promotion
+              <Plus className="w-4 h-4" /> Create Banner
             </Button>
           </div>
         </div>
@@ -203,7 +203,7 @@ const AdminPromotions = () => {
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 <div className="flex-1">
                   <Input
-                    placeholder="Tìm kiếm promotion..."
+                    placeholder="Search banners..."
                     value={query}
                     onChange={(e) => {
                       setQuery(e.target.value);
@@ -213,7 +213,7 @@ const AdminPromotions = () => {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Hiển thị:</span>
+                  <span className="text-sm text-muted-foreground">Display:</span>
                   <select
                     value={size}
                     onChange={(e) => {
@@ -234,9 +234,9 @@ const AdminPromotions = () => {
 
           <CardContent className="flex-1 overflow-auto">
             {loading ? (
-              <div className="text-center py-8">Đang tải...</div>
+              <div className="text-center py-8">Loading...</div>
             ) : items.length === 0 ? (
-              <div className="text-center py-8">Không có promotion nào</div>
+              <div className="text-center py-8">No banners available</div>
             ) : (
               <Table>
                 <TableHeader>
@@ -297,7 +297,7 @@ const AdminPromotions = () => {
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-4 flex-shrink-0">
             <div className="text-sm text-muted-foreground">
-              Hiển thị {items.length} trên tổng {totalElements}
+              Showing {items.length} of {totalElements}
             </div>
             <div className="flex items-center gap-1">
               <Button variant="outline" size="icon" onClick={() => setPage(0)} disabled={page === 0} className="h-8 w-8 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]">
@@ -349,8 +349,8 @@ const AdminPromotions = () => {
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           onConfirm={handleConfirmDelete}
-          title="Xóa promotion?"
-          description={`Bạn có chắc muốn xóa promotion "${selected?.title || ""}"? Hành động này không thể hoàn tác.`}
+          title="Delete banner?"
+          description={`Are you sure you want to delete banner "${selected?.title || ""}"? This action cannot be undone.`}
           isLoading={submitting}
         />
       </div>

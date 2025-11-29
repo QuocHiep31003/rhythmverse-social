@@ -53,6 +53,7 @@ import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
+import AcrHummingTest from "./pages/AcrHummingTest";
 
 import PaymentCancel from "./pages/PaymentCancel";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -128,6 +129,7 @@ const App = () => (
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
+                    <Route path="/acr-humming-test" element={<AcrHummingTest />} />
 
                     {/* ⭐ Public profile is inline via /social?u=... */}
 

@@ -27,6 +27,7 @@ import type { Song } from "@/services/api/songApi";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
+import { apiClient } from "@/services/api/config";
 import { createSlug } from "@/utils/playlistUtils";
 import { toast } from "@/hooks/use-toast";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
@@ -223,11 +224,91 @@ const SearchResults = () => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handlePlaySong = (song) => {
-    // Khi play: chỉ set queue với 1 bài hát đó thôi
-    const formattedSong = mapToPlayerSong(song);
-    setQueue([formattedSong]);
-    playSong(formattedSong);
+  const handlePlaySong = async (song) => {
+    try {
+      // Dùng play-now endpoint giống như trang test để đảm bảo phát được
+      const songId = typeof song.id === 'string' ? parseInt(song.id, 10) : song.id;
+      if (isNaN(songId)) {
+        toast({
+          title: "Lỗi",
+          description: "ID bài hát không hợp lệ.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Gọi play-now endpoint để setup và lấy streamUrl
+      const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+      
+      // Kiểm tra lỗi từ response
+      if (response.data?.success === false) {
+        const errorMsg = response.data?.error || 'Không thể phát bài hát';
+        if (errorMsg.includes('HLS master playlist not found')) {
+          toast({
+            title: "Bài hát chưa sẵn sàng",
+            description: "File audio của bài hát này chưa được xử lý. Vui lòng thử bài hát khác.",
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else if (errorMsg.includes('missing uuid')) {
+          toast({
+            title: "Bài hát chưa sẵn sàng",
+            description: "Bài hát này chưa có file audio. Vui lòng thử bài hát khác.",
+            variant: "destructive",
+            duration: 5000,
+          });
+        } else {
+          toast({
+            title: "Lỗi",
+            description: errorMsg,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+      
+      // Nếu /play-now thành công, đã có streamUrl và playback state đã được setup
+      // Chỉ cần set song vào context, không cần gọi playbackApi.playSong() nữa
+      if (response.data?.song) {
+        const formattedSong = mapToPlayerSong(response.data.song);
+        // Đảm bảo UUID được set từ response để MusicPlayer có thể load stream
+        if (response.data.song.uuid) {
+          formattedSong.uuid = response.data.song.uuid;
+        }
+        setQueue([formattedSong]);
+        
+        // Gọi playSong với skipApiCall=true vì /play-now đã setup playback state rồi
+        // playSong sẽ chỉ set currentSong và trigger MusicPlayer, không gọi API
+        await playSong(formattedSong, true);
+      } else {
+        // Fallback: dùng cách cũ nếu không có song trong response
+        const formattedSong = mapToPlayerSong(song);
+        setQueue([formattedSong]);
+        playSong(formattedSong, false);
+      }
+    } catch (error: unknown) {
+      console.error('Error playing song:', error);
+      const errorResponse = error as { response?: { data?: { error?: string; success?: boolean } }; message?: string };
+      const errorMessage = errorResponse?.response?.data?.error 
+        || (error instanceof Error ? error.message : 'Không thể phát bài hát');
+      
+      // Xử lý lỗi cụ thể
+      if (errorMessage.includes('HLS master playlist not found') || 
+          errorResponse?.response?.data?.error?.includes('HLS master playlist not found')) {
+        toast({
+          title: "Bài hát chưa sẵn sàng",
+          description: "File audio của bài hát này chưa được xử lý. Vui lòng thử bài hát khác.",
+          variant: "destructive",
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: "Lỗi",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    }
   };
 
 

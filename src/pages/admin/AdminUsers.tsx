@@ -303,13 +303,13 @@ const AdminUsers = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
-                Quản lý Người dùng
+                User Management
               </h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1">
                 <Badge variant="secondary" className="font-normal">
                   {totalElements} người dùng
                 </Badge>
-                {loading && <span className="text-xs">Đang tải...</span>}
+                {loading && <span className="text-xs">Loading...</span>}
               </p>
             </div>
           </div>
@@ -349,7 +349,7 @@ const AdminUsers = () => {
               className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"
             >
               <Plus className="w-4 h-4" />
-              Thêm người dùng
+              Add User
             </Button>
           </div>
         </div>
@@ -397,7 +397,7 @@ const AdminUsers = () => {
                     <td colSpan={5} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
                         <div className="w-8 h-8 border-4 border-[hsl(var(--admin-active))] border-t-transparent rounded-full animate-spin" />
-                        <p className="text-sm text-muted-foreground">Đang tải...</p>
+                        <p className="text-sm text-muted-foreground">Loading...</p>
                       </div>
                     </td>
                   </tr>
@@ -406,7 +406,7 @@ const AdminUsers = () => {
                     <td colSpan={5} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
                         <UsersIcon className="w-12 h-12 text-muted-foreground/50" />
-                        <p className="text-sm font-medium">Không tìm thấy người dùng</p>
+                        <p className="text-sm font-medium">No users found</p>
                         <p className="text-xs text-muted-foreground">
                           {searchQuery ? 'Thử điều chỉnh tìm kiếm' : 'Bắt đầu bằng cách thêm người dùng mới'}
                         </p>

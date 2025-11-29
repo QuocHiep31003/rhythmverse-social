@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown, ChevronDown, ChevronRight } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown, ChevronDown, ChevronRight, FolderTree, BarChart3 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
@@ -13,17 +13,16 @@ interface AdminLayoutProps {
 const AdminLayout = ({ children }: AdminLayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
-
+  const [premiumMenuOpen, setPremiumMenuOpen] = useState(false);
+  const [contentMenuOpen, setContentMenuOpen] = useState(false);
+  const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
 
   useEffect(() => {
     const isAuthenticated = localStorage.getItem("adminAuth");
     if (!isAuthenticated && location.pathname !== "/admin/login") {
-
-
       navigate("/admin/login");
     }
   }, [navigate, location]);
-
 
   const handleLogout = () => {
     // Stop token refresh interval
@@ -34,47 +33,77 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     localStorage.removeItem("adminToken");
     localStorage.removeItem("adminRole");
     localStorage.removeItem("adminEmail");
-    toast.success("Đã đăng xuất");
+    toast.success("Logged out");
     navigate("/admin/login");
   };
-
 
   if (location.pathname === "/admin/login") {
     return <>{children}</>;
   }
 
-
-  const [premiumMenuOpen, setPremiumMenuOpen] = useState(false);
-
   const menuItems = [
-    { icon: Home, label: "Dashboard", path: "/admin/home" },
+    { 
+      icon: BarChart3, 
+      label: "Dashboard & Analytics", 
+      path: null, 
+      menuKey: "dashboard",
+      children: [
+        { label: "Dashboard", path: "/admin/home" },
+        { label: "Trending", path: "/admin/trending" },
+      ]
+    },
+    { 
+      icon: FolderTree, 
+      label: "Content Management", 
+      path: null, 
+      menuKey: "content",
+      children: [
+        { label: "Songs", path: "/admin/songs" },
+        { label: "Artists", path: "/admin/artists" },
+        { label: "Genres", path: "/admin/genres" },
+        { label: "Moods", path: "/admin/moods" },
+        { label: "Albums", path: "/admin/albums" },
+        { label: "Playlists", path: "/admin/playlists" },
+        { label: "Promotions", path: "/admin/promotions" },
+      ]
+    },
     { 
       icon: Crown, 
       label: "Premium", 
       path: null, 
+      menuKey: "premium",
       children: [
         { label: "Premium Dashboard", path: "/admin/premium-dashboard" },
-        { label: "Gói Đăng Ký", path: "/admin/subscription-plans" },
+        { label: "Subscription Plans", path: "/admin/subscription-plans" },
       ]
     },
-    { icon: Music, label: "Bài hát", path: "/admin/songs" },
-    { icon: Disc3, label: "Albums", path: "/admin/albums" },
-    { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
-    { icon: Tag, label: "Promotions", path: "/admin/promotions" },
-    { icon: Users, label: "Nghệ sĩ", path: "/admin/artists" },
-    { icon: Music, label: "Thể loại", path: "/admin/genres" },
-    { icon: Heart, label: "Mood", path: "/admin/moods" },
-    { icon: Users, label: "Người dùng", path: "/admin/users" },
-    { icon: TrendingUp, label: "Trending", path: "/admin/trending" },
-    { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
+    { icon: Users, label: "Users", path: "/admin/users" },
+    { icon: Settings, label: "Settings", path: "/admin/settings" },
   ];
 
-  // Check if current path is in premium menu
+  // Check if current path is in any submenu and open the parent menu
   useEffect(() => {
     const isPremiumPath = location.pathname === "/admin/premium-dashboard" || 
                           location.pathname === "/admin/subscription-plans";
     if (isPremiumPath) {
       setPremiumMenuOpen(true);
+    }
+
+    const isContentPath = location.pathname === "/admin/songs" ||
+                          location.pathname === "/admin/artists" ||
+                          location.pathname === "/admin/genres" ||
+                          location.pathname === "/admin/moods" ||
+                          location.pathname === "/admin/albums" ||
+                          location.pathname === "/admin/playlists" ||
+                          location.pathname === "/admin/promotions";
+    if (isContentPath) {
+      setContentMenuOpen(true);
+    }
+
+    const isDashboardPath = location.pathname === "/admin/home" ||
+                             location.pathname === "/admin/trending";
+    if (isDashboardPath) {
+      setDashboardMenuOpen(true);
     }
   }, [location.pathname]);
 
@@ -106,11 +135,25 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           // Menu có children (dropdown)
           if (item.children) {
             const hasActiveChild = item.children.some(child => location.pathname === child.path);
+            const isOpen = item.menuKey === "premium" ? premiumMenuOpen :
+                          item.menuKey === "content" ? contentMenuOpen :
+                          item.menuKey === "dashboard" ? dashboardMenuOpen : false;
+            
+            const toggleMenu = () => {
+              if (item.menuKey === "premium") {
+                setPremiumMenuOpen(!premiumMenuOpen);
+              } else if (item.menuKey === "content") {
+                setContentMenuOpen(!contentMenuOpen);
+              } else if (item.menuKey === "dashboard") {
+                setDashboardMenuOpen(!dashboardMenuOpen);
+              }
+            };
+
             return (
               <div key={item.label} className="space-y-1">
                 <Button
                   variant="ghost"
-                  onClick={() => setPremiumMenuOpen(!premiumMenuOpen)}
+                  onClick={toggleMenu}
                   className={`w-full justify-between transition-all duration-200 ${
                     hasActiveChild
                       ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold"
@@ -121,13 +164,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                     <Icon className="w-4 h-4 mr-3" />
                     {item.label}
                   </div>
-                  {premiumMenuOpen ? (
+                  {isOpen ? (
                     <ChevronDown className="w-4 h-4" />
                   ) : (
                     <ChevronRight className="w-4 h-4" />
                   )}
                 </Button>
-                {premiumMenuOpen && (
+                {isOpen && (
                   <div className="ml-4 space-y-1">
                     {item.children.map((child) => {
                       const isActive = location.pathname === child.path;
@@ -183,7 +226,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           onClick={handleLogout}
         >
           <LogOut className="w-4 h-4 mr-3" />
-          Đăng xuất
+          Logout
         </Button>
       </div>
     </div>

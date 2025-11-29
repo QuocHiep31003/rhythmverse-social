@@ -200,7 +200,7 @@ const AIPicksSection = () => {
     fetchAIPicks();
   }, []);
 
-  const handlePlaySong = (song: AIPickSong) => {
+  const handlePlaySong = async (song: AIPickSong) => {
     // Convert to player song format
     const playerSong = mapToPlayerSong({
       id: song.id,
@@ -224,7 +224,8 @@ const AIPicksSection = () => {
     }));
 
     setQueue(allPlayerSongs);
-    playSong(playerSong);
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(playerSong, playSong);
   };
 
   return (
@@ -234,7 +235,7 @@ const AIPicksSection = () => {
         <Sparkles className="w-6 h-6 text-primary" />
         <h2 className="text-2xl font-bold text-foreground">AI Picks For You</h2>
         <Badge variant="secondary" className="ml-2">
-          Thông minh
+          Smart
         </Badge>
       </div>
 
@@ -253,7 +254,7 @@ const AIPicksSection = () => {
                 ))}
               </div>
             ) : aiPicks.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-8">Đang tải gợi ý thông minh...</p>
+              <p className="text-muted-foreground text-sm py-8">Loading smart recommendations...</p>
             ) : (
               aiPicks.map((song) => (
                 <div
@@ -319,7 +320,7 @@ const AIPicksSection = () => {
 
       {/* Description */}
       <p className="text-xs text-muted-foreground mt-4">
-        Gợi ý thông minh dựa trên xu hướng hot, bài hát trending và nội dung phổ biến hiện tại
+        Smart recommendations based on hot trends, trending songs, and popular content right now
       </p>
     </section>
   );

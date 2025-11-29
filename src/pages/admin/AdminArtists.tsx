@@ -72,7 +72,7 @@ const AdminArtists = () => {
       setTotalPages(data.totalPages || 0);
       setTotalElements(data.totalElements || 0);
     } catch (error) {
-      toast({ title: "Lỗi", description: "Không thể tải danh sách nghệ sĩ", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to load artists list", variant: "destructive" });
     } finally { setLoading(false); }
   };
 
@@ -83,32 +83,32 @@ const AdminArtists = () => {
   const handleFormSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
-      if (formMode === "create") { await artistsApi.create(data); toast({ title: "Thành công", description: "Đã tạo nghệ sĩ mới" }); }
-      else { await artistsApi.update(selectedArtist.id, data); toast({ title: "Thành công", description: "Đã cập nhật nghệ sĩ" }); }
+      if (formMode === "create") { await artistsApi.create(data); toast({ title: "Success", description: "Artist created successfully" }); }
+      else { await artistsApi.update(selectedArtist.id, data); toast({ title: "Success", description: "Artist updated successfully" }); }
       setFormOpen(false); loadArtists();
-    } catch (error) { toast({ title: "Lỗi", description: "Không thể lưu nghệ sĩ", variant: "destructive" }); }
+    } catch (error) { toast({ title: "Error", description: "Failed to save artist", variant: "destructive" }); }
     finally { setIsSubmitting(false); }
   };
 
   const handleDelete = async () => {
     try {
       setIsSubmitting(true); await artistsApi.delete(selectedArtist.id);
-      toast({ title: "Thành công", description: "Đã xóa nghệ sĩ" }); setDeleteOpen(false); loadArtists();
-    } catch (error) { toast({ title: "Lỗi", description: "Không thể xóa nghệ sĩ", variant: "destructive" }); }
+      toast({ title: "Success", description: "Artist deleted successfully" }); setDeleteOpen(false); loadArtists();
+    } catch (error) { toast({ title: "Error", description: "Failed to delete artist", variant: "destructive" }); }
     finally { setIsSubmitting(false); }
   };
 
   const handleExport = async () => {
-    try { await artistsApi.exportExcel(); toast({ title: "Thành công", description: "Xuất file Excel thành công" }); }
-    catch (error) { toast({ title: "Lỗi", description: "Lỗi khi xuất file Excel", variant: "destructive" }); }
+    try { await artistsApi.exportExcel(); toast({ title: "Success", description: "Excel file exported successfully" }); }
+    catch (error) { toast({ title: "Error", description: "Failed to export Excel file", variant: "destructive" }); }
   };
 
   const handleImportClick = () => fileInputRef.current?.click();
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Lỗi", description: "Vui lòng chọn file Excel", variant: "destructive" }); return; }
-    try { setIsSubmitting(true); const result = await artistsApi.importExcel(file); toast({ title: "Thành công", description: result }); loadArtists(); }
-    catch (error: any) { toast({ title: "Lỗi", description: error.message || "Lỗi khi nhập file Excel", variant: "destructive" }); }
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Error", description: "Please select an Excel file", variant: "destructive" }); return; }
+    try { setIsSubmitting(true); const result = await artistsApi.importExcel(file); toast({ title: "Success", description: result }); loadArtists(); }
+    catch (error: any) { toast({ title: "Error", description: error.message || "Failed to import Excel file", variant: "destructive" }); }
     finally { setIsSubmitting(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
@@ -137,10 +137,10 @@ const AdminArtists = () => {
               <Music className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Nghệ sĩ</h1>
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Artist Management</h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1">
-                <Badge variant="secondary" className="font-normal">{totalElements} nghệ sĩ</Badge>
-                {loading && <span className="text-xs">Đang tải...</span>}
+                <Badge variant="secondary" className="font-normal">{totalElements} artists</Badge>
+                {loading && <span className="text-xs">Loading...</span>}
               </p>
             </div>
           </div>
@@ -148,7 +148,7 @@ const AdminArtists = () => {
             <Button variant="outline" onClick={handleExport} className="border-[hsl(var(--admin-border))] gap-2 hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Download className="w-4 h-4" />Export</Button>
             <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting} className="border-[hsl(var(--admin-border))] gap-2 hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Upload className="w-4 h-4" />Import</Button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" />
-            <Button onClick={handleCreate} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"><Plus className="w-4 h-4" />Thêm nghệ sĩ</Button>
+            <Button onClick={handleCreate} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"><Plus className="w-4 h-4" />Add Artist</Button>
           </div>
         </div>
         <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
@@ -194,18 +194,18 @@ const AdminArtists = () => {
             </div>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col min-h-0">
-            {loading ? <div className="text-center py-8">Loading...</div> : artists.length === 0 ? <div className="text-center py-8 text-muted-foreground">{searchQuery || countryFilter || debutYearFilter ? "No artists found" : "Chưa có nghệ sĩ nào"}</div> : (
+            {loading ? <div className="text-center py-8">Loading...</div> : artists.length === 0 ? <div className="text-center py-8 text-muted-foreground">{searchQuery || countryFilter || debutYearFilter ? "No artists found" : "No artists yet"}</div> : (
               <>
                 {/* Fixed Header */}
                 <div className="flex-shrink-0 border-b-2 border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
                   <table className="w-full table-fixed">
                     <thead>
                       <tr>
-                        <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                        <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Quốc gia</th>
-                        <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">Nghệ sĩ</th>
-                        <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Năm debut</th>
-                        <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
+                        <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">#</th>
+                        <th className="w-48 text-left text-sm font-medium text-muted-foreground p-3">Country</th>
+                        <th className="w-96 text-left text-sm font-medium text-muted-foreground p-3">Artist</th>
+                        <th className="w-32 text-left text-sm font-medium text-muted-foreground p-3">Debut Year</th>
+                        <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Actions</th>
                       </tr>
                     </thead>
                   </table>
@@ -275,7 +275,7 @@ const AdminArtists = () => {
       </div>
 
       <ArtistFormDialog open={formOpen} onOpenChange={setFormOpen} onSubmit={handleFormSubmit} defaultValues={selectedArtist} isLoading={isSubmitting} mode={formMode} />
-      <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa nghệ sĩ?" description={`Bạn có chắc muốn xóa nghệ sĩ "${selectedArtist?.name}"?`} isLoading={isSubmitting} />
+      <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Delete Artist?" description={`Are you sure you want to delete artist "${selectedArtist?.name}"?`} isLoading={isSubmitting} />
     </div>
   );
 };

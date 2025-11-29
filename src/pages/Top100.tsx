@@ -164,7 +164,7 @@ const Top100 = () => {
       .finally(() => setIsLoadingTop3Chart(false));
   }, []);
 
-  const handlePlaySong = (song: TopSong) => {
+  const handlePlaySong = async (song: TopSong) => {
     const formattedSong: Song = {
       id: String(song.id),
       name: song.name || song.songName,
@@ -188,7 +188,8 @@ const Top100 = () => {
     }));
 
     setQueue(formattedQueue);
-    playSong(formattedSong);
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(formattedSong, playSong);
     toast({ title: `Playing ${song.name || song.songName || "Unknown Song"}` });
   };
 

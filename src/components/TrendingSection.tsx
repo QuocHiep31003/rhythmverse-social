@@ -122,9 +122,10 @@ const TrendingSection = () => {
                 <div 
                   key={song.id} 
                   className="flex items-center space-x-4 p-2 rounded-lg hover:bg-muted/30 transition-colors group cursor-pointer"
-                  onClick={() => {
+                  onClick={async () => {
                     setQueue(trendingSongs);
-                    playSong(song);
+                    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                    await playSongWithStreamUrl(song, playSong);
                   }}
                 >
                 <div className="flex items-center justify-center w-8 text-lg font-bold text-primary">

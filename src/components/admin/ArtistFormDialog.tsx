@@ -37,9 +37,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const artistFormSchema = z.object({
-  name: z.string().min(1, "Tên nghệ sĩ không được để trống").max(200),
-  country: z.string().min(1, "Quốc gia không được để trống").max(100),
-  debutYear: z.coerce.number().min(1900, "Năm debut không hợp lệ").max(new Date().getFullYear()),
+  name: z.string().min(1, "Artist name cannot be empty").max(200),
+  country: z.string().min(1, "Country cannot be empty").max(100),
+  debutYear: z.coerce.number().min(1900, "Invalid debut year").max(new Date().getFullYear()),
   description: z.string().max(1000).optional().or(z.literal("")),
   avatar: z.string().url("URL không hợp lệ").optional().or(z.literal("")),
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
@@ -172,12 +172,12 @@ export const ArtistFormDialog = ({
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
-            {mode === "create" ? "Thêm nghệ sĩ mới" : "Chỉnh sửa nghệ sĩ"}
+            {mode === "create" ? "Add New Artist" : "Edit Artist"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Nhập thông tin để tạo nghệ sĩ mới"
-              : "Cập nhật thông tin nghệ sĩ"}
+              ? "Enter information to create a new artist"
+              : "Update artist information"}
           </DialogDescription>
         </DialogHeader>
 
@@ -189,7 +189,7 @@ export const ArtistFormDialog = ({
               name="avatar"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Ảnh đại diện</FormLabel>
+                  <FormLabel>Avatar</FormLabel>
                   <FormControl>
                     <div className="flex flex-col gap-4">
                       {previewUrl ? (
@@ -210,7 +210,7 @@ export const ArtistFormDialog = ({
                       ) : (
                         <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed rounded-lg cursor-pointer hover:bg-accent">
                           <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Upload ảnh</span>
+                          <span className="text-xs text-muted-foreground">Upload image</span>
                           <input
                             type="file"
                             accept="image/*"
@@ -235,9 +235,9 @@ export const ArtistFormDialog = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tên nghệ sĩ *</FormLabel>
+                  <FormLabel>Artist Name *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Tên nghệ sĩ" {...field} />
+                    <Input placeholder="Artist name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -249,7 +249,7 @@ export const ArtistFormDialog = ({
               name="country"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Quốc gia *</FormLabel>
+                  <FormLabel>Country *</FormLabel>
                   <FormControl>
                     <Input placeholder="Việt Nam, United States..." {...field} />
                   </FormControl>
@@ -263,7 +263,7 @@ export const ArtistFormDialog = ({
               name="debutYear"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Năm debut *</FormLabel>
+                  <FormLabel>Debut Year *</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="2020" {...field} />
                   </FormControl>
@@ -280,7 +280,7 @@ export const ArtistFormDialog = ({
                   <FormLabel>Mô tả</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Giới thiệu về nghệ sĩ..."
+                      placeholder="Introduce the artist..."
                       className="min-h-[100px]"
                       {...field}
                     />
@@ -297,12 +297,12 @@ export const ArtistFormDialog = ({
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Trạng thái</FormLabel>
+                    <FormLabel>Status</FormLabel>
                     <FormControl>
                       <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            {field.value === "ACTIVE" ? "Đang hoạt động" : "Tạm ẩn"}
+                            {field.value === "ACTIVE" ? "Active" : "Inactive"}
                           </p>
                         </div>
                         <Switch
@@ -325,10 +325,10 @@ export const ArtistFormDialog = ({
                 onClick={() => onOpenChange(false)}
                 disabled={isLoading || uploading}
               >
-                Hủy
+                Cancel
               </Button>
               <Button type="submit" disabled={isLoading || uploading}>
-                {isLoading ? "Đang lưu..." : uploading ? "Đang upload..." : mode === "create" ? "Tạo" : "Cập nhật"}
+                {isLoading ? "Saving..." : uploading ? "Uploading..." : mode === "create" ? "Create" : "Update"}
               </Button>
             </DialogFooter>
           </form>
@@ -338,16 +338,16 @@ export const ArtistFormDialog = ({
         <AlertDialog open={showDeactivationWarning} onOpenChange={setShowDeactivationWarning}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Cảnh báo khi tắt hoạt động</AlertDialogTitle>
+              <AlertDialogTitle>Deactivation Warning</AlertDialogTitle>
               <AlertDialogDescription>
-                {deactivationWarning?.message || "Khi tắt artist này, các bài hát liên quan sẽ bị ảnh hưởng."}
+                {deactivationWarning?.message || "When deactivating this artist, related songs will be affected."}
                 <br />
                 <br />
-                <strong>Số bài hát sẽ bị ảnh hưởng: {deactivationWarning?.affectedSongsCount || 0}</strong>
+                <strong>Number of songs that will be affected: {deactivationWarning?.affectedSongsCount || 0}</strong>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={handleCancelDeactivation}>Hủy</AlertDialogCancel>
+              <AlertDialogCancel onClick={handleCancelDeactivation}>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmDeactivation}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

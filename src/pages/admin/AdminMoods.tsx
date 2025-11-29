@@ -57,10 +57,10 @@ const AdminMoods = () => {
     if (!status) return null;
     const normalized = status.toUpperCase();
     if (normalized === "ACTIVE") {
-      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20">Hoạt động</Badge>;
+      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20">Active</Badge>;
     }
     if (normalized === "INACTIVE") {
-      return <Badge variant="outline" className="text-destructive border-destructive/40">Ngưng hoạt động</Badge>;
+      return <Badge variant="outline" className="text-destructive border-destructive/40">Inactive</Badge>;
     }
     return <Badge variant="outline">{normalized}</Badge>;
   };
@@ -74,7 +74,7 @@ const AdminMoods = () => {
       setLoading(true);
       const data = await moodsApi.getAll({ page: currentPage, size: pageSize, sort: sortOption, search: searchQuery || undefined });
       setMoods(data.content || []); setTotalPages(data.totalPages || 0); setTotalElements(data.totalElements || 0);
-    } catch (error) { toast({ title: "Lỗi", description: "Không thể tải danh sách mood", variant: "destructive" }); }
+    } catch (error) { toast({ title: "Error", description: "Failed to load moods list", variant: "destructive" }); }
     finally { setLoading(false); }
   };
 
@@ -84,30 +84,30 @@ const AdminMoods = () => {
   const handleFormSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
-      if (formMode === "create") { await moodsApi.create(data); toast({ title: "Thành công", description: "Đã tạo mood mới" }); }
-      else { await moodsApi.update(selectedMood.id, data); toast({ title: "Thành công", description: "Đã cập nhật mood" }); }
+      if (formMode === "create") { await moodsApi.create(data); toast({ title: "Success", description: "Mood created successfully" }); }
+      else { await moodsApi.update(selectedMood.id, data); toast({ title: "Success", description: "Mood updated successfully" }); }
       setFormOpen(false); loadMoods();
-    } catch (error) { toast({ title: "Lỗi", description: "Không thể lưu mood", variant: "destructive" }); }
+    } catch (error) { toast({ title: "Error", description: "Failed to save mood", variant: "destructive" }); }
     finally { setIsSubmitting(false); }
   };
 
   const handleDelete = async () => {
-    try { setIsSubmitting(true); await moodsApi.delete(selectedMood.id); toast({ title: "Thành công", description: "Đã xóa mood" }); setDeleteOpen(false); loadMoods(); }
-    catch (error) { toast({ title: "Lỗi", description: "Không thể xóa mood", variant: "destructive" }); }
+    try { setIsSubmitting(true); await moodsApi.delete(selectedMood.id); toast({ title: "Success", description: "Mood deleted successfully" }); setDeleteOpen(false); loadMoods(); }
+    catch (error) { toast({ title: "Error", description: "Failed to delete mood", variant: "destructive" }); }
     finally { setIsSubmitting(false); }
   };
 
   const handleExport = async () => {
-    try { await moodsApi.exportExcel(); toast({ title: "Thành công", description: "Xuất file Excel thành công" }); }
-    catch (error) { toast({ title: "Lỗi", description: "Lỗi khi xuất file Excel", variant: "destructive" }); }
+    try { await moodsApi.exportExcel(); toast({ title: "Success", description: "Excel file exported successfully" }); }
+    catch (error) { toast({ title: "Error", description: "Failed to export Excel file", variant: "destructive" }); }
   };
 
   const handleImportClick = () => fileInputRef.current?.click();
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Lỗi", description: "Vui lòng chọn file Excel", variant: "destructive" }); return; }
-    try { setIsSubmitting(true); const result = await moodsApi.importExcel(file); toast({ title: "Thành công", description: result }); loadMoods(); }
-    catch (error: any) { toast({ title: "Lỗi", description: error.message || "Lỗi khi nhập file Excel", variant: "destructive" }); }
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Error", description: "Please select an Excel file", variant: "destructive" }); return; }
+    try { setIsSubmitting(true); const result = await moodsApi.importExcel(file); toast({ title: "Success", description: result }); loadMoods(); }
+    catch (error: any) { toast({ title: "Error", description: error.message || "Failed to import Excel file", variant: "destructive" }); }
     finally { setIsSubmitting(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
@@ -135,10 +135,10 @@ const AdminMoods = () => {
               <Heart className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Mood</h1>
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Mood Management</h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1">
-                <Badge variant="secondary" className="font-normal">{totalElements} mood</Badge>
-                {loading && <span className="text-xs">Đang tải...</span>}
+                <Badge variant="secondary" className="font-normal">{totalElements} moods</Badge>
+                {loading && <span className="text-xs">Loading...</span>}
               </p>
             </div>
           </div>
@@ -146,7 +146,7 @@ const AdminMoods = () => {
             <Button variant="outline" onClick={handleExport} className="border-[hsl(var(--admin-border))] gap-2 hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Download className="w-4 h-4" />Export</Button>
             <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting} className="border-[hsl(var(--admin-border))] gap-2 hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Upload className="w-4 h-4" />Import</Button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" />
-            <Button onClick={handleCreate} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"><Plus className="w-4 h-4" />Thêm mood</Button>
+            <Button onClick={handleCreate} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"><Plus className="w-4 h-4" />Add Mood</Button>
           </div>
         </div>
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
@@ -173,25 +173,25 @@ const AdminMoods = () => {
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
               {loading ? (
-                <div className="text-center py-8">Đang tải...</div>
+                <div className="text-center py-8">Loading...</div>
               ) : moods.length === 0 ? (
-                <div className="text-center py-8">{searchQuery ? "Không tìm thấy mood" : "Chưa có mood nào"}</div>
+                <div className="text-center py-8">{searchQuery ? "No moods found" : "No moods yet"}</div>
               ) : (
                 <>
                   <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin">
                     <table className="w-full table-fixed border-collapse">
                       <thead className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b-2 border-[hsl(var(--admin-border))]">
                         <tr>
-                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên mood</th>
+                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">#</th>
+                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Mood Name</th>
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
                           <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Gradient</th>
-                          <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
-                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Trạng thái</th>
-                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
-                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
-                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
-                          <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
+                          <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Weight</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Status</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Songs</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Created</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Updated</th>
+                          <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -223,7 +223,7 @@ const AdminMoods = () => {
                                 </div>
                                   );
                                 }
-                                return <Badge variant="outline" className="text-muted-foreground">Không có</Badge>;
+                                return <Badge variant="outline" className="text-muted-foreground">None</Badge>;
                               })()}
                             </td>
                             <td className="w-1/4 p-3 text-left align-top">
@@ -274,7 +274,7 @@ const AdminMoods = () => {
                                     setSongsDialogOpen(true);
                                   }} 
                                   className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
-                                  title="Xem bài hát"
+                                  title="View Songs"
                                 >
                                   <ListMusic className="w-4 h-4" />
                                 </Button>
@@ -342,7 +342,7 @@ const AdminMoods = () => {
               : undefined
           }
         />
-        <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa mood?" description={`Bạn có chắc muốn xóa mood "${selectedMood?.name}"?`} isLoading={isSubmitting} />
+        <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Delete Mood?" description={`Are you sure you want to delete mood "${selectedMood?.name}"?`} isLoading={isSubmitting} />
         <MoodSongsDialog 
           open={songsDialogOpen} 
           onOpenChange={setSongsDialogOpen} 
