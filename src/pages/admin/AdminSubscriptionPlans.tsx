@@ -145,8 +145,8 @@ const AdminSubscriptionPlans = () => {
       }
     } catch (error: any) {
       toast({
-        title: "Lỗi",
-        description: error?.message || "Không thể tải danh sách gói",
+        title: "Error",
+        description: error?.message || "Unable to load plans",
         variant: "destructive",
       });
     } finally {
@@ -326,8 +326,8 @@ const AdminSubscriptionPlans = () => {
 
         await subscriptionPlanApi.updatePlan(editingPlan.id, payload);
         toast({
-          title: "Thành công",
-          description: "Đã cập nhật gói thành công",
+          title: "Success",
+          description: "Plan updated successfully",
         });
       } else {
         const payload: SubscriptionPlanDTO = {
@@ -338,16 +338,16 @@ const AdminSubscriptionPlans = () => {
 
         await subscriptionPlanApi.createPlan(payload);
         toast({
-          title: "Thành công",
-          description: "Đã tạo gói mới thành công",
+          title: "Success",
+          description: "New plan created successfully",
         });
       }
       handleCloseDialog();
       loadPlans();
     } catch (error: any) {
       toast({
-        title: "Lỗi",
-        description: error?.message || "Không thể lưu gói",
+        title: "Error",
+        description: error?.message || "Unable to save plan",
         variant: "destructive",
       });
     }
@@ -358,26 +358,26 @@ const AdminSubscriptionPlans = () => {
     
     if (isDefaultPlan) {
       toast({
-        title: "Không thể xóa",
-        description: "Không thể xóa gói mặc định (FREE, PREMIUM, PREMIUM_YEARLY). Bạn chỉ có thể chỉnh sửa.",
+        title: "Not allowed",
+        description: "You cannot delete default plans (FREE, PREMIUM, PREMIUM_YEARLY). You can only edit them.",
         variant: "destructive",
       });
       return;
     }
 
-    if (!confirm("Bạn có chắc chắn muốn xóa gói này?")) return;
+    if (!confirm("Are you sure you want to delete this plan?")) return;
 
     try {
       await subscriptionPlanApi.deletePlan(id);
       toast({
-        title: "Thành công",
-        description: "Đã xóa gói thành công",
+        title: "Success",
+        description: "Plan deleted successfully",
       });
       loadPlans();
     } catch (error: any) {
       toast({
-        title: "Lỗi",
-        description: error?.message || "Không thể xóa gói",
+        title: "Error",
+        description: error?.message || "Unable to delete plan",
         variant: "destructive",
       });
     }
@@ -387,7 +387,7 @@ const AdminSubscriptionPlans = () => {
     return (
       <div className="flex items-center justify-center h-[60vh] gap-3 text-muted-foreground">
         <RefreshCw className="h-6 w-6 animate-spin" />
-        <span>Đang tải danh sách gói...</span>
+        <span>Loading plans...</span>
       </div>
     );
   }
@@ -403,11 +403,11 @@ const AdminSubscriptionPlans = () => {
               </div>
               <div>
                 <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
-                  Quản lý Gói Đăng Ký
+                  Subscription Plans
                 </h1>
                 <p className="text-muted-foreground flex items-center gap-2 mt-1">
                   <Badge variant="secondary" className="font-normal">
-                    {plans.length} gói đang hiển thị
+                    {plans.length} plans visible
                   </Badge>
                   
                 </p>
@@ -420,11 +420,11 @@ const AdminSubscriptionPlans = () => {
                 className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]"
               >
                 <RefreshCw className="h-4 w-4" />
-                Làm mới
+                Refresh
               </Button>
               <Button onClick={() => handleOpenDialog()} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Tạo gói mới
+                Create plan
               </Button>
             </div>
           </div>
@@ -465,11 +465,11 @@ const AdminSubscriptionPlans = () => {
                               {isDefaultPlan ? (
                                 <Badge variant="outline" className="text-xs flex items-center gap-1">
                                   <Sparkles className="h-3 w-3" />
-                                  Gói mặc định
+                                  Default plan
                                 </Badge>
                               ) : (
                                 <Badge variant="outline" className="text-xs">
-                                  {isActivePlan ? "Đang hoạt động" : "Tạm ẩn"}
+                                  {isActivePlan ? "Active" : "Hidden"}
                                 </Badge>
                               )}
                             </div>
@@ -499,29 +499,29 @@ const AdminSubscriptionPlans = () => {
                         </div>
 
                         <p className="text-sm text-muted-foreground line-clamp-4 min-h-[64px]">
-                          {plan.description || "Chưa có mô tả cho gói này."}
+                          {plan.description || "No description for this plan yet."}
                         </p>
 
                         <div className="grid grid-cols-2 gap-3 text-sm">
                           <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Tính năng</p>
+                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Features</p>
                             <p className="text-2xl font-bold text-foreground">{featureCount}</p>
                             <p className="text-xs text-muted-foreground">Tùy chỉnh giới hạn linh hoạt</p>
                           </div>
                           <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
-                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Options giá</p>
+                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pricing options</p>
                             <p className="text-2xl font-bold text-foreground">{priceOptionsCount}</p>
-                            <p className="text-xs text-muted-foreground">Kỳ thanh toán đang cấu hình</p>
+                            <p className="text-xs text-muted-foreground">Configured billing options</p>
                           </div>
                         </div>
 
                         <div className="mt-auto flex items-center justify-between text-xs text-muted-foreground">
                           <span>
-                            Cập nhật lần cuối:{" "}
-                            {plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString() : "Chưa xác định"}
+                            Last updated:{" "}
+                            {plan.updatedAt ? new Date(plan.updatedAt).toLocaleDateString() : "Unknown"}
                           </span>
                           <span className="font-medium text-foreground">
-                            {isActivePlan ? "Có sẵn" : "Bị ẩn"}
+                            {isActivePlan ? "Available" : "Hidden"}
                           </span>
                         </div>
                       </div>
@@ -538,12 +538,12 @@ const AdminSubscriptionPlans = () => {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]">
           <DialogHeader>
             <DialogTitle>
-              {editingPlan ? "Chỉnh sửa Gói" : "Tạo Gói Mới"}
+              {editingPlan ? "Edit plan" : "Create new plan"}
             </DialogTitle>
             <DialogDescription>
               {editingPlan
-                ? "Cập nhật thông tin gói đăng ký"
-                : "Tạo gói đăng ký mới với các tính năng và giới hạn"}
+                ? "Update subscription plan information"
+                : "Create a new subscription plan with features and limits"}
             </DialogDescription>
           </DialogHeader>
 
@@ -551,7 +551,7 @@ const AdminSubscriptionPlans = () => {
             <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="planCode">Mã gói *</Label>
+                  <Label htmlFor="planCode">Plan code *</Label>
                   <Input
                     id="planCode"
                     value={formData.planCode}
@@ -561,17 +561,17 @@ const AdminSubscriptionPlans = () => {
                   />
                   {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
                     <p className="text-xs text-muted-foreground">
-                      Lưu ý: Thay đổi mã gói mặc định có thể ảnh hưởng đến logic hệ thống
+                      Note: Changing default plan codes may affect system logic.
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="planName">Tên gói *</Label>
+                  <Label htmlFor="planName">Plan name *</Label>
                   <Input
                     id="planName"
                     value={formData.planName}
                     onChange={(e) => setFormData({ ...formData, planName: e.target.value })}
-                    placeholder="Gói Cơ Bản"
+                    placeholder="Basic Plan"
                     className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                   />
                 </div>
@@ -579,7 +579,7 @@ const AdminSubscriptionPlans = () => {
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="description">Mô tả</Label>
+                  <Label htmlFor="description">Description</Label>
                   <span className={`text-xs ${descriptionCounterClass}`}>{descriptionLength}/300</span>
                 </div>
                 <Textarea
@@ -591,7 +591,7 @@ const AdminSubscriptionPlans = () => {
                       setFormData({ ...formData, description: value });
                     }
                   }}
-                  placeholder="Chia sẻ nhanh lợi ích chính của gói..."
+                  placeholder="Briefly describe the main benefits of this plan..."
                   maxLength={300}
                   className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                 />
@@ -599,21 +599,21 @@ const AdminSubscriptionPlans = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="displayOrder">Thứ tự hiển thị</Label>
+                  <Label htmlFor="displayOrder">Display order</Label>
                   <Input
                     id="displayOrder"
                     inputMode="numeric"
                     value={formatNumber(formData.displayOrder)}
                     onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
-                    placeholder="Ví dụ: 1"
+                    placeholder="Example: 1"
                     className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                   />
                 </div>
                 <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]/60 p-4 flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-semibold">Trạng thái gói</p>
+                    <p className="font-semibold">Plan status</p>
                     <p className="text-xs text-muted-foreground">
-                      {formData.isActive ? "Gói sẽ hiển thị cho người dùng" : "Gói đang ẩn và không thể mua"}
+                      {formData.isActive ? "Plan is visible to users" : "Plan is hidden and cannot be purchased"}
                     </p>
                   </div>
                   <Switch
@@ -628,11 +628,11 @@ const AdminSubscriptionPlans = () => {
             <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <Label className="font-semibold">Tính năng mặc định</Label>
-                  <p className="text-xs text-muted-foreground">Mỗi gói luôn có đầy đủ 5 tính năng, chỉ tùy chỉnh giới hạn.</p>
+                  <Label className="font-semibold">Default features</Label>
+                  <p className="text-xs text-muted-foreground">Each plan always has 5 features; you only configure limits.</p>
                 </div>
                 <Badge variant="secondary" className="text-xs">
-                  Tất cả gói đều có 5 tính năng này
+                  All plans share these 5 features
                 </Badge>
               </div>
 
@@ -654,7 +654,9 @@ const AdminSubscriptionPlans = () => {
                           <div className="flex-1">
                             <p className="font-medium">{featureLabel}</p>
                             <p className="text-xs text-muted-foreground">
-                              {isUnlimited ? "Đang mở hoàn toàn cho người dùng." : "Giới hạn số lượt sử dụng trong gói này."}
+                              {isUnlimited
+                                ? "Fully enabled for users."
+                                : "Limit how many times users can use this feature in the plan."}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
@@ -663,18 +665,18 @@ const AdminSubscriptionPlans = () => {
                               onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
                             />
                             <Badge variant={isUnlimited ? "default" : "secondary"} className={isUnlimited ? "bg-green-600" : ""}>
-                              {isUnlimited ? "Không giới hạn" : "Có giới hạn"}
+                              {isUnlimited ? "Unlimited" : "Limited"}
                             </Badge>
                           </div>
                           <div className="w-full md:w-56">
                             {isUnlimited ? (
-                              <div className="text-sm text-muted-foreground text-right md:text-left">Không giới hạn</div>
+                              <div className="text-sm text-muted-foreground text-right md:text-left">Unlimited</div>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <Input
                                   type="number"
                                   min="0"
-                                  placeholder="Số lượt"
+                                  placeholder="Number of uses"
                                   value={feature.limitValue || 0}
                                   onChange={(e) => {
                                     const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
@@ -685,7 +687,7 @@ const AdminSubscriptionPlans = () => {
                                   className="flex-1 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                                 />
                                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                  {feature.limitValue === 0 ? "(Không cho dùng)" : "lượt"}
+                                  {feature.limitValue === 0 ? "(Disabled)" : "uses"}
                                 </span>
                               </div>
                             )}
@@ -703,12 +705,12 @@ const AdminSubscriptionPlans = () => {
             <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <Label className="font-semibold">Options Giá/Thời Gian</Label>
-                  <p className="text-xs text-muted-foreground">Thêm nhiều lựa chọn thanh toán để tối ưu tỉ lệ chuyển đổi.</p>
+                  <Label className="font-semibold">Pricing / Duration options</Label>
+                  <p className="text-xs text-muted-foreground">Add multiple billing options to optimize conversion.</p>
                 </div>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddDetail}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Thêm Option
+                  Add option
                 </Button>
               </div>
 
@@ -733,16 +735,16 @@ const AdminSubscriptionPlans = () => {
                         </div>
                         <div className="grid gap-3 md:grid-cols-4">
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Tên Option</Label>
+                            <Label className="text-xs text-muted-foreground">Option name</Label>
                             <Input
                               value={detail.detailName || ""}
                               onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
-                              placeholder="Ví dụ: 1 tháng"
+                              placeholder="Example: 1 month"
                               className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Giá</Label>
+                            <Label className="text-xs text-muted-foreground">Price</Label>
                             <Input
                               inputMode="numeric"
                               value={formatNumber(detail.price)}
@@ -752,7 +754,7 @@ const AdminSubscriptionPlans = () => {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Thời hạn (ngày)</Label>
+                            <Label className="text-xs text-muted-foreground">Duration (days)</Label>
                             <Input
                               type="number"
                               value={detail.durationDays || 30}
@@ -764,7 +766,7 @@ const AdminSubscriptionPlans = () => {
                             />
                           </div>
                           <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Thứ tự hiển thị</Label>
+                          <Label className="text-xs text-muted-foreground">Display order</Label>
                             <Input
                               type="number"
                               value={detail.displayOrder || 0}
@@ -781,7 +783,7 @@ const AdminSubscriptionPlans = () => {
                               onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
                             />
                             <span className="text-sm text-muted-foreground">
-                              {isRecommended ? "Đang được ưu tiên hiển thị" : "Bật để gợi ý option này cho người dùng"}
+                              {isRecommended ? "This option is highlighted as recommended." : "Enable to recommend this option to users."}
                             </span>
                           </div>
                           <Button
@@ -799,7 +801,7 @@ const AdminSubscriptionPlans = () => {
                 </div>
               ) : (
                 <div className="rounded-xl border border-dashed border-[hsl(var(--admin-border))] p-6 text-center text-sm text-muted-foreground">
-                  Chưa có option nào. Nhấn “Thêm Option” để tạo lựa chọn giá đầu tiên.
+                  No options yet. Click “Add option” to create the first pricing option.
                 </div>
               )}
             </section>
@@ -807,11 +809,11 @@ const AdminSubscriptionPlans = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseDialog}>
-              Hủy
+              Cancel
             </Button>
             <Button onClick={handleSave}>
               <Save className="h-4 w-4 mr-2" />
-              Lưu
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
