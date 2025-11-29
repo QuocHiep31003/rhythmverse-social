@@ -142,7 +142,7 @@ export const paymentApi = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[paymentApi] Error response:', errorText);
-        let errorMessage = 'Không thể tạo đơn hàng';
+        let errorMessage = 'Unable to create order';
         try {
           const errorData = JSON.parse(errorText);
           console.error('[paymentApi] Parsed error data:', errorData);
@@ -164,7 +164,7 @@ export const paymentApi = {
       console.log('[paymentApi] Success response:', result);
       
       if (!result.success) {
-        throw new Error(result.desc || 'Không thể tạo đơn hàng');
+        throw new Error(result.desc || 'Unable to create order');
       }
 
       if (!result.data || !result.data.checkoutUrl) {
@@ -192,9 +192,9 @@ export const paymentApi = {
       `${API_BASE_URL}/payments/orders/${orderCode}/final-status?timeoutMs=${timeoutMs}`
     );
 
-    if (!response.ok) {
+      if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = 'Không thể lấy trạng thái đơn hàng';
+      let errorMessage = 'Unable to get order status';
       try {
         const errorData = JSON.parse(errorText);
         errorMessage = errorData.desc || errorData.message || errorMessage;
@@ -207,7 +207,7 @@ export const paymentApi = {
     const result: OrderStatusResponse = await response.json();
     
     if (!result.success) {
-      throw new Error(result.desc || 'Không thể lấy trạng thái đơn hàng');
+      throw new Error(result.desc || 'Unable to get order status');
     }
 
     return result.data;
@@ -223,7 +223,7 @@ export const paymentApi = {
 
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = 'Không thể lấy chi tiết đơn hàng';
+      let errorMessage = 'Unable to get order detail';
       try {
         const errorData = JSON.parse(errorText);
         errorMessage = errorData.desc || errorData.message || errorMessage;
@@ -236,7 +236,7 @@ export const paymentApi = {
     const result: OrderDetailResponse = await response.json();
     
     if (!result.success) {
-      throw new Error(result.desc || 'Không thể lấy chi tiết đơn hàng');
+      throw new Error(result.desc || 'Unable to get order detail');
     }
 
     return result.data;
@@ -252,7 +252,7 @@ export const paymentApi = {
 
     if (!response.ok) {
       const errorText = await response.text();
-      let errorMessage = 'Không thể lấy lịch sử thanh toán';
+      let errorMessage = 'Unable to get payment history';
       try {
         const errorData = JSON.parse(errorText);
         errorMessage = errorData.desc || errorData.message || errorMessage;
@@ -265,7 +265,7 @@ export const paymentApi = {
     const result: OrderHistoryResponse = await response.json();
     
     if (!result.success) {
-      throw new Error(result.desc || 'Không thể lấy lịch sử thanh toán');
+      throw new Error(result.desc || 'Unable to get payment history');
     }
 
     return result.data;

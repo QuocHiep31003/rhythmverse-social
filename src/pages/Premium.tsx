@@ -113,13 +113,13 @@ const Premium = () => {
       
       if (limitValue === null) {
         status = "unlimited";
-        displayText = "Không giới hạn";
+        displayText = "Unlimited";
       } else if (limitValue === 0) {
         status = "disabled";
-        displayText = "Không khả dụng";
+        displayText = "Not available";
       } else {
         status = "limited";
-        displayText = `${limitValue} lần`;
+        displayText = `${limitValue} uses`;
       }
       
       return {
@@ -184,17 +184,17 @@ const Premium = () => {
   };
 
   const formatPrice = (plan: SubscriptionPlanDTO) => {
-    if (plan.planCode?.toUpperCase() === "FREE") return "Miễn phí";
+    if (plan.planCode?.toUpperCase() === "FREE") return "Free";
     const detail = getRecommendedDetail(plan);
-    if (!detail || !detail.price || detail.price <= 0) return "Liên hệ";
-    return `Từ ${Number(detail.price).toLocaleString("vi-VN")} ${detail.currency || "VND"}`;
+    if (!detail || !detail.price || detail.price <= 0) return "Contact us";
+    return `From ${Number(detail.price).toLocaleString("vi-VN")} ${detail.currency || "VND"}`;
   };
 
   const getDurationLabel = (plan: SubscriptionPlanDTO) => {
     if (plan.planCode?.toUpperCase() === "FREE") return null;
     const detail = getRecommendedDetail(plan);
     if (!detail || !detail.durationDays) return null;
-    return `${detail.durationDays} ngày`;
+    return `${detail.durationDays} days`;
   };
 
   const renderPlanCard = (
@@ -269,7 +269,7 @@ const Premium = () => {
             )}
           </div>
           <p className="text-sm text-muted-foreground mb-3 line-clamp-2 min-h-[40px]">
-            {plan.description || "Tận hưởng trải nghiệm âm nhạc đầy đủ tính năng."}
+            {plan.description || "Enjoy the full music experience with all premium features."}
           </p>
           {options?.subtext ? (
             <p className="text-xs text-white/60 mb-4">{options.subtext}</p>
@@ -312,7 +312,7 @@ const Premium = () => {
                 </div>
               ))
             ) : (
-              <div className="text-sm text-white/70">Chưa có tính năng cho gói này.</div>
+              <div className="text-sm text-white/70">No features configured for this plan yet.</div>
             )}
           </div>
           <Button
@@ -589,15 +589,15 @@ const Premium = () => {
       </div>
       <Footer />
 
-      {/* Dialog chọn PlanDetail */}
+      {/* Plan detail selection dialog */}
       <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
         <DialogContent className="max-w-2xl bg-slate-950/95 border-white/10">
           <DialogHeader>
             <DialogTitle className="text-2xl text-white">
-              Chọn gói {getPlanDisplayName(selectedPlan)}
+              Choose {getPlanDisplayName(selectedPlan)}
             </DialogTitle>
             <DialogDescription className="text-white/70">
-              Chọn option giá và thời gian phù hợp với bạn
+              Select the pricing option and duration that works best for you.
             </DialogDescription>
           </DialogHeader>
           
@@ -629,7 +629,7 @@ const Premium = () => {
                           )}
                         </div>
                         <p className="text-sm text-white/70 mb-3">
-                          {detail.durationDays} ngày
+                          {detail.durationDays} days
                         </p>
                         <div className="text-3xl font-black text-white">
                           {Number(detail.price).toLocaleString("vi-VN")} {detail.currency || "VND"}
@@ -639,7 +639,7 @@ const Premium = () => {
                         variant={detail.isRecommended ? "default" : "outline"}
                         className="ml-4"
                       >
-                        Chọn
+                        Choose
                       </Button>
                     </div>
                   </CardContent>
@@ -649,7 +649,7 @@ const Premium = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDetailDialogOpen(false)}>
-              Hủy
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -39,8 +39,8 @@ export default function PaymentHistoryPage() {
     } catch (error) {
       console.error('Error loading payment history:', error);
       toast({
-        title: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Không thể tải lịch sử thanh toán',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Unable to load payment history',
         variant: 'destructive',
       });
     } finally {
