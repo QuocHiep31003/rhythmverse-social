@@ -14,6 +14,7 @@ import {
   Crown,
   RefreshCw,
   Search,
+
   CalendarDays,
 } from "lucide-react";
 import { paymentApi, OrderHistoryItem } from "@/services/api/paymentApi";
@@ -36,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { Label } from "@/components/ui/label";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Line, LineChart, CartesianGrid, XAxis, YAxis } from "recharts";
@@ -49,23 +51,65 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const formatCompactCurrency = (value: number) =>
-  new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-    notation: "compact",
-    compactDisplay: "short",
-    maximumFractionDigits: value < 1_000_000 ? 0 : 1,
-  })
-    .format(value)
-    .replace("₫", "")
-    .trim();
+
+const formatCompactCurrency = (value: number) => {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(value);
+};
 
 const getISODateString = (date: Date) => date.toISOString().split("T")[0];
 
 const getCurrentMonthValue = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
+const formatDate = (date: Date | string | null | undefined): string => {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "—";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const formatDateTime = (date: Date | string | null | undefined): string => {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "—";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
+const formatDateInputValue = (isoDateString: string | undefined): string => {
+  if (!isoDateString) return "";
+  try {
+    const date = new Date(isoDateString + "T00:00:00");
+    if (isNaN(date.getTime())) return "";
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return "";
+  }
+};
+
+const formatMonthInputValue = (isoMonthString: string | undefined): string => {
+  if (!isoMonthString) return "";
+  try {
+    const [year, month] = isoMonthString.split("-");
+    if (!year || !month) return "";
+    return `${month}/${year}`;
+  } catch {
+    return "";
+  }
 };
 
 type PickerInput = HTMLInputElement & { showPicker?: () => void };
@@ -87,6 +131,7 @@ const AdminPremiumDashboard = () => {
     totalElements: 0,
     totalPages: 0,
   });
+
   const [chartMode, setChartMode] = useState<ChartMode>("MONTH");
   const [selectedDay, setSelectedDay] = useState(() => getISODateString(new Date()));
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthValue);
@@ -144,6 +189,7 @@ const AdminPremiumDashboard = () => {
     } catch (error: any) {
       console.error("Failed to fetch premium payments", error);
       toast({
+
         title: "Error",
         description: error?.message || "Unable to load premium transaction statistics",
         variant: "destructive",
@@ -156,6 +202,7 @@ const AdminPremiumDashboard = () => {
   useEffect(() => {
     fetchPayments();
   }, [fetchPayments]);
+
 
   useEffect(() => {
     if (chartMode === "DAY" && !selectedDay) {
@@ -210,21 +257,25 @@ const AdminPremiumDashboard = () => {
   const statCards = useMemo(
     () => [
       {
+
         label: "Total revenue",
         value: formatCurrency(premiumStats.totalRevenue),
         icon: Coins,
       },
       {
+
         label: "Last 30 days revenue",
         value: formatCurrency(premiumStats.monthlyRevenue),
         icon: TrendingUp,
       },
       {
+
         label: "Total transactions",
         value: premiumStats.totalOrders.toString(),
         icon: CreditCard,
       },
       {
+
         label: "Success rate",
         value: `${premiumStats.successRate}%`,
         icon: Crown,
@@ -237,6 +288,7 @@ const AdminPremiumDashboard = () => {
     status === "SUCCESS"
       ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
       : "bg-destructive/10 text-destructive border border-destructive/40";
+
 
   const chartConfig = useMemo(
     () => ({
@@ -375,7 +427,7 @@ const AdminPremiumDashboard = () => {
       (date) => (date.getMonth() + 1).toString(),
     );
 
-    const monthLabels = ["Th1", "Th2", "Th3", "Th4", "Th5", "Th6", "Th7", "Th8", "Th9", "Th10", "Th11", "Th12"];
+    const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const monthsToShow = isCurrentYear ? Math.max(1, currentMonth) : 12;
     const data = monthLabels.slice(0, monthsToShow).map((label, index) => ({
       label,
@@ -383,13 +435,14 @@ const AdminPremiumDashboard = () => {
     }));
 
     return {
-      timeframeLabel: `Năm ${targetYear}`,
+      timeframeLabel: `Year ${targetYear}`,
       data,
       total: data.reduce((sum, item) => sum + item.revenue, 0),
     };
   }, [chartMode, premiumTransactions, selectedDay, selectedMonth, selectedYear]);
 
   return (
+
     <div className="min-h-screen p-6 space-y-4">
       <div className="w-full space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0">
@@ -403,8 +456,10 @@ const AdminPremiumDashboard = () => {
               </h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1">
                 <Badge variant="secondary" className="font-normal">
+
                   {transactionMeta.totalElements} transactions recorded
                 </Badge>
+
                 {loadingPayments && <span className="text-xs">Syncing...</span>}
               </p>
             </div>
@@ -417,6 +472,7 @@ const AdminPremiumDashboard = () => {
               disabled={loadingPayments}
             >
               <RefreshCw className={`w-4 h-4 ${loadingPayments ? "animate-spin" : ""}`} />
+
               Refresh
             </Button>
           </div>
@@ -438,6 +494,7 @@ const AdminPremiumDashboard = () => {
             </Card>
           ))}
         </div>
+
 
         <Card className="border-none shadow-lg bg-[hsl(var(--admin-card))]">
           <CardHeader className="border-b border-[hsl(var(--admin-border))]/70">
@@ -473,7 +530,7 @@ const AdminPremiumDashboard = () => {
 
                 <div className="flex w-full flex-1 flex-col gap-2 lg:max-w-sm lg:items-end">
                   {chartMode === "DAY" && (
-                    <div className="flex w-full flex-col gap-2 lg:max-w-[220px]">
+                    <div className="flex w-full flex-col gap-2 lg:max-w-[120px]">
                       <Label htmlFor="premium-chart-day" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Date
                       </Label>
@@ -481,26 +538,31 @@ const AdminPremiumDashboard = () => {
                         <button
                           type="button"
                           onClick={() => openNativePicker(dayInputRef.current)}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[hsl(var(--admin-primary))]"
-                          aria-label="Chọn ngày"
+                          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[hsl(var(--admin-primary))]"
+                          aria-label="Select date"
                         >
                           <CalendarDays className="h-4 w-4" />
                         </button>
-                        <Input
-                          id="premium-chart-day"
-                          type="date"
-                          ref={dayInputRef}
-                          className="bg-background pl-10 [&::-webkit-calendar-picker-indicator]:hidden"
-                          value={selectedDay}
-                          max={todayValue}
-                          onChange={(e) => setSelectedDay(e.target.value)}
-                        />
+                        <div className="relative">
+                          <Input
+                            id="premium-chart-day"
+                            type="date"
+                            ref={dayInputRef}
+                            className="bg-background pl-10 pr-16 text-sm h-9 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:hidden [&::-webkit-datetime-edit-fields-wrapper]:hidden [&::-webkit-datetime-edit-text]:hidden [&::-webkit-datetime-edit-month-field]:hidden [&::-webkit-datetime-edit-day-field]:hidden [&::-webkit-datetime-edit-year-field]:hidden"
+                            value={selectedDay}
+                            max={todayValue}
+                            onChange={(e) => setSelectedDay(e.target.value)}
+                          />
+                          <span className="absolute left-10 top-1/2 -translate-y-1/2 pointer-events-none text-xs text-foreground">
+                            {formatDateInputValue(selectedDay)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {chartMode === "MONTH" && (
-                    <div className="flex w-full flex-col gap-2 lg:max-w-[220px]">
+                    <div className="flex w-full flex-col gap-2 lg:max-w-[120px]">
                       <Label htmlFor="premium-chart-month" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Month
                       </Label>
@@ -508,20 +570,25 @@ const AdminPremiumDashboard = () => {
                         <button
                           type="button"
                           onClick={() => openNativePicker(monthInputRef.current)}
-                          className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[hsl(var(--admin-primary))]"
-                          aria-label="Chọn tháng"
+                          className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[hsl(var(--admin-primary))]"
+                          aria-label="Select month"
                         >
                           <CalendarDays className="h-4 w-4" />
                         </button>
-                        <Input
-                          id="premium-chart-month"
-                          type="month"
-                          ref={monthInputRef}
-                          className="bg-background pl-10 [&::-webkit-calendar-picker-indicator]:hidden"
-                          value={selectedMonth}
-                          max={thisMonthValue}
-                          onChange={(e) => setSelectedMonth(e.target.value)}
-                        />
+                        <div className="relative">
+                          <Input
+                            id="premium-chart-month"
+                            type="month"
+                            ref={monthInputRef}
+                            className="bg-background pl-10 pr-12 text-sm h-9 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-datetime-edit]:hidden [&::-webkit-datetime-edit-fields-wrapper]:hidden [&::-webkit-datetime-edit-text]:hidden [&::-webkit-datetime-edit-month-field]:hidden [&::-webkit-datetime-edit-year-field]:hidden"
+                            value={selectedMonth}
+                            max={thisMonthValue}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                          />
+                          <span className="absolute left-10 top-1/2 -translate-y-1/2 pointer-events-none text-xs text-foreground">
+                            {formatMonthInputValue(selectedMonth)}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -532,7 +599,7 @@ const AdminPremiumDashboard = () => {
                         Year
                       </Label>
                       <Select value={selectedYear} onValueChange={setSelectedYear}>
-                        <SelectTrigger id="premium-chart-year" className="w-full sm:w-[140px]">
+                        <SelectTrigger id="premium-chart-year" className="w-full sm:w-[80px]">
                             <SelectValue placeholder="Year" />
                         </SelectTrigger>
                         <SelectContent>
@@ -550,12 +617,17 @@ const AdminPremiumDashboard = () => {
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="w-full">
-              <ChartContainer config={chartConfig} className="w-full h-[260px] sm:h-[320px] lg:h-[380px]">
-                <LineChart data={salesChart.data} margin={{ top: 12, right: 24, left: 12, bottom: 12 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--admin-border))" />
-                  <XAxis dataKey="label" tickLine={false} axisLine={false} dy={8} tickMargin={6} interval="preserveEnd" />
-                  <YAxis tickFormatter={formatCompactCurrency as (value: number) => string} dx={-8} tickMargin={6} />
+              <div className="w-full relative">
+                <div className="absolute left-2 top-1/2 -translate-y-1/2 z-10">
+                  <span className="text-[11px] font-medium text-muted-foreground" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+                    VND
+                  </span>
+                </div>
+                <ChartContainer config={chartConfig} className="w-full h-[260px] sm:h-[320px] lg:h-[380px]">
+                  <LineChart data={salesChart.data} margin={{ top: 12, right: 24, left: 50, bottom: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--admin-border))" />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} dy={8} tickMargin={6} interval="preserveEnd" />
+                    <YAxis tickFormatter={formatCompactCurrency as (value: number) => string} dx={-8} tickMargin={6} width={60} />
                   <ChartTooltip
                     cursor={false}
                     content={
@@ -563,7 +635,7 @@ const AdminPremiumDashboard = () => {
                         className="bg-background"
                         formatter={(value) => (
                           <div className="flex w-full items-center justify-between gap-4">
-                            <span>Doanh thu</span>
+                            <span>Revenue</span>
                             <span className="font-semibold text-foreground">{formatCurrency(Number(value) || 0)}</span>
                           </div>
                         )}
@@ -581,7 +653,7 @@ const AdminPremiumDashboard = () => {
                 </LineChart>
               </ChartContainer>
               <div className="mt-4 text-sm text-muted-foreground">
-                Tổng doanh thu ({salesChart.timeframeLabel}):{" "}
+                Total revenue ({salesChart.timeframeLabel}):{" "}
                 <span className="font-semibold text-foreground">{formatCurrency(salesChart.total)}</span>
               </div>
             </div>
@@ -593,13 +665,16 @@ const AdminPremiumDashboard = () => {
             <div className="flex flex-col gap-4">
               <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
                 <div>
+
                   <CardTitle className="text-2xl font-bold text-foreground">Transactions</CardTitle>
                   <CardDescription>
+
                     View all PayOS transactions, filter by status and search by description or order code
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
+
                     Showing {filteredTransactions.length} / {premiumTransactions.length} transactions
                   </Badge>
                 </div>
@@ -609,6 +684,7 @@ const AdminPremiumDashboard = () => {
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
+
                     placeholder="Search by description or order code..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
@@ -621,9 +697,11 @@ const AdminPremiumDashboard = () => {
                   onValueChange={(value) => setStatusFilter(value as "ALL" | "SUCCESS" | "FAILED")}
                 >
                   <SelectTrigger className="w-full md:w-[220px]">
+
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
+
                     <SelectItem value="ALL">All statuses</SelectItem>
                     <SelectItem value="SUCCESS">Success</SelectItem>
                     <SelectItem value="FAILED">Failed</SelectItem>
@@ -638,6 +716,7 @@ const AdminPremiumDashboard = () => {
                       setSearchTerm("");
                     }}
                   >
+
                     Clear filters
                   </Button>
                 )}
@@ -645,33 +724,42 @@ const AdminPremiumDashboard = () => {
             </div>
           </CardHeader>
 
+
           <CardContent className="p-0">
             {loadingPayments ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+
                 Loading payment data...
               </div>
             ) : filteredTransactions.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-6 text-center">
+
                 No transactions match the current filters.
               </div>
             ) : (
+
               <div className="overflow-auto scroll-smooth scrollbar-admin">
                 <Table className="min-w-full">
                   <TableHeader className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b border-[hsl(var(--admin-border))]/70">
                     <TableRow>
                       <TableHead className="w-32 text-xs font-semibold tracking-wide text-muted-foreground">
+
                         Order code
                       </TableHead>
                       <TableHead className="text-xs font-semibold tracking-wide text-muted-foreground">
+
                         Description
                       </TableHead>
                       <TableHead className="w-32 text-xs font-semibold tracking-wide text-muted-foreground text-right">
+
                         Amount
                       </TableHead>
                       <TableHead className="w-32 text-xs font-semibold tracking-wide text-muted-foreground text-center">
+
                         Status
                       </TableHead>
                       <TableHead className="w-48 text-xs font-semibold tracking-wide text-muted-foreground text-right">
+
                         Time
                       </TableHead>
                     </TableRow>
@@ -693,11 +781,13 @@ const AdminPremiumDashboard = () => {
                         </TableCell>
                         <TableCell className="text-center">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeClass(tx.status)}`}>
+
                             {tx.status === "SUCCESS" ? "Success" : "Failed"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right text-sm text-muted-foreground">
-                          {tx.createdAt ? new Date(tx.createdAt).toLocaleString("vi-VN") : "—"}
+
+                          {formatDateTime(tx.createdAt)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -708,6 +798,7 @@ const AdminPremiumDashboard = () => {
           </CardContent>
 
           <CardFooter className="border-t border-[hsl(var(--admin-border))]/70 justify-between text-sm text-muted-foreground">
+
             <span>Total {premiumTransactions.length} transactions loaded</span>
             <span>
               {transactionMeta.totalPages > 1 ? `${transactionMeta.totalPages} trang dữ liệu` : "1 trang dữ liệu"}
@@ -720,4 +811,5 @@ const AdminPremiumDashboard = () => {
 };
 
 export default AdminPremiumDashboard;
+
 

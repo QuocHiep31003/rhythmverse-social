@@ -299,7 +299,10 @@ const Profile = () => {
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const formatPaymentDate = (dateString: string | null | undefined) => {
@@ -311,13 +314,12 @@ const Profile = () => {
       if (Number.isNaN(date.getTime())) {
         return dateString;
       }
-      return new Intl.DateTimeFormat('vi-VN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(date);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, "0");
+      const minutes = String(date.getMinutes()).padStart(2, "0");
+      return `${day}/${month}/${year} ${hours}:${minutes}`;
     } catch {
       return dateString;
     }
@@ -1216,11 +1218,11 @@ const Profile = () => {
               Invoice {selectedOrder ? `#${selectedOrder.orderCode}` : ""}
             </DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Chi tiết gói được cố định tại thời điểm bạn thanh toán.
+              Plan details are snapshotted at the moment you completed payment.
             </p>
           </DialogHeader>
           {!selectedOrder ? (
-            <div className="text-sm text-muted-foreground">Không có dữ liệu đơn hàng.</div>
+            <div className="text-sm text-muted-foreground">No order data.</div>
           ) : (
             <div className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
@@ -1229,20 +1231,20 @@ const Profile = () => {
                     Plan snapshot
                   </p>
                   <div className="text-lg font-semibold">
-                    {selectedOrder.planName || selectedOrder.planCode || selectedOrder.description || "Không xác định"}
+                    {selectedOrder.planName || selectedOrder.planCode || selectedOrder.description || "Unknown"}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Mã gói: <span className="text-foreground font-medium">{selectedOrder.planCode || "—"}</span>
+                    Plan code: <span className="text-foreground font-medium">{selectedOrder.planCode || "—"}</span>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Option: <span className="text-foreground font-medium">{selectedOrder.planDetailName || "Không có"}</span>
+                    Option: <span className="text-foreground font-medium">{selectedOrder.planDetailName || "None"}</span>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Thời hạn:{" "}
+                    Duration:{" "}
                     <span className="text-foreground font-medium">
                       {selectedOrder.planDurationDaysSnapshot
-                        ? `${selectedOrder.planDurationDaysSnapshot} ngày`
-                        : "Không xác định"}
+                        ? `${selectedOrder.planDurationDaysSnapshot} days`
+                        : "Unknown"}
                     </span>
                   </div>
                 </div>
@@ -1263,7 +1265,7 @@ const Profile = () => {
                     </span>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    Ngày thanh toán:{" "}
+                    Paid at{" "}
                     <span className="text-foreground font-medium">
                       {formatPaymentDate(selectedOrder.paidAt ?? selectedOrder.failedAt ?? selectedOrder.createdAt)}
                     </span>
@@ -1275,7 +1277,7 @@ const Profile = () => {
                   )}
                   {selectedOrder.failureReason && (
                     <div className="text-sm text-destructive">
-                      Lý do thất bại: {selectedOrder.failureReason}
+                      Failure reason: {selectedOrder.failureReason}
                     </div>
                   )}
                 </div>
@@ -1283,11 +1285,11 @@ const Profile = () => {
 
               <div>
                 <p className="text-xs uppercase text-muted-foreground tracking-wide mb-2">
-                  Quyền lợi tại thời điểm mua
+                  Benefits at purchase time
                 </p>
                 {selectedOrderFeatures.length === 0 ? (
                   <div className="text-sm text-muted-foreground">
-                    Không có dữ liệu quyền lợi (có thể là gói miễn phí hoặc dữ liệu đã bị xóa).
+                    No benefit data found (this might be a free plan or data was removed).
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
@@ -1314,8 +1316,9 @@ const Profile = () => {
               </div>
 
               <div className="text-xs text-muted-foreground">
-                Thông tin trên được lưu cố định trong database (`payment_orders` và `premium_subscription_features`)
-                để đảm bảo bạn luôn nhận đúng quyền lợi đã thanh toán, kể cả khi admin chỉnh sửa gói về sau.
+                The information above is stored as a snapshot in the database (`payment_orders` and
+                `premium_subscription_features`) so you always keep the exact benefits you paid for, even if admins
+                change plans later.
               </div>
             </div>
           )}
