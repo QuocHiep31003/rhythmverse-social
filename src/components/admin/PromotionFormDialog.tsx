@@ -61,23 +61,23 @@ function buildGradientFromRGB(rgb: { r: number; g: number; b: number }) {
 const schema = z.object({
   title: z
     .string()
-    .min(1, "Bắt buộc")
-    .max(60, "Tối đa 60 ký tự"),
+    .min(1, "Required")
+    .max(60, "Max 60 characters"),
   subtitle: z
     .string()
-    .max(120, "Tối đa 120 ký tự")
+    .max(120, "Max 120 characters")
     .optional()
     .or(z.literal("")),
   imageUrl: z.string().optional().or(z.literal("")),
   ctaText: z
     .string()
-    .max(24, "Tối đa 24 ký tự")
+    .max(24, "Max 24 characters")
     .optional()
     .or(z.literal("")),
   gradient: z.string().optional().or(z.literal("")),
   badge: z
     .string()
-    .max(20, "Tối đa 20 ký tự")
+    .max(20, "Max 20 characters")
     .optional()
     .or(z.literal("")),
   icon: z.string().optional().or(z.literal("")),
@@ -140,7 +140,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
       const rgb = await getDominantColor(result.secure_url);
       form.setValue("gradient", buildGradientFromRGB(rgb), { shouldDirty: true });
     } catch (err) {
-      toast.error("Upload ảnh thất bại");
+      toast.error("Failed to upload image");
     } finally {
       setUploading(false);
     }
@@ -164,8 +164,8 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[760px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-zinc-800">
-          <DialogTitle className="text-2xl font-bold">{mode === "create" ? "Tạo Promotion mới" : "Chỉnh sửa Promotion"}</DialogTitle>
-          <DialogDescription className="text-gray-400">Fill in the promotion details. You can edit later.</DialogDescription>
+          <DialogTitle className="text-2xl font-bold">{mode === "create" ? "Create New Banner" : "Edit Banner"}</DialogTitle>
+          <DialogDescription className="text-gray-400">Fill in the banner details. You can edit later.</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
@@ -180,7 +180,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                   <>
                     <img
                       src={imagePreview}
-                      alt="Promotion image"
+                      alt="Banner image"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.currentTarget.src = "/placeholder.svg";
@@ -223,7 +223,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                   <FormItem>
                     <FormLabel className="text-sm">Title *</FormLabel>
                     <FormControl>
-                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="Enter promotion title..." />
+                      <Input {...field} className="bg-zinc-900 border-zinc-700 focus:border-indigo-500 transition-colors h-9 text-sm" placeholder="Enter banner title..." />
                     </FormControl>
                     <div className="flex justify-between text-xs text-gray-500 mt-0.5">
                       <span>Max 60 characters</span>
@@ -325,8 +325,8 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                     : isLoading
                     ? "Saving..."
                     : mode === "create"
-                    ? "Create Promotion"
-                    : "Update Promotion"}
+                    ? "Create Banner"
+                    : "Update Banner"}
                 </Button>
               </DialogFooter>
             </div>

@@ -479,7 +479,7 @@ const AdminSubscriptionPlans = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenDialog(plan)}
-                              title="Chỉnh sửa"
+                              title="Edit"
                               className="hover:bg-primary/10"
                             >
                               <Edit className="h-4 w-4" />
@@ -489,7 +489,7 @@ const AdminSubscriptionPlans = () => {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => plan.id && handleDelete(plan.id, plan.planCode)}
-                                title="Xóa"
+                                title="Delete"
                                 className="text-destructive hover:bg-destructive/10"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -506,7 +506,7 @@ const AdminSubscriptionPlans = () => {
                           <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Features</p>
                             <p className="text-2xl font-bold text-foreground">{featureCount}</p>
-                            <p className="text-xs text-muted-foreground">Tùy chỉnh giới hạn linh hoạt</p>
+                            <p className="text-xs text-muted-foreground">Flexible limit customization</p>
                           </div>
                           <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pricing options</p>
@@ -698,7 +698,7 @@ const AdminSubscriptionPlans = () => {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Không tìm thấy tính năng nào cho gói này.</p>
+                <p className="text-sm text-muted-foreground">No features found for this plan.</p>
               )}
             </section>
 

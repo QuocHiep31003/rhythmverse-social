@@ -93,7 +93,7 @@ const App = () => (
                     <Route path="moods" element={<AdminMoods />} />
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="playlists" element={<AdminPlaylists />} />
-                    <Route path="promotions" element={<AdminPromotions />} />
+                    <Route path="banners" element={<AdminPromotions />} />
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
