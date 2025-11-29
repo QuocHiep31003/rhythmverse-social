@@ -888,7 +888,7 @@ const PlaylistLibrary = () => {
           </TabsList>
 
           <TabsContent value="my-playlists">
-            <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
+            <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(230px,280px))]">
               {filteredOwnedPlaylists.length === 0 ? (
                 <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-border/40 bg-card/40 py-12 text-center text-muted-foreground">
                   <Users className="h-10 w-10 mb-3 opacity-60" />
@@ -916,7 +916,7 @@ const PlaylistLibrary = () => {
           </TabsContent>
 
           <TabsContent value="collab-playlists">
-            <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
+            <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(230px,280px))]">
               {filteredCollabPlaylists.length === 0 ? (
                 <div className="col-span-full flex flex-col items-center justify-center rounded-lg border border-border/40 bg-card/40 py-12 text-center text-muted-foreground">
                   <Music className="h-10 w-10 mb-3 opacity-60" />

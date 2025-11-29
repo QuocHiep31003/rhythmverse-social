@@ -20,6 +20,7 @@ import Quiz from "./pages/Quiz";
 import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
 import Login from "./pages/Login";
+import OAuthCallback from "./pages/OAuthCallback";
 import Premium from "./pages/Premium";
 import Profile from "./pages/Profile";
 import Social from "./pages/Social";
@@ -78,6 +79,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/oauth2/callback" element={<OAuthCallback />} />
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
 
