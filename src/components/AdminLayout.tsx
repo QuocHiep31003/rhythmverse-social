@@ -54,19 +54,19 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       path: null, 
       children: [
         { label: "Premium Dashboard", path: "/admin/premium-dashboard" },
-        { label: "Gói Đăng Ký", path: "/admin/subscription-plans" },
+        { label: "Subscription Plans", path: "/admin/subscription-plans" },
       ]
     },
-    { icon: Music, label: "Bài hát", path: "/admin/songs" },
+    { icon: Music, label: "Songs", path: "/admin/songs" },
     { icon: Disc3, label: "Albums", path: "/admin/albums" },
     { icon: ListMusic, label: "Playlists", path: "/admin/playlists" },
     { icon: Tag, label: "Banners", path: "/admin/banners" },
-    { icon: Users, label: "Nghệ sĩ", path: "/admin/artists" },
-    { icon: Music, label: "Thể loại", path: "/admin/genres" },
+    { icon: Users, label: "Artists", path: "/admin/artists" },
+    { icon: Music, label: "Genres", path: "/admin/genres" },
     { icon: Heart, label: "Mood", path: "/admin/moods" },
-    { icon: Users, label: "Người dùng", path: "/admin/users" },
+    { icon: Users, label: "Users", path: "/admin/users" },
     { icon: TrendingUp, label: "Trending", path: "/admin/trending" },
-    { icon: Settings, label: "Cài đặt", path: "/admin/settings" },
+    { icon: Settings, label: "Settings", path: "/admin/settings" },
   ];
 
   // Check if current path is in premium menu
@@ -183,7 +183,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           onClick={handleLogout}
         >
           <LogOut className="w-4 h-4 mr-3" />
-          Đăng xuất
+          Logout
         </Button>
       </div>
     </div>
