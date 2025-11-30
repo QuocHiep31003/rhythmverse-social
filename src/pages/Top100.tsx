@@ -176,18 +176,7 @@ const Top100 = () => {
       audioUrl: song.audioUrl,
     };
 
-    const formattedQueue: Song[] = topSongs.map((s) => ({
-      id: String(s.id),
-      name: s.name || s.songName,
-      songName: s.songName,
-      artist: s.artist,
-      album: s.album,
-      duration: s.duration,
-      cover: s.cover,
-      audioUrl: s.audioUrl,
-    }));
-
-    setQueue(formattedQueue);
+    // Chỉ phát bài này, không set queue (giữ nguyên queue hiện tại)
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
     await playSongWithStreamUrl(formattedSong, playSong);
     toast({ title: `Playing ${song.name || song.songName || "Unknown Song"}` });
@@ -452,6 +441,16 @@ const chartData: ChartDataPoint[] = chartLabels.map((label: string, idx: number)
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAddToQueue(song);
+                          }}
+                        >
+                          <ListPlus className="w-4 h-4 mr-2" />
+                          Thêm vào danh sách phát
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();

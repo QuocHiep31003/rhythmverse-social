@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Play, Pause, Volume2, VolumeX, MoreHorizontal, X } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, MoreHorizontal, X, SkipForward, SkipBack, Repeat, Repeat1, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useMusic } from "@/contexts/MusicContext";
+import { useMusic, type Song } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api/config";
 import { getAuthToken } from "@/services/api";
@@ -16,9 +16,376 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// QueueItem component tách riêng để tránh re-render
+const QueueItem = memo(({ 
+  song, 
+  index, 
+  isCurrent, 
+  onPlay, 
+  onRemove 
+}: { 
+  song: Song; 
+  index: number; 
+  isCurrent: boolean; 
+  onPlay: () => void; 
+  onRemove: () => void;
+}) => {
+  return (
+    <div
+      className={cn(
+        "group flex items-center gap-3 px-4 py-2 hover:bg-accent cursor-pointer transition-colors",
+        isCurrent && "bg-accent/50"
+      )}
+      onClick={onPlay}
+    >
+      {/* Number */}
+      <div className={cn(
+        "text-xs font-medium w-6 text-center",
+        isCurrent ? "text-primary" : "text-muted-foreground"
+      )}>
+        {index + 1}
+      </div>
+
+      {/* Cover Image */}
+      {song.cover && (
+        <img
+          src={song.cover}
+          alt={song.title || song.name}
+          className="w-10 h-10 rounded object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/placeholder-music.png';
+          }}
+        />
+      )}
+
+      {/* Song Info */}
+      <div className="flex-1 min-w-0">
+        <div className={cn(
+          "font-medium truncate text-sm",
+          isCurrent && "text-primary"
+        )}>
+          {song.title || song.name || 'Unknown Song'}
+        </div>
+        <div className="text-xs text-muted-foreground truncate">
+          {song.artist || 'Unknown Artist'}
+        </div>
+      </div>
+
+      {/* Status/Actions */}
+      {isCurrent ? (
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <span className="text-xs text-primary font-medium">Đang phát</span>
+        </div>
+      ) : (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 opacity-0 group-hover:opacity-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+        >
+          <X className="w-4 h-4" />
+        </Button>
+      )}
+    </div>
+  );
+});
+
+QueueItem.displayName = 'QueueItem';
+
+// SongInfo component - chỉ re-render khi currentSong thay đổi
+const SongInfo = memo(({ song }: { song: Song }) => {
+  return (
+    <div className="flex items-center gap-3 min-w-0 flex-1">
+      {song.cover && (
+        <img
+          src={song.cover}
+          alt={song.title || song.name}
+          className="w-14 h-14 rounded object-cover"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = '/placeholder-music.png';
+          }}
+        />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="font-medium truncate">{song.title || song.name || 'Unknown Song'}</div>
+        <div className="text-sm text-muted-foreground truncate">
+          {song.artist || 'Unknown Artist'}
+        </div>
+      </div>
+    </div>
+  );
+});
+SongInfo.displayName = 'SongInfo';
+
+// Controls component
+const Controls = memo(({
+  isPlaying,
+  isLoading,
+  onTogglePlay,
+  onPrevious,
+  onNext,
+  onToggleShuffle,
+  onCycleRepeatMode,
+  isShuffled,
+  repeatMode,
+  canGoPrevious,
+}: {
+  isPlaying: boolean;
+  isLoading: boolean;
+  onTogglePlay: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onToggleShuffle: () => void;
+  onCycleRepeatMode: () => void;
+  isShuffled: boolean;
+  repeatMode: "off" | "one" | "all";
+  canGoPrevious: boolean;
+}) => {
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onToggleShuffle}
+        disabled={isLoading}
+        className={cn(
+          "rounded-full h-9 w-9 transition-all",
+          isShuffled 
+            ? "text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30" 
+            : "hover:bg-accent"
+        )}
+        title={isShuffled ? "Tắt phát ngẫu nhiên" : "Bật phát ngẫu nhiên"}
+      >
+        <Shuffle className={cn(
+          "w-5 h-5 transition-all",
+          isShuffled && "fill-current scale-110"
+        )} />
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onPrevious}
+        disabled={isLoading || !canGoPrevious}
+        className={cn("rounded-full", !canGoPrevious && "opacity-50 cursor-not-allowed")}
+        title={!canGoPrevious ? "Chế độ lặp đang tắt" : "Bài trước"}
+      >
+        <SkipBack className="w-5 h-5" />
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onTogglePlay}
+        disabled={isLoading}
+        className="rounded-full"
+      >
+        {isLoading ? (
+          <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        ) : isPlaying ? (
+          <Pause className="w-5 h-5" />
+        ) : (
+          <Play className="w-5 h-5" />
+        )}
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onNext}
+        disabled={isLoading}
+        className="rounded-full"
+        title="Bài tiếp theo"
+      >
+        <SkipForward className="w-5 h-5" />
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onCycleRepeatMode}
+        disabled={isLoading}
+        className={cn(
+          "rounded-full h-9 w-9 transition-all",
+          repeatMode !== "off"
+            ? "text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30"
+            : "hover:bg-accent"
+        )}
+        title={
+          repeatMode === "off"
+            ? "Bật lặp lại"
+            : repeatMode === "all"
+            ? "Lặp lại tất cả"
+            : "Lặp lại một bài"
+        }
+      >
+        {repeatMode === "one" ? (
+          <Repeat1 className={cn(
+            "w-5 h-5 transition-all",
+            repeatMode === "one" && "fill-current scale-110"
+          )} />
+        ) : (
+          <Repeat className={cn(
+            "w-5 h-5 transition-all",
+            repeatMode === "all" && "fill-current scale-110"
+          )} />
+        )}
+      </Button>
+    </div>
+  );
+});
+Controls.displayName = 'Controls';
+
+// ProgressBar component
+const ProgressBar = memo(({
+  currentTime,
+  duration,
+  formattedCurrentTime,
+  formattedDuration,
+  onSeek,
+}: {
+  currentTime: number;
+  duration: number;
+  formattedCurrentTime: string;
+  formattedDuration: string;
+  onSeek: (value: number[]) => void;
+}) => {
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <span className="text-xs text-muted-foreground min-w-[40px] text-right">
+        {formattedCurrentTime}
+      </span>
+      <Slider
+        value={[currentTime]}
+        max={duration || 0}
+        step={0.1}
+        onValueChange={onSeek}
+        className="flex-1"
+      />
+      <span className="text-xs text-muted-foreground min-w-[40px]">
+        {formattedDuration}
+      </span>
+    </div>
+  );
+});
+ProgressBar.displayName = 'ProgressBar';
+
+// VolumeControl component
+const VolumeControl = memo(({
+  volume,
+  isMuted,
+  onVolumeChange,
+  onToggleMute,
+}: {
+  volume: number;
+  isMuted: boolean;
+  onVolumeChange: (value: number[]) => void;
+  onToggleMute: () => void;
+}) => {
+  return (
+    <div className="flex items-center gap-2 min-w-[120px]">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onToggleMute}
+        className="h-9 w-9"
+      >
+        {isMuted ? (
+          <VolumeX className="w-5 h-5" />
+        ) : (
+          <Volume2 className="w-5 h-5" />
+        )}
+      </Button>
+      <Slider
+        value={[volume * 100]}
+        max={100}
+        step={1}
+        onValueChange={onVolumeChange}
+        className="flex-1"
+      />
+    </div>
+  );
+});
+VolumeControl.displayName = 'VolumeControl';
+
+// QueueMenu component
+const QueueMenu = memo(({
+  queue,
+  currentSong,
+  showQueue,
+  onOpenChange,
+  onPlaySong,
+  onRemoveFromQueue,
+}: {
+  queue: Song[];
+  currentSong: Song | null;
+  showQueue: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPlaySong: (song: Song) => void;
+  onRemoveFromQueue: (songId: string | number) => Promise<void>;
+}) => {
+  return (
+    <DropdownMenu open={showQueue} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 relative"
+        >
+          <MoreHorizontal className="w-5 h-5" />
+          {queue.length > 0 && (
+            <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+              {queue.length}
+            </span>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-96 max-h-[500px] overflow-hidden flex flex-col">
+        <div className="px-4 py-3 border-b">
+          <div className="text-sm font-semibold">Danh sách chờ</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            {queue.length} {queue.length === 1 ? 'bài hát' : 'bài hát'}
+          </div>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {queue.length === 0 ? (
+            <div className="px-4 py-8 text-sm text-muted-foreground text-center">
+              Danh sách chờ trống
+            </div>
+          ) : (
+            <div className="py-2">
+              {queue.map((song, index) => (
+                <QueueItem
+                  key={song.id}
+                  song={song}
+                  index={index}
+                  isCurrent={currentSong?.id === song.id}
+                  onPlay={() => {
+                    if (currentSong?.id !== song.id) {
+                      onPlaySong(song);
+                    }
+                  }}
+                  onRemove={async () => {
+                    await onRemoveFromQueue(song.id);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+});
+QueueMenu.displayName = 'QueueMenu';
+
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, queue, playNext, removeFromQueue } = useMusic();
+  const { currentSong, queue, playNext, playPrevious, removeFromQueue, playSong, repeatMode, isShuffled, toggleShuffle, setRepeatMode } = useMusic();
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -29,6 +396,7 @@ const MusicPlayer = () => {
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
 
   // Load and play stream from songID
   useEffect(() => {
@@ -60,19 +428,95 @@ const MusicPlayer = () => {
             variant: "destructive",
           });
           setIsLoading(false);
-          return;
-        }
+      return;
+    }
 
         // Gọi /play-now để lấy stream URL
-        const response = await apiClient.post(`/songs/${songId}/play-now`, {});
-        
-        if (response.data?.success === false || !response.data?.song?.uuid) {
-          toast({
-            title: "Lỗi",
-            description: "Không thể lấy stream URL.",
+        let response;
+        try {
+          response = await apiClient.post(`/songs/${songId}/play-now`, {});
+        } catch (error: unknown) {
+          // Xử lý lỗi 404 - không có UUID trên S3
+          const err = error as { 
+            response?: { 
+              status?: number; 
+              data?: { 
+                message?: string; 
+                error?: string;
+              } 
+            }; 
+            message?: string 
+          };
+          const errorMessage = err?.response?.data?.error 
+            || err?.response?.data?.message 
+            || err?.message 
+            || '';
+          
+          // Kiểm tra các loại lỗi liên quan đến HLS/stream
+          if (err?.response?.status === 404 || 
+              errorMessage.includes('HLS master playlist not found') ||
+              errorMessage.includes('missing uuid')) {
+            const songName = currentSong.title || currentSong.name || 'bài hát này';
+      toast({
+              title: "Không thể phát bài hát",
+              description: `Không thể phát ${songName} ngay lúc này. Đang chuyển sang bài tiếp theo...`,
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            setIsPlaying(false);
+            // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
+            await removeFromQueue(currentSong.id);
+            // Luôn cố gắng phát bài tiếp theo (playNext sẽ tự kiểm tra queue)
+            await playNext();
+      return;
+    }
+          
+          // Lỗi khác - báo lỗi chi tiết
+          const songName = currentSong.title || currentSong.name || 'bài hát này';
+          const detailedError = errorMessage || 'Không thể phát bài hát';
+    toast({
+            title: "Lỗi phát nhạc",
+            description: `Không thể phát ${songName}: ${detailedError}`,
             variant: "destructive",
           });
           setIsLoading(false);
+          setIsPlaying(false);
+          // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
+          await removeFromQueue(currentSong.id);
+          await playNext();
+      return;
+    }
+        
+        // Kiểm tra response có lỗi hoặc thiếu UUID
+        if (response.data?.success === false || !response.data?.song?.uuid) {
+          const errorMsg = response.data?.error || response.data?.message || '';
+          const songName = currentSong.title || currentSong.name || 'bài hát này';
+          
+          // Kiểm tra nếu là lỗi HLS/stream
+          if (errorMsg.includes('HLS master playlist not found') || 
+              errorMsg.includes('missing uuid')) {
+        toast({
+              title: "Không thể phát bài hát",
+              description: `Không thể phát ${songName} ngay lúc này. Đang chuyển sang bài tiếp theo...`,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+            setIsPlaying(false);
+            // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
+            await removeFromQueue(currentSong.id);
+            // Luôn cố gắng phát bài tiếp theo (playNext sẽ tự kiểm tra queue)
+            await playNext();
+            return;
+          }
+          
+          // Lỗi khác
+          toast({
+            title: "Không thể phát bài hát",
+            description: `Không thể phát ${songName} ngay lúc này.`,
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          setIsPlaying(false);
           return;
         }
 
@@ -89,14 +533,16 @@ const MusicPlayer = () => {
         if (!audioRef.current) {
           const audio = document.createElement('audio');
           audio.crossOrigin = 'anonymous';
+          audio.volume = volume; // Set volume khi tạo mới
           audioRef.current = audio;
         }
 
         const audio = audioRef.current;
         
-        // Reset audio
+        // Reset audio nhưng giữ volume
         audio.pause();
         audio.currentTime = 0;
+        audio.volume = volume; // Đảm bảo volume được giữ nguyên
         setCurrentTime(0);
         setIsPlaying(false);
 
@@ -120,22 +566,32 @@ const MusicPlayer = () => {
             if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
               setDuration(audio.duration);
             }
+            // Đảm bảo volume được set đúng
+            audio.volume = volume;
             // Auto play from beginning
             audio.currentTime = 0;
             audio.play().then(() => {
               setIsPlaying(true);
             }).catch((err) => {
               console.error('Play failed:', err);
+              setIsLoading(false);
+              setIsPlaying(false);
+                toast({
+                title: "Lỗi phát nhạc",
+                description: "Không thể phát bài hát. Vui lòng thử lại.",
+                  variant: "destructive",
+                });
             });
           });
 
           hls.on(Hls.Events.ERROR, (_, data) => {
             if (data.fatal) {
-              setIsLoading(false);
-              toast({
+                setIsLoading(false);
+              setIsPlaying(false);
+                toast({
                 title: "Lỗi phát nhạc",
                 description: "Không thể load stream.",
-                variant: "destructive",
+                  variant: "destructive",
               });
             }
           });
@@ -144,19 +600,29 @@ const MusicPlayer = () => {
         } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
           // Safari native HLS
           audio.src = streamUrl;
+          audio.volume = volume; // Đảm bảo volume được set đúng
           audio.load();
           audio.addEventListener('loadedmetadata', () => {
             setIsLoading(false);
             setDuration(audio.duration);
+            // Đảm bảo volume được set đúng
+            audio.volume = volume;
             audio.currentTime = 0;
             audio.play().then(() => {
               setIsPlaying(true);
             }).catch((err) => {
               console.error('Play failed:', err);
-            });
-          });
-        } else {
           setIsLoading(false);
+              setIsPlaying(false);
+          toast({
+                title: "Lỗi phát nhạc",
+                description: "Không thể phát bài hát. Vui lòng thử lại.",
+            variant: "destructive",
+          });
+          });
+        });
+      } else {
+        setIsLoading(false);
           toast({
             title: "Lỗi",
             description: "Trình duyệt không hỗ trợ HLS.",
@@ -176,6 +642,37 @@ const MusicPlayer = () => {
         const handleEnded = () => {
           setIsPlaying(false);
           setCurrentTime(0);
+          
+          // Xử lý khi bài hát kết thúc dựa trên repeatMode và shuffle
+          if (currentSong) {
+            if (repeatMode === "one") {
+              // Lặp lại bài hát hiện tại - không xóa khỏi queue
+              audio.currentTime = 0;
+              audio.play().then(() => {
+                setIsPlaying(true);
+              }).catch((err) => {
+                console.error('Play failed:', err);
+                setIsPlaying(false);
+                toast({
+                  title: "Lỗi phát nhạc",
+                  description: "Không thể lặp lại bài hát. Vui lòng thử lại.",
+                  variant: "destructive",
+                });
+              });
+            } else if (repeatMode === "all") {
+              // Giữ bài hát trong queue và chuyển sang bài tiếp theo
+              // playNext() sẽ tự xử lý việc quay lại bài đầu nếu hết queue
+              playNext();
+            } else {
+              // repeatMode === "off": 
+              // - Nếu shuffle: Xóa bài hiện tại và phát bài tiếp theo (ngẫu nhiên)
+              // - Nếu không shuffle: Xóa bài hiện tại và phát bài tiếp theo (theo thứ tự)
+              // playNext() sẽ tự xử lý việc kiểm tra queue và dừng nếu hết bài
+              removeFromQueue(currentSong.id).then(() => {
+                playNext();
+              });
+            }
+          }
         };
 
         const handlePlay = () => {
@@ -191,10 +688,9 @@ const MusicPlayer = () => {
         audio.addEventListener('ended', handleEnded);
         audio.addEventListener('play', handlePlay);
         audio.addEventListener('pause', handlePause);
-        audio.volume = volume;
-
-        // Return cleanup function
-        return () => {
+          
+          // Return cleanup function
+          return () => {
           audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
           audio.removeEventListener('timeupdate', handleTimeUpdate);
           audio.removeEventListener('ended', handleEnded);
@@ -204,11 +700,36 @@ const MusicPlayer = () => {
       } catch (error) {
         console.error("Failed to load stream:", error);
         setIsLoading(false);
-        toast({
-          title: "Lỗi",
-          description: "Không thể load stream.",
-          variant: "destructive",
-        });
+        setIsPlaying(false);
+        
+        // Lấy thông tin lỗi chi tiết
+        const err = error as { 
+          response?: { 
+            status?: number; 
+            data?: { 
+              message?: string; 
+              error?: string;
+            } 
+          }; 
+          message?: string 
+        };
+        const errorMessage = err?.response?.data?.error 
+          || err?.response?.data?.message 
+          || err?.message 
+          || 'Không thể load stream';
+        
+        const songName = currentSong?.title || currentSong?.name || 'bài hát này';
+            toast({
+          title: "Lỗi phát nhạc",
+          description: `Không thể phát ${songName}: ${errorMessage}`,
+              variant: "destructive",
+            });
+        
+        // Nếu có currentSong, xóa khỏi queue và chuyển sang bài tiếp theo
+        if (currentSong) {
+          await removeFromQueue(currentSong.id);
+          await playNext();
+        }
       }
     };
 
@@ -230,10 +751,18 @@ const MusicPlayer = () => {
         hlsRef.current = null;
       }
     };
-  }, [currentSong, volume]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSong]);
 
-  // Toggle play/pause
-  const handleTogglePlay = () => {
+  // Update volume separately to avoid reloading stream
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
+
+  // Toggle play/pause - useCallback để tránh re-render
+  const handleTogglePlay = useCallback(() => {
     if (!audioRef.current) return;
     
     if (isPlaying) {
@@ -241,27 +770,27 @@ const MusicPlayer = () => {
     } else {
       audioRef.current.play();
     }
-  };
+  }, [isPlaying]);
 
-  // Seek
-  const handleSeek = (value: number[]) => {
+  // Seek - useCallback để tránh re-render
+  const handleSeek = useCallback((value: number[]) => {
     if (!audioRef.current) return;
     const newTime = value[0];
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
-  };
+  }, []);
 
-  // Volume control
-  const handleVolumeChange = (value: number[]) => {
+  // Volume control - useCallback để tránh re-render
+  const handleVolumeChange = useCallback((value: number[]) => {
     const newVolume = value[0] / 100;
     setVolume(newVolume);
     if (audioRef.current) {
       audioRef.current.volume = newVolume;
     }
-  };
+  }, []);
 
-  // Toggle mute
-  const handleToggleMute = () => {
+  // Toggle mute - useCallback để tránh re-render
+  const handleToggleMute = useCallback(() => {
     if (!audioRef.current) return;
     if (isMuted) {
       audioRef.current.volume = volume;
@@ -270,15 +799,53 @@ const MusicPlayer = () => {
       audioRef.current.volume = 0;
       setIsMuted(true);
     }
-  };
+  }, [isMuted, volume]);
 
-  // Format time
-  const formatTime = (seconds: number): string => {
+  // Toggle shuffle - useCallback để tránh re-render
+  const handleToggleShuffle = useCallback(async () => {
+    console.log('[MusicPlayer] Toggle shuffle clicked, current state:', isShuffled);
+    await toggleShuffle();
+    console.log('[MusicPlayer] Shuffle toggled, new state:', !isShuffled);
+  }, [toggleShuffle, isShuffled]);
+
+  // Cycle repeat mode - useCallback để tránh re-render
+  const handleCycleRepeatMode = useCallback(async () => {
+    console.log('[MusicPlayer] Cycle repeat mode clicked, current mode:', repeatMode);
+    let newMode: "off" | "one" | "all";
+    if (repeatMode === "off") {
+      newMode = "all";
+    } else if (repeatMode === "all") {
+      newMode = "one";
+    } else {
+      newMode = "off";
+    }
+    console.log('[MusicPlayer] Setting repeat mode to:', newMode);
+    await setRepeatMode(newMode);
+    console.log('[MusicPlayer] Repeat mode set to:', newMode);
+  }, [repeatMode, setRepeatMode]);
+
+  // Format time - useMemo để cache kết quả
+  const formatTime = useCallback((seconds: number): string => {
     if (isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
+
+  // Memoize formatted times để tránh re-render
+  const formattedCurrentTime = useMemo(() => formatTime(currentTime), [currentTime, formatTime]);
+  const formattedDuration = useMemo(() => formatTime(duration), [duration, formatTime]);
+  const canGoPrevious = useMemo(() => repeatMode !== "off", [repeatMode]);
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log('[MusicPlayer] State updated:', {
+      isShuffled,
+      repeatMode,
+      isPlaying,
+      currentSong: currentSong?.title || currentSong?.name
+    });
+  }, [isShuffled, repeatMode, isPlaying, currentSong]);
 
   // Hide player on login page or if no song
   if (location.pathname === "/login" || !currentSong) {
@@ -286,87 +853,55 @@ const MusicPlayer = () => {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center gap-4">
-          {/* Song Info */}
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            {currentSong.cover && (
-              <img
-                src={currentSong.cover}
-                alt={currentSong.title || currentSong.name}
-                className="w-14 h-14 rounded object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/placeholder-music.png';
-                }}
-              />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="font-medium truncate">{currentSong.title || currentSong.name || 'Unknown Song'}</div>
-              <div className="text-sm text-muted-foreground truncate">
-                {currentSong.artist || 'Unknown Artist'}
-              </div>
-            </div>
+    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-50 w-full">
+      <div className="w-full px-4 py-3">
+        <div className="flex items-center justify-between gap-4 w-full">
+          {/* Song Info - Bên trái */}
+          <div className="flex-shrink-0">
+            <SongInfo song={currentSong} />
           </div>
 
-          {/* Controls */}
-          <div className="flex flex-col items-center gap-2 flex-1 max-w-2xl">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleTogglePlay}
-                disabled={isLoading}
-                className="rounded-full"
-              >
-                {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : isPlaying ? (
-                  <Pause className="w-5 h-5" />
-                ) : (
-                  <Play className="w-5 h-5" />
-                )}
-              </Button>
-            </div>
+          {/* Controls - Ở giữa */}
+          <div className="flex flex-col items-center gap-2 flex-1 max-w-2xl mx-auto">
+            <Controls
+              isPlaying={isPlaying}
+              isLoading={isLoading}
+              onTogglePlay={handleTogglePlay}
+              onPrevious={playPrevious}
+              onNext={playNext}
+              onToggleShuffle={handleToggleShuffle}
+              onCycleRepeatMode={handleCycleRepeatMode}
+              isShuffled={isShuffled}
+              repeatMode={repeatMode}
+              canGoPrevious={canGoPrevious}
+            />
 
             {/* Progress Bar */}
-            <div className="flex items-center gap-2 w-full">
-              <span className="text-xs text-muted-foreground min-w-[40px] text-right">
-                {formatTime(currentTime)}
-              </span>
-              <Slider
-                value={[currentTime]}
-                max={duration || 0}
-                step={0.1}
-                onValueChange={handleSeek}
-                className="flex-1"
-              />
-              <span className="text-xs text-muted-foreground min-w-[40px]">
-                {formatTime(duration)}
-              </span>
-            </div>
+            <ProgressBar
+              currentTime={currentTime}
+              duration={duration}
+              formattedCurrentTime={formattedCurrentTime}
+              formattedDuration={formattedDuration}
+              onSeek={handleSeek}
+            />
           </div>
 
-          {/* Volume */}
-          <div className="flex items-center gap-2 min-w-[120px]">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleToggleMute}
-              className="h-9 w-9"
-            >
-              {isMuted ? (
-                <VolumeX className="w-5 h-5" />
-              ) : (
-                <Volume2 className="w-5 h-5" />
-              )}
-            </Button>
-            <Slider
-              value={[volume * 100]}
-              max={100}
-              step={1}
-              onValueChange={handleVolumeChange}
-              className="flex-1"
+          {/* Volume và Queue - Bên phải */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <VolumeControl
+              volume={volume}
+              isMuted={isMuted}
+              onVolumeChange={handleVolumeChange}
+              onToggleMute={handleToggleMute}
+            />
+
+            <QueueMenu
+              queue={queue}
+              currentSong={currentSong}
+              showQueue={showQueue}
+              onOpenChange={setShowQueue}
+              onPlaySong={playSong}
+              onRemoveFromQueue={removeFromQueue}
             />
           </div>
         </div>
@@ -375,4 +910,4 @@ const MusicPlayer = () => {
   );
 };
 
-export default MusicPlayer;
+export default memo(MusicPlayer);

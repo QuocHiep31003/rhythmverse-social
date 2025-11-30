@@ -1002,98 +1002,88 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const playNext = useCallback(async () => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // Allow any device to control (sync controls), but only active device plays audio
-    // If no active device, request control
-    if (!activeDeviceId) {
-      await requestPlaybackControl();
+    // Xử lý next từ queue local - không gọi API
+    if (queue.length === 0) {
+      console.log('[MusicContext] Queue is empty, cannot play next');
+      setIsPlaying(false);
+      return;
     }
-    
-    try {
-      const result = await playbackApi.playNext(deviceIdRef.current);
-      console.log('[MusicContext] playNext API call successful:', result);
-      
-      // Update state từ response (vì Firebase listener đã tắt)
-      if (result) {
-        if (result.currentSongId) {
-          const loadedSong = await loadSongById(result.currentSongId);
-          if (loadedSong) {
-            console.log('[MusicContext] Setting currentSong from playNext:', loadedSong);
-            setCurrentSong(loadedSong);
-          }
+
+    const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
+    let nextIndex: number;
+
+    if (isShuffled) {
+      // Phát ngẫu nhiên
+      const availableSongs = queue.filter(s => s.id !== currentSong?.id);
+      if (availableSongs.length === 0) {
+        // Nếu chỉ còn 1 bài và repeatMode === "all", quay lại bài đầu
+        if (repeatMode === "all" && queue.length > 0) {
+          nextIndex = 0;
+        } else {
+          setIsPlaying(false);
+          return;
         }
-        if (result.isPlaying !== undefined) {
-          setIsPlaying(result.isPlaying);
-        }
-        if (result.activeDeviceId) {
-          setActiveDeviceId(result.activeDeviceId);
-          setActiveDeviceName(result.activeDeviceName || null);
-        }
-        // Update queue từ result nếu có
-        if (result.queue && result.queue.length > 0) {
-          const queueSongs = await Promise.all(
-            result.queue.map(id => loadSongById(id))
-          );
-          const validSongs = queueSongs.filter((s): s is Song => s !== null);
-          setQueueState(validSongs);
-        }
+      } else {
+        nextIndex = Math.floor(Math.random() * availableSongs.length);
+        const nextSong = availableSongs[nextIndex];
+        nextIndex = queue.findIndex(s => s.id === nextSong.id);
       }
-    } catch (error) {
-      console.error('[MusicContext] Failed to play next:', error);
-      toast({
-        title: "Lỗi",
-        description: "Không thể chuyển bài tiếp theo.",
-        variant: "destructive",
-      });
+    } else {
+      // Phát theo thứ tự
+      if (currentIndex === -1 || currentIndex === queue.length - 1) {
+        // Hết queue
+        if (repeatMode === "all") {
+          // Quay lại bài đầu
+          nextIndex = 0;
+        } else {
+          setIsPlaying(false);
+          return;
+        }
+      } else {
+        nextIndex = currentIndex + 1;
+      }
     }
-  }, [checkAuth, activeDeviceId, requestPlaybackControl, loadSongById]);
+
+    const nextSong = queue[nextIndex];
+    if (nextSong) {
+      console.log('[MusicContext] Playing next song from queue:', nextSong);
+      await playSong(nextSong, true);
+    } else {
+      setIsPlaying(false);
+    }
+  }, [checkAuth, queue, currentSong, isShuffled, repeatMode, playSong]);
   
   const playPrevious = useCallback(async () => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // Allow any device to control (sync controls), but only active device plays audio
-    // If no active device, request control
-    if (!activeDeviceId) {
-      await requestPlaybackControl();
+    // Xử lý previous từ queue local - không gọi API
+    if (queue.length === 0) {
+      console.log('[MusicContext] Queue is empty, cannot play previous');
+      return;
     }
-    
-    try {
-      const result = await playbackApi.playPrevious(deviceIdRef.current);
-      console.log('[MusicContext] playPrevious API call successful:', result);
-      
-      // Update state từ response (vì Firebase listener đã tắt)
-      if (result) {
-        if (result.currentSongId) {
-          const loadedSong = await loadSongById(result.currentSongId);
-          if (loadedSong) {
-            console.log('[MusicContext] Setting currentSong from playPrevious:', loadedSong);
-            setCurrentSong(loadedSong);
-          }
-        }
-        if (result.isPlaying !== undefined) {
-          setIsPlaying(result.isPlaying);
-        }
-        if (result.activeDeviceId) {
-          setActiveDeviceId(result.activeDeviceId);
-          setActiveDeviceName(result.activeDeviceName || null);
-        }
-        // Update queue từ result nếu có
-        if (result.queue && result.queue.length > 0) {
-          const queueSongs = await Promise.all(
-            result.queue.map(id => loadSongById(id))
-          );
-          const validSongs = queueSongs.filter((s): s is Song => s !== null);
-          setQueueState(validSongs);
-        }
+
+    const currentIndex = queue.findIndex(s => s.id === currentSong?.id);
+    let prevIndex: number;
+
+    if (currentIndex === -1 || currentIndex === 0) {
+      // Ở bài đầu hoặc không tìm thấy
+      if (repeatMode === "all") {
+        // Quay lại bài cuối
+        prevIndex = queue.length - 1;
+      } else {
+        // Không có bài trước
+        return;
       }
-    } catch (error) {
-      console.error('[MusicContext] Failed to play previous:', error);
-      toast({
-        title: "Lỗi",
-        description: "Không thể chuyển bài trước đó.",
-        variant: "destructive",
-      });
+    } else {
+      prevIndex = currentIndex - 1;
     }
-  }, [checkAuth, activeDeviceId, requestPlaybackControl, loadSongById]);
+
+    const prevSong = queue[prevIndex];
+    if (prevSong) {
+      console.log('[MusicContext] Playing previous song from queue:', prevSong);
+      await playSong(prevSong, true);
+    }
+  }, [checkAuth, queue, currentSong, repeatMode, playSong]);
   
   const setQueue = useCallback(async (songs: Song[]) => {
     if (!checkAuth() || !userIdRef.current) return;
@@ -1133,15 +1123,28 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       console.log('[MusicContext] ➕ Adding song to queue (sending only ID to backend):', songId);
       
       // Cache song locally để hiển thị ngay (optimistic update)
-      // Nhưng queue thực tế sẽ được sync từ Firebase và load metadata từ BE
       queueSongMapRef.current.set(songId, song);
+      
+      // Optimistic update: thêm vào queue state ngay lập tức
+      setQueueState(prev => {
+        // Kiểm tra xem bài hát đã có trong queue chưa
+        const existingIndex = prev.findIndex(s => String(s.id) === String(song.id));
+        if (existingIndex >= 0) {
+          // Nếu đã có, remove và add lại ở cuối
+          const newQueue = prev.filter(s => String(s.id) !== String(song.id));
+          return [...newQueue, song];
+        }
+        // Nếu chưa có, add vào cuối
+        return [...prev, song];
+      });
       
       // Send only ID to backend - backend stores only ID in Redis/Firebase
       await playbackApi.addToQueue(deviceIdRef.current, songId);
-      console.log('[MusicContext] ✅ Song ID sent to backend, will sync from Firebase and load metadata from BE');
-      // State will be updated via Firebase listener with ID, then we load song metadata from BE API
+      console.log('[MusicContext] ✅ Song ID sent to backend, queue updated optimistically');
     } catch (error) {
       console.error('[MusicContext] ❌ Failed to add to queue:', error);
+      // Rollback optimistic update nếu có lỗi
+      setQueueState(prev => prev.filter(s => String(s.id) !== String(song.id)));
     }
   }, [checkAuth]);
   
@@ -1176,34 +1179,44 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const toggleShuffle = useCallback(async () => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    if (activeDeviceId && activeDeviceId !== deviceIdRef.current) {
-      toast({
-        title: "Không thể điều khiển",
-        description: "Một thiết bị khác đang phát nhạc.",
-        variant: "warning",
-      });
-      return;
-    }
+    // Update state ngay lập tức (optimistic update)
+    const newShuffleState = !isShuffled;
+    setIsShuffled(newShuffleState);
     
     try {
-      await playbackApi.setShuffle(deviceIdRef.current, !isShuffled);
-      // State will be updated via Firebase listener
+      await playbackApi.setShuffle(deviceIdRef.current, newShuffleState);
     } catch (error) {
       console.error('[MusicContext] Failed to toggle shuffle:', error);
+      // Revert state nếu API call fail
+      setIsShuffled(!newShuffleState);
+      toast({
+        title: "Lỗi",
+        description: "Không thể thay đổi chế độ phát ngẫu nhiên.",
+        variant: "destructive",
+      });
     }
-  }, [checkAuth, activeDeviceId, isShuffled]);
+  }, [checkAuth, isShuffled]);
   
   const setRepeatMode = useCallback(async (mode: "off" | "one" | "all") => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // Any device can control (sync controls)
+    // Update state ngay lập tức (optimistic update)
+    const previousMode = repeatMode;
+    setRepeatModeState(mode);
+    
     try {
       await playbackApi.setRepeat(deviceIdRef.current, mode);
-      // State will be updated via Firebase listener
     } catch (error) {
       console.error('[MusicContext] Failed to set repeat mode:', error);
+      // Revert state nếu API call fail
+      setRepeatModeState(previousMode);
+      toast({
+        title: "Lỗi",
+        description: "Không thể thay đổi chế độ lặp lại.",
+        variant: "destructive",
+      });
     }
-  }, [checkAuth]);
+  }, [checkAuth, repeatMode]);
   
   const updatePosition = useCallback(async (positionMs: number, durationMs?: number) => {
     if (!checkAuth() || !userIdRef.current) return;
