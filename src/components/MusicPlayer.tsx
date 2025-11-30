@@ -364,9 +364,11 @@ const QueueMenu = memo(({
                   song={song}
                   index={index}
                   isCurrent={currentSong?.id === song.id}
-                  onPlay={() => {
+                  onPlay={async () => {
                     if (currentSong?.id !== song.id) {
-                      onPlaySong(song);
+                      // Khi click vào bài trong queue, dùng playSongWithStreamUrl để giữ nguyên queue
+                      const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                      await playSongWithStreamUrl(song, onPlaySong);
                     }
                   }}
                   onRemove={async () => {
@@ -385,7 +387,7 @@ QueueMenu.displayName = 'QueueMenu';
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, queue, playNext, playPrevious, removeFromQueue, playSong, repeatMode, isShuffled, toggleShuffle, setRepeatMode } = useMusic();
+  const { currentSong, queue, playNext, playPrevious, removeFromQueue, playSong, repeatMode, isShuffled, toggleShuffle, setRepeatMode, togglePlay, updatePosition } = useMusic();
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -397,6 +399,105 @@ const MusicPlayer = () => {
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
+  const [isTabActive, setIsTabActive] = useState(true);
+  const channelRef = useRef<BroadcastChannel | null>(null);
+
+  // Detect tab visibility (khi chuyển tab browser)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsTabActive(!document.hidden);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    setIsTabActive(!document.hidden);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // Setup BroadcastChannel để nhận commands từ MiniPlayer và gửi state updates
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.BroadcastChannel) {
+      return;
+    }
+
+    // Chỉ setup khi là tab chính (có thể phát nhạc)
+    const isMainTab = location.pathname !== "/login";
+    if (!isMainTab || !currentSong) {
+      return;
+    }
+
+    const channel = new BroadcastChannel("player");
+    channelRef.current = channel;
+
+    // Lắng nghe commands từ MiniPlayer
+    channel.onmessage = async (event) => {
+      const data = event.data;
+      console.log('[MusicPlayer] Nhận được message từ BroadcastChannel:', data);
+      
+      if (data.type === "PLAYER_CONTROL") {
+        console.log('[MusicPlayer] Xử lý command:', data.action);
+        try {
+          switch (data.action) {
+            case "togglePlay":
+              console.log('[MusicPlayer] Gọi togglePlay');
+              await togglePlay();
+              break;
+            case "next":
+              console.log('[MusicPlayer] Gọi playNext');
+              await playNext();
+              break;
+            case "previous":
+              console.log('[MusicPlayer] Gọi playPrevious');
+              await playPrevious();
+              break;
+            case "seek":
+              console.log('[MusicPlayer] Gọi seek:', data.position);
+              if (data.position !== undefined && audioRef.current) {
+                // Seek trực tiếp trên audio element
+                audioRef.current.currentTime = data.position / 1000; // Convert từ milliseconds sang seconds
+                setCurrentTime(data.position / 1000);
+                // Cập nhật position trong context
+                await updatePosition(data.position);
+              }
+              break;
+          }
+        } catch (error) {
+          console.error('[MusicPlayer] Lỗi khi xử lý command:', error);
+        }
+      }
+    };
+
+    // Gửi state updates định kỳ (ngay cả khi tab không active)
+    const sendStateUpdate = () => {
+      if (currentSong && currentTime >= 0 && duration > 0) {
+        channel.postMessage({
+          type: "PLAYER_STATE_UPDATE",
+          songId: currentSong.id,
+          currentTime: currentTime, // Đã là seconds rồi
+          duration: duration, // Đã là seconds rồi
+          isPlaying: isPlaying,
+          songTitle: currentSong.title || currentSong.name || currentSong.songName,
+          songArtist: currentSong.artist,
+          songCover: currentSong.cover,
+        });
+      }
+    };
+
+    // Gửi update ngay lập tức
+    sendStateUpdate();
+
+    // Gửi update định kỳ (mỗi giây)
+    const interval = setInterval(sendStateUpdate, 1000);
+
+    return () => {
+      clearInterval(interval);
+      if (channelRef.current) {
+        channelRef.current.close();
+      }
+    };
+  }, [togglePlay, playNext, playPrevious, location.pathname, currentSong, currentTime, duration, isPlaying]);
 
   // Load and play stream from songID
   useEffect(() => {
@@ -639,7 +740,7 @@ const MusicPlayer = () => {
           setCurrentTime(audio.currentTime);
         };
 
-        const handleEnded = () => {
+        const handleEnded = async () => {
           setIsPlaying(false);
           setCurrentTime(0);
           
@@ -660,17 +761,28 @@ const MusicPlayer = () => {
                 });
               });
             } else if (repeatMode === "all") {
-              // Giữ bài hát trong queue và chuyển sang bài tiếp theo
-              // playNext() sẽ tự xử lý việc quay lại bài đầu nếu hết queue
-              playNext();
+              // repeatMode === "all": Phát bài tiếp theo, quay lại bài đầu nếu hết queue
+              await playNext();
             } else {
-              // repeatMode === "off": 
-              // - Nếu shuffle: Xóa bài hiện tại và phát bài tiếp theo (ngẫu nhiên)
-              // - Nếu không shuffle: Xóa bài hiện tại và phát bài tiếp theo (theo thứ tự)
-              // playNext() sẽ tự xử lý việc kiểm tra queue và dừng nếu hết bài
-              removeFromQueue(currentSong.id).then(() => {
-                playNext();
-              });
+              // repeatMode === "off": Phát bài tiếp theo (nếu có) và xóa bài hiện tại
+              const currentSongId = currentSong.id;
+              
+              console.log('[MusicPlayer] Song ended, repeatMode is off, playing next song and removing current:', currentSongId);
+              
+              // Gọi playNext() để phát bài tiếp theo (nếu có trong queue)
+              // playNext() sẽ tự dừng nếu hết queue
+              await playNext();
+              
+              // Xóa bài hiện tại khỏi queue sau khi đã chuyển sang bài tiếp theo
+              // Sử dụng setTimeout để đảm bảo playNext() đã hoàn thành và currentSong đã được set mới
+              setTimeout(async () => {
+                // Chỉ xóa nếu bài hát vẫn còn trong queue (tránh xóa nhầm bài mới)
+                // Kiểm tra xem currentSong đã thay đổi chưa
+                if (currentSongId) {
+                  console.log('[MusicPlayer] Removing previous song from queue:', currentSongId);
+                  await removeFromQueue(currentSongId);
+                }
+              }, 300);
             }
           }
         };
@@ -847,8 +959,8 @@ const MusicPlayer = () => {
     });
   }, [isShuffled, repeatMode, isPlaying, currentSong]);
 
-  // Hide player on login page or if no song
-  if (location.pathname === "/login" || !currentSong) {
+  // Hide player on login page, if no song, or if tab is not active (MiniPlayer will show instead)
+  if (location.pathname === "/login" || !currentSong || !isTabActive) {
     return null;
   }
 

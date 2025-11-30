@@ -165,6 +165,22 @@ const Top100 = () => {
   }, []);
 
   const handlePlaySong = async (song: TopSong) => {
+    // Format toàn bộ 100 bài thành Song[] để set vào queue
+    const allSongs: Song[] = topSongs.map((s) => ({
+      id: String(s.id),
+      name: s.name || s.songName,
+      songName: s.songName,
+      artist: s.artist,
+      album: s.album,
+      duration: s.duration,
+      cover: s.cover,
+      audioUrl: s.audioUrl,
+    }));
+
+    // Set queue với toàn bộ 100 bài của Top 100
+    await setQueue(allSongs);
+    
+    // Format bài hát được chọn
     const formattedSong: Song = {
       id: String(song.id),
       name: song.name || song.songName,
@@ -176,7 +192,8 @@ const Top100 = () => {
       audioUrl: song.audioUrl,
     };
 
-    // Chỉ phát bài này, không set queue (giữ nguyên queue hiện tại)
+    // Phát bài hát được chọn - KHÔNG truyền setQueue để tránh override queue 100 bài
+    // playSongWithStreamUrl sẽ không set queue nếu không có setQueue parameter
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
     await playSongWithStreamUrl(formattedSong, playSong);
     toast({ title: `Playing ${song.name || song.songName || "Unknown Song"}` });

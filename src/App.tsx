@@ -27,6 +27,7 @@ import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
 import MusicPlayer from "./components/MusicPlayer";
+import MiniPlayer from "./components/MiniPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
@@ -148,6 +149,7 @@ const App = () => (
             </Routes>
 
             <MusicPlayer />
+            <MiniPlayer />
 
             {(() => {
               try {
