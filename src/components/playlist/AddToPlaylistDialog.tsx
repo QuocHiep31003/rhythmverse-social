@@ -17,6 +17,8 @@ interface AddToPlaylistDialogProps {
   songId: number | string;
   songTitle?: string;
   songCover?: string;
+  onSuccess?: (playlistId?: number) => void;
+  currentPlaylistId?: number;
 }
 
 export const AddToPlaylistDialog = ({
@@ -25,6 +27,8 @@ export const AddToPlaylistDialog = ({
   songId,
   songTitle,
   songCover,
+  onSuccess,
+  currentPlaylistId,
 }: AddToPlaylistDialogProps) => {
   const navigate = useNavigate();
   const [playlists, setPlaylists] = useState<PlaylistLibraryItemDTO[]>([]);
@@ -111,6 +115,10 @@ export const AddToPlaylistDialog = ({
         description: `"${songTitle || "Bài hát"}" đã được thêm vào playlist`,
       });
       onOpenChange(false);
+      // Call onSuccess callback to refresh data
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Không thể thêm bài hát vào playlist";
       toast({
@@ -177,6 +185,10 @@ export const AddToPlaylistDialog = ({
       });
 
       onOpenChange(false);
+      // Call onSuccess callback to refresh data
+      if (onSuccess) {
+        onSuccess(newPlaylist.id);
+      }
       // Navigate to the new playlist
       navigate(`/playlist/${createSlug(newPlaylist.name, newPlaylist.id)}`);
     } catch (error: any) {

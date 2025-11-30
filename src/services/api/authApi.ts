@@ -152,6 +152,60 @@ export const authApi = {
 
         return await response.json();
     },
+
+    /**
+     * OAuth2 login with Google (for mobile apps)
+     * Mobile app should get access token from Google SDK and send it here
+     * 
+     * @param data OAuth2TokenRequest containing Google access token
+     * @returns AuthResponse with JWT token and user info
+     */
+    loginWithGoogle: async (data: { accessToken: string; rememberMe?: boolean }) => {
+        const response = await fetch(`${API_BASE_URL}/auth/oauth2/google`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                accessToken: data.accessToken,
+                rememberMe: data.rememberMe || false,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || error.error || 'Google login failed');
+        }
+
+        return await response.json();
+    },
+
+    /**
+     * OAuth2 login with Facebook (for mobile apps)
+     * Mobile app should get access token from Facebook SDK and send it here
+     * 
+     * @param data OAuth2TokenRequest containing Facebook access token
+     * @returns AuthResponse with JWT token and user info
+     */
+    loginWithFacebook: async (data: { accessToken: string; rememberMe?: boolean }) => {
+        const response = await fetch(`${API_BASE_URL}/auth/oauth2/facebook`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                accessToken: data.accessToken,
+                rememberMe: data.rememberMe || false,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || error.error || 'Facebook login failed');
+        }
+
+        return await response.json();
+    },
 };
 
 export default authApi;

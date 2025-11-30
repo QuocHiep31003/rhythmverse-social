@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Music, Play } from "lucide-react";
 import { DEFAULT_ARTIST_NAME } from "@/utils/socialUtils";
 import { cn } from "@/lib/utils";
+import { toSeconds, formatTotal } from "@/utils/playlistUtils";
 
 /* ---------- WRAPPER ---------- */
 export const SharedContentWrapper = ({
@@ -81,9 +82,10 @@ type SharedPlaylist = {
   cover?: string | null;
   ownerName?: string | null;
   totalSongs?: number | null;
-  songs?: Array<{ id?: string | number }>;
+  songs?: Array<{ id?: string | number; duration?: string | number | null; length?: string | number | null; durationMs?: number | null }>;
   songCount?: number | null;
   songIds?: Array<string | number>;
+  totalDuration?: string | null;
 };
 
 interface SharedPlaylistCardProps {
@@ -107,13 +109,40 @@ export const SharedPlaylistCard = ({
 
   const title = loading ? "Loading…" : playlist?.name || "Shared playlist";
   const ownerLabel = playlist?.ownerName || sharedBy || (isSentByMe ? "You" : "Friend");
-  const count =
-    playlist?.totalSongs ??
-    playlist?.songs?.length ??
+  
+  // Get songCount from multiple sources - same logic as PlaylistLibrary.tsx
+  // Ưu tiên songCount/totalSongs từ API, sau đó fallback về songs.length hoặc songIds.length
+  const rawSongCount =
     playlist?.songCount ??
-    playlist?.songIds?.length ??
-    0;
-  const subtitle = `Playlist · ${ownerLabel} · ${count} ${count === 1 ? "item" : "items"}`;
+    playlist?.totalSongs ??
+    null;
+  const count =
+    typeof rawSongCount === 'number' && Number.isFinite(rawSongCount) && rawSongCount >= 0
+      ? rawSongCount
+      : (Array.isArray(playlist?.songs) && playlist.songs.length > 0
+        ? playlist.songs.length
+        : (Array.isArray(playlist?.songIds) && playlist.songIds.length > 0
+          ? playlist.songIds.length
+          : 0));
+  
+  // Calculate totalDuration from songs if available
+  const calculatedDuration = playlist?.songs && Array.isArray(playlist.songs) && playlist.songs.length > 0
+    ? (() => {
+        const totalSeconds = playlist.songs.reduce((acc, song) => {
+          const duration = song.duration ?? song.length ?? song.durationMs;
+          if (duration) {
+            const seconds = toSeconds(duration);
+            return acc + seconds;
+          }
+          return acc;
+        }, 0);
+        return totalSeconds > 0 ? formatTotal(totalSeconds) : null;
+      })()
+    : null;
+  
+  const duration = playlist?.totalDuration ?? calculatedDuration ?? null;
+  const durationText = duration ? ` · ${duration}` : "";
+  const subtitle = `Playlist · ${ownerLabel} · ${count} ${count === 1 ? "song" : "songs"}${durationText}`;
 
   return (
     <SharedContentWrapper isSentByMe={isSentByMe}>
@@ -132,11 +161,16 @@ export const SharedPlaylistCard = ({
 
 /* ---------- ALBUM CARD ---------- */
 type SharedAlbum = {
+  id?: number;
   name?: string;
   coverUrl?: string | null;
   artistName?: string | null;
   releaseYear?: string | number | null;
   releaseDateLabel?: string | null;
+  songCount?: number | null;
+  totalSongs?: number | null;
+  songs?: Array<{ id?: string | number; duration?: string | number | null; length?: string | number | null; durationMs?: number | null }>;
+  totalDuration?: string | null;
 };
 
 interface SharedAlbumCardProps {
@@ -156,7 +190,32 @@ export const SharedAlbumCard = ({
 
   const artist = album.artistName || DEFAULT_ARTIST_NAME;
   const release = album.releaseYear ?? album.releaseDateLabel ?? "";
-  const subtitle = `Album · ${artist}${release ? ` · ${release}` : ""}`;
+  
+  const count =
+    album?.songCount ??
+    album?.totalSongs ??
+    album?.songs?.length ??
+    0;
+  
+  // Calculate totalDuration from songs if available
+  const calculatedDuration = album?.songs && Array.isArray(album.songs) && album.songs.length > 0
+    ? (() => {
+        const totalSeconds = album.songs.reduce((acc, song) => {
+          const duration = song.duration ?? song.length ?? song.durationMs;
+          if (duration) {
+            const seconds = toSeconds(duration);
+            return acc + seconds;
+          }
+          return acc;
+        }, 0);
+        return totalSeconds > 0 ? formatTotal(totalSeconds) : null;
+      })()
+    : null;
+  
+  const duration = album?.totalDuration ?? calculatedDuration ?? null;
+  const durationText = duration ? ` · ${duration}` : "";
+  const countText = count > 0 ? ` · ${count} ${count === 1 ? "song" : "songs"}` : "";
+  const subtitle = `Album · ${artist}${release ? ` · ${release}` : ""}${countText}${durationText}`;
 
   return (
     <SharedContentWrapper isSentByMe={isSentByMe}>
@@ -175,10 +234,13 @@ export const SharedAlbumCard = ({
 
 /* ---------- SONG CARD ---------- */
 type SharedSong = {
+  id?: number;
   name?: string;
   coverUrl?: string | null;
-  artists?: string[];
+  artists?: string[] | Array<string | { name?: string }>;
+  artist?: string;
   durationLabel?: string;
+  audioUrl?: string | null;
 };
 
 interface SharedSongCardProps {
@@ -199,17 +261,24 @@ export const SharedSongCard = ({
   if (!song) return null;
   const go = () => _link && navigate(_link);
 
+  // Extract artist name similar to FavoriteSongs.tsx
+  // Ưu tiên artist string, sau đó artists array
+  const artistName = (song as { artist?: string }).artist 
+    || (Array.isArray(song.artists) && song.artists.length > 0
+      ? song.artists.map(a => typeof a === 'string' ? a : (a as { name?: string }).name || '').filter(Boolean).join(", ")
+      : DEFAULT_ARTIST_NAME);
+
   return (
     <SharedContentWrapper isSentByMe={isSentByMe}>
       <div
-        onClick={go}
         className="flex items-center w-full rounded-xl
         border border-white/20 bg-white/5
         shadow-[0_6px_20px_rgba(91,33,182,0.25)]
-        hover:scale-[1.02] transition-all duration-300 cursor-pointer p-2 sm:p-3"
+        hover:bg-white/10 hover:shadow-[0_8px_24px_rgba(91,33,182,0.35)]
+        transition-all duration-300 p-3"
       >
         {/* Ảnh bài hát */}
-        <div className="h-[55px] w-[55px] flex-shrink-0 rounded-lg overflow-hidden bg-white/10">
+        <div className="h-14 w-14 flex-shrink-0 rounded-lg overflow-hidden bg-white/10">
           {song.coverUrl ? (
             <img
               src={song.coverUrl}
@@ -218,36 +287,41 @@ export const SharedSongCard = ({
             />
           ) : (
             <div className="flex items-center justify-center h-full bg-gradient-to-br from-purple-700 to-indigo-800">
-              <Music className="w-4 h-4 text-white/60" />
+              <Music className="w-5 h-5 text-white/60" />
             </div>
           )}
         </div>
 
         {/* Nội dung bài hát */}
         <div className="flex-1 min-w-0 px-3 text-left">
-          <p className="font-medium text-[13px] text-white leading-snug break-words whitespace-normal">
-            {song.name}
+          <p className="font-medium text-sm text-white leading-tight line-clamp-2">
+            {song.name || "Unknown Song"}
           </p>
-          <p className="text-[11px] text-white/70 truncate">
-            {song.artists?.join(", ") || DEFAULT_ARTIST_NAME}
+          <p className="text-xs text-white/70 truncate mt-0.5">
+            {artistName}
           </p>
           {song.durationLabel && (
-            <p className="text-[10px] text-white/50">{song.durationLabel}</p>
+            <p className="text-[10px] text-white/50 mt-0.5">{song.durationLabel}</p>
           )}
         </div>
 
         {/* Nút Play */}
         <button
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             onPlay();
           }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
           aria-label="Play song"
-          className="flex items-center justify-center flex-shrink-0 h-8 w-8 rounded-full 
-          bg-white/25 border border-white/30 hover:bg-white/35 
-          shadow-[0_0_10px_rgba(255,255,255,0.25)] transition-all"
+          className="flex items-center justify-center flex-shrink-0 h-9 w-9 rounded-full 
+          bg-white/25 border border-white/30 hover:bg-white/35 active:bg-white/45
+          shadow-[0_0_10px_rgba(255,255,255,0.25)] transition-all ml-2 cursor-pointer z-10"
         >
-          <Play className="w-3.5 h-3.5 text-white" />
+          <Play className="w-4 h-4 text-white" />
         </button>
       </div>
     </SharedContentWrapper>

@@ -18,6 +18,11 @@ export function normalizeArtistName(artist: unknown): string {
 }
 
 export const extractArtistNames = (artists: unknown): string[] => {
+  // Handle string (BE trả về từ FirebaseChatService)
+  if (typeof artists === "string" && artists.trim()) {
+    return artists.split(',').map(a => a.trim()).filter(Boolean);
+  }
+  // Handle array
   if (!Array.isArray(artists)) return [];
   return artists
     .map((artist) => {
