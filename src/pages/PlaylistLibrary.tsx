@@ -34,6 +34,72 @@ import { PlaylistCard } from "@/components/playlist/PlaylistCard";
 import { favoritesApi, FavoriteSongDTO, FavoritePlaylistDTO, FavoriteAlbumDTO, FavoriteError } from "@/services/api/favoritesApi";
 import { AlbumCard } from "@/components/AlbumCard";
 import { useFavoriteAlbum, useFavoritePlaylist } from "@/hooks/useFavorites";
+import { HorizontalScrollableCards } from "@/components/HorizontalScrollableCards";
+
+const FavoriteAlbumCardInline = ({
+  album,
+  onRemove,
+}: {
+  album: FavoriteAlbumDTO;
+  onRemove: () => void;
+}) => {
+  const albumNumericId = useMemo(() => {
+    if (typeof album.id === "number" && Number.isFinite(album.id)) return album.id;
+    if (typeof album.id === "string") {
+      const parsed = Number(album.id);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  }, [album.id]);
+  
+  const favoriteHook = useFavoriteAlbum(albumNumericId, { disableToast: false });
+  
+  useEffect(() => {
+    if (albumNumericId) {
+      favoriteHook.setFavoriteLocally(true);
+    }
+  }, [albumNumericId, favoriteHook]);
+  
+  const handleToggleFavorite = useCallback(async () => {
+    if (!albumNumericId) return;
+    const wasFavorite = favoriteHook.isFavorite;
+    const success = await favoriteHook.toggleFavorite();
+    if (wasFavorite && success) {
+      onRemove();
+    }
+  }, [albumNumericId, favoriteHook, onRemove]);
+  
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
+  };
+  
+  return (
+    <AlbumCard
+      album={{
+        id: album.id,
+        name: album.name,
+        artist: album.artist,
+        artistName: typeof album.artist === "string" 
+          ? album.artist 
+          : album.artist?.name || album.artistName || "Unknown Artist",
+        coverUrl: album.coverUrl,
+        songCount: album.songCount,
+        totalDuration: album.totalDuration,
+        likes: album.likes,
+        releaseDate: album.releaseDate,
+        releaseYear: album.releaseDate ? new Date(album.releaseDate).getFullYear() : undefined,
+      }}
+      formatNumber={formatNumber}
+      favoriteState={{
+        isFavorite: favoriteHook.isFavorite,
+        pending: favoriteHook.pending,
+        onToggle: handleToggleFavorite,
+      }}
+    />
+  );
+};
 
 const toPlaylistItemFromFavorite = (dto: FavoritePlaylistDTO): PlaylistItem => {
   const cover =
@@ -140,68 +206,6 @@ const PlaylistCardWithFavoriteInLibrary = ({
   );
 };
 
-const FavoriteAlbumCard = ({
-  album,
-  onRemove,
-}: {
-  album: FavoriteAlbumDTO;
-  onRemove: () => void;
-}) => {
-  const albumNumericId = useMemo(() => {
-    if (typeof album.id === "number" && Number.isFinite(album.id)) return album.id;
-    if (typeof album.id === "string") {
-      const parsed = Number(album.id);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-    return undefined;
-  }, [album.id]);
-  
-  const favoriteHook = useFavoriteAlbum(albumNumericId, { disableToast: false });
-  
-  // Đảm bảo card hiển thị là đã thích ngay khi render danh sách
-  useEffect(() => {
-    if (albumNumericId) {
-      favoriteHook.setFavoriteLocally(true);
-    }
-  }, [albumNumericId, favoriteHook]);
-  
-  const handleToggleFavorite = useCallback(async () => {
-    if (!albumNumericId) return;
-    const wasFavorite = favoriteHook.isFavorite;
-    const success = await favoriteHook.toggleFavorite();
-    if (wasFavorite && success) {
-      onRemove();
-    }
-  }, [albumNumericId, favoriteHook, onRemove]);
-  
-  const formatNumber = (num: number) => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
-  };
-  
-  return (
-    <AlbumCard
-      album={{
-        id: album.id,
-        name: album.name,
-        artistName: album.artistName,
-        coverUrl: album.coverUrl,
-        songCount: album.songCount,
-        totalDuration: album.totalDuration,
-        likes: album.likes,
-        releaseDate: album.releaseDate,
-        releaseYear: album.releaseDate ? new Date(album.releaseDate).getFullYear() : undefined,
-      }}
-      formatNumber={formatNumber}
-      favoriteState={{
-        isFavorite: favoriteHook.isFavorite,
-        pending: favoriteHook.pending,
-        onToggle: handleToggleFavorite,
-      }}
-    />
-  );
-};
 
 const PlaylistLibrary = () => {
   const navigate = useNavigate();
@@ -564,7 +568,8 @@ const PlaylistLibrary = () => {
           : songsRes.content?.length ?? 0
       );
       setFavoritePlaylists(playlistsRes.content ?? []);
-      setFavoriteAlbums(albumsRes.content ?? []);
+      const albums = albumsRes.content ?? [];
+      setFavoriteAlbums(albums);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Không thể tải danh sách yêu thích";
       setFavoritesError(message);
@@ -946,7 +951,7 @@ const PlaylistLibrary = () => {
             <div className="space-y-8">
               <div className="relative flex flex-col md:flex-row items-center gap-6 rounded-2xl border border-pink-500/30 bg-gradient-to-r from-pink-500/10 via-pink-500/5 to-transparent p-6 shadow-lg">
                 <div className="flex-1 w-full">
-                  <p className="text-xs uppercase tracking-[0.2em] text-pink-300/80">Pinned</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-pink-300/80">Liked songs</p>
                   <h3 className="mt-1 text-3xl font-semibold text-foreground">Favorie hub</h3>
                   <p className="mt-2 text-sm text-muted-foreground">
                     {favoriteSongsTotal
@@ -1067,24 +1072,23 @@ const PlaylistLibrary = () => {
                     <p className="text-sm">Lưu album để chúng xuất hiện tại đây.</p>
                   </div>
                 ) : (
-                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-custom snap-x snap-mandatory">
-                    {favoriteAlbums.map((album) => (
-                  <div
-                    key={album.id}
-                    className="snap-start min-w-[240px] max-w-[260px]"
-                  >
-                        <FavoriteAlbumCard
-                          album={album}
-                          onRemove={() => {
-                            const idKey = String(album.id);
-                            setFavoriteAlbums((prev) =>
-                              prev.filter((a) => String(a.id) !== idKey)
-                            );
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
+                  <HorizontalScrollableCards
+                    items={favoriteAlbums}
+                    itemWidth={240}
+                    gap={16}
+                    itemsPerView={4}
+                    renderItem={(album) => (
+                      <FavoriteAlbumCardInline
+                        album={album}
+                        onRemove={() => {
+                          const idKey = String(album.id);
+                          setFavoriteAlbums((prev) =>
+                            prev.filter((a) => String(a.id) !== idKey)
+                          );
+                        }}
+                      />
+                    )}
+                  />
                 )}
               </section>
             </div>

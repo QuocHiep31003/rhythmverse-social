@@ -137,12 +137,12 @@ const AlbumSongRow = ({
 
   return (
     <div
-      className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
+      className={`grid grid-cols-[56px_minmax(0,1fr)_130px_110px_120px] md:grid-cols-[72px_minmax(0,1fr)_180px_130px_140px]
         items-center gap-3 px-6 py-3 cursor-pointer transition-colors
         ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}
       onClick={onPlay}
     >
-      <div className="flex justify-center">
+      <div className="flex justify-center items-center">
         {active ? (
           isPlaying ? (
             <span className="flex gap-0.5 h-4 items-end">
@@ -167,13 +167,13 @@ const AlbumSongRow = ({
         </div>
       </div>
 
-      <div className="hidden sm:flex justify-center text-sm">
+      <div className="hidden sm:flex items-center justify-center text-sm w-full">
         {releaseDate ? new Date(releaseDate).toLocaleDateString() : "—"}
       </div>
-      <div className="flex justify-center text-sm">
+      <div className="flex items-center justify-center text-sm w-full">
         {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : "-"}
       </div>
-      <div className="flex justify-center gap-2">
+      <div className="flex items-center justify-center gap-2 w-full">
         <Button
           size="icon"
           variant="ghost"
@@ -498,9 +498,6 @@ const AlbumDetail = () => {
               <Shuffle className="w-4 h-4" />
               Ngẫu nhiên
             </Button>
-            <Button variant="ghost" className="text-white/80 hover:text-white" onClick={() => navigate("/albums")}>
-              Về thư viện
-            </Button>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -546,12 +543,12 @@ const AlbumDetail = () => {
       <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
         <Card className="border-white/10 bg-black/40 backdrop-blur">
           <CardContent className="p-0">
-            <div className="grid grid-cols-[56px_minmax(0,1fr)_130px_110px_120px] md:grid-cols-[72px_minmax(0,1fr)_180px_130px_140px] px-6 py-3 text-xs uppercase text-white/70 border-b border-border">
-              <div className="text-center">#</div>
-              <div>Title</div>
-              <div className="hidden sm:block text-center">Released</div>
-              <div className="text-center">Duration</div>
-              <div className="text-center">Actions</div>
+            <div className="grid grid-cols-[56px_minmax(0,1fr)_130px_110px_120px] md:grid-cols-[72px_minmax(0,1fr)_180px_130px_140px] px-6 py-3 gap-3 text-xs uppercase text-white/70 border-b border-border items-center">
+              <div className="flex justify-center items-center">#</div>
+              <div className="flex items-center">Title</div>
+              <div className="hidden sm:flex items-center justify-center w-full">Released</div>
+              <div className="flex items-center justify-center w-full">Duration</div>
+              <div className="flex items-center justify-center w-full">Actions</div>
             </div>
 
             {songs.length ? (

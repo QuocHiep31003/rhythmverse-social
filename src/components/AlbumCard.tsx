@@ -96,8 +96,7 @@ export const AlbumCard = ({ album, onPlay, formatNumber, favoriteState }: AlbumC
   return (
     <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
       <CardContent className="p-0">
-        <div className="relative aspect-square">
-          <Link to={albumUrl}>
+        <div className="relative aspect-square group/cover">
             {cover ? (
               <img
                 src={cover}
@@ -109,11 +108,10 @@ export const AlbumCard = ({ album, onPlay, formatNumber, favoriteState }: AlbumC
                 <Music className="w-16 h-16 text-white/80" />
               </div>
             )}
-          </Link>
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
             <Button
               size="icon"
-              className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90"
+              className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90 pointer-events-auto"
               onClick={handlePlay}
             >
               <Play className="w-8 h-8" />
