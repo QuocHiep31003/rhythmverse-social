@@ -37,7 +37,7 @@ const AdminPromotions = () => {
       setTotalElements((res as any).totalElements || 0);
       setTotalPages((res as any).totalPages || 0);
     } catch (e) {
-      toast.error("Không thể tải promotions");
+      toast.error("Unable to load banners");
     } finally {
       setLoading(false);
     }
@@ -120,7 +120,7 @@ const AdminPromotions = () => {
       setDeleteOpen(false);
       load();
     } catch (e) {
-      toast.error("Xoá thất bại");
+      toast.error("Delete failed");
     } finally {
       setSubmitting(false);
     }
@@ -135,7 +135,7 @@ const AdminPromotions = () => {
       setSelectedIds([]);
       load();
     } catch (e) {
-      toast.error("Xoá thất bại");
+      toast.error("Delete failed");
     } finally {
       setSubmitting(false);
     }
@@ -159,7 +159,7 @@ const AdminPromotions = () => {
       toast.success(msg || "Banners imported successfully");
       load();
     } catch (err: any) {
-      toast.error(err?.message || "Import thất bại");
+      toast.error(err?.message || "Import failed");
     } finally {
       setImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -226,7 +226,7 @@ const AdminPromotions = () => {
                     <option value={10}>10</option>
                     <option value={20}>20</option>
                   </select>
-                  <span className="text-sm text-muted-foreground">mỗi trang</span>
+                  <span className="text-sm text-muted-foreground">per page</span>
                 </div>
               </div>
             </div>
@@ -244,13 +244,13 @@ const AdminPromotions = () => {
                     <TableHead className="w-10">
                       <input type="checkbox" checked={allSelected} onChange={(e) => toggleSelectAll(e.target.checked)} />
                     </TableHead>
-                    <TableHead className="w-16">STT</TableHead>
-                    <TableHead className="w-24">Ảnh</TableHead>
-                    <TableHead>Tiêu đề</TableHead>
-                    <TableHead>Phụ đề</TableHead>
-                    <TableHead className="w-28 text-center">Trạng thái</TableHead>
+                    <TableHead className="w-16">No.</TableHead>
+                    <TableHead className="w-24">Image</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Subtitle</TableHead>
+                    <TableHead className="w-28 text-center">Status</TableHead>
                     <TableHead className="w-28 text-center">Active</TableHead>
-                    <TableHead className="w-28 text-right">Hành động</TableHead>
+                    <TableHead className="w-28 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

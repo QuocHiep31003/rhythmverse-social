@@ -762,7 +762,7 @@ const TopBar = () => {
               className="border-primary text-primary"
               onClick={() => navigate("/premium")}
             >
-              Khám phá Premium
+              Discover Premium
             </Button>
           )}
 

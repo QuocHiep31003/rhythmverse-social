@@ -43,11 +43,12 @@ const DialogContent = React.forwardRef<
         className,
       )}
       onInteractOutside={(e) => {
-        // Ngăn đóng khi click ra ngoài (nhưng nút X vẫn hoạt động vì nó dùng DialogPrimitive.Close)
-        e.preventDefault();
+        // Cho phép đóng khi click ra ngoài
+        // Nếu component muốn ngăn đóng, có thể truyền onInteractOutside và gọi e.preventDefault()
         if (onInteractOutside) {
           onInteractOutside(e);
         }
+        // Nếu không có custom handler hoặc handler không prevent default, modal sẽ đóng
       }}
       {...props}
     >

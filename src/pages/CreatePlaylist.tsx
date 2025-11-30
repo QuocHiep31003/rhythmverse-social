@@ -361,10 +361,25 @@ const CreatePlaylist = () => {
 
       navigate(`/playlist/${createSlug(data.name || "playlist", data.id)}`);
     } catch (err: any) {
-      if (err?.status === 403 || err?.message?.toLowerCase().includes("limit")) {
+      // Kiểm tra các trường hợp lỗi về limit
+      const errorMessage = err?.message || "";
+      const isLimitError = 
+        err?.status === 403 ||
+        errorMessage.toLowerCase().includes("limit") ||
+        errorMessage.toLowerCase().includes("giới hạn") ||
+        errorMessage.toLowerCase().includes("đã đạt") ||
+        errorMessage.toLowerCase().includes("premium") ||
+        errorMessage.toLowerCase().includes("vô hiệu hóa") ||
+        errorMessage.toLowerCase().includes("nâng cấp");
+      
+      if (isLimitError) {
         setShowLimitModal(true);
         await refresh();
+        // Không hiển thị toast error nếu đã show modal
+        return;
       }
+      
+      // Hiển thị toast cho các lỗi khác
       toast({
         title: "Error",
         description: err?.message || "Please try again later",

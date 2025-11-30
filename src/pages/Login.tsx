@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Music, Mail, Lock, User, Eye, EyeOff, Chrome } from "lucide-react";
+import { Facebook } from "lucide-react";
 import { authApi } from "@/services/api";
-import { setTokens, startTokenRefreshInterval, getAuthToken, isTokenExpiringSoon, clearTokens } from "@/services/api/config";
+
+import { setTokens, startTokenRefreshInterval, getAuthToken, isTokenExpiringSoon, clearTokens,AUTH_SERVER_URL} from "@/services/api/config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 const Login = () => {
@@ -240,60 +242,40 @@ const Login = () => {
   
 
   const handleSocialLogin = async (provider: string) => {
-    if (provider !== 'google') {
+    if (provider !== 'google' && provider !== 'facebook') {
       console.warn('Unsupported provider:', provider);
       return;
     }
 
     setIsLoading(true);
     try {
-      // TODO: Implement Google OAuth
-      // 1. Get Google OAuth credentials from Google Cloud Console
-      // 2. Install: npm install @react-oauth/google
-      // 3. Configure Google OAuth client ID in environment variables
-      // 4. Initialize Google OAuth in App.tsx or main.tsx
-      // 5. Use GoogleLogin component or handle OAuth flow manually
-      
-      // Example implementation (placeholder):
-      // const response = await googleAuth.signIn();
-      // const { token, email, name } = response;
-      // 
-      // // Send to backend to create/login user
-      // const authResponse = await authApi.loginWithGoogle({ token, email, name });
-      // 
-      // // Save tokens
-      // setTokens(authResponse.token, authResponse.refreshToken);
-      // startTokenRefreshInterval();
-      // 
-      // // Navigate
-      // const params = new URLSearchParams(window.location.search);
-      // const redirectParam = params.get('redirect');
-      // const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
-      // const target = redirectParam || pending || '/';
-      // navigate(target);
-
-      // Temporary: Show message that Google login is coming soon
-      alert('Google OAuth integration is in progress. Please use email/password login for now.');
-    } catch (error) {
-      console.error('Google login error:', error);
-      alert('Failed to login with Google. Please try again or use email/password login.');
-    } finally {
-      setIsLoading(false);
-    }
-
-    setTimeout(() => {
+      // Persist redirect hint before leaving the app
       try {
         const params = new URLSearchParams(window.location.search);
         const redirectParam = params.get('redirect');
         const pending = localStorage.getItem('pendingInviteUrl') || sessionStorage.getItem('pendingInviteUrl');
-        const target = redirectParam || pending || '/';
-        try { localStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from localStorage", storageError); }
-        try { sessionStorage.removeItem('pendingInviteUrl'); } catch (storageError) { console.warn("Failed to clear pendingInviteUrl from sessionStorage", storageError); }
-        navigate(target);
+        let target = redirectParam || pending || window.location.pathname || '/';
+
+        // ⚙️ Không bao giờ redirect lại về trang login sau khi đăng nhập
+        if (!target || target === '/login' || target.startsWith('/login?')) {
+          target = '/';
+        }
+
+        sessionStorage.setItem('postLoginRedirect', target);
+        localStorage.setItem('postLoginRedirect', target);
       } catch {
-        navigate('/');
+        /* ignore */
       }
-    }, 1000);
+
+      // Kick off OAuth2 authorization on the backend
+      const oauthUrl = `${AUTH_SERVER_URL}/oauth2/authorization/${provider}`;
+      window.location.href = oauthUrl;
+    } catch (error) {
+      console.error(`${provider} login error:`, error);
+      alert(`Failed to start ${provider} login. Please try again or use email/password login.`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const [resetStep, setResetStep] = useState<1 | 2>(1);
@@ -656,7 +638,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="mt-4">
+              <div className="mt-4 space-y-2">
                 <Button
                   variant="outline"
                   className="w-full"
@@ -665,6 +647,15 @@ const Login = () => {
                 >
                   <Chrome className="w-4 h-4 mr-2" />
                   Continue with Google
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => handleSocialLogin("facebook")}
+                  disabled={isLoading}
+                >
+                  <Facebook className="w-4 h-4 mr-2" />
+                  Continue with Facebook
                 </Button>
               </div>
             </div>

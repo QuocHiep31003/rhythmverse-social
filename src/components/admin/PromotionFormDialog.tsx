@@ -61,17 +61,17 @@ function buildGradientFromRGB(rgb: { r: number; g: number; b: number }) {
 const schema = z.object({
   title: z
     .string()
-    .min(1, "Bắt buộc")
-    .max(60, "Tối đa 60 ký tự"),
+    .min(1, "Required")
+    .max(60, "Max 60 characters"),
   subtitle: z
     .string()
-    .max(120, "Tối đa 120 ký tự")
+    .max(120, "Max 120 characters")
     .optional()
     .or(z.literal("")),
   imageUrl: z.string().optional().or(z.literal("")),
   ctaText: z
     .string()
-    .max(24, "Tối đa 24 ký tự")
+    .max(24, "Max 24 characters")
     .optional()
     .or(z.literal("")),
   ctaUrl: z
@@ -82,7 +82,7 @@ const schema = z.object({
   gradient: z.string().optional().or(z.literal("")),
   badge: z
     .string()
-    .max(20, "Tối đa 20 ký tự")
+    .max(20, "Max 20 characters")
     .optional()
     .or(z.literal("")),
   icon: z.string().optional().or(z.literal("")),
@@ -147,7 +147,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
       const rgb = await getDominantColor(result.secure_url);
       form.setValue("gradient", buildGradientFromRGB(rgb), { shouldDirty: true });
     } catch (err) {
-      toast.error("Upload ảnh thất bại");
+      toast.error("Failed to upload image");
     } finally {
       setUploading(false);
     }
@@ -187,7 +187,7 @@ export const PromotionFormDialog = ({ open, onOpenChange, onSubmit, isLoading = 
                   <>
                     <img
                       src={imagePreview}
-                      alt="Promotion image"
+                      alt="Banner image"
                       className="w-full h-full object-cover"
                       onError={(e) => {
                         e.currentTarget.src = "/placeholder.svg";

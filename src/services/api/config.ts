@@ -2,6 +2,8 @@ import axios from 'axios';
 
 // Base URL cho API
 export const API_BASE_URL = "http://localhost:8080/api";
+// Auth server base (remove trailing /api to hit OAuth endpoints)
+export const AUTH_SERVER_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 // JWT token utilities
 interface DecodedToken {

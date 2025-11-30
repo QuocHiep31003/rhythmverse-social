@@ -96,14 +96,6 @@ export const CollaboratorDialog = ({
       open={open}
       onOpenChange={onOpenChange}
     >
-      {canManage && (
-        <DialogTrigger asChild>
-          <Button variant="outline">
-            <UserPlus className="w-4 h-4 mr-2" />
-            Collaborate
-          </Button>
-        </DialogTrigger>
-      )}
       <DialogContent
         className="sm:max-w-lg"
         aria-describedby="collab-dialog-description"

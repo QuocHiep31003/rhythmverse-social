@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
 import AppLayout from "@/components/AppLayout";
@@ -13,12 +13,14 @@ import Discover from "./pages/Discover";
 import Playlist from "./pages/Playlist";
 import Top100 from "./pages/Top100";
 import PlaylistDetail from "./pages/PlaylistDetail";
+import FavoriteSongs from "./pages/FavoriteSongs";
 import CreatePlaylist from "./pages/CreatePlaylist";
 import PlaylistLibrary from "./pages/PlaylistLibrary";
 import Quiz from "./pages/Quiz";
 import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
 import Login from "./pages/Login";
+import OAuthCallback from "./pages/OAuthCallback";
 import Premium from "./pages/Premium";
 import Profile from "./pages/Profile";
 import Social from "./pages/Social";
@@ -79,6 +81,7 @@ const App = () => (
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/oauth2/callback" element={<OAuthCallback />} />
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
 
@@ -95,7 +98,7 @@ const App = () => (
                     <Route path="moods" element={<AdminMoods />} />
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="playlists" element={<AdminPlaylists />} />
-                    <Route path="promotions" element={<AdminPromotions />} />
+                    <Route path="banners" element={<AdminPromotions />} />
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
@@ -114,7 +117,8 @@ const App = () => (
                     <Route path="/playlist" element={<Playlist />} />
                     <Route path="/playlists" element={<PlaylistLibrary />} />
                     <Route path="/playlist/:slug" element={<PlaylistDetail />} />
-                    <Route path="/create-playlist" element={<CreatePlaylist />} />
+                    <Route path="/create-playlist" element={<Navigate to="/playlist/create" replace />} />
+                    <Route path="/favorites/songs" element={<FavoriteSongs />} />
                     <Route path="/trending" element={<Top100 />} />
                     <Route path="/top100" element={<Top100 />} />
                     <Route path="/quiz" element={<Quiz />} />

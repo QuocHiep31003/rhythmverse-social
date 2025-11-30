@@ -16,6 +16,7 @@ export {
   playlistCollabInvitesApi,
   playlistCollaboratorsApi,
 } from './api/playlistApi';
+export { favoritesApi, FavoriteError } from './api/favoritesApi';
 export { friendsApi, inviteLinksApi } from './api/friendsApi';
 export { listeningHistoryApi } from './api/listeningHistoryApi';
 export { lyricsApi } from './api/lyricsApi';
@@ -32,6 +33,15 @@ export { playbackApi } from './api/playbackApi';
 import { mockUsers, mockGenres } from "@/data/mockData";
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse, apiClient } from "./api/config";
 import axios from "axios";
+
+type UserPayload = Record<string, unknown>;
+
+export interface GenreDTO {
+  id: number;
+  name: string;
+  description?: string;
+  iconUrl?: string;
+}
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -81,7 +91,7 @@ export const usersApi = {
     return await response.json();
   },
 
-  create: async (data: any) => {
+  create: async (data: UserPayload) => {
     const response = await fetch(`${API_BASE_URL}/user`, {
       method: 'POST',
       headers: buildJsonHeaders(),
@@ -96,7 +106,7 @@ export const usersApi = {
     return await response.json();
   },
 
-  update: async (id: string, data: any) => {
+  update: async (id: string, data: UserPayload) => {
     const response = await fetch(`${API_BASE_URL}/user/${id}`, {
       method: 'PUT',
       headers: buildJsonHeaders(),
@@ -163,7 +173,7 @@ export const genresApi = {
       if (!response.ok) {
         throw new Error("Failed to fetch genres");
       }
-      const data: PaginatedResponse<any> = await response.json();
+      const data: PaginatedResponse<GenreDTO> = await response.json();
       return data;
     } catch (error) {
       console.error("Error fetching genres:", error);
@@ -177,7 +187,7 @@ export const genresApi = {
         first: true,
         last: true,
         empty: false
-      } as PaginatedResponse<any>;
+      } as PaginatedResponse<GenreDTO>;
     }
   },
 
@@ -357,12 +367,12 @@ export const arcApi = {
 
       console.log("[arcApi] recognizeMusic response:", response.data);
       return response.data;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("[arcApi] Error recognizing music:", error);
-      if (error.code === 'ECONNABORTED') {
+      if (axios.isAxiosError(error) && error.code === 'ECONNABORTED') {
         throw new Error('Request timeout - recognition is taking too long. Please try again.');
       }
-      if (error.message && error.message.includes('Network error')) {
+      if (axios.isAxiosError(error) && error.message && error.message.includes('Network error')) {
         console.error("[arcApi] Network error details:", {
           message: error.message,
           request: error.request,
@@ -370,7 +380,10 @@ export const arcApi = {
           config: error.config
         });
       }
-      throw error;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Unknown error while recognizing music");
     }
   },
   
