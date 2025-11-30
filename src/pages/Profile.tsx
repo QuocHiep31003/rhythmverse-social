@@ -380,13 +380,47 @@ const Profile = () => {
     }
   };
 
+  // Feature name mapping to scientific/display names with descriptions
+  const FEATURE_INFO: Record<string, { name: string; description: string }> = {
+    PLAYLIST_CREATE: {
+      name: 'Playlist Creation',
+      description: 'Create and manage custom playlists'
+    },
+    OFFLINE_DOWNLOAD: {
+      name: 'Offline Download',
+      description: 'Download songs for offline listening'
+    },
+    AI_SEARCH: {
+      name: 'AI-Powered Search',
+      description: 'Intelligent music discovery and search'
+    },
+    ADVANCED_ANALYTICS: {
+      name: 'Advanced Analytics',
+      description: 'Detailed listening statistics and insights'
+    },
+    CUSTOM_THEME: {
+      name: 'Custom Theme',
+      description: 'Personalize your app appearance'
+    },
+  };
+
   const formatFeatureName = (value?: string | null) => {
-    if (!value) return 'Unknown feature';
+    if (!value) return 'Unknown Feature';
+    // Check if we have a display name mapping
+    const featureInfo = FEATURE_INFO[value.toUpperCase()];
+    if (featureInfo) return featureInfo.name;
+    // Fallback to formatted name
     return value
       .toLowerCase()
       .split('_')
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
       .join(' ');
+  };
+
+  const getFeatureDescription = (value?: string | null) => {
+    if (!value) return '';
+    const featureInfo = FEATURE_INFO[value.toUpperCase()];
+    return featureInfo?.description || '';
   };
 
   const formatPeriodLabel = (period?: string | null, periodValue?: number | null) => {
@@ -395,34 +429,37 @@ const Profile = () => {
     }
     const normalized = period.toUpperCase();
     const base = normalized === 'DAY'
-      ? 'ngày'
+      ? 'day'
       : normalized === 'WEEK'
-        ? 'tuần'
+        ? 'week'
         : normalized === 'MONTH'
-          ? 'tháng'
+          ? 'month'
           : normalized === 'YEAR'
-            ? 'năm'
+            ? 'year'
             : normalized.toLowerCase();
     if (!periodValue || periodValue <= 1) {
       return base;
     }
-    return `${periodValue} ${base}`;
+    return `${periodValue} ${base}${periodValue > 1 ? 's' : ''}`;
   };
 
   const formatFeatureLimit = (feature: PlanFeatureSnapshot) => {
     const limitType = feature.limitType?.toUpperCase();
     if (feature.isEnabled === false || limitType === 'DISABLED') {
-      return 'Không khả dụng trong gói này';
+      return 'Not available in this plan';
     }
     if (limitType === 'UNLIMITED') {
-      return 'Không giới hạn';
+      return 'Unlimited usage';
     }
     if (limitType === 'LIMITED') {
       const limitValue = feature.limitValue ?? 0;
       const period = formatPeriodLabel(feature.limitPeriod, feature.periodValue);
-      return period ? `${limitValue} lượt / ${period}` : `${limitValue} lượt`;
+      if (period) {
+        return `${limitValue} use${limitValue !== 1 ? 's' : ''} per ${period}`;
+      }
+      return `${limitValue} use${limitValue !== 1 ? 's' : ''} total`;
     }
-    return 'Không xác định';
+    return 'Unknown limit';
   };
 
   const selectedOrderFeatures = useMemo(() => {
@@ -1212,113 +1249,217 @@ const Profile = () => {
           }
         }}
       >
-        <DialogContent className="max-w-2xl bg-gradient-glass border-white/10">
-          <DialogHeader>
-            <DialogTitle>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto scrollbar-invoice bg-gradient-to-br from-background via-background/95 to-background/90 border-white/10 shadow-2xl">
+          <DialogHeader className="space-y-1 pb-3 border-b border-white/10">
+            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent flex items-center gap-2">
+              <ReceiptText className="w-5 h-5 text-primary" />
               Invoice {selectedOrder ? `#${selectedOrder.orderCode}` : ""}
             </DialogTitle>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
               Plan details are snapshotted at the moment you completed payment.
             </p>
           </DialogHeader>
           {!selectedOrder ? (
-            <div className="text-sm text-muted-foreground">No order data.</div>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <ReceiptText className="w-12 h-12 text-muted-foreground/50 mb-2" />
+              <p className="text-sm text-muted-foreground">No order data available.</p>
+            </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 py-1">
+              {/* Plan Snapshot & Payment Info Grid */}
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-xs uppercase text-muted-foreground tracking-wide">
-                    Plan snapshot
-                  </p>
-                  <div className="text-lg font-semibold">
-                    {selectedOrder.planName || selectedOrder.planCode || selectedOrder.description || "Unknown"}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Plan code: <span className="text-foreground font-medium">{selectedOrder.planCode || "—"}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Option: <span className="text-foreground font-medium">{selectedOrder.planDetailName || "None"}</span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Duration:{" "}
-                    <span className="text-foreground font-medium">
-                      {selectedOrder.planDurationDaysSnapshot
-                        ? `${selectedOrder.planDurationDaysSnapshot} days`
-                        : "Unknown"}
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs uppercase text-muted-foreground tracking-wide">
-                    Payment info
-                  </p>
-                  <div className="text-lg font-semibold">
-                    {formatCurrencyWithCode(
-                      selectedOrder.planPriceSnapshot ?? selectedOrder.amount,
-                      selectedOrder.planCurrencySnapshot ?? selectedOrder.currency
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {getPaymentStatusBadge(selectedOrder)}
-                    <span className="text-xs text-muted-foreground uppercase tracking-wide">
-                      {selectedOrder.status}
-                    </span>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Paid at{" "}
-                    <span className="text-foreground font-medium">
-                      {formatPaymentDate(selectedOrder.paidAt ?? selectedOrder.failedAt ?? selectedOrder.createdAt)}
-                    </span>
-                  </div>
-                  {selectedOrder.reference && (
-                    <div className="text-sm text-muted-foreground">
-                      Reference: <span className="text-foreground font-medium">{selectedOrder.reference}</span>
-                    </div>
-                  )}
-                  {selectedOrder.failureReason && (
-                    <div className="text-sm text-destructive">
-                      Failure reason: {selectedOrder.failureReason}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs uppercase text-muted-foreground tracking-wide mb-2">
-                  Benefits at purchase time
-                </p>
-                {selectedOrderFeatures.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">
-                    No benefit data found (this might be a free plan or data was removed).
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                    {selectedOrderFeatures.map((feature, index) => (
-                      <div
-                        key={`${feature.featureName}-${index}`}
-                        className="flex items-center justify-between gap-4 rounded-lg bg-white/5 px-3 py-2"
-                      >
-                        <div>
-                          <div className="font-medium">
-                            {formatFeatureName(feature.featureName)}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatFeatureLimit(feature)}
-                          </div>
-                        </div>
-                        <Badge variant={feature.isEnabled === false ? "outline" : "default"}>
-                          {feature.limitType || (feature.isEnabled === false ? "Disabled" : "Enabled")}
-                        </Badge>
+                {/* Plan Snapshot Card */}
+                <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/20">
+                  <CardHeader className="pb-2 pt-3 px-4">
+                    <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <Crown className="w-3.5 h-3.5 text-primary" />
+                      Plan Snapshot
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 space-y-3">
+                    <div>
+                      <div className="text-lg font-bold text-foreground mb-1.5">
+                        {selectedOrder.planName || selectedOrder.planCode || selectedOrder.description || "Unknown"}
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <Badge variant="outline" className="text-xs border-primary/30 text-primary bg-primary/10">
+                        {selectedOrder.planCode || "—"}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1.5 pt-2 border-t border-white/10">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Option:</span>
+                        <span className="font-medium text-foreground">{selectedOrder.planDetailName || "None"}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Duration:</span>
+                        <span className="font-medium text-foreground">
+                          {selectedOrder.planDurationDaysSnapshot
+                            ? `${selectedOrder.planDurationDaysSnapshot} days`
+                            : "Unknown"}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Payment Info Card */}
+                <Card className="bg-gradient-to-br from-green-500/10 via-green-500/5 to-transparent border-green-500/20">
+                  <CardHeader className="pb-2 pt-3 px-4">
+                    <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-green-500" />
+                      Payment Info
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3 space-y-3">
+                    <div>
+                      <div className="text-lg font-bold text-foreground mb-2">
+                        {formatCurrencyWithCode(
+                          selectedOrder.planPriceSnapshot ?? selectedOrder.amount,
+                          selectedOrder.planCurrencySnapshot ?? selectedOrder.currency
+                        )}
+                      </div>
+                      <div>
+                        {getPaymentStatusBadge(selectedOrder)}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 pt-2 border-t border-white/10">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          Paid at:
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {formatPaymentDate(selectedOrder.paidAt ?? selectedOrder.failedAt ?? selectedOrder.createdAt)}
+                        </span>
+                      </div>
+                      {selectedOrder.reference && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Reference:</span>
+                          <span className="font-mono text-xs font-medium text-foreground bg-white/5 px-1.5 py-0.5 rounded">
+                            {selectedOrder.reference}
+                          </span>
+                        </div>
+                      )}
+                      {selectedOrder.failureReason && (
+                        <div className="mt-1.5 p-2 rounded bg-destructive/10 border border-destructive/20">
+                          <div className="flex items-center gap-1.5 text-xs text-destructive">
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span className="font-medium">Failure reason:</span>
+                          </div>
+                          <p className="text-xs text-destructive/80 mt-0.5">{selectedOrder.failureReason}</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
 
-              <div className="text-xs text-muted-foreground">
-                The information above is stored as a snapshot in the database (`payment_orders` and
-                `premium_subscription_features`) so you always keep the exact benefits you paid for, even if admins
-                change plans later.
+              {/* Benefits Section */}
+              <Card className="bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-transparent border-purple-500/20">
+                <CardHeader className="pb-2 pt-3 px-4">
+                  <CardTitle className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-purple-500" />
+                    Benefits at Purchase Time
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-3">
+                  {selectedOrderFeatures.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                      <Music className="w-10 h-10 text-muted-foreground/50 mb-2" />
+                      <p className="text-xs text-muted-foreground">
+                        No benefit data found (this might be a free plan or data was removed).
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2 max-h-64 overflow-y-auto pr-2 scrollbar-invoice">
+                      {selectedOrderFeatures.map((feature, index) => {
+                        const isUnlimited = feature.limitType?.toUpperCase() === 'UNLIMITED';
+                        const isDisabled = feature.isEnabled === false || feature.limitType?.toUpperCase() === 'DISABLED';
+                        
+                        return (
+                          <div
+                            key={`${feature.featureName}-${index}`}
+                            className={`group flex items-center justify-between gap-3 rounded-lg p-3 transition-all duration-200 ${
+                              isDisabled
+                                ? 'bg-white/5 border border-white/10'
+                                : isUnlimited
+                                ? 'bg-gradient-to-r from-purple-500/20 via-purple-500/10 to-transparent border border-purple-500/30 hover:border-purple-500/50'
+                                : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                              <div className={`p-1.5 rounded-lg flex-shrink-0 ${
+                                isDisabled
+                                  ? 'bg-muted/50'
+                                  : isUnlimited
+                                  ? 'bg-purple-500/20'
+                                  : 'bg-primary/20'
+                              }`}>
+                                {feature.featureName?.includes('ANALYTICS') && <TrendingUp className="w-3.5 h-3.5 text-purple-500" />}
+                                {feature.featureName?.includes('SEARCH') && <Music className="w-3.5 h-3.5 text-purple-500" />}
+                                {feature.featureName?.includes('THEME') && <Palette className="w-3.5 h-3.5 text-purple-500" />}
+                                {feature.featureName?.includes('DOWNLOAD') && <Play className="w-3.5 h-3.5 text-purple-500" />}
+                                {feature.featureName?.includes('PLAYLIST') && <Music className="w-3.5 h-3.5 text-purple-500" />}
+                                {!feature.featureName?.includes('ANALYTICS') && 
+                                 !feature.featureName?.includes('SEARCH') && 
+                                 !feature.featureName?.includes('THEME') && 
+                                 !feature.featureName?.includes('DOWNLOAD') &&
+                                 !feature.featureName?.includes('PLAYLIST') && 
+                                 <Music className="w-3.5 h-3.5 text-purple-500" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-sm text-foreground mb-0.5">
+                                  {formatFeatureName(feature.featureName)}
+                                </div>
+                                <div className="text-xs text-muted-foreground/80 mb-1">
+                                  {getFeatureDescription(feature.featureName) || formatFeatureLimit(feature)}
+                                </div>
+                                {getFeatureDescription(feature.featureName) && (
+                                  <div className="text-xs text-muted-foreground/60">
+                                    {formatFeatureLimit(feature)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0">
+                              {isUnlimited ? (
+                                <Badge className="bg-gradient-to-r from-purple-600 to-purple-500 text-white border-0 shadow-md shadow-purple-500/20 px-3 py-1 text-xs font-semibold">
+                                  UNLIMITED
+                                </Badge>
+                              ) : isDisabled ? (
+                                <Badge variant="outline" className="border-destructive/30 text-destructive bg-destructive/10 text-xs">
+                                  Disabled
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30 text-xs">
+                                  {feature.limitType || 'Enabled'}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Footer Note */}
+              <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+                <div className="flex items-start gap-2">
+                  <div className="mt-0.5 p-1 rounded bg-blue-500/20 flex-shrink-0">
+                    <ReceiptText className="w-3.5 h-3.5 text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      <span className="font-semibold text-foreground">Note:</span> The information above is stored as a snapshot in the database (
+                      <code className="px-1 py-0.5 rounded bg-white/5 text-primary font-mono text-[10px]">payment_orders</code> and{' '}
+                      <code className="px-1 py-0.5 rounded bg-white/5 text-primary font-mono text-[10px]">premium_subscription_features</code>) 
+                      so you always keep the exact benefits you paid for, even if admins change plans later.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
