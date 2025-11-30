@@ -1,5 +1,19 @@
 import { API_BASE_URL, buildJsonHeaders, fetchWithAuth } from './config';
-import type { PlaybackState } from '@/services/firebase/playback';
+
+export interface PlaybackState {
+  userId: number;
+  activeDeviceId: string | null;
+  activeDeviceName: string | null;
+  currentSongId: number | null;
+  isPlaying: boolean;
+  queue: number[];
+  isShuffled: boolean;
+  repeatMode: 'off' | 'one' | 'all';
+  position: number; // Current playback position in milliseconds
+  duration: number; // Song duration in milliseconds
+  timestamp: number;
+  devices?: Record<string, { deviceId: string; deviceName: string; lastSeen: number; isActive: boolean }>;
+}
 
 export interface PlaySongRequest {
   deviceId: string;

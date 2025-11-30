@@ -2,8 +2,6 @@ import { createContext, useContext, useState, useCallback, ReactNode, useEffect,
 import { toast } from "@/hooks/use-toast";
 import { mapToPlayerSong, type ApiSong } from "@/lib/utils";
 import { getAuthToken, decodeToken, getRefreshToken, setTokens, clearTokens } from "@/services/api/config";
-import { playbackApi } from "@/services/api/playbackApi";
-import { watchPlaybackState, updatePlaybackState, type PlaybackState, type DeviceInfo } from "@/services/firebase/playback";
 import { songsApi } from "@/services/api/songApi";
 
 export interface Song {
@@ -50,7 +48,7 @@ interface MusicContextType {
   updateDuration: (duration: number) => Promise<void>;
   resetPlayer: () => void;
   requestPlaybackControl: () => Promise<boolean>;
-  devices: Record<string, DeviceInfo>; // Map of deviceId -> DeviceInfo
+  devices: Record<string, { deviceId: string; deviceName: string; lastSeen: number; isActive: boolean }>; // Map of deviceId -> DeviceInfo
   selectOutputDevice: (deviceId: string) => Promise<void>;
 }
 
@@ -91,15 +89,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const [position, setPosition] = useState<number>(0); // Position in milliseconds
   const [duration, setDuration] = useState<number>(0); // Duration in milliseconds
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [devices, setDevices] = useState<Record<string, DeviceInfo>>({});
+  const [devices, setDevices] = useState<Record<string, { deviceId: string; deviceName: string; lastSeen: number; isActive: boolean }>>({});
   
   const deviceIdRef = useRef<string>(`device-${Date.now()}-${Math.random()}`);
   const userIdRef = useRef<number | null>(null);
-  const isSyncingRef = useRef<boolean>(false);
-  const justPlayedRef = useRef<boolean>(false); // Track if we just called playSong
-  const justPlayedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const waitingForTokenRef = useRef<boolean>(false); // Track if we're waiting for token from another tab
-  const unsubscribeFirebaseRef = useRef<(() => void) | null>(null);
   const queueSongMapRef = useRef<Map<number, Song>>(new Map()); // Cache song data by ID
   const checkingAuthRef = useRef<Promise<boolean> | null>(null); // Cache để tránh gọi đồng thời
   
@@ -265,7 +259,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       const song = normalizeSong(apiSong as ApiSong);
       
       // Cache để tránh gọi API nhiều lần trong cùng một session
-      // Nhưng queue luôn được load từ Firebase (chỉ IDs) và metadata từ BE
+      // Queue được quản lý local
       queueSongMapRef.current.set(songId, song);
       console.log('[MusicContext] ✅ Loaded song metadata from BE:', song.name || song.songName);
       return song;
@@ -280,155 +274,6 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
   
-  // Sync state from Firebase playback state
-  const syncStateFromFirebase = useCallback(async (firebaseState: PlaybackState | null) => {
-    if (!firebaseState) {
-      console.log('[MusicContext] syncStateFromFirebase: firebaseState is null, skipping');
-      return;
-    }
-    
-    // Chỉ block nếu đang sync và state không thay đổi (tránh loop)
-    // Nhưng vẫn cho phép sync nếu state thay đổi (ví dụ: từ tab khác)
-    if (isSyncingRef.current) {
-      console.log('[MusicContext] ⚠️ Already syncing, queuing sync...');
-      // Đợi một chút rồi thử lại để tránh block hoàn toàn
-      setTimeout(() => {
-        if (!isSyncingRef.current) {
-          syncStateFromFirebase(firebaseState);
-        }
-      }, 50);
-      return;
-    }
-    
-    isSyncingRef.current = true;
-    
-    try {
-      console.log('[MusicContext] 🔥 Syncing state from Firebase:', {
-        songId: firebaseState.currentSongId,
-        isPlaying: firebaseState.isPlaying,
-        deviceId: firebaseState.activeDeviceId,
-        queueLength: firebaseState.queue?.length || 0,
-        currentDeviceId: deviceIdRef.current,
-        isThisDeviceActive: firebaseState.activeDeviceId === deviceIdRef.current
-      });
-      
-      // Update basic state
-      // Đảm bảo isPlaying được set đúng từ Firebase
-      // NHƯNG: Nếu chúng ta vừa playSong (justPlayedRef), không override isPlaying về false
-      const shouldBePlaying = firebaseState.isPlaying || false;
-      
-      // Chỉ ignore nếu chúng ta vừa play và Firebase nói false
-      // Nhưng nếu Firebase nói true (từ tab khác), vẫn sync
-      if (justPlayedRef.current && !shouldBePlaying) {
-        console.log('[MusicContext] ⚠️ Firebase says isPlaying=false, but we just played. Ignoring isPlaying sync to prevent override.');
-        // Không override isPlaying nếu chúng ta vừa playSong
-      } else {
-        console.log('[MusicContext] Setting isPlaying from Firebase:', shouldBePlaying);
-        setIsPlaying(shouldBePlaying);
-      }
-      
-      setIsShuffled(firebaseState.isShuffled || false);
-      setRepeatModeState((firebaseState.repeatMode || 'off') as "off" | "one" | "all");
-      setActiveDeviceId(firebaseState.activeDeviceId);
-      setActiveDeviceName(firebaseState.activeDeviceName || null);
-      
-      // Sync position từ Firebase - chỉ sync nếu không phải device này đang control
-      // (tránh conflict khi device này đang seek)
-      if (firebaseState.position !== undefined && firebaseState.position !== null) {
-        const firebasePosition = firebaseState.position; // milliseconds
-        // Chỉ sync position nếu không phải device này đang là active device
-        // hoặc nếu position khác biệt quá nhiều (có thể là từ device khác)
-        const currentPosition = position;
-        const positionDiff = Math.abs(firebasePosition - currentPosition);
-        
-        // Sync nếu:
-        // 1. Không phải device này đang control, HOẶC
-        // 2. Position khác biệt > 2 giây (có thể là từ device khác seek)
-        if (firebaseState.activeDeviceId !== deviceIdRef.current || positionDiff > 2000) {
-          console.log('[MusicContext] Syncing position from Firebase:', {
-            firebasePosition,
-            currentPosition,
-            positionDiff,
-            isThisDeviceActive: firebaseState.activeDeviceId === deviceIdRef.current
-          });
-          setPosition(firebasePosition);
-        }
-      }
-      
-      // Sync duration từ Firebase - luôn sync để non-active devices có đầy đủ thông tin
-      if (firebaseState.duration !== undefined && firebaseState.duration !== null) {
-        const firebaseDuration = firebaseState.duration; // milliseconds
-        if (firebaseDuration > 0) {
-          console.log('[MusicContext] Syncing duration from Firebase:', firebaseDuration, 'ms');
-          setDuration(firebaseDuration);
-        }
-      }
-      
-      // Load current song từ Firebase (chỉ ID) và load metadata từ BE API
-      // QUAN TRỌNG: currentSongId chỉ là ID trên Firebase, metadata luôn lấy từ BE
-      if (firebaseState.currentSongId) {
-        console.log('[MusicContext] 📡 Loading current song metadata from BE API, songId:', firebaseState.currentSongId);
-        const song = await loadSongById(firebaseState.currentSongId);
-        console.log('[MusicContext] ✅ Loaded current song from Firebase (ID) and BE API (metadata):', song?.name || song?.songName);
-        if (song) {
-          setCurrentSong(song);
-        }
-      } else {
-        console.log('[MusicContext] No currentSongId in Firebase state');
-        setCurrentSong(null);
-      }
-      
-      // Load queue songs từ Firebase (chỉ IDs) và load metadata từ BE API
-      // QUAN TRỌNG: Queue chỉ lưu IDs trên Firebase, metadata luôn lấy từ BE
-      if (firebaseState.queue && firebaseState.queue.length > 0) {
-        console.log('[MusicContext] 📋 Loading queue from Firebase (IDs only):', firebaseState.queue);
-        const queueSongs = await Promise.all(
-          firebaseState.queue.map(id => {
-            console.log('[MusicContext] 📡 Loading metadata for song ID:', id, 'from BE API');
-            return loadSongById(id);
-          })
-        );
-        const validSongs = queueSongs.filter((s): s is Song => s !== null);
-        console.log('[MusicContext] ✅ Synced queue from Firebase and loaded metadata from BE:', validSongs.length, 'songs');
-        setQueueState(validSongs);
-      } else {
-        console.log('[MusicContext] 📋 Queue is empty in Firebase');
-        setQueueState([]);
-      }
-      
-      // Sync devices từ Firebase
-      if (firebaseState.devices) {
-        console.log('[MusicContext] Syncing devices from Firebase:', Object.keys(firebaseState.devices).length, 'devices');
-        setDevices(firebaseState.devices);
-      } else {
-        setDevices({});
-      }
-    } catch (error) {
-      console.error('[MusicContext] Error syncing state from Firebase:', error);
-    } finally {
-      // Giảm timeout để không block quá lâu
-      setTimeout(() => {
-        isSyncingRef.current = false;
-      }, 50);
-    }
-  }, [loadSongById]);
-  
-  // ĐÃ TẮT: Firebase listener và đồng bộ giữa các thiết bị
-  // Chỉ phát nhạc trên thiết bị hiện tại, không cần đồng bộ
-  useEffect(() => {
-    const initAuth = async () => {
-      const authenticated = await checkAuth();
-      if (!authenticated || !userIdRef.current) {
-        return;
-      }
-      
-      // Đã tắt Firebase listener - không đồng bộ giữa các thiết bị nữa
-      // Chỉ phát nhạc trên thiết bị hiện tại
-      console.log('[MusicContext] Firebase sync disabled - chỉ phát nhạc local');
-    };
-    
-    initAuth();
-  }, [checkAuth]);
   
   // QUAN TRỌNG: Check auth ngay khi component mount (mới vào page)
   // Đảm bảo check auth ngay cả khi mở tab mới sau khi đăng nhập
@@ -736,38 +581,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       userIdRef.current = userId;
     }
     
-    try {
-      const state = await playbackApi.requestControl(deviceIdRef.current);
-      setActiveDeviceId(state.activeDeviceId);
-      setActiveDeviceName(state.activeDeviceName);
-      return true;
-    } catch (error: unknown) {
-      console.error('[MusicContext] Failed to request control:', error);
-      
-      // Only redirect if it's a 401 and refresh failed
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const is401 = errorMessage.includes('401') || (error && typeof error === 'object' && 'response' in error && (error as { response?: { status?: number } }).response?.status === 401);
-      if (is401) {
-        toast({
-          title: "Yêu cầu đăng nhập",
-          description: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-          variant: "destructive",
-        });
-        if (typeof window !== 'undefined') {
-          setTimeout(() => {
-            window.location.href = '/login';
-          }, 1000); // Delay redirect to show toast
-        }
-      } else {
-        toast({
-          title: "Lỗi",
-          description: "Không thể yêu cầu quyền điều khiển phát nhạc.",
-          variant: "destructive",
-        });
-      }
-      return false;
-    }
-  }, [getUserId]);
+    // Local playback - không cần request control
+    setActiveDeviceId(deviceIdRef.current);
+    setActiveDeviceName('Current Device');
+    return true;
+  }, [checkAuth]);
   
   const playSong = useCallback(async (song: Song, skipApiCall = false) => {
     // Kiểm tra xem có đang ở trang login không - tránh redirect loop
@@ -836,14 +654,23 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       //    - Bài hát không phải là bài tiếp theo trong queue (người dùng chọn bài khác trong cùng danh sách)
       let isNewRequest = false;
       
-      if (!skipApiCall) {
-        // Gọi trực tiếp từ người dùng - luôn là yêu cầu mới
+      // QUAN TRỌNG: Kiểm tra queue.length TRƯỚC để quyết định có reset queue không
+      // Nếu queue có nhiều bài (ví dụ: 100 bài từ Top100), KHÔNG BAO GIỜ reset queue
+      const hasMultipleSongs = queue.length > 1;
+      const songIndex = queue.findIndex(s => String(s.id) === String(song.id));
+      const isSongInQueue = songIndex >= 0;
+      
+      if (hasMultipleSongs) {
+        // Queue có nhiều bài - KHÔNG BAO GIỜ reset queue, dù skipApiCall = true hay false
+        // Đây có thể là từ Top100, Trending, hoặc playlist lớn
+        isNewRequest = false; // Không reset queue
+        console.log('[MusicContext] Queue có nhiều bài (', queue.length, '), giữ nguyên queue và phát bài:', song.name || song.title || song.songName);
+      } else if (!skipApiCall) {
+        // Gọi trực tiếp từ người dùng và queue chỉ có 1 bài hoặc rỗng - yêu cầu mới
         isNewRequest = true;
       } else {
         // skipApiCall = true: có thể là từ playNext/playPrevious hoặc từ playSongWithStreamUrl
-        const songIndex = queue.findIndex(s => String(s.id) === String(song.id));
-        const isSongInQueue = songIndex >= 0;
-        
+        // Queue chỉ có 1 bài hoặc rỗng
         if (!isSongInQueue) {
           // Bài hát không có trong queue - đây là yêu cầu mới
           isNewRequest = true;
@@ -851,58 +678,30 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
           // Queue chỉ có 1 bài - đây có thể là yêu cầu mới (người dùng chọn bài khác)
           isNewRequest = true;
         } else {
-          // Bài hát có trong queue và queue có nhiều hơn 1 bài
-          // Kiểm tra xem có phải là bài tiếp theo không (từ playNext/playPrevious)
-          if (currentSong && queue.length > 0) {
-            const currentIndex = queue.findIndex(s => String(s.id) === String(currentSong.id));
-            const nextIndex = currentIndex >= 0 ? currentIndex + 1 : -1;
-            
-            // Nếu bài hát không phải là bài tiếp theo trong queue, đó là yêu cầu mới
-            // (người dùng chọn một bài khác trong cùng danh sách, ví dụ: chọn bài số 5 trong Top 100)
-            isNewRequest = songIndex !== nextIndex;
-          } else {
-            // Không có currentSong - đây là yêu cầu mới
-            isNewRequest = true;
-          }
+          // Queue rỗng - đây là yêu cầu mới
+          isNewRequest = true;
         }
       }
       
       if (isNewRequest) {
-        // Kiểm tra xem bài hát đã có trong queue chưa
-        const songIndex = queue.findIndex(s => String(s.id) === String(song.id));
-        const isSongInQueue = songIndex >= 0;
+        // Chỉ reset queue nếu queue chỉ có 1 bài hoặc rỗng, và bài hát không có trong queue
+        const shouldReplaceQueue = !isSongInQueue || queue.length <= 1;
         
-        // Nếu bài hát đã có trong queue và queue có nhiều hơn 1 bài, giữ nguyên queue
-        // (ví dụ: click vào một bài trong danh sách chờ)
-        if (isSongInQueue && queue.length > 1) {
-          console.log('[MusicContext] Song is already in queue with multiple songs, keeping existing queue and playing this song');
-        } else if (skipApiCall && queue.length > 1) {
-          // Nếu skipApiCall = true và queue có nhiều bài, queue đã được set từ bên ngoài
-          // (ví dụ: Top100 set queue 100 bài)
-          console.log('[MusicContext] skipApiCall=true and queue has multiple songs, keeping existing queue (set externally)');
-        } else {
-          // Chỉ set lại queue nếu bài hát không có trong queue hoặc queue chỉ có 1 bài
-          const shouldReplaceQueue = !isSongInQueue || queue.length === 1;
-          
-          if (shouldReplaceQueue) {
-            console.log('[MusicContext] New song request detected, clearing old queue and setting new queue with this song');
-            // Xóa queue cũ và set queue mới với chỉ bài hát này
-            const songIds = [parseInt(String(song.id), 10)].filter(id => !isNaN(id));
-            if (songIds.length > 0) {
-              try {
-                // Set queue mới với chỉ bài hát này (sẽ thay thế toàn bộ queue cũ)
-                await playbackApi.setQueue(deviceIdRef.current, songIds);
-                // Optimistic update: set queue state ngay lập tức với chỉ bài hát này
-                setQueueState([song]);
-                console.log('[MusicContext] Old queue cleared, new queue set with song:', song.name || song.title || song.songName);
-              } catch (error) {
-                console.error('[MusicContext] Failed to set queue:', error);
-              }
-            }
+        if (shouldReplaceQueue) {
+          console.log('[MusicContext] New song request detected, clearing old queue and setting new queue with this song');
+          // Xóa queue cũ và set queue mới với chỉ bài hát này
+          const songIds = [parseInt(String(song.id), 10)].filter(id => !isNaN(id));
+          if (songIds.length > 0) {
+            // Set queue mới với chỉ bài hát này (local only)
+            setQueueState([song]);
+            console.log('[MusicContext] Old queue cleared, new queue set with song:', song.name || song.title || song.songName);
           }
+        } else {
+          // Bài hát đã có trong queue và queue có nhiều hơn 1 bài, giữ nguyên queue
+          console.log('[MusicContext] Song is already in queue with multiple songs, keeping existing queue and playing this song');
         }
       } else {
-        console.log('[MusicContext] Playing next song from queue (from playNext/playPrevious), keeping existing queue');
+        console.log('[MusicContext] Playing song from existing queue (keeping queue with', queue.length, 'songs)');
       }
       
       // Đã tắt: Không cần request control nữa - chỉ phát nhạc local
@@ -913,7 +712,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       
       if (skipApiCall) {
         // Đã có playback state từ /play-now, chỉ cần set song và trigger MusicPlayer
-        console.log('[MusicContext] Skipping playbackApi.playSong (already setup by /play-now)');
+        console.log('[MusicContext] Skipping API call (already setup by /play-now)');
         setCurrentSong(song);
         setIsPlaying(true);
         // Set device hiện tại là active device để MusicPlayer phát nhạc
@@ -922,59 +721,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
       
-      // Gọi API bình thường nếu không skip
-      console.log('[MusicContext] Calling playbackApi.playSong...');
-      const result = await playbackApi.playSong(deviceIdRef.current, songId);
-      console.log('[MusicContext] playSong API call successful:', result);
-      
-      // Optimistic update: set isPlaying = true ngay lập tức khi playSong
+      // Local playback - chỉ cần set state
+      setCurrentSong(song);
       setIsPlaying(true);
-      
-      // Đánh dấu rằng chúng ta vừa playSong để tránh Firebase sync override trong 3 giây
-      justPlayedRef.current = true;
-      if (justPlayedTimeoutRef.current) {
-        clearTimeout(justPlayedTimeoutRef.current);
-      }
-      justPlayedTimeoutRef.current = setTimeout(() => {
-        justPlayedRef.current = false;
-        console.log('[MusicContext] Just played flag cleared, Firebase sync can now override');
-      }, 3000);
-      
-      // Cập nhật state ngay lập tức từ response (không chỉ đợi Firebase)
-      if (result) {
-        if (result.currentSongId) {
-          const loadedSong = await loadSongById(result.currentSongId);
-          if (loadedSong) {
-            console.log('[MusicContext] Setting currentSong:', loadedSong);
-            setCurrentSong(loadedSong);
-          } else {
-            // Nếu không load được từ API, dùng song hiện tại
-            console.log('[MusicContext] Using provided song as currentSong');
-            setCurrentSong(song);
-          }
-        } else {
-          // Nếu response không có currentSongId, dùng song hiện tại
-          console.log('[MusicContext] No currentSongId in response, using provided song');
-          setCurrentSong(song);
-        }
-        // Update từ result - nhưng chỉ set isPlaying = true nếu result.isPlaying là true
-        // Nếu result.isPlaying là false (empty state), giữ nguyên optimistic update
-        if (result.isPlaying === true) {
-          setIsPlaying(true);
-        } else {
-          console.log('[MusicContext] ⚠️ API returned isPlaying=false, keeping optimistic update (true)');
-          // Giữ nguyên isPlaying = true từ optimistic update
-        }
-        setActiveDeviceId(result.activeDeviceId);
-        setActiveDeviceName(result.activeDeviceName);
-      } else {
-        // Nếu không có result, vẫn set song và isPlaying = true để hiển thị player
-        console.log('[MusicContext] No result from API, using provided song');
-        setCurrentSong(song);
-        setIsPlaying(true);
-      }
-      
-      // State will also be updated via Firebase listener
+      setActiveDeviceId(deviceIdRef.current);
+      setActiveDeviceName('Current Device');
     } catch (error: unknown) {
       console.error('[MusicContext] Failed to play song:', error);
       
@@ -1060,21 +811,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       await requestPlaybackControl();
     }
     
-    // Gọi togglePlay - backend sẽ tự động:
-    // - Pause nếu active device đã stale và đang playing
-    // - Cho device này trở thành active nếu active device đã stale và user click play
-    try {
-      console.log('[MusicContext] ⏯️ Toggle play - backend sẽ tự động xử lý stale device và take over');
-      await playbackApi.togglePlay(deviceIdRef.current);
-      // State will be updated via Firebase listener
-    } catch (error) {
-      console.error('[MusicContext] Failed to toggle play:', error);
-      toast({
-        title: "Lỗi",
-        description: "Không thể điều khiển phát nhạc.",
-        variant: "destructive",
-      });
-    }
+    // Local playback - chỉ toggle state
+    setIsPlaying(prev => !prev);
   }, [checkAuth, activeDeviceId, isPlaying, requestPlaybackControl]);
   
   const playNext = useCallback(async () => {
@@ -1194,14 +932,13 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
     if (!checkAuth() || !userIdRef.current) return;
     
     try {
-      // QUAN TRỌNG: Extract only IDs - queue chỉ lưu IDs trên Firebase
-      // Metadata sẽ được load từ BE API khi sync từ Firebase
+      // Extract song IDs for local queue management
       const songIds = songs.map(s => parseInt(String(s.id), 10)).filter(id => !isNaN(id));
       
       console.log('[MusicContext] 📋 Setting queue (sending only IDs to backend):', songIds);
       
       // Cache songs locally để hiển thị ngay (optimistic update)
-      // Nhưng queue thực tế sẽ được sync từ Firebase và load metadata từ BE
+      // Queue managed locally
       songs.forEach(song => {
         const songId = parseInt(String(song.id), 10);
         if (!isNaN(songId)) {
@@ -1209,14 +946,9 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
         }
       });
       
-      // Optimistic update: set queue state ngay lập tức để UI phản hồi nhanh
+      // Set queue state (local only)
       setQueueState(songs);
-      console.log('[MusicContext] ✅ Queue state updated optimistically with', songs.length, 'songs');
-      
-      // Send only IDs to backend - backend stores only IDs in Redis/Firebase
-      await playbackApi.setQueue(deviceIdRef.current, songIds);
-      console.log('[MusicContext] ✅ Queue IDs sent to backend, will sync from Firebase and load metadata from BE');
-      // State will also be updated via Firebase listener with IDs, then we load song metadata from BE API
+      console.log('[MusicContext] ✅ Queue state updated with', songs.length, 'songs');
     } catch (error) {
       console.error('[MusicContext] ❌ Failed to set queue:', error);
       // Rollback optimistic update nếu có lỗi
@@ -1249,9 +981,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
         return [...prev, song];
       });
       
-      // Send only ID to backend - backend stores only ID in Redis/Firebase
-      await playbackApi.addToQueue(deviceIdRef.current, songId);
-      console.log('[MusicContext] ✅ Song ID sent to backend, queue updated optimistically');
+      // Queue updated locally
+      console.log('[MusicContext] ✅ Song added to queue');
     } catch (error) {
       console.error('[MusicContext] ❌ Failed to add to queue:', error);
       // Rollback optimistic update nếu có lỗi
@@ -1267,8 +998,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       const id = parseInt(String(songId), 10);
       if (isNaN(id)) return;
       
-      await playbackApi.removeFromQueue(deviceIdRef.current, id);
-      // State will be updated via Firebase listener
+      // Remove from queue locally
+      setQueueState(prev => prev.filter(s => String(s.id) !== String(id)));
     } catch (error) {
       console.error('[MusicContext] Failed to remove from queue:', error);
     }
@@ -1290,89 +1021,33 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const toggleShuffle = useCallback(async () => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // Update state ngay lập tức (optimistic update)
-    const newShuffleState = !isShuffled;
-    setIsShuffled(newShuffleState);
-    
-    try {
-      await playbackApi.setShuffle(deviceIdRef.current, newShuffleState);
-    } catch (error) {
-      console.error('[MusicContext] Failed to toggle shuffle:', error);
-      // Revert state nếu API call fail
-      setIsShuffled(!newShuffleState);
-      toast({
-        title: "Lỗi",
-        description: "Không thể thay đổi chế độ phát ngẫu nhiên.",
-        variant: "destructive",
-      });
-    }
+    // Update state locally
+    setIsShuffled(prev => !prev);
   }, [checkAuth, isShuffled]);
   
   const setRepeatMode = useCallback(async (mode: "off" | "one" | "all") => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // Update state ngay lập tức (optimistic update)
-    const previousMode = repeatMode;
+    // Update state locally
     setRepeatModeState(mode);
-    
-    try {
-      await playbackApi.setRepeat(deviceIdRef.current, mode);
-    } catch (error) {
-      console.error('[MusicContext] Failed to set repeat mode:', error);
-      // Revert state nếu API call fail
-      setRepeatModeState(previousMode);
-      toast({
-        title: "Lỗi",
-        description: "Không thể thay đổi chế độ lặp lại.",
-        variant: "destructive",
-      });
-    }
   }, [checkAuth, repeatMode]);
   
   const updatePosition = useCallback(async (positionMs: number, durationMs?: number) => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // Cho phép TẤT CẢ devices update position (kể cả non-active)
-    // Non-active devices có thể seek, active device sẽ seek theo
-    try {
-      // Update local state ngay lập tức để UI responsive
-      setPosition(positionMs);
-      if (durationMs !== undefined && durationMs > 0) {
-        setDuration(durationMs);
-      }
-      
-      // Gửi update lên backend (backend sẽ sync Firebase)
-      // Backend sẽ forward seek command đến active device
-      await playbackApi.updatePosition(deviceIdRef.current, positionMs);
-      // State will be updated via Firebase listener
-    } catch (error) {
-      console.error('[MusicContext] Failed to update position:', error);
+    // Update local state
+    setPosition(positionMs);
+    if (durationMs !== undefined && durationMs > 0) {
+      setDuration(durationMs);
     }
   }, [checkAuth]);
   
   const updateDuration = useCallback(async (durationMs: number) => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    // CHỈ active device mới được update duration (từ audio thực tế)
-    // Non-active devices không được phép update duration
-    const isThisDeviceActive = activeDeviceId === null || activeDeviceId === deviceIdRef.current;
-    if (!isThisDeviceActive) {
-      console.log('[MusicContext] ⚠️ Device này không phải active device, không update duration');
-      return;
-    }
-    
-    try {
-      // Update local state ngay lập tức để UI responsive
-      setDuration(durationMs);
-      
-      // Gửi update lên backend (backend sẽ sync Firebase)
-      await playbackApi.updateDuration(deviceIdRef.current, durationMs);
-      console.log('[MusicContext] ✅ Updated duration from audio:', durationMs, 'ms');
-      // State will be updated via Firebase listener
-    } catch (error) {
-      console.error('[MusicContext] Failed to update duration:', error);
-    }
-  }, [checkAuth, activeDeviceId]);
+    // Update local state
+    setDuration(durationMs);
+  }, [checkAuth]);
   
   const resetPlayer = useCallback(() => {
     // Reset local state only, backend will handle actual reset
@@ -1389,61 +1064,12 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const selectOutputDevice = useCallback(async (deviceId: string) => {
     if (!checkAuth() || !userIdRef.current) return;
     
-    try {
-      const state = await playbackApi.selectOutputDevice(deviceId);
-      setActiveDeviceId(state.activeDeviceId);
-      setActiveDeviceName(state.activeDeviceName);
-      // State will be updated via Firebase listener
-    } catch (error) {
-      console.error('[MusicContext] Failed to select output device:', error);
-      toast({
-        title: "Lỗi",
-        description: "Không thể chọn thiết bị phát nhạc.",
-        variant: "destructive",
-      });
-    }
+    // Local playback - chỉ set device
+    setActiveDeviceId(deviceId);
+    setActiveDeviceName('Selected Device');
   }, [checkAuth]);
   
-  // Register device when component mounts
-  useEffect(() => {
-    if (!isAuthenticated || !userIdRef.current) return;
-    
-    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
-    
-    const registerDevice = async () => {
-      try {
-        const deviceName = typeof navigator !== 'undefined' 
-          ? `${navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop'} - ${navigator.platform}`
-          : 'Unknown Device';
-        
-        await playbackApi.registerDevice(deviceIdRef.current, deviceName);
-        console.log('[MusicContext] ✅ Registered device:', deviceIdRef.current);
-        
-        // Start heartbeat interval (every 5 seconds)
-        heartbeatInterval = setInterval(async () => {
-          try {
-            await playbackApi.updateDeviceHeartbeat(deviceIdRef.current);
-          } catch (error) {
-            console.error('[MusicContext] Failed to update heartbeat:', error);
-          }
-        }, 5000);
-      } catch (error) {
-        console.error('[MusicContext] Failed to register device:', error);
-      }
-    };
-    
-    registerDevice();
-    
-    return () => {
-      if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-      }
-      // Unregister device when component unmounts
-      playbackApi.unregisterDevice(deviceIdRef.current).catch(err => {
-        console.error('[MusicContext] Failed to unregister device:', err);
-      });
-    };
-  }, [isAuthenticated]);
+  // Local playback - không cần register device
   
   return (
     <MusicContext.Provider

@@ -103,7 +103,7 @@ const CustomTop3ChartTooltip = ({ active, payload, label }: TooltipProps<Tooltip
 const Top100 = () => {
   const [likedItems, setLikedItems] = useState<string[]>([]);
   const [topSongs, setTopSongs] = useState<TopSong[]>([]);
-  const { playSong, setQueue, addToQueue, queue } = useMusic();
+  const { playSong, setQueue, addToQueue, queue, currentSong } = useMusic();
   const [isLoading, setIsLoading] = useState(true);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [selectedSongForPlaylist, setSelectedSongForPlaylist] = useState<{
@@ -192,10 +192,17 @@ const Top100 = () => {
       audioUrl: song.audioUrl,
     };
 
-    // Phát bài hát được chọn - KHÔNG truyền setQueue để tránh override queue 100 bài
-    // playSongWithStreamUrl sẽ không set queue nếu không có setQueue parameter
+    // Phát bài hát được chọn
+    // Nếu là tab phụ, sẽ gửi command qua BroadcastChannel thay vì tự phát nhạc
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-    await playSongWithStreamUrl(formattedSong, playSong);
+    await playSongWithStreamUrl(formattedSong, playSong, setQueue, topSongs.map(s => ({
+      id: String(s.id),
+      name: s.name || s.songName,
+      artist: s.artist,
+      album: s.album,
+      duration: s.duration,
+      cover: s.cover,
+    })), currentSong);
     toast({ title: `Playing ${song.name || song.songName || "Unknown Song"}` });
   };
 
@@ -263,7 +270,7 @@ const Top100 = () => {
     });
   };
 
-  const handleAddToQueue = (song: TopSong) => {
+  const handleAddToQueue = async (song: TopSong) => {
     const formattedSong: Song = {
       id: String(song.id),
       name: song.name || song.songName,
@@ -276,24 +283,50 @@ const Top100 = () => {
       uuid: song.uuid,
     };
 
-    // Kiểm tra xem bài hát đã có trong queue chưa
-    const existingIndex = queue.findIndex(s => String(s.id) === String(song.id));
+    // Kiểm tra xem có phải tab chính không (tab có currentSong)
+    const isMainTab = currentSong !== null && currentSong !== undefined;
     
-    if (existingIndex >= 0) {
-      // Nếu đã có, remove và add lại ở cuối
-      const newQueue = queue.filter(s => String(s.id) !== String(song.id));
-      setQueue([...newQueue, formattedSong]);
-      toast({
-        title: `${song.name || song.songName || "Bài hát"} đã được đưa ra sau cùng danh sách phát`,
-        duration: 2000,
-      });
+    if (isMainTab) {
+      // Tab chính: thêm trực tiếp vào queue
+      const existingIndex = queue.findIndex(s => String(s.id) === String(song.id));
+      
+      if (existingIndex >= 0) {
+        // Nếu đã có, remove và add lại ở cuối
+        const newQueue = queue.filter(s => String(s.id) !== String(song.id));
+        setQueue([...newQueue, formattedSong]);
+        toast({
+          title: `${song.name || song.songName || "Bài hát"} đã được đưa ra sau cùng danh sách phát`,
+          duration: 2000,
+        });
+      } else {
+        // Nếu chưa có, add vào cuối
+        await addToQueue(formattedSong);
+        toast({
+          title: `${song.name || song.songName || "Bài hát"} đã được thêm vào cuối danh sách`,
+          duration: 2000,
+        });
+      }
     } else {
-      // Nếu chưa có, add vào cuối
-      addToQueue(formattedSong);
-      toast({
-        title: `${song.name || song.songName || "Bài hát"} đã được thêm vào cuối danh sách`,
-        duration: 2000,
-      });
+      // Tab phụ: gửi command qua BroadcastChannel
+      if (typeof window !== 'undefined' && window.BroadcastChannel) {
+        const channel = new BroadcastChannel('player');
+        channel.postMessage({
+          type: "PLAYER_CONTROL",
+          action: "addToQueue",
+          song: {
+            id: formattedSong.id,
+            title: formattedSong.title || formattedSong.name || formattedSong.songName,
+            name: formattedSong.name || formattedSong.songName,
+            artist: formattedSong.artist,
+            cover: formattedSong.cover,
+          },
+        });
+        channel.close();
+        toast({
+          title: `${song.name || song.songName || "Bài hát"} đã được thêm vào cuối danh sách`,
+          duration: 2000,
+        });
+      }
     }
   };
 
