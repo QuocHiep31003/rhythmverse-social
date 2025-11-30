@@ -54,7 +54,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       path: null, 
       children: [
         { label: "Premium Dashboard", path: "/admin/premium-dashboard" },
-        { label: "Gói Đăng Ký", path: "/admin/subscription-plans" },
+        { label: "Subscription Plans", path: "/admin/subscription-plans" },
       ]
     },
     { icon: Music, label: "Bài hát", path: "/admin/songs" },

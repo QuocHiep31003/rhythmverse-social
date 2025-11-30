@@ -27,8 +27,8 @@ const FEATURE_OPTIONS: { value: FeatureName; label: string }[] = [
   { value: FeatureName.CUSTOM_THEME, label: "Custom Theme" },
 ];
 
-const DEFAULT_PLAN_CODES: string[] = ["FREE", "PREMIUM", "PREMIUM_YEARLY"];
-const DEFAULT_PLANS = [...DEFAULT_PLAN_CODES]; // Các gói mặc định không thể xóa
+const DEFAULT_PLAN_CODES: string[] = ["FREE", "PREMIUM"];
+const DEFAULT_PLANS = [...DEFAULT_PLAN_CODES]; // Default plans cannot be deleted
 
 const AdminSubscriptionPlans = () => {
   const { toast } = useToast();
@@ -76,7 +76,7 @@ const AdminSubscriptionPlans = () => {
     }));
   };
 
-  // Sắp xếp để FREE, PREMIUM và PREMIUM_YEARLY luôn hiển thị đầu tiên
+  // Sort so FREE and PREMIUM always display first
   const sortPlansWithDefaultsFirst = (plans: SubscriptionPlanDTO[]): SubscriptionPlanDTO[] => {
     const defaultPlans: SubscriptionPlanDTO[] = [];
     const otherPlans: SubscriptionPlanDTO[] = [];
@@ -107,7 +107,7 @@ const AdminSubscriptionPlans = () => {
     try {
       setLoading(true);
       
-      // Luôn đảm bảo có đủ 3 gói mặc định trước khi load
+      // Always ensure default plans exist before loading
       try {
         await subscriptionPlanApi.seedDefaultPlans();
       } catch (seedError: any) {
@@ -130,7 +130,7 @@ const AdminSubscriptionPlans = () => {
         try {
           await subscriptionPlanApi.seedDefaultPlans();
           const updatedData = await subscriptionPlanApi.getAllPlans();
-          // Sắp xếp: FREE, PREMIUM và PREMIUM_YEARLY luôn hiển thị đầu tiên
+          // Sort: FREE and PREMIUM always display first
           const sorted = sortPlansWithDefaultsFirst(updatedData || []);
           setPlans(sorted);
         } catch (retryError: any) {
@@ -359,7 +359,7 @@ const AdminSubscriptionPlans = () => {
     if (isDefaultPlan) {
       toast({
         title: "Not allowed",
-        description: "You cannot delete default plans (FREE, PREMIUM, PREMIUM_YEARLY). You can only edit them.",
+        description: "You cannot delete default plans (FREE, PREMIUM). You can only edit them.",
         variant: "destructive",
       });
       return;
