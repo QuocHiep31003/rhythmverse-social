@@ -392,6 +392,7 @@ const MusicPlayer = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
   
+  // Sử dụng state local cho isPlaying, đồng bộ qua BroadcastChannel
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -424,12 +425,37 @@ const MusicPlayer = () => {
 
     // Chỉ setup khi là tab chính (có thể phát nhạc)
     const isMainTab = location.pathname !== "/login";
-    if (!isMainTab || !currentSong) {
+    if (!isMainTab) {
       return;
     }
 
+    // Setup channel ngay cả khi chưa có currentSong để nhận commands từ MiniPlayer
     const channel = new BroadcastChannel("player");
     channelRef.current = channel;
+
+    // Gửi state updates định kỳ (ngay cả khi tab không active)
+    const sendStateUpdate = () => {
+      // Chỉ gửi khi có currentSong và giá trị hợp lệ
+      if (currentSong && currentTime >= 0 && duration > 0) {
+        channel.postMessage({
+          type: "PLAYER_STATE_UPDATE",
+          songId: currentSong.id,
+          currentTime: currentTime, // Đã là seconds rồi
+          duration: duration, // Đã là seconds rồi
+          isPlaying: isPlaying,
+          songTitle: currentSong.title || currentSong.name || currentSong.songName,
+          songArtist: currentSong.artist,
+          songCover: currentSong.cover,
+          queue: queue.map(s => ({ 
+            id: s.id, 
+            title: s.title || s.name || s.songName, 
+            name: s.name || s.songName,
+            artist: s.artist, 
+            cover: s.cover 
+          })),
+        });
+      }
+    };
 
     // Lắng nghe commands từ MiniPlayer
     channel.onmessage = async (event) => {
@@ -441,16 +467,48 @@ const MusicPlayer = () => {
         try {
           switch (data.action) {
             case "togglePlay":
-              console.log('[MusicPlayer] Gọi togglePlay');
+              console.log('[MusicPlayer] Gọi togglePlay, currentSong:', currentSong, 'isPlaying:', isPlaying, 'queue length:', queue.length);
+              // Chỉ toggle play/pause nếu đã có currentSong
+              if (!currentSong) {
+                console.warn('[MusicPlayer] Không có currentSong, không thể toggle play. Command từ MiniPlayer sẽ bị bỏ qua.');
+                break;
+              }
+              // Toggle isPlaying state local ngay lập tức
+              const newIsPlaying = !isPlaying;
+              setIsPlaying(newIsPlaying);
+              
+              // Gọi togglePlay từ context (để cập nhật backend)
               await togglePlay();
+              
+              // Điều khiển audio element trực tiếp
+              if (audioRef.current) {
+                if (newIsPlaying) {
+                  audioRef.current.play().catch(err => {
+                    console.error('Play failed:', err);
+                    setIsPlaying(false);
+                  });
+                } else {
+                  audioRef.current.pause();
+                }
+              }
+              
+              // Gửi state update ngay lập tức với giá trị mới
+              setTimeout(() => {
+                console.log('[MusicPlayer] Gửi state update sau toggle, isPlaying mới:', newIsPlaying);
+                sendStateUpdate();
+              }, 100);
               break;
             case "next":
               console.log('[MusicPlayer] Gọi playNext');
               await playNext();
+              // Gửi state update ngay sau khi chuyển bài
+              setTimeout(() => sendStateUpdate(), 100);
               break;
             case "previous":
               console.log('[MusicPlayer] Gọi playPrevious');
               await playPrevious();
+              // Gửi state update ngay sau khi chuyển bài
+              setTimeout(() => sendStateUpdate(), 100);
               break;
             case "seek":
               console.log('[MusicPlayer] Gọi seek:', data.position);
@@ -460,36 +518,50 @@ const MusicPlayer = () => {
                 setCurrentTime(data.position / 1000);
                 // Cập nhật position trong context
                 await updatePosition(data.position);
+                // Gửi state update ngay sau khi seek
+                setTimeout(() => sendStateUpdate(), 100);
               }
               break;
           }
         } catch (error) {
           console.error('[MusicPlayer] Lỗi khi xử lý command:', error);
         }
+      } else if (data.type === "PLAYER_STATE_UPDATE") {
+        // Nhận state update từ tab khác (nếu có) - chỉ cập nhật nếu không phải tab chính
+        const isMainTab = location.pathname !== "/login" && currentSong;
+        if (!isMainTab && data.isPlaying !== undefined) {
+          console.log('[MusicPlayer] Nhận state update từ tab khác, cập nhật isPlaying:', data.isPlaying);
+          setIsPlaying(data.isPlaying);
+        }
+      } else if (data.type === "FOCUS_REQUEST") {
+        // MiniPlayer yêu cầu focus vào tab chính
+        console.log('[MusicPlayer] Nhận được yêu cầu focus từ MiniPlayer');
+        try {
+          // Cố gắng focus window (chỉ hoạt động nếu tab đang mở)
+          if (window.focus) {
+            window.focus();
+          }
+          // Gửi response để MiniPlayer biết tab chính còn sống
+          channel.postMessage({
+            type: "FOCUS_RESPONSE",
+          });
+        } catch (error) {
+          console.error('[MusicPlayer] Không thể focus window:', error);
+        }
       }
     };
 
-    // Gửi state updates định kỳ (ngay cả khi tab không active)
-    const sendStateUpdate = () => {
-      if (currentSong && currentTime >= 0 && duration > 0) {
-        channel.postMessage({
-          type: "PLAYER_STATE_UPDATE",
-          songId: currentSong.id,
-          currentTime: currentTime, // Đã là seconds rồi
-          duration: duration, // Đã là seconds rồi
-          isPlaying: isPlaying,
-          songTitle: currentSong.title || currentSong.name || currentSong.songName,
-          songArtist: currentSong.artist,
-          songCover: currentSong.cover,
-        });
+    // Gửi update ngay lập tức (nếu có currentSong)
+    if (currentSong) {
+      sendStateUpdate();
+    }
+
+    // Gửi update định kỳ (mỗi giây) - chỉ khi có currentSong
+    const interval = setInterval(() => {
+      if (currentSong) {
+        sendStateUpdate();
       }
-    };
-
-    // Gửi update ngay lập tức
-    sendStateUpdate();
-
-    // Gửi update định kỳ (mỗi giây)
-    const interval = setInterval(sendStateUpdate, 1000);
+    }, 1000);
 
     return () => {
       clearInterval(interval);
@@ -497,7 +569,31 @@ const MusicPlayer = () => {
         channelRef.current.close();
       }
     };
-  }, [togglePlay, playNext, playPrevious, location.pathname, currentSong, currentTime, duration, isPlaying]);
+  }, [togglePlay, playNext, playPrevious, location.pathname, currentSong, currentTime, duration, isPlaying, queue]);
+
+  // Gửi state update khi isPlaying thay đổi (để đồng bộ với MiniPlayer ngay lập tức)
+  useEffect(() => {
+    if (channelRef.current && currentSong && currentTime >= 0 && duration > 0) {
+      // Gửi state update khi isPlaying thay đổi
+      channelRef.current.postMessage({
+        type: "PLAYER_STATE_UPDATE",
+        songId: currentSong.id,
+        currentTime: currentTime,
+        duration: duration,
+        isPlaying: isPlaying, // Sử dụng state local
+        songTitle: currentSong.title || currentSong.name || currentSong.songName,
+        songArtist: currentSong.artist,
+        songCover: currentSong.cover,
+        queue: queue.map(s => ({ 
+          id: s.id, 
+          title: s.title || s.name || s.songName, 
+          name: s.name || s.songName,
+          artist: s.artist, 
+          cover: s.cover 
+        })),
+      });
+    }
+  }, [isPlaying, currentSong, currentTime, duration, queue]);
 
   // Load and play stream from songID
   useEffect(() => {
@@ -602,7 +698,7 @@ const MusicPlayer = () => {
           variant: "destructive",
         });
         setIsLoading(false);
-            setIsPlaying(false);
+            // isPlaying được cập nhật tự động từ context qua Firebase
             // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
             await removeFromQueue(currentSong.id);
             // Luôn cố gắng phát bài tiếp theo (playNext sẽ tự kiểm tra queue)
@@ -617,7 +713,7 @@ const MusicPlayer = () => {
             variant: "destructive",
           });
           setIsLoading(false);
-          setIsPlaying(false);
+          // isPlaying được cập nhật tự động từ context qua Firebase
           return;
         }
 
@@ -645,7 +741,7 @@ const MusicPlayer = () => {
         audio.currentTime = 0;
         audio.volume = volume; // Đảm bảo volume được giữ nguyên
         setCurrentTime(0);
-        setIsPlaying(false);
+        // isPlaying được cập nhật tự động từ context qua Firebase
 
         // Load HLS
         if (Hls.isSupported()) {
@@ -688,7 +784,7 @@ const MusicPlayer = () => {
           hls.on(Hls.Events.ERROR, (_, data) => {
             if (data.fatal) {
                 setIsLoading(false);
-              setIsPlaying(false);
+                setIsPlaying(false);
                 toast({
                 title: "Lỗi phát nhạc",
                 description: "Không thể load stream.",
@@ -874,15 +970,33 @@ const MusicPlayer = () => {
   }, [volume]);
 
   // Toggle play/pause - useCallback để tránh re-render
-  const handleTogglePlay = useCallback(() => {
-    if (!audioRef.current) return;
+  const handleTogglePlay = useCallback(async () => {
+    if (!audioRef.current || !currentSong) return;
     
-    if (isPlaying) {
-      audioRef.current.pause();
+    // Toggle isPlaying state local ngay lập tức
+    const newIsPlaying = !isPlaying;
+    setIsPlaying(newIsPlaying);
+    
+    // Gọi togglePlay từ context (để cập nhật backend)
+    await togglePlay();
+    
+    // Điều khiển audio element trực tiếp
+    if (newIsPlaying) {
+      audioRef.current.play().catch(err => {
+        console.error('Play failed:', err);
+        setIsPlaying(false);
+      });
     } else {
-      audioRef.current.play();
+      audioRef.current.pause();
     }
-  }, [isPlaying]);
+    
+    // Gửi state update qua BroadcastChannel
+    if (channelRef.current) {
+      setTimeout(() => {
+        sendStateUpdate();
+      }, 100);
+    }
+  }, [isPlaying, currentSong, togglePlay]);
 
   // Seek - useCallback để tránh re-render
   const handleSeek = useCallback((value: number[]) => {

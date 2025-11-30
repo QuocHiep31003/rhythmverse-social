@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useMusic } from "@/contexts/MusicContext";
-import { Play, Pause, SkipForward, SkipBack, X, Maximize2 } from "lucide-react";
+import { useMusic, type Song } from "@/contexts/MusicContext";
+import { Play, Pause, SkipForward, SkipBack, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ interface PlayerState {
   songTitle?: string;
   songArtist?: string;
   songCover?: string;
+  queue?: Array<{ id: string | number; [key: string]: unknown }>;
 }
 
 const MiniPlayer = () => {
@@ -28,6 +29,9 @@ const MiniPlayer = () => {
     position,
     duration,
     updatePosition,
+    queue,
+    setQueue,
+    playSong,
   } = useMusic();
 
   const [localState, setLocalState] = useState<PlayerState>({
@@ -39,8 +43,11 @@ const MiniPlayer = () => {
 
   const [isVisible, setIsVisible] = useState(false);
   const [isTabActive, setIsTabActive] = useState(true);
+  const [isMainTabAlive, setIsMainTabAlive] = useState(true);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const isMainPlayerRef = useRef<boolean>(false);
+  const lastStateUpdateRef = useRef<number>(Date.now());
+  const stateUpdateCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Detect tab visibility (khi chuyển tab browser)
   useEffect(() => {
@@ -77,11 +84,15 @@ const MiniPlayer = () => {
       if (data.type === "PLAYER_STATE_UPDATE") {
         const isMainTab = location.pathname !== "/login" && currentSong;
         
+        // Cập nhật timestamp của state update mới nhất
+        lastStateUpdateRef.current = Date.now();
+        setIsMainTabAlive(true);
+        
         // Cập nhật state nếu:
         // 1. Không phải tab chính (tab khác của web), HOẶC
         // 2. Là tab chính nhưng tab không active (chuyển sang tab browser khác)
         if (!isMainTab || (isMainTab && !isTabActive)) {
-          console.log('[MiniPlayer] Nhận được state update:', { isMainTab, isTabActive, data });
+          console.log('[MiniPlayer] Nhận được state update:', { isMainTab, isTabActive, data, queueLength: data.queue?.length });
           // Chỉ cập nhật currentTime nếu có giá trị hợp lệ (tránh reset về 0)
           setLocalState(prev => ({
             songId: data.songId || prev.songId,
@@ -95,8 +106,39 @@ const MiniPlayer = () => {
             songTitle: data.songTitle || prev.songTitle,
             songArtist: data.songArtist || prev.songArtist,
             songCover: data.songCover || prev.songCover,
+            queue: data.queue || prev.queue,
           }));
+          
+          // Đồng bộ queue vào context nếu queue từ tab chính khác với queue trong context
+          // Điều này đảm bảo khi gửi command, context có queue đúng
+          if (data.queue && data.queue.length > 0 && (!isMainTab || (isMainTab && !isTabActive))) {
+            // Chuyển đổi queue từ format BroadcastChannel sang format Song
+            const queueSongs: Song[] = data.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
+              id: String(q.id),
+              name: q.title || q.name || "Unknown Song",
+              songName: q.title || q.name || "Unknown Song",
+              title: q.title || q.name || "Unknown Song",
+              artist: q.artist || "Unknown Artist",
+              album: "",
+              duration: 0,
+              cover: q.cover || "",
+            }));
+            
+            // Chỉ cập nhật queue nếu queue hiện tại khác với queue mới
+            // Tránh cập nhật không cần thiết
+            if (queue.length !== queueSongs.length || 
+                queue.length === 0 || 
+                queue[0]?.id !== queueSongs[0]?.id) {
+              console.log('[MiniPlayer] Đồng bộ queue vào context, queue length:', queueSongs.length);
+              setQueue(queueSongs).catch(err => {
+                console.error('[MiniPlayer] Lỗi khi đồng bộ queue:', err);
+              });
+            }
+          }
         }
+      } else if (data.type === "FOCUS_RESPONSE") {
+        // Tab chính đã focus, không cần làm gì thêm
+        console.log('[MiniPlayer] Tab chính đã focus');
       }
     };
 
@@ -118,6 +160,7 @@ const MiniPlayer = () => {
             songTitle: currentSong.title || currentSong.name || currentSong.songName,
             songArtist: currentSong.artist,
             songCover: currentSong.cover,
+            queue: queue.map(s => ({ id: s.id, title: s.title || s.name || s.songName, artist: s.artist, cover: s.cover })),
           });
         }
       };
@@ -134,12 +177,33 @@ const MiniPlayer = () => {
       };
     }
 
+    // Kiểm tra xem tab chính còn sống không (nếu không nhận được update trong 3 giây)
+    if (!isMainTab) {
+      const checkMainTabAlive = () => {
+        const timeSinceLastUpdate = Date.now() - lastStateUpdateRef.current;
+        if (timeSinceLastUpdate > 3000 && localState.songId) {
+          // Không nhận được update trong 3 giây, tab chính có thể đã đóng
+          console.log('[MiniPlayer] Tab chính có thể đã đóng, chuyển thành MusicPlayer');
+          setIsMainTabAlive(false);
+        }
+      };
+
+      stateUpdateCheckIntervalRef.current = setInterval(checkMainTabAlive, 1000);
+
+      return () => {
+        if (stateUpdateCheckIntervalRef.current) {
+          clearInterval(stateUpdateCheckIntervalRef.current);
+        }
+        channel.close();
+      };
+    }
+
     return () => {
       if (channelRef.current) {
         channelRef.current.close();
       }
     };
-  }, [currentSong, isPlaying, position, duration, location.pathname, isTabActive]);
+  }, [currentSong, isPlaying, position, duration, location.pathname, isTabActive, queue, localState.songId, setQueue]);
 
   // Cập nhật localState từ currentSong khi tab active (cho tab chính)
   // Chỉ cập nhật khi có giá trị hợp lệ để tránh reset về 0
@@ -181,61 +245,45 @@ const MiniPlayer = () => {
   }, []);
 
   // Handle controls
+  // MiniPlayer chỉ hiển thị khi không phải tab chính hoặc tab không active
+  // Nên luôn gửi command qua BroadcastChannel
   const handleTogglePlay = useCallback(async () => {
-    const isMainTab = location.pathname !== "/login" && currentSong;
-    
-    if (isMainTab && isTabActive) {
-      // Tab chính và đang active: gọi trực tiếp
-      console.log('[MiniPlayer] Tab chính active - gọi togglePlay trực tiếp');
-      await togglePlay();
-    } else {
-      // Tab khác hoặc tab chính nhưng không active: gửi command qua BroadcastChannel
-      console.log('[MiniPlayer] Gửi togglePlay command qua BroadcastChannel', { isMainTab, isTabActive });
-      channelRef.current?.postMessage({
+    console.log('[MiniPlayer] handleTogglePlay được gọi, channelRef.current:', channelRef.current);
+    if (!channelRef.current) {
+      console.error('[MiniPlayer] channelRef.current là null, không thể gửi command');
+      return;
+    }
+    console.log('[MiniPlayer] Gửi togglePlay command qua BroadcastChannel');
+    try {
+      channelRef.current.postMessage({
         type: "PLAYER_CONTROL",
         action: "togglePlay",
       });
+      console.log('[MiniPlayer] Đã gửi togglePlay command');
+    } catch (error) {
+      console.error('[MiniPlayer] Lỗi khi gửi togglePlay command:', error);
     }
-  }, [togglePlay, location.pathname, currentSong, isTabActive]);
+  }, []);
 
   const handleNext = useCallback(async () => {
-    const isMainTab = location.pathname !== "/login" && currentSong;
-    
-    if (isMainTab && isTabActive) {
-      console.log('[MiniPlayer] Tab chính active - gọi playNext trực tiếp');
-      await playNext();
-    } else {
-      console.log('[MiniPlayer] Gửi next command qua BroadcastChannel', { isMainTab, isTabActive });
-      channelRef.current?.postMessage({
-        type: "PLAYER_CONTROL",
-        action: "next",
-      });
-    }
-  }, [playNext, location.pathname, currentSong, isTabActive]);
+    console.log('[MiniPlayer] Gửi next command qua BroadcastChannel');
+    channelRef.current?.postMessage({
+      type: "PLAYER_CONTROL",
+      action: "next",
+    });
+  }, []);
 
   const handlePrevious = useCallback(async () => {
-    const isMainTab = location.pathname !== "/login" && currentSong;
-    
-    if (isMainTab && isTabActive) {
-      console.log('[MiniPlayer] Tab chính active - gọi playPrevious trực tiếp');
-      await playPrevious();
-    } else {
-      console.log('[MiniPlayer] Gửi previous command qua BroadcastChannel', { isMainTab, isTabActive });
-      channelRef.current?.postMessage({
-        type: "PLAYER_CONTROL",
-        action: "previous",
-      });
-    }
-  }, [playPrevious, location.pathname, currentSong, isTabActive]);
+    console.log('[MiniPlayer] Gửi previous command qua BroadcastChannel');
+    channelRef.current?.postMessage({
+      type: "PLAYER_CONTROL",
+      action: "previous",
+    });
+  }, []);
 
   const handleClose = useCallback(() => {
     setIsVisible(false);
   }, []);
-
-  const handleMaximize = useCallback(() => {
-    // Navigate đến trang chính hoặc mở player full
-    navigate("/");
-  }, [navigate]);
 
   // Handle seek
   const handleSeek = useCallback((value: number[]) => {
@@ -294,15 +342,6 @@ const MiniPlayer = () => {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleMaximize}
-              title="Mở player đầy đủ"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </Button>
             <Button
               variant="ghost"
               size="icon"
