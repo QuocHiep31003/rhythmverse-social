@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { favoritesApi, FavoriteSongDTO } from "@/services/api/favoritesApi";
 import { playlistsApi, PlaylistLibraryItemDTO } from "@/services/api/playlistApi";
+import type { SongDTO } from "@/types/playlistLibrary";
 import { authApi } from "@/services/api";
 import { PlaylistVisibility } from "@/types/playlist";
 import type { PlaylistItem } from "@/types/playlistLibrary";
@@ -39,17 +40,35 @@ import "./FavoriteSongs.css";
 
 const PAGE_SIZE = 40;
 
-const PlaylistCardWithFavorite = ({ playlist }: { playlist: PlaylistItem }) => {
+const PlaylistCardWithFavorite = ({ 
+  playlist, 
+  duration, 
+  playlistMeta 
+}: { 
+  playlist: PlaylistItem;
+  duration?: string;
+  playlistMeta?: { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null };
+}) => {
   const numericId = Number(playlist.id);
   const favoriteHook = useFavoritePlaylist(Number.isFinite(numericId) ? numericId : undefined, { disableToast: false });
+  
+  const formatNumber = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toString();
+  };
+  
   return (
     <div className="snap-start w-full sm:w-auto sm:min-w-[240px] sm:max-w-[260px]">
       <PlaylistCard
         playlist={playlist}
+        playlistMeta={playlistMeta}
+        duration={duration || playlist.totalDuration}
         isLiked={favoriteHook.isFavorite}
         onLike={favoriteHook.toggleFavorite}
         likePending={favoriteHook.pending}
-        onPlay={() => toast({ title: `Playing ${playlist.title}`, description: `${playlist.songCount} songs` })}
+        formatNumber={formatNumber}
+        onPlay={() => toast({ title: `Playing ${playlist.title}`, description: `${playlistMeta?.songCount ?? playlist.songCount} songs` })}
       />
     </div>
   );
@@ -94,38 +113,54 @@ const mapFavoriteSongToPlayerSong = (song: FavoriteSongDTO): Song => {
   };
 };
 
-const mapLibraryPlaylist = (item: PlaylistLibraryItemDTO): PlaylistItem => ({
+const mapLibraryPlaylist = (item: PlaylistLibraryItemDTO): PlaylistItem => {
+  // Get songCount from multiple sources - same logic as PlaylistLibrary
+  const rawSongCount =
+    (item as { songCount?: number | null; totalSongs?: number | null }).songCount ??
+    (item as { songCount?: number | null; totalSongs?: number | null }).totalSongs ??
+    null;
+  const songCount =
+    typeof rawSongCount === 'number' && Number.isFinite(rawSongCount) && rawSongCount >= 0
+      ? rawSongCount
+      : 0;
+  
+  // Get totalDuration
+  const totalDuration =
+    (item as { totalDuration?: string | null }).totalDuration ?? '--';
+  
+  return {
   id: String(item.playlistId),
   title: item.name,
   description: item.description ?? "",
   cover: item.coverUrl ?? "",
-  songCount: item.songCount ?? 0,
-  totalDuration: item.totalDuration ?? "--",
+    songCount,
+    totalDuration,
   isPublic: item.visibility === PlaylistVisibility.PUBLIC,
   visibility: item.visibility ?? null,
   likes: item.likes ?? 0,
   createdAt: item.createdAt ?? null,
-  updatedAt: item.updatedAt ?? item.dateUpdate ?? null,
+    updatedAt: item.updatedAt ?? (item as { dateUpdate?: string | null }).dateUpdate ?? null,
   ownerId: item.ownerId,
   ownerName: item.ownerName,
   ownerAvatar: item.ownerAvatar ?? null,
   isOwner: !!item.isOwner,
   isCollaborator: !!item.isCollaborator,
   role: item.role as PlaylistItem["role"],
-});
+  };
+};
 
 const formatFavoriteDate = (value?: string | null) => {
   if (!value) return "—";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "—";
   try {
-    return new Intl.DateTimeFormat("vi-VN", {
+    return new Intl.DateTimeFormat("en-US", {
       day: "2-digit",
       month: "short",
       year: "numeric",
     }).format(parsed);
   } catch {
-    return parsed.toLocaleDateString("vi-VN");
+    return parsed.toLocaleDateString("en-US");
   }
 };
 
@@ -139,6 +174,8 @@ const FavoriteSongs = () => {
   const [addToPlaylistSong, setAddToPlaylistSong] = useState<{ id: number; title: string; cover?: string } | null>(null);
   const [playlistPreview, setPlaylistPreview] = useState<PlaylistItem[]>([]);
   const [loadingPlaylists, setLoadingPlaylists] = useState(true);
+  const [playlistDurations, setPlaylistDurations] = useState<Record<string, string>>({});
+  const [playlistMeta, setPlaylistMeta] = useState<Record<string, { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null }>>({});
   const [profile, setProfile] = useState<{ name: string; avatar: string }>({ name: "", avatar: "" });
   const [profileLoading, setProfileLoading] = useState(true);
   const [denseRows, setDenseRows] = useState(false);
@@ -199,7 +236,65 @@ const FavoriteSongs = () => {
     try {
       setLoadingPlaylists(true);
       const items = await playlistsApi.library();
-      setPlaylistPreview(items.slice(0, 6).map(mapLibraryPlaylist));
+      const mapped = items.slice(0, 6).map(mapLibraryPlaylist);
+      setPlaylistPreview(mapped);
+      
+      // Fetch metadata for each playlist
+      const ids = mapped.map(p => p.id);
+      const res = await Promise.all(ids.map(async (id) => {
+        try {
+          const detail = await playlistsApi.getById(id);
+          const secs = Array.isArray(detail.songs)
+            ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0)
+            : 0;
+          const songCount =
+            Array.isArray(detail.songs)
+              ? detail.songs.length
+              : Array.isArray(detail.songIds)
+              ? detail.songIds.length
+              : undefined;
+          const visibility =
+            (detail as { visibility?: PlaylistVisibility | string | null }).visibility ?? null;
+          const updatedAt =
+            (detail as { updatedAt?: string | null }).updatedAt ??
+            (detail as { dateUpdate?: string | null }).dateUpdate ??
+            (detail as { createdAt?: string | null }).createdAt ??
+            null;
+          return {
+            id,
+            duration: formatTotal(secs),
+            songCount,
+            visibility,
+            updatedAt,
+          };
+        } catch {
+          return { id, duration: '--' };
+        }
+      }));
+      
+      const durationMap: Record<string, string> = {};
+      const metaMap: Record<
+        string,
+        { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null }
+      > = {};
+      res.forEach(({ id, duration, songCount, visibility, updatedAt }) => {
+        durationMap[id] = duration;
+        const nextMeta: { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null } = {};
+        if (typeof songCount === 'number' && Number.isFinite(songCount)) {
+          nextMeta.songCount = songCount;
+        }
+        if (typeof visibility === 'string' || visibility === null) {
+          nextMeta.visibility = visibility;
+        }
+        if (typeof updatedAt === 'string' || updatedAt === null) {
+          nextMeta.updatedAt = updatedAt;
+        }
+        if (Object.keys(nextMeta).length > 0) {
+          metaMap[id] = nextMeta;
+        }
+      });
+      setPlaylistDurations(durationMap);
+      setPlaylistMeta(metaMap);
     } catch {
       setPlaylistPreview([]);
     } finally {
@@ -242,8 +337,8 @@ const FavoriteSongs = () => {
 
   const handleDownloadFavorites = () => {
     toast({
-      title: "Tải playlist yêu thích",
-      description: "Tính năng tải ngoại tuyến sẽ sớm ra mắt.",
+      title: "Download favorite playlist",
+      description: "Offline download feature coming soon.",
     });
   };
 
@@ -251,15 +346,15 @@ const FavoriteSongs = () => {
 
   const handleActionComingSoon = () =>
     toast({
-      title: "Tính năng sắp ra mắt",
-      description: "Chúng tôi đang hoàn thiện trải nghiệm này.",
+      title: "Coming soon",
+      description: "We're working on this feature.",
     });
 
   const profileDisplayName = profile.name?.trim()
     ? profile.name
     : profileLoading
-      ? "Đang tải..."
-      : "Playlist của bạn";
+      ? "Loading..."
+      : "Your playlist";
   const profileInitial = profileDisplayName.charAt(0).toUpperCase() || "B";
   const heroBackgroundClass = "favorite-hero-overlay";
 
@@ -278,11 +373,11 @@ const FavoriteSongs = () => {
   };
 
   return (
-    <div className="min-h-screen text-white favorite-page-background">
-      <section className="relative overflow-hidden border-b border-white/10">
+    <div className="min-h-screen text-foreground dark:text-white favorite-page-background">
+      <section className="relative overflow-hidden border-b border-border dark:border-white/10">
         <div className={`absolute inset-0 ${heroBackgroundClass}`} />
         <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
-          <div className="relative w-52 h-52 md:w-64 md:h-64 rounded-3xl overflow-hidden shadow-[0_25px_45px_rgba(8,8,35,0.45)] ring-1 ring-white/10">
+          <div className="relative w-52 h-52 md:w-64 md:h-64 rounded-3xl overflow-hidden shadow-[0_25px_45px_rgba(8,8,35,0.45)] ring-1 ring-border dark:ring-white/10">
             <div className="absolute inset-0 bg-gradient-to-br from-[#a78bfa] via-[#8b5cf6] to-[#6d28d9]" />
             <div className="absolute inset-0 opacity-70 mix-blend-screen bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.8),transparent_55%)]" />
             <div className="absolute inset-0 opacity-40 mix-blend-screen bg-[radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.8),transparent_45%)]" />
@@ -293,26 +388,26 @@ const FavoriteSongs = () => {
             </div>
           </div>
           <div className="flex-1 text-center md:text-left">
-            <Badge className="bg-white/15 text-white uppercase tracking-[0.4em] rounded-full px-4 py-1 text-[11px]">
+            <Badge className="bg-muted/50 dark:bg-white/15 text-foreground dark:text-white uppercase tracking-[0.4em] rounded-full px-4 py-1 text-[11px]">
               Your Favorite
             </Badge>
-            <h1 className="text-4xl md:text-6xl font-black mt-3 drop-shadow-sm">
+            <h1 className="text-4xl md:text-6xl font-black mt-3 drop-shadow-sm text-foreground dark:text-white">
               Liked Songs
             </h1>
 
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-6 text-sm text-white/80">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-6 text-sm text-muted-foreground dark:text-white/80">
               <div className="flex items-center gap-2">
-                <Avatar className="h-9 w-9 border border-white/20 bg-white/5">
+                <Avatar className="h-9 w-9 border border-border dark:border-white/20 bg-muted dark:bg-white/5">
                   <AvatarImage src={profile.avatar} alt={profileDisplayName} />
-                  <AvatarFallback className="bg-white/10 text-white">
+                  <AvatarFallback className="bg-muted dark:bg-white/10 text-foreground dark:text-white">
                     {profileInitial}
                   </AvatarFallback>
                 </Avatar>
                 <span className="font-semibold">{profileDisplayName}</span>
               </div>
-              <span className="text-white/40">•</span>
-              <span>{mappedSongs.length} bài hát</span>
-              <span className="text-white/40">•</span>
+              <span className="text-muted-foreground/50 dark:text-white/40">•</span>
+              <span>{mappedSongs.length} {mappedSongs.length === 1 ? "song" : "songs"}</span>
+              <span className="text-muted-foreground/50 dark:text-white/40">•</span>
               <span>{formatTotal(totalDuration)}</span>
             </div>
           </div>
@@ -324,8 +419,8 @@ const FavoriteSongs = () => {
           <div className="flex flex-wrap items-center gap-4">
             <Button
               size="icon"
-              className={`h-16 w-16 rounded-full text-black shadow-2xl transition ${
-                isPlaying ? "bg-white hover:bg-white/90" : "bg-[#1ed760] hover:bg-[#1ed760]/90"
+              className={`h-16 w-16 rounded-full text-white shadow-2xl transition duration-200 ${
+                isPlaying ? "bg-[#c084fc] hover:bg-[#c084fc]/90" : "bg-[#a855f7] hover:bg-[#9333ea]"
               }`}
               onClick={handlePrimaryAction}
               disabled={!mappedSongs.length}
@@ -334,22 +429,22 @@ const FavoriteSongs = () => {
             </Button>
             <Button
               variant="outline"
-              className="gap-2 border-white/20 bg-white/5 text-white hover:bg-white/10"
+              className="gap-2 border-border dark:border-white/20 bg-muted/50 dark:bg-white/5 text-foreground dark:text-white hover:bg-muted dark:hover:bg-white/10"
               onClick={handleShufflePlay}
               disabled={!mappedSongs.length}
             >
               <Shuffle className="w-4 h-4" />
-              Ngẫu nhiên
+              Shuffle
             </Button>
-            <Button variant="ghost" className="text-white/80 hover:text-white" onClick={() => navigate("/playlists")}>
-              Về thư viện
+            <Button variant="ghost" className="text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white" onClick={() => navigate("/playlists")}>
+              Back to library
             </Button>
           </div>
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="icon"
-              className="text-white/80 hover:text-white"
+              className="text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white"
               onClick={handleDownloadFavorites}
               disabled={!mappedSongs.length}
             >
@@ -360,8 +455,8 @@ const FavoriteSongs = () => {
               size="icon"
               className={
                 denseRows
-                  ? "bg-white text-background hover:bg-white/90"
-                  : "text-white/80 hover:text-white"
+                  ? "bg-foreground dark:bg-white text-background dark:text-background hover:bg-foreground/90 dark:hover:bg-white/90"
+                  : "text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white"
               }
               onClick={handleToggleDensity}
             >
@@ -370,7 +465,7 @@ const FavoriteSongs = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="text-white/80 hover:text-white"
+              className="text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white"
               onClick={handleActionComingSoon}
             >
               <MoreHorizontal className="w-5 h-5" />
@@ -380,26 +475,26 @@ const FavoriteSongs = () => {
       </section>
 
       <div className="container mx-auto max-w-6xl px-4 md:px-8 pb-12 space-y-10">
-        <Card className="border-white/10 bg-black/40 backdrop-blur">
+        <Card className="border-border dark:border-white/10 bg-card/50 dark:bg-black/40 backdrop-blur">
           <CardContent className="p-0">
-            <div className="grid grid-cols-[56px_minmax(0,4fr)_minmax(0,2fr)_150px_96px_140px] md:grid-cols-[72px_minmax(0,4fr)_minmax(0,2.2fr)_160px_96px_160px] px-6 py-3 text-xs uppercase text-white/60 border-b border-white/10">
-              <div className="text-center">#</div>
-              <div>Bài hát</div>
-              <div className="hidden sm:block">Album</div>
-              <div className="hidden md:block text-center">Ngày thêm</div>
-              <div className="text-center">Thời lượng</div>
-              <div className="text-center">Hành động</div>
+            <div className="grid grid-cols-[56px_minmax(0,4fr)_minmax(0,2fr)_150px_96px_140px] md:grid-cols-[72px_minmax(0,4fr)_minmax(0,2.2fr)_160px_96px_160px] px-6 py-3 gap-4 text-xs uppercase text-muted-foreground dark:text-white/60 border-b border-border dark:border-white/10 items-center">
+              <div className="flex justify-center items-center">#</div>
+              <div className="flex items-center">Title</div>
+              <div className="hidden sm:flex items-center">Album</div>
+              <div className="hidden md:flex items-center justify-center w-full">Date added</div>
+              <div className="flex items-center justify-center w-full">Duration</div>
+              <div className="flex items-center justify-center w-full">Actions</div>
             </div>
 
             {loading ? (
               <div className="space-y-3 p-6">
                 {[...Array(6)].map((_, idx) => (
-                  <Skeleton key={idx} className="h-16 w-full bg-white/5" />
+                  <Skeleton key={idx} className="h-16 w-full bg-muted dark:bg-white/5" />
                 ))}
               </div>
             ) : mappedSongs.length === 0 ? (
-              <div className="px-6 py-12 text-center text-white/70">
-                Bạn chưa lưu bài hát nào. Nhấn icon trái tim ở bất kỳ bài hát nào để thêm vào đây.
+              <div className="px-6 py-12 text-center text-muted-foreground dark:text-white/70">
+                You haven't saved any songs yet. Click the heart icon on any song to add it here.
               </div>
             ) : (
               mappedSongs.map((song, index) => (
@@ -417,8 +512,8 @@ const FavoriteSongs = () => {
                     const candidateId = Number(songs[index]?.id ?? song.id);
                     if (!Number.isFinite(candidateId)) {
                       toast({
-                        title: "Không thể thêm",
-                        description: "Thiếu thông tin bài hát để thêm vào playlist.",
+                        title: "Cannot add",
+                        description: "Missing song information to add to playlist.",
                         variant: "destructive",
                       });
                       return;
@@ -447,11 +542,11 @@ const FavoriteSongs = () => {
           <div className="flex justify-center">
             <Button
               variant="outline"
-              className="border-white/20 text-white hover:bg-white/10"
+              className="border-border dark:border-white/20 text-foreground dark:text-white hover:bg-muted dark:hover:bg-white/10"
               onClick={handleLoadMore}
               disabled={loadingMore}
             >
-              {loadingMore ? "Đang tải..." : "Tải thêm"}
+              {loadingMore ? "Loading..." : "Load more"}
             </Button>
           </div>
         )}
@@ -459,33 +554,38 @@ const FavoriteSongs = () => {
         <section className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h3 className="text-xl font-semibold">Playlist của bạn</h3>
-              <p className="text-sm text-white/70">
-                Tiếp tục nghe các playlist đã tạo hoặc đang cộng tác.
+              <h3 className="text-xl font-semibold text-foreground dark:text-white">Your playlists</h3>
+              <p className="text-sm text-muted-foreground dark:text-white/70">
+                Continue listening to playlists you've created or are collaborating on.
               </p>
             </div>
-            <Button variant="ghost" size="sm" className="text-white/80 hover:text-white" onClick={() => navigate("/playlists")}>
-              Xem tất cả
+            <Button variant="ghost" size="sm" className="text-muted-foreground dark:text-white/80 hover:text-foreground dark:hover:text-white" onClick={() => navigate("/playlists")}>
+              See all
             </Button>
           </div>
           {loadingPlaylists ? (
             <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
               {[0, 1, 2].map((skeleton) => (
-                <Skeleton key={skeleton} className="h-64 rounded-xl bg-white/5" />
+                <Skeleton key={skeleton} className="h-64 rounded-xl bg-muted dark:bg-white/5" />
               ))}
             </div>
           ) : playlistPreview.length === 0 ? (
-            <div className="rounded-xl border border-white/10 bg-black/40 p-8 text-center text-white/70">
-              Bạn chưa có playlist nào trong thư viện. Tạo playlist mới để hiển thị tại đây.
+            <div className="rounded-xl border border-border dark:border-white/10 bg-card/50 dark:bg-black/40 p-8 text-center text-muted-foreground dark:text-white/70">
+              You don't have any playlists in your library yet. Create a new playlist to see it here.
             </div>
           ) : (
             <div className="grid gap-4 md:gap-6 grid-cols-[repeat(auto-fill,minmax(220px,1fr))]">
-              {playlistPreview.map((playlist) => (
-                <PlaylistCardWithFavorite
-                  key={playlist.id}
-                  playlist={playlist}
-                />
-              ))}
+              {playlistPreview.map((playlist) => {
+                const playlistIdKey = String(playlist.id);
+                return (
+                  <PlaylistCardWithFavorite
+                    key={playlist.id}
+                    playlist={playlist}
+                    duration={playlistDurations[playlistIdKey] ?? playlist.totalDuration}
+                    playlistMeta={playlistMeta[playlistIdKey]}
+                  />
+                );
+              })}
             </div>
           )}
         </section>
@@ -513,8 +613,34 @@ const FavoriteSongs = () => {
           songId={addToPlaylistSong.id}
           songTitle={addToPlaylistSong.title}
           songCover={addToPlaylistSong.cover}
+          onSuccess={() => {
+            // Refresh playlist preview after adding song
+            loadPlaylistPreview();
+          }}
         />
       )}
+
+      {/* Wave animation CSS */}
+      <style>{`
+        .bar {
+          display: inline-block;
+          width: 2px;
+          height: 8px;
+          background: ${isPlaying ? "rgb(167, 139, 250)" : "transparent"};
+          animation: ${isPlaying ? "fav-eq 1s ease-in-out infinite" : "none"};
+        }
+        .bar.delay-100 {
+          animation-delay: 0.12s;
+        }
+        .bar.delay-200 {
+          animation-delay: 0.24s;
+        }
+        @keyframes fav-eq {
+          0% { height: 4px; }
+          50% { height: 14px; }
+          100% { height: 4px; }
+        }
+      `}</style>
     </div>
   );
 };
@@ -550,9 +676,11 @@ const FavoriteSongRow = ({
   const favoriteHook = useFavoriteSong(Number.isFinite(numericId) ? numericId : undefined);
   const cover = playerSong.cover || "/placeholder.svg";
   const likes = song.likes ?? 0;
+  const [imageError, setImageError] = useState(false);
+  const hasValidCover = cover && cover !== "/placeholder.svg" && !imageError;
   const gridTemplate = dense
     ? "grid-cols-[40px_minmax(0,2.5fr)_minmax(0,1.6fr)_110px_80px_130px] md:grid-cols-[56px_minmax(0,3fr)_minmax(0,1.8fr)_130px_96px_140px]"
-    : "grid-cols-[56px_minmax(0,4fr)_minmax(0,2fr)_150px_96px_140px] md:grid-cols-[72px_minmax(0,4.5fr)_minmax(0,2.2fr)_160px_96px_160px]";
+    : "grid-cols-[56px_minmax(0,4fr)_minmax(0,2fr)_150px_96px_140px] md:grid-cols-[72px_minmax(0,4fr)_minmax(0,2.2fr)_160px_96px_160px]";
   const rowPadding = dense ? "px-4 py-2 gap-3 text-sm" : "px-6 py-3 gap-4";
   const coverSize = dense ? "w-10 h-10" : "w-12 h-12";
   const titleClass = dense ? "text-sm" : "text-base";
@@ -582,23 +710,21 @@ const FavoriteSongRow = ({
       </div>
 
       <div className="min-w-0 flex items-center gap-3">
-        {cover ? (
+        {hasValidCover ? (
           <img
             src={cover}
             alt={playerSong.title || playerSong.songName}
             className={`${coverSize} rounded object-cover`}
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
+            onError={() => setImageError(true)}
           />
         ) : null}
-        {!cover && (
-          <div className={`${coverSize} rounded bg-muted flex items-center justify-center text-sm font-semibold uppercase`}>
-            {(playerSong.title || playerSong.songName || "?").charAt(0)}
+        {!hasValidCover && (
+          <div className={`${coverSize} rounded bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center text-sm font-semibold uppercase text-primary`}>
+            {(playerSong.title || playerSong.songName || "?").charAt(0).toUpperCase()}
           </div>
         )}
         <div className="min-w-0">
-          <p className={`font-medium truncate ${titleClass}`}>{playerSong.title || playerSong.songName}</p>
+          <p className={`font-medium truncate ${titleClass} text-foreground dark:text-white`}>{playerSong.title || playerSong.songName}</p>
           <p className="text-sm text-muted-foreground truncate">{playerSong.artist}</p>
         </div>
       </div>
@@ -607,15 +733,15 @@ const FavoriteSongRow = ({
         <span className="truncate">{playerSong.album || "—"}</span>
       </div>
 
-      <div className="hidden md:block text-sm text-muted-foreground text-center">
+      <div className="hidden md:flex text-sm text-muted-foreground items-center justify-center w-full">
         {formatFavoriteDate(song.likedAt)}
       </div>
 
-      <div className="text-sm text-muted-foreground text-center">
+      <div className="text-sm text-muted-foreground flex items-center justify-center w-full">
         {playerSong.duration > 0 ? formatDurationForRow(playerSong.duration) : "--:--"}
       </div>
 
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex items-center justify-center gap-2 w-full">
         <Button
           variant="ghost"
           size="icon"
@@ -631,7 +757,7 @@ const FavoriteSongRow = ({
             }
           }}
           disabled={favoriteHook.pending || !Number.isFinite(numericId)}
-          title={favoriteHook.isFavorite ? "Bỏ khỏi Favorite" : "Thêm vào Favorite"}
+          title={favoriteHook.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
         >
           <Heart className={`w-4 h-4 ${favoriteHook.isFavorite ? "fill-current" : ""}`} />
         </Button>
@@ -654,7 +780,7 @@ const FavoriteSongRow = ({
               }}
             >
               <ListPlus className="w-4 h-4 mr-2" />
-              Thêm vào playlist
+              Add to playlist
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
@@ -663,7 +789,7 @@ const FavoriteSongRow = ({
               }}
             >
               <Share2 className="w-4 h-4 mr-2" />
-              Chia sẻ
+              Share
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
@@ -672,7 +798,7 @@ const FavoriteSongRow = ({
               }}
             >
               <ExternalLink className="w-4 h-4 mr-2" />
-              Xem chi tiết
+              View details
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

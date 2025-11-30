@@ -33,6 +33,7 @@ export interface FavoriteAlbumDTO {
   name: string;
   description?: string | null;
   coverUrl?: string | null;
+  artist?: { id?: number; name?: string } | string | null; // Can be object or string
   artistName?: string | null;
   artistId?: number | null;
   songCount?: number | null;

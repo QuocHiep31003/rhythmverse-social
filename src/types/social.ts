@@ -72,6 +72,9 @@ export interface SharedPlaylistSongMessageData {
   artists: string[];
   coverUrl?: string | null;
   durationLabel?: string | null;
+  duration?: string | number | null;
+  length?: string | number | null;
+  durationMs?: number | null;
 }
 
 export interface SharedPlaylistMessageData {
@@ -83,7 +86,9 @@ export interface SharedPlaylistMessageData {
   songLimit?: number | null;
   songs: SharedPlaylistSongMessageData[];
   ownerName?: string | null;
+  songCount?: number | null;
   totalSongs?: number | null;
+  totalDuration?: string | null;
 }
 
 export interface SharedAlbumMessageData {
@@ -93,12 +98,17 @@ export interface SharedAlbumMessageData {
   artistName?: string | null;
   releaseYear?: number | null;
   releaseDateLabel?: string | null;
+  songCount?: number | null;
+  totalSongs?: number | null;
+  songs?: Array<{ id?: string | number; duration?: string | number | null; length?: string | number | null; durationMs?: number | null }>;
+  totalDuration?: string | null;
 }
 
 export interface SharedSongMessageData {
   id?: number;
   name?: string;
-  artists: string[];
+  artists?: string[] | Array<string | { name?: string }>;
+  artist?: string;
   coverUrl?: string | null;
   audioUrl?: string | null;
   durationLabel?: string | null;

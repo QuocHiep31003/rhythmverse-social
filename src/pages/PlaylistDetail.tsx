@@ -1,4 +1,4 @@
-﻿﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music, Shuffle, Share2, Download } from "lucide-react";
+import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music, Shuffle, Share2, Download, Globe, Lock } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
@@ -28,7 +28,7 @@ import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { songsApi } from "@/services/api/songApi";
 import { songMoodApi } from "@/services/api/songMoodApi";
-import { buildJsonHeaders, API_BASE_URL } from "@/services/api";
+import { buildJsonHeaders, API_BASE_URL, authApi } from "@/services/api";
 import { mapToPlayerSong } from "@/lib/utils";
 import { friendsApi } from "@/services/api/friendsApi";
 import { userApi } from "@/services/api/userApi";
@@ -435,9 +435,38 @@ const PlaylistDetail = () => {
       setLoadingRecommended(true);
       try {
         const data = await songsApi.getAll({ size: 4, page: 0 });
-        setRecommendedSongs((data.content || []).slice(0, 4));
-      } catch (error) {
-        console.error("Failed to load recommended songs:", error);
+        // Convert Song[] to SearchSongResult[] - ensure id is number
+        const songs = (data.content || []).slice(0, 4);
+        const converted: SearchSongResult[] = songs.map((song): SearchSongResult => {
+          const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
+          // Handle artists - can be array or string
+          let artists: Array<{ id?: number; name: string }> = [];
+          if (Array.isArray(song.artists)) {
+            artists = song.artists.map((a: any) => {
+              if (typeof a === 'string') return { name: a };
+              if (a && typeof a === 'object' && 'name' in a) {
+                const result: { id?: number; name: string } = { name: a.name };
+                if (a.id !== undefined) result.id = a.id;
+                return result;
+              }
+              return null;
+            }).filter((a): a is { id?: number; name: string } => a !== null);
+          }
+          return {
+            id: songId,
+            name: song.name || song.songName || song.title || '',
+            artists,
+            album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
+            urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
+            duration: song.duration || 0,
+          };
+        }).filter((s) => s.id > 0);
+        setRecommendedSongs(converted);
+      } catch (error: any) {
+        // Silently handle access denied or other errors
+        if (error?.message !== 'Access Denied') {
+          console.error("Failed to load recommended songs:", error);
+        }
         setRecommendedSongs([]);
       } finally {
         setLoadingRecommended(false);
@@ -576,7 +605,13 @@ const PlaylistDetail = () => {
                 (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
               ) as SearchSongResult[];
             })
-            .catch(() => [] as SearchSongResult[])
+            .catch((e) => {
+              // Silently handle access denied or other errors
+              if (e?.message !== 'Access Denied') {
+                console.warn('Failed to load popular songs for recommendations:', e);
+              }
+              return [] as SearchSongResult[];
+            })
         );
         
         // CCancel t?t c? song song
@@ -610,8 +645,11 @@ const PlaylistDetail = () => {
                 !finalSongs.some(existing => String(existing.id) === String(s.id))
             );
             finalSongs.push(...fallbackSongs.slice(0, 4 - finalSongs.length));
-          } catch (e) {
-            console.warn('Failed to load fallback recommendations:', e);
+          } catch (e: any) {
+            // Silently handle access denied or other errors
+            if (e?.message !== 'Access Denied') {
+              console.warn('Failed to load fallback recommendations:', e);
+            }
           }
         }
         
@@ -640,6 +678,59 @@ const PlaylistDetail = () => {
   }, [playlist, permissions.canEdit, permissions.isOwner, loadRecommended]);
 
   const isCreateMode = slug === "create";
+  
+  const reloadPlaylist = useCallback(async () => {
+    if (!slug || isCreateMode) return;
+    
+    try {
+      const parsed = parseSlug(slug);
+      const playlistId = parsed.id;
+
+      if (!playlistId || isNaN(playlistId)) {
+        return;
+      }
+
+      const data: PlaylistDTO = await playlistsApi.getById(playlistId);
+      const extendedData = data as ExtendedPlaylistDTO;
+      const mappedSongs = mapSongsFromResponse(data.songs);
+
+      const ownerId = data.ownerId ?? data.owner?.id;
+      const normalizeVisibility = (v: unknown): PlaylistVisibility => {
+        const raw = typeof v === 'string' ? v.toUpperCase() : '';
+        if (raw === 'FRIENDS_ONLY') return PlaylistVisibility.FRIENDS_ONLY;
+        if (raw === 'PRIVATE') return PlaylistVisibility.PRIVATE;
+        if (raw === 'PUBLIC') return PlaylistVisibility.PUBLIC;
+        return PlaylistVisibility.PUBLIC;
+      };
+      const visibility = normalizeVisibility((data as PlaylistDTO).visibility);
+
+      const ownerName = extendedData?.owner?.name 
+        ?? (data.owner as { name?: string } | undefined)?.name 
+        ?? (data as { ownerName?: string }).ownerName
+        ?? undefined;
+      const ownerAvatar = extendedData?.owner?.avatar 
+        ?? (data.owner as { avatar?: string | null } | undefined)?.avatar 
+        ?? (data as { ownerAvatar?: string | null }).ownerAvatar
+        ?? null;
+
+      const playlistCover = data.coverUrl || extendedData.urlImagePlaylist || null;
+      setPlaylist({
+        id: data.id,
+        title: data.name,
+        description: data.description || '',
+        cover: playlistCover,
+        ownerName,
+        ownerAvatar,
+        ownerId,
+        visibility,
+        totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
+        updatedAt: extendedData?.dateUpdate || null,
+        songs: mappedSongs,
+      });
+    } catch (e) {
+      console.warn('Failed to reload playlist:', e);
+    }
+  }, [slug, isCreateMode]);
   
   useEffect(() => {
     const load = async () => {
@@ -732,6 +823,8 @@ const PlaylistDetail = () => {
         setEditedDescription(data.description || '');
         setEditedCoverUrl(data.coverUrl || extendedData.urlImagePlaylist || '');
         setEditedVisibility(visibility);
+        // Ensure we're not in edit mode when loading an existing playlist
+        setIsEditing(false);
         
         // L?y m�u t? ?nh cover
         if (playlistCover) {
@@ -1906,9 +1999,14 @@ const handlePlaySong = (song: Song) => {
                   }
                 };
                 const config = visibilityConfig[currentVisibility] || visibilityConfig[PlaylistVisibility.PUBLIC];
+                const VisibilityIcon = currentVisibility === PlaylistVisibility.PUBLIC 
+                  ? Globe 
+                  : currentVisibility === PlaylistVisibility.FRIENDS_ONLY 
+                  ? Users 
+                  : Lock;
                 return (
                   <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium border ${config.className}`}>
-                    <Users className="w-3 h-3" />
+                    <VisibilityIcon className="w-3 h-3" />
                     {config.label}
                   </span>
                 );
@@ -1961,15 +2059,38 @@ const handlePlaySong = (song: Song) => {
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="visibility">Visibility</Label>
                     <Select value={editedVisibility} onValueChange={(v) => setEditedVisibility(v as PlaylistVisibility)}>
                       <SelectTrigger id="visibility" className="w-[180px]">
-                        <SelectValue />
+                        <div className="flex items-center gap-2">
+                          {editedVisibility === PlaylistVisibility.PUBLIC && <Globe className="w-4 h-4" />}
+                          {editedVisibility === PlaylistVisibility.FRIENDS_ONLY && <Users className="w-4 h-4" />}
+                          {editedVisibility === PlaylistVisibility.PRIVATE && <Lock className="w-4 h-4" />}
+                          <span className="text-sm">
+                            {editedVisibility === PlaylistVisibility.PUBLIC ? "Public" : 
+                             editedVisibility === PlaylistVisibility.FRIENDS_ONLY ? "Friends Only" : 
+                             "Private"}
+                          </span>
+                        </div>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={PlaylistVisibility.PUBLIC}>Public</SelectItem>
-                        <SelectItem value={PlaylistVisibility.FRIENDS_ONLY}>Friends Only</SelectItem>
-                        <SelectItem value={PlaylistVisibility.PRIVATE}>Private</SelectItem>
+                        <SelectItem value={PlaylistVisibility.PUBLIC}>
+                          <div className="flex items-center gap-2">
+                            <Globe className="w-4 h-4" />
+                            <span>Public</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value={PlaylistVisibility.FRIENDS_ONLY}>
+                          <div className="flex items-center gap-2">
+                            <Users className="w-4 h-4" />
+                            <span>Friends Only</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value={PlaylistVisibility.PRIVATE}>
+                          <div className="flex items-center gap-2">
+                            <Lock className="w-4 h-4" />
+                            <span>Private</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -2040,6 +2161,7 @@ const handlePlaySong = (song: Song) => {
                         
                         const data = await res.json();
                         toast({ title: 'Playlist created successfully!' });
+                        // Navigate to the new playlist - it will load in view mode, not edit mode
                         navigate(`/playlist/${createSlug(data.name || "playlist", data.id)}`);
                       } else {
                         // Update existing playlist
@@ -2060,7 +2182,7 @@ const handlePlaySong = (song: Song) => {
                       if (e instanceof PlaylistPermissionError) {
                         toast({ title: 'Access Denied', description: e.message, variant: 'destructive' });
                       } else {
-                        const message = err instanceof Error ? err.message : "No matching songs found.";
+                        const message = e instanceof Error ? e.message : "No matching songs found.";
                         toast({ title: 'Error', description: message, variant: 'destructive' });
                       }
                     }
@@ -2373,7 +2495,23 @@ const handlePlaySong = (song: Song) => {
             >
               <Heart className={`w-5 h-5 ${isPlaylistSaved ? "fill-current" : ""}`} />
             </Button>
-            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={() => setSharePlaylistOpen(true)}>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
+              onClick={() => {
+                if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
+                  toast({
+                    title: "Cannot share",
+                    description: "Your playlist is private",
+                    variant: "destructive",
+                  });
+                } else {
+                  setSharePlaylistOpen(true);
+                }
+              }}
+            >
               <Share2 className="w-5 h-5" />
             </Button>
             <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
@@ -2631,6 +2769,134 @@ const handlePlaySong = (song: Song) => {
           songId={selectedSongForPlaylist.id}
           songTitle={selectedSongForPlaylist.name}
           songCover={selectedSongForPlaylist.urlImageAlbum}
+          currentPlaylistId={playlistNumericId}
+          onSuccess={async (addedPlaylistId) => {
+            // Only update if the song was added to the current playlist
+            if (addedPlaylistId && playlistNumericId && addedPlaylistId === playlistNumericId) {
+              // Optimistic update: fetch song detail and add to playlist state (similar to addSongToPlaylist)
+              try {
+                const songId = selectedSongForPlaylist.id;
+                // Check if song already exists
+                if (playlist?.songs.some((s) => s.id === String(songId))) {
+                  return;
+                }
+                
+                // Fetch song detail to get full information
+                let songDetail: any = null;
+                let songDuration = 0;
+                try {
+                  songDetail = await songsApi.getById(String(songId));
+                  if (songDetail) {
+                    songDuration = toSeconds(songDetail.duration);
+                  }
+                } catch (error) {
+                  console.warn("Failed to fetch song detail:", error);
+                  songDuration = 0;
+                }
+                
+                // Use the same logic as mapSongsFromResponse to ensure consistency with reload
+                let artistName = 'Unknown';
+                let coverUrl = '';
+                if (songDetail) {
+                  // Process artist exactly like mapSongsFromResponse does
+                  const artistsArray =
+                    Array.isArray(songDetail.artists) && songDetail.artists.length > 0
+                      ? songDetail.artists
+                          .map((a: any) => {
+                            if (typeof a === "string") return a.trim();
+                            if (a && typeof a === "object" && "name" in a && typeof a.name === "string") {
+                              return a.name.trim();
+                            }
+                            return null;
+                          })
+                          .filter((name): name is string => !!name && name.length > 0)
+                      : [];
+                  const artistFromArray = artistsArray.join(", ");
+                  const artistFromString =
+                    typeof songDetail.artists === "string" && songDetail.artists.trim().length > 0
+                      ? songDetail.artists.trim()
+                      : "";
+                  const artistField = (songDetail as { artist?: unknown }).artist;
+                  const artistFromField = typeof artistField === "string" && artistField.trim().length > 0 ? artistField.trim() : "";
+                  artistName = artistFromArray || artistFromString || artistFromField || "Unknown";
+                  
+                  // Get cover - use mapToPlayerSong for cover
+                  const mapped = mapToPlayerSong(songDetail as any);
+                  coverUrl = mapped.cover || '';
+                }
+                // Fallback for cover
+                if (!coverUrl) {
+                  coverUrl = selectedSongForPlaylist.urlImageAlbum || '';
+                }
+                
+                // Get current user avatar - same logic as addSongToPlaylist
+                let currentUserAvatar: string | null = null;
+                if (meId) {
+                  // First try friends list
+                  if (friends.length > 0) {
+                    const currentUserFriend = friends.find(f => f.id === meId);
+                    if (currentUserFriend?.avatar) {
+                      currentUserAvatar = currentUserFriend.avatar;
+                    }
+                  }
+                  // If still no avatar, try to get from profile
+                  if (!currentUserAvatar && meId) {
+                    try {
+                      const profile = await authApi.me();
+                      if (profile?.avatar) {
+                        currentUserAvatar = profile.avatar;
+                      }
+                    } catch (e) {
+                      console.warn('Failed to fetch user profile for avatar:', e);
+                    }
+                  }
+                }
+                
+                const optimisticSong: Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null } = {
+                  id: String(songId),
+                  title: songDetail?.name || songDetail?.title || selectedSongForPlaylist.name,
+                  artist: artistName,
+                  album: songDetail?.album?.name || (typeof songDetail?.album === 'string' ? songDetail.album : '') || '',
+                  cover: coverUrl,
+                  audioUrl: songDetail?.audioUrl || songDetail?.audio || songDetail?.url || '',
+                  duration: songDuration,
+                  addedAt: new Date().toISOString(),
+                  addedBy: 'You',
+                  addedById: meId,
+                  addedByAvatar: toAbsoluteUrl(currentUserAvatar) || null,
+                };
+                
+                setPlaylist((prev) => {
+                  if (!prev) return prev;
+                  if (prev.songs.some((existing) => existing.id === String(songId))) {
+                    return prev;
+                  }
+                  const nextSongs = [...prev.songs, optimisticSong];
+                  const nextTotal = (prev.totalSongs ?? prev.songs.length) + 1;
+                  return {
+                    ...prev,
+                    songs: nextSongs,
+                    totalSongs: nextTotal,
+                    updatedAt: new Date().toISOString(),
+                  };
+                });
+              } catch (e) {
+                console.warn('Failed to update playlist after adding song:', e);
+                // Fallback: just update totalSongs count
+                setPlaylist((prev) => {
+                  if (!prev) return prev;
+                  if (prev.songs.some((s) => s.id === String(selectedSongForPlaylist.id))) {
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    totalSongs: (prev.totalSongs ?? prev.songs.length) + 1,
+                    updatedAt: new Date().toISOString(),
+                  };
+                });
+              }
+            }
+          }}
         />
       )}
 

@@ -7,7 +7,7 @@ import { useMusic, Song } from "@/contexts/MusicContext";
 import type { Message, SharedPlaylistMessageData, SharedAlbumMessageData, SharedSongMessageData } from "@/types/social";
 import { SharedPlaylistCard, SharedAlbumCard, SharedSongCard } from "./SharedContentCards";
 import { extractArtistNames, formatDurationLabel, normalizeArtistName, DEFAULT_ARTIST_NAME, decodeUnicodeEscapes } from "@/utils/socialUtils";
-import { createSlug } from "@/utils/playlistUtils";
+import { createSlug, toSeconds, formatTotal } from "@/utils/playlistUtils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { mapToPlayerSong } from "@/lib/utils";
 import { API_BASE_URL } from "@/services/api/config";
@@ -37,9 +37,9 @@ interface MessageCardProps {
 }
 
 export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOptions = DEFAULT_REACTIONS, senderAvatar, meId, previousMessage }: MessageCardProps) => {
-  const { setQueue } = useMusic();
+  const { setQueue, currentSong } = useMusic();
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistDTO | null>(null);
-  const [albumInfo, setAlbumInfo] = useState<{ id: number; name: string; coverUrl?: string | null; artist?: unknown; releaseYear?: number; songs?: unknown[] } | null>(null);
+  const [albumInfo, setAlbumInfo] = useState<{ id: number; name: string; coverUrl?: string | null; artist?: unknown; releaseYear?: number; songs?: Array<{ id?: number; duration?: string | number | null; length?: string | number | null; durationMs?: number | null }>; songCount?: number | null; totalSongs?: number | null; totalDuration?: string | null } | null>(null);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
   const [loadingAlbum, setLoadingAlbum] = useState(false);
   const isSentByMe = message.sender === "You";
@@ -188,8 +188,8 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
 
   useEffect(() => {
     if (message.type !== "playlist") return;
-    if (message.sharedPlaylist) return;
-    const playlistId = message.playlistData?.id;
+    // Fetch từ API để lấy songCount đúng - giống PlaylistLibrary
+    const playlistId = message.sharedPlaylist?.id ?? message.playlistData?.id;
     if (!playlistId || playlistInfo) return;
     setLoadingPlaylist(true);
     playlistsApi
@@ -197,7 +197,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
       .then((data) => setPlaylistInfo(data))
       .catch(() => void 0)
       .finally(() => setLoadingPlaylist(false));
-  }, [message.type, message.sharedPlaylist, message.playlistData?.id, playlistInfo]);
+  }, [message.type, message.sharedPlaylist?.id, message.playlistData?.id, playlistInfo]);
 
   useEffect(() => {
     if (message.type !== "album") return;
@@ -213,24 +213,56 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
   }, [message.type, message.sharedAlbum, message.albumData?.id, albumInfo]);
 
   const playlistPreview = useMemo<SharedPlaylistMessageData | null>(() => {
-    if (message.sharedPlaylist) {
-      return {
-        ...message.sharedPlaylist,
-        songs: Array.isArray(message.sharedPlaylist.songs)
-          ? message.sharedPlaylist.songs
-          : [],
-      };
-    }
+    // Ưu tiên playlistInfo từ API (đã fetch) vì có songCount đúng
     if (playlistInfo) {
       const songs = Array.isArray(playlistInfo.songs)
-        ? playlistInfo.songs.map((song: { id?: number; songId?: number; name?: string; title?: string; artists?: unknown; artistNames?: unknown; urlImageAlbum?: string; coverUrl?: string; cover?: string; duration?: unknown; length?: unknown; durationMs?: unknown }) => ({
-            id: song?.id ?? song?.songId,
-            name: song?.name || song?.title || "",
-            artists: extractArtistNames(song?.artists ?? song?.artistNames),
-            coverUrl: song?.urlImageAlbum ?? song?.coverUrl ?? song?.cover ?? undefined,
-            durationLabel: formatDurationLabel(song?.duration ?? song?.length ?? song?.durationMs),
-          }))
+        ? playlistInfo.songs.map((song: { id?: number; songId?: number; name?: string; title?: string; artists?: unknown; artistNames?: unknown; urlImageAlbum?: string; coverUrl?: string; cover?: string; duration?: unknown; length?: unknown; durationMs?: unknown }) => {
+            const duration = song?.duration ?? song?.length ?? song?.durationMs ?? null;
+            const durationValue = duration !== null && (typeof duration === 'string' || typeof duration === 'number') ? duration : null;
+            const lengthValue = song?.length !== undefined && (typeof song.length === 'string' || typeof song.length === 'number') ? song.length : durationValue;
+            const durationMsValue = typeof song?.durationMs === 'number' ? song.durationMs : null;
+            return {
+              id: song?.id ?? song?.songId,
+              name: song?.name || song?.title || "",
+              artists: extractArtistNames(song?.artists ?? song?.artistNames),
+              coverUrl: song?.urlImageAlbum ?? song?.coverUrl ?? song?.cover ?? undefined,
+              durationLabel: formatDurationLabel(duration),
+              duration: durationValue,
+              length: lengthValue,
+              durationMs: durationMsValue,
+            };
+          })
         : [];
+      
+      // Calculate totalDuration from songs
+      const totalDuration = songs.length > 0
+        ? (() => {
+            const totalSeconds = songs.reduce((acc, song) => {
+              const duration = song.duration ?? song.length ?? song.durationMs;
+              if (duration) {
+                const seconds = toSeconds(duration);
+                return acc + seconds;
+              }
+              return acc;
+            }, 0);
+            return totalSeconds > 0 ? formatTotal(totalSeconds) : null;
+          })()
+        : (playlistInfo as { totalDuration?: string | null }).totalDuration ?? null;
+      
+      // Get songCount from multiple sources - prioritize API fields
+      const rawSongCount =
+        (playlistInfo as { songCount?: number | null; totalSongs?: number | null }).songCount ??
+        (playlistInfo as { songCount?: number | null; totalSongs?: number | null }).totalSongs ??
+        null;
+      const songCount =
+        typeof rawSongCount === 'number' && Number.isFinite(rawSongCount) && rawSongCount >= 0
+          ? rawSongCount
+          : Array.isArray(playlistInfo.songs)
+          ? playlistInfo.songs.length
+          : Array.isArray(playlistInfo.songIds)
+          ? playlistInfo.songIds.length
+          : 0;
+      
       return {
         id: playlistInfo.id,
         name: playlistInfo.name,
@@ -240,14 +272,40 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
         songLimit: playlistInfo.songLimit ?? null,
         songs,
         ownerName: playlistInfo.owner?.name ?? null,
-        totalSongs: Array.isArray(playlistInfo.songs)
-          ? playlistInfo.songs.length
-          : Array.isArray(playlistInfo.songIds)
-          ? playlistInfo.songIds.length
-          : null,
+        totalSongs: songCount,
+        totalDuration,
+      };
+    }
+    // Fallback về message.sharedPlaylist nếu chưa có playlistInfo từ API
+    if (message.sharedPlaylist) {
+      // Get songCount - nếu có từ API thì dùng, không thì fallback về songs.length
+      const rawSongCount =
+        (message.sharedPlaylist as { songCount?: number | null }).songCount ??
+        message.sharedPlaylist.totalSongs ??
+        null;
+      const songCount =
+        typeof rawSongCount === 'number' && Number.isFinite(rawSongCount) && rawSongCount >= 0
+          ? rawSongCount
+          : (Array.isArray(message.sharedPlaylist.songs) && message.sharedPlaylist.songs.length > 0
+            ? message.sharedPlaylist.songs.length
+            : 0);
+      
+      return {
+        ...message.sharedPlaylist,
+        songs: Array.isArray(message.sharedPlaylist.songs)
+          ? message.sharedPlaylist.songs
+          : [],
+        totalSongs: songCount,
       };
     }
     if (message.playlistData) {
+      // Get songCount from multiple sources - same logic as FavoriteSongs.tsx
+      const rawSongCount = message.playlistData.songCount ?? null;
+      const songCount =
+        typeof rawSongCount === 'number' && Number.isFinite(rawSongCount) && rawSongCount >= 0
+          ? rawSongCount
+          : 0;
+      
       return {
         id: message.playlistData.id,
         name: message.playlistData.name,
@@ -257,34 +315,62 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
         songLimit: null,
         songs: [],
         ownerName: message.playlistData.owner ?? null,
-        totalSongs: message.playlistData.songCount ?? null,
+        totalSongs: songCount,
       };
     }
     return null;
-  }, [message.sharedPlaylist, playlistInfo, message.playlistData]);
+  }, [playlistInfo, message.sharedPlaylist, message.playlistData]);
 
   const albumPreview = useMemo<SharedAlbumMessageData | null>(() => {
     if (message.sharedAlbum) {
       return message.sharedAlbum;
     }
     if (albumInfo) {
+      const songCount =
+        albumInfo.songCount ??
+        albumInfo.totalSongs ??
+        (Array.isArray(albumInfo.songs) ? albumInfo.songs.length : null);
+      
+      // Get artistName from multiple sources - prioritize artistName field, then normalize artist object
+      const rawArtistName = 
+        (albumInfo as { artistName?: string | null }).artistName ??
+        (albumInfo as { artist?: unknown }).artist;
+      const artistName = rawArtistName 
+        ? normalizeArtistName(rawArtistName)
+        : DEFAULT_ARTIST_NAME;
+      
       return {
         id: albumInfo.id,
         name: albumInfo.name,
         coverUrl: albumInfo.coverUrl ?? null,
-        artistName: normalizeArtistName((albumInfo as { artist?: unknown }).artist),
+        artistName: artistName,
         releaseYear: albumInfo.releaseYear ?? null,
         releaseDateLabel: null,
+        songCount: songCount ?? null,
+        totalSongs: songCount ?? null,
+        songs: Array.isArray(albumInfo.songs) ? albumInfo.songs : undefined,
+        totalDuration: albumInfo.totalDuration ?? null,
       };
     }
     if (message.albumData) {
+      // Get artistName from multiple sources - prioritize artistName field, then normalize artist
+      const rawArtistName = 
+        (message.albumData as { artistName?: string | null }).artistName ??
+        message.albumData.artist;
+      const artistName = rawArtistName 
+        ? normalizeArtistName(rawArtistName)
+        : DEFAULT_ARTIST_NAME;
+      
       return {
         id: message.albumData.id,
         name: message.albumData.name,
         coverUrl: message.albumData.coverUrl ?? null,
-        artistName: message.albumData.artist ?? null,
+        artistName: artistName,
         releaseYear: message.albumData.releaseYear ?? null,
         releaseDateLabel: null,
+        songCount: (message.albumData as { songCount?: number | null }).songCount ?? null,
+        totalSongs: (message.albumData as { songCount?: number | null }).songCount ?? null,
+        totalDuration: (message.albumData as { totalDuration?: string | null }).totalDuration ?? null,
       };
     }
     return null;
@@ -292,11 +378,20 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
 
   const songPreview = useMemo<SharedSongMessageData | null>(() => {
     if (message.sharedSong) {
+      // Extract artists - BE trả về có thể là string hoặc array
+      let artists: string[] = [];
+      const rawArtists = (message.sharedSong as { artists?: unknown }).artists;
+      if (Array.isArray(rawArtists)) {
+        artists = rawArtists.map(a => typeof a === 'string' ? a : (a as { name?: string }).name || '').filter(Boolean);
+      } else if (typeof rawArtists === 'string' && rawArtists.trim()) {
+        // BE trả về artists là string (comma-separated)
+        artists = rawArtists.split(',').map((a: string) => a.trim()).filter(Boolean);
+      }
+      
       return {
         ...message.sharedSong,
-        artists: Array.isArray(message.sharedSong.artists)
-          ? message.sharedSong.artists
-          : [],
+        artists: artists,
+        artist: artists.length > 0 ? artists.join(', ') : undefined,
       };
     }
     if (message.songData) {
@@ -307,6 +402,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
         id: parsedId,
         name: message.songData.title,
         artists: message.songData.artist ? [message.songData.artist] : [],
+        artist: message.songData.artist,
         coverUrl: undefined,
         audioUrl: undefined,
         durationLabel: null,
@@ -370,124 +466,132 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
       return;
     }
     
+    // Lấy songId ngay lập tức (không async)
+    let songId: number | undefined;
+    
+    // Ưu tiên 1: từ songPreview.id
+    if (songPreview.id) {
+      if (typeof songPreview.id === "number") {
+        songId = songPreview.id;
+      } else if (typeof songPreview.id === "string") {
+        const parsed = Number(songPreview.id);
+        if (!isNaN(parsed) && isFinite(parsed)) {
+          songId = parsed;
+        }
+      }
+    }
+    
+    // Ưu tiên 2: từ message.songData.id
+    if (!songId && message.songData?.id) {
+      if (typeof message.songData.id === "number") {
+        songId = message.songData.id;
+      } else if (typeof message.songData.id === "string") {
+        const parsed = Number(message.songData.id);
+        if (!isNaN(parsed) && isFinite(parsed)) {
+          songId = parsed;
+        }
+      }
+    }
+    
+    // Ưu tiên 3: từ message.sharedSong?.id
+    if (!songId && message.sharedSong?.id) {
+      if (typeof message.sharedSong.id === "number") {
+        songId = message.sharedSong.id;
+      } else if (typeof message.sharedSong.id === "string") {
+        const parsed = Number(message.sharedSong.id);
+        if (!isNaN(parsed) && isFinite(parsed)) {
+          songId = parsed;
+        }
+      }
+    }
+    
+    if (!songId) {
+      console.warn("[MessageCard] Could not determine songId", { songPreview, message: message.songData, sharedSong: message.sharedSong });
+      toast.error("Song not playable: Missing song ID");
+      return;
+    }
+    
+    // Tạo playable song ngay từ songPreview để play nhanh, sau đó fetch detail trong background
+    const quickPlayable: Song = {
+      id: String(songId),
+      name: songPreview.name || "Unknown Song",
+      songName: songPreview.name || "Unknown Song",
+      artist: Array.isArray(songPreview.artists) 
+        ? songPreview.artists.join(", ") 
+        : songPreview.artist || "Unknown Artist",
+      album: "",
+      duration: 0,
+      cover: songPreview.coverUrl || "",
+      audioUrl: songPreview.audioUrl || undefined,
+    };
+    
+    // Play ngay với thông tin có sẵn
+    setQueue([quickPlayable]);
+    playSong(quickPlayable);
+    
+    // Fetch detail và update trong background
     try {
-      // Thử nhiều cách để lấy songId
-      let songId: number | undefined;
-      
-      // Ưu tiên 1: từ songPreview.id
-      if (songPreview.id) {
-        if (typeof songPreview.id === "number") {
-          songId = songPreview.id;
-        } else if (typeof songPreview.id === "string") {
-          const parsed = Number(songPreview.id);
-          if (!isNaN(parsed) && isFinite(parsed)) {
-            songId = parsed;
-          }
-        }
-      }
-      
-      // Ưu tiên 2: từ message.songData.id
-      if (!songId && message.songData?.id) {
-        if (typeof message.songData.id === "number") {
-          songId = message.songData.id;
-        } else if (typeof message.songData.id === "string") {
-          const parsed = Number(message.songData.id);
-          if (!isNaN(parsed) && isFinite(parsed)) {
-            songId = parsed;
-          }
-        }
-      }
-      
-      // Ưu tiên 3: từ message.sharedSong?.id
-      if (!songId && message.sharedSong?.id) {
-        if (typeof message.sharedSong.id === "number") {
-          songId = message.sharedSong.id;
-        } else if (typeof message.sharedSong.id === "string") {
-          const parsed = Number(message.sharedSong.id);
-          if (!isNaN(parsed) && isFinite(parsed)) {
-            songId = parsed;
-          }
-        }
-      }
-      
-      if (!songId) {
-        console.warn("[MessageCard] Could not determine songId", { songPreview, message: message.songData, sharedSong: message.sharedSong });
-        toast.error("Song not playable: Missing song ID");
-        return;
-      }
-      
-      console.log("[MessageCard] Attempting to play song with ID:", songId);
-      
-      // Lấy thông tin bài hát từ API
       const detail = await songsApi.getById(String(songId));
       
       if (!detail) {
         console.warn("[MessageCard] Song detail not found for ID:", songId);
-        toast.error("Song not playable: Song not found");
         return;
       }
       
-      console.log("[MessageCard] Song detail retrieved:", { id: detail.id, hasAudioUrl: !!detail.audioUrl });
-      
-      // Lấy playback URL từ stream session API (cho shared songs)
+      // Lấy playback URL từ stream session API
       let playbackUrl: string | null = null;
       try {
         const streamSession = await songsApi.getPlaybackUrl(songId);
         playbackUrl = streamSession.playbackUrl;
-        console.log("[MessageCard] Playback URL retrieved:", playbackUrl);
       } catch (streamError) {
-        console.warn("[MessageCard] Failed to get playback URL, trying fallback:", streamError);
-        // Fallback: thử lấy từ song detail
         playbackUrl = detail.audioUrl || detail.audio || detail.url || null;
       }
       
-      // Nếu vẫn không có và có uuid, dùng proxy endpoint (giống MusicPlayer)
+      // Nếu vẫn không có và có uuid, dùng proxy endpoint
       if (!playbackUrl && detail.uuid) {
-        try {
-          // Dùng proxy endpoint với uuid từ song detail
-          const proxyBaseUrl = `/api/songs/${songId}/stream-proxy`;
-          playbackUrl = `${window.location.origin}${proxyBaseUrl}/${detail.uuid}_128kbps.m3u8`;
-          console.log("[MessageCard] Using proxy endpoint with UUID:", playbackUrl);
-        } catch (streamError2) {
-          console.warn("[MessageCard] Failed to build proxy URL:", streamError2);
+        const proxyBaseUrl = `/api/songs/${songId}/stream-proxy`;
+        playbackUrl = `${window.location.origin}${proxyBaseUrl}/${detail.uuid}_128kbps.m3u8`;
+      }
+      
+      if (playbackUrl) {
+        // Update với thông tin đầy đủ
+        const mapped = mapToPlayerSong(detail);
+        const fullPlayable: Song = {
+          id: mapped.id,
+          name: mapped.songName,
+          songName: mapped.songName,
+          artist: mapped.artist,
+          album: mapped.album,
+          duration: mapped.duration,
+          cover: mapped.cover,
+          audioUrl: playbackUrl,
+        };
+        
+        // Update queue và current song nếu đang play
+        setQueue([fullPlayable]);
+        if (currentSong?.id === quickPlayable.id) {
+          playSong(fullPlayable);
         }
       }
-      
-      if (!playbackUrl) {
-        console.warn("[MessageCard] No playback URL available for song:", { detail });
-        toast.error("Song not playable: No audio URL");
-        return;
-      }
-      
-      // Sử dụng mapToPlayerSong để đảm bảo format đúng
-      const mapped = mapToPlayerSong(detail);
-      
-      // Convert PlayerSong sang Song format cho MusicContext
-      const playable: Song = {
-        id: mapped.id,
-        name: mapped.songName,
-        songName: mapped.songName,
-        artist: mapped.artist,
-        album: mapped.album,
-        duration: mapped.duration,
-        cover: mapped.cover,
-        audioUrl: playbackUrl,
-      };
-      
-      console.log("[MessageCard] Playing song:", playable);
-      setQueue([playable]);
-      playSong(playable);
     } catch (error) {
-      console.error("[MessageCard] Failed to play song:", error);
-      toast.error("Failed to play song");
+      console.error("[MessageCard] Failed to fetch song detail:", error);
+      // Không show error vì đã play được với thông tin cơ bản
     }
   };
 
   const contentNode: React.ReactNode = (() => {
     if (message.type === "song" && songPreview) {
+      // Normalize artists to string[] for SharedSongCard
+      const normalizedSong = songPreview ? {
+        ...songPreview,
+        artists: Array.isArray(songPreview.artists) 
+          ? songPreview.artists.map(a => typeof a === 'string' ? a : (a as { name?: string }).name || '').filter(Boolean)
+          : songPreview.artist ? [songPreview.artist] : [],
+      } : undefined;
+      
       return (
         <SharedSongCard
-          song={songPreview}
+          song={normalizedSong}
           onPlay={handlePlaySong}
           _link={songLink}
           isSentByMe={isSentByMe}
@@ -517,7 +621,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
 
     return (
       <div
-        className={`px-3 py-1.5 rounded-2xl break-words w-full min-w-0 whitespace-pre-wrap text-sm leading-relaxed border ${
+        className={`px-4 py-2 rounded-2xl break-words w-full min-w-0 whitespace-pre-wrap text-base leading-relaxed border ${
           isSentByMe 
             ? "bg-primary text-primary-foreground rounded-tr-sm border-primary/50" 
             : "bg-white text-foreground border-muted/40 dark:bg-muted/50 dark:text-muted-foreground rounded-tl-sm"
@@ -527,11 +631,11 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
           const txt = decodeUnicodeEscapes(message.content);
           const isUrl = /^https?:\/\//i.test(txt);
           return isUrl ? (
-            <a href={txt} target="_blank" rel="noreferrer" className="text-sm underline break-all">
+            <a href={txt} target="_blank" rel="noreferrer" className="text-base underline break-all">
               {txt}
             </a>
           ) : (
-            <p className="text-sm break-words whitespace-pre-wrap w-full leading-relaxed">
+            <p className="text-base break-words whitespace-pre-wrap w-full leading-relaxed">
               {txt}
             </p>
           );
