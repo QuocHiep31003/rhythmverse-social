@@ -1728,48 +1728,45 @@ const PlaylistDetail = () => {
     return playlist.songs.reduce((acc, song) => acc + toSeconds(song.duration), 0);
   }, [playlist]);
 
-  const playAllSongs = () => {
+  const togglePlaylistLike = () => {
+    setIsLiked(!isLiked);
+    toast({
+      title: isLiked ? "Removed from your playlists" : "Added to your playlists",
+      duration: 2000,
+    });
+  };
+
+  const toggleSongLike = (songId: string) => {
+    setLikedSongs(prev =>
+      prev.includes(songId)
+        ? prev.filter(id => id !== songId)
+        : [...prev, songId]
+    );
+  };
+
+  const playAllSongs = async () => {
     if (!playlist || !playlist.songs.length) return;
     if (isPlaying) {
       togglePlay();
     } else {
       // N?u dang c� b�i h�t trong playlist dang ph�t, resume b�i d�
       if (currentSong && playlist.songs.find((s) => s.id === currentSong.id)) {
-        playSong(currentSong);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(currentSong, playSong, setQueue);
       } else {
-        // N?u kh�ng, play b�i d?u ti�n
-        setQueue(playlist.songs);
-        playSong(playlist.songs[0]);
+        // Nếu không, play bài đầu tiên
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(playlist.songs[0], playSong, setQueue);
       }
     }
   };
 
-const shufflePlaylistSongs = () => {
-  if (!playlist || !playlist.songs.length) return;
-  const shuffled = [...playlist.songs].sort(() => Math.random() - 0.5);
-  setQueue(shuffled);
-  playSong(shuffled[0]);
-};
-
-const handleDownloadPlaylist = () => {
-  toast({
-    title: "T?i playlist",
-    description: "T�nh nang t?i playlist s? s?m ra m?t.",
-  });
-};
-
-const handlePlaylistActionComingSoon = () => {
-  toast({
-    title: "T�nh nang s?p ra m?t",
-    description: "Ch�ng t�i dang ho�n thi?n tr?i nghi?m n�y.",
-  });
-};
-
-const handlePlaySong = (song: Song) => {
-  if (!playlist) return;
-  setQueue(playlist.songs);
-  playSong(song);
-};
+  const handlePlaySong = async (song: Song) => {
+    if (!playlist) return;
+    // Dùng helper để phát nhạc với /play-now
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(song, playSong, setQueue);
+  };
 
   const confirmRemoveSong = (songId: string) => {
     setPendingDeleteSongId(songId);
@@ -2672,9 +2669,8 @@ const handlePlaySong = (song: Song) => {
                             if (isNaN(songId)) return;
                             const fullSong = await songsApi.getById(String(songId));
                             if (fullSong) {
-                              const mapped = mapToPlayerSong(fullSong);
-                              setQueue([mapped]);
-                              playSong(mapped);
+                              const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                              await playSongWithStreamUrl(fullSong, playSong, setQueue);
                             }
                           } catch (error) {
                             console.error("Failed to play song:", error);

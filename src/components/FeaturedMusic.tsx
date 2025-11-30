@@ -16,22 +16,22 @@ const FeaturedMusic = () => {
   const features = [
     {
       icon: Mic,
-      title: "Tìm kiếm bằng giai điệu",
-      description: "Hum, hát hoặc ngân nga giai điệu bạn nhớ, chúng tôi sẽ tìm bài hát cho bạn",
+      title: "Search by Melody",
+      description: "Hum, sing, or whistle the melody you remember, and we'll find the song for you",
       color: "from-neon-pink to-primary",
       badge: "Humming",
     },
     {
       icon: Fingerprint,
       title: "Audio Fingerprint",
-      description: "Tải lên file audio hoặc link YouTube, hệ thống sẽ nhận diện bài hát chính xác",
+      description: "Upload an audio file or YouTube link, and our system will accurately identify the song",
       color: "from-neon-blue to-accent",
       badge: "Fingerprint",
     },
     {
       icon: Search,
-      title: "Tìm kiếm thông minh",
-      description: "Không cần biết tên bài hát, chỉ cần nhớ giai điệu là đủ",
+      title: "Smart Search",
+      description: "No need to know the song name, just remember the melody and that's enough",
       color: "from-neon-green to-primary",
       badge: "AI Powered",
     },
@@ -46,11 +46,11 @@ const FeaturedMusic = () => {
         {/* Header */}
         <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">
-            Tìm bài hát chỉ bằng giai điệu
+            Find Songs by Melody Only
           </h2>
           <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Bạn nhớ giai điệu nhưng quên tên bài hát? Chỉ cần hum, hát hoặc tải file audio lên, 
-            chúng tôi sẽ tìm ra bài hát bạn đang tìm kiếm!
+            Remember the melody but forgot the song name? Just hum, sing, or upload an audio file, 
+            and we'll find the song you're looking for!
           </p>
         </div>
 
@@ -92,10 +92,10 @@ const FeaturedMusic = () => {
             <div className="flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1 text-center md:text-left">
                 <h3 className="text-2xl md:text-3xl font-bold mb-3 text-foreground">
-                  Sẵn sàng thử ngay?
+                  Ready to Try It Now?
                 </h3>
                 <p className="text-muted-foreground text-lg">
-                  Hum một giai điệu hoặc tải file audio lên để tìm bài hát bạn đang tìm kiếm
+                  Hum a melody or upload an audio file to find the song you're looking for
                 </p>
               </div>
               
@@ -107,18 +107,10 @@ const FeaturedMusic = () => {
                   onClick={() => navigate("/music-recognition")}
                 >
                   <Mic className="w-5 h-5" />
-                  Thử ngay
+                  Try Now
                   <ArrowRight className="w-4 h-4" />
                 </Button>
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="gap-2 min-w-[200px]"
-                  onClick={() => navigate("/discover")}
-                >
-                  <Music className="w-5 h-5" />
-                  Khám phá thêm
-                </Button>
+           
               </div>
             </div>
           </CardContent>
@@ -128,15 +120,15 @@ const FeaturedMusic = () => {
         <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
           <div>
             <div className="text-3xl font-bold text-primary mb-2">99%+</div>
-            <div className="text-muted-foreground">Độ chính xác</div>
+            <div className="text-muted-foreground">Accuracy</div>
           </div>
           <div>
-            <div className="text-3xl font-bold text-primary mb-2">Hàng triệu</div>
-            <div className="text-muted-foreground">Bài hát trong database</div>
+            <div className="text-3xl font-bold text-primary mb-2">Millions</div>
+            <div className="text-muted-foreground">Songs in Database</div>
           </div>
           <div>
-            <div className="text-3xl font-bold text-primary mb-2">Chỉ vài giây</div>
-            <div className="text-muted-foreground">Để tìm ra bài hát</div>
+            <div className="text-3xl font-bold text-primary mb-2">Just Seconds</div>
+            <div className="text-muted-foreground">To Find Your Song</div>
           </div>
         </div>
       </div>

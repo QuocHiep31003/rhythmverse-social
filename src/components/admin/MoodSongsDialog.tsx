@@ -123,9 +123,9 @@ export const MoodSongsDialog = ({ open, onOpenChange, moodId, moodName }: MoodSo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Quản lý bài hát - {moodName || "Mood"}</DialogTitle>
+          <DialogTitle>Manage Songs - {moodName || "Mood"}</DialogTitle>
           <DialogDescription>
-            Xem và chỉnh sửa score của các bài hát thuộc mood này
+            View and edit scores of songs in this mood
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-auto">

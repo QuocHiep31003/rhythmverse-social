@@ -106,7 +106,7 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-dark">
       <PromotionCarousel />
       
-      {/* Tìm bài hát chỉ bằng giai điệu - Ngay dưới banner */}
+      {/* Find songs by melody only - Right below banner */}
       <FeaturedMusic />
       
       <main className="pt-4">

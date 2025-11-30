@@ -50,10 +50,10 @@ import { genresApi, artistsApi, moodsApi, songGenreApi, songMoodApi } from "@/se
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const contributorFieldConfigs = [
-  { field: "performerIds", label: "Ca sĩ chính", required: true, badgeLabel: "ca sĩ" },
-  { field: "featIds", label: "Feat (ca sĩ phụ)", required: false, badgeLabel: "feat" },
-  { field: "composerIds", label: "Nhạc sĩ (Composer)", required: false, badgeLabel: "composer" },
-  { field: "lyricistIds", label: "Người viết lời (Lyricist)", required: false, badgeLabel: "lyricist" },
+  { field: "performerIds", label: "Main Performer", required: true, badgeLabel: "performer" },
+  { field: "featIds", label: "Feat (Featured Artist)", required: false, badgeLabel: "feat" },
+  { field: "composerIds", label: "Composer", required: false, badgeLabel: "composer" },
+  { field: "lyricistIds", label: "Lyricist", required: false, badgeLabel: "lyricist" },
   { field: "producerIds", label: "Producer", required: false, badgeLabel: "producer" },
 ] as const;
 
@@ -84,16 +84,16 @@ const getAudioDuration = async (file: File): Promise<string> => {
 };
 
 const songFormSchema = z.object({
-  name: z.string().min(1, "Tên bài hát không được để trống").max(200),
-  releaseAt: z.string().min(1, "Ngày phát hành không được để trống"),
-  genreIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 thể loại"),
-  performerIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 ca sĩ chính"),
+  name: z.string().min(1, "Song name cannot be empty").max(200),
+  releaseAt: z.string().min(1, "Release date cannot be empty"),
+  genreIds: z.array(z.number()).min(1, "Please select at least 1 genre"),
+  performerIds: z.array(z.number()).min(1, "Please select at least 1 main performer"),
   featIds: z.array(z.number()).optional(),
   composerIds: z.array(z.number()).optional(),
   lyricistIds: z.array(z.number()).optional(),
   producerIds: z.array(z.number()).optional(),
   artistIds: z.array(z.number()).optional(),
-  moodIds: z.array(z.number()).min(1, "Vui lòng chọn ít nhất 1 mood"), // Bắt buộc
+  moodIds: z.array(z.number()).min(1, "Please select at least 1 mood"), // Required
   duration: z.string().optional(),
 });
 
@@ -317,7 +317,7 @@ export const SongFormDialog = ({
     if (!file) {
       setSelectedFile(null);
       if (mode === "create") {
-        setFileError("Vui lòng chọn file audio để tạo bài hát");
+        setFileError("Please select an audio file to create a song");
       }
       return;
     }
@@ -339,7 +339,7 @@ export const SongFormDialog = ({
       }, 1000);
     } catch (error) {
       console.error("File processing error:", error);
-      alert("Lỗi khi xử lý file. Vui lòng thử lại.");
+      alert("Error processing file. Please try again.");
       setSelectedFile(null);
     } finally {
       setUploading(false);
@@ -358,7 +358,7 @@ export const SongFormDialog = ({
 
   const handleSubmit = (data: SongFormValues) => {
     if (mode === "create" && !selectedFile) {
-      setFileError("Vui lòng chọn file audio trước khi lưu");
+      setFileError("Please select an audio file before saving");
       return;
     }
 
@@ -460,12 +460,12 @@ export const SongFormDialog = ({
         </button>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
-            {mode === "create" ? "Thêm bài hát mới" : "Chỉnh sửa bài hát"}
+            {mode === "create" ? "Add New Song" : "Edit Song"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Nhập thông tin để tạo bài hát mới"
-              : "Cập nhật thông tin bài hát"}
+              ? "Enter information to create a new song"
+              : "Update song information"}
           </DialogDescription>
         </DialogHeader>
 
@@ -487,10 +487,10 @@ export const SongFormDialog = ({
                         name="name"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Tên bài hát *</FormLabel>
+                            <FormLabel>Song Name *</FormLabel>
                             <FormControl>
                               <Input
-                                placeholder="Tên bài hát"
+                                placeholder="Song name"
                                 {...field}
                                 className="admin-input transition-all duration-200"
                               />
@@ -505,7 +505,7 @@ export const SongFormDialog = ({
                       name="releaseAt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Ngày phát hành *</FormLabel>
+                          <FormLabel>Release Date *</FormLabel>
                           <FormControl>
                             <Input
                               type="datetime-local"
@@ -555,7 +555,7 @@ export const SongFormDialog = ({
                               {uploading && (
                                 <div className="space-y-1">
                                   <div className="text-sm text-muted-foreground">
-                                    Đang upload... {uploadProgress}%
+                                    Uploading... {uploadProgress}%
                                   </div>
                                   <div className="w-full bg-secondary rounded-full h-2">
                                     <div
@@ -568,14 +568,14 @@ export const SongFormDialog = ({
                             </div>
                             {mode === "edit" && (
                               <div className="text-sm text-muted-foreground">
-                                Upload file mới để thay thế audio hiện tại
+                                Upload new file to replace current audio
                               </div>
                             )}
                             {selectedFile && !uploading && (
                               <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 p-2 rounded-md">
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
                                 <span className="truncate text-xs">
-                                  File đã chọn: {selectedFile.name}
+                                  Selected file: {selectedFile.name}
                                 </span>
                               </div>
                             )}
@@ -592,9 +592,9 @@ export const SongFormDialog = ({
 
                 <TabsContent value="contributor" className="space-y-4">
                   <div>
-                    <h3 className="text-lg font-semibold">Nghệ sĩ & Credits</h3>
+                    <h3 className="text-lg font-semibold">Artists & Credits</h3>
                     <p className="text-sm text-muted-foreground">
-                      Sắp xếp nghệ sĩ theo từng vai trò. Thứ tự trong danh sách sẽ được giữ nguyên.
+                      Organize artists by role. The order in the list will be preserved.
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -612,7 +612,7 @@ export const SongFormDialog = ({
                               {label} {required && <span className="text-destructive">*</span>}
                               {value.length > 0 && (
                                 <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
-                                  {value.length} đã chọn
+                                  {value.length} selected
                                 </span>
                               )}
                             </FormLabel>
@@ -639,11 +639,11 @@ export const SongFormDialog = ({
                                         <div className="flex items-center gap-1">
                                           <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
                                           <span className="font-medium">
-                                            {value.length} nghệ sĩ {badgeLabel ? `(${badgeLabel})` : ""}
+                                            {value.length} artist{value.length !== 1 ? 's' : ''} {badgeLabel ? `(${badgeLabel})` : ""}
                                           </span>
                                         </div>
                                       ) : (
-                                        <span>Tìm kiếm và chọn nghệ sĩ...</span>
+                                        <span>Search and select artists...</span>
                                       )}
                                     </div>
                                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -654,7 +654,7 @@ export const SongFormDialog = ({
                                 <Command shouldFilter={false}>
                                   <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
                                     <CommandInput
-                                      placeholder="Tìm kiếm nghệ sĩ..."
+                                      placeholder="Search artists..."
                                       value={artistSearchQuery}
                                       onValueChange={setArtistSearchQuery}
                                       className="border-0 focus:ring-0"
@@ -665,7 +665,7 @@ export const SongFormDialog = ({
                                       <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                                         <span className="text-xs">🎤</span>
                                       </div>
-                                      <span>Không tìm thấy nghệ sĩ</span>
+                                      <span>No artist found</span>
                                     </div>
                                   </CommandEmpty>
                                   <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
@@ -768,10 +768,10 @@ export const SongFormDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium flex items-center gap-2">
-                          Thể loại *
+                          Genre *
                           {field.value?.length > 0 && (
                             <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
-                              {field.value.length} đã chọn
+                              {field.value.length} selected
                             </span>
                           )}
                         </FormLabel>
@@ -792,11 +792,11 @@ export const SongFormDialog = ({
                                     <div className="flex items-center gap-1">
                                       <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
                                       <span className="font-medium">
-                                        {field.value.length} thể loại đã chọn
+                                        {field.value.length} genre{field.value.length !== 1 ? 's' : ''} selected
                                       </span>
                                     </div>
                                   ) : (
-                                    <span>Tìm kiếm và chọn thể loại...</span>
+                                    <span>Search and select genres...</span>
                                   )}
                                 </div>
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -807,7 +807,7 @@ export const SongFormDialog = ({
                             <Command shouldFilter={false}>
                               <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
                                 <CommandInput
-                                  placeholder="Tìm kiếm thể loại..."
+                                  placeholder="Search genres..."
                                   value={genreSearchQuery}
                                   onValueChange={setGenreSearchQuery}
                                   className="border-0 focus:ring-0"
@@ -818,7 +818,7 @@ export const SongFormDialog = ({
                                   <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                                     <span className="text-xs">🔍</span>
                                   </div>
-                                  <span>Không tìm thấy thể loại</span>
+                                  <span>No genre found</span>
                                 </div>
                               </CommandEmpty>
                               <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
@@ -940,7 +940,7 @@ export const SongFormDialog = ({
                           Mood <span className="text-destructive">*</span>
                           {field.value && field.value.length > 0 && (
                             <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
-                              {field.value.length} đã chọn
+                              {field.value.length} selected
                             </span>
                           )}
                         </FormLabel>
@@ -961,11 +961,11 @@ export const SongFormDialog = ({
                                     <div className="flex items-center gap-1">
                                       <div className="w-2 h-2 bg-[hsl(var(--admin-active))] rounded-full"></div>
                                       <span className="font-medium">
-                                        {field.value.length} mood đã chọn
+                                        {field.value.length} mood selected
                                       </span>
                                     </div>
                                   ) : (
-                                    <span>Vui lòng chọn ít nhất 1 mood...</span>
+                                    <span>Please select at least 1 mood...</span>
                                   )}
                                 </div>
                                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -976,7 +976,7 @@ export const SongFormDialog = ({
                             <Command shouldFilter={false}>
                               <div className="p-3 border-b border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
                                 <CommandInput
-                                  placeholder="Tìm kiếm mood..."
+                                  placeholder="Search mood..."
                                   value={moodSearchQuery}
                                   onValueChange={setMoodSearchQuery}
                                   className="border-0 focus:ring-0"
@@ -987,7 +987,7 @@ export const SongFormDialog = ({
                                   <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                                     <span className="text-xs">😊</span>
                                   </div>
-                                  <span>Không tìm thấy mood</span>
+                                  <span>No mood found</span>
                                 </div>
                               </CommandEmpty>
                               <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
@@ -1108,12 +1108,12 @@ export const SongFormDialog = ({
                     className={`h-4 w-4 mt-1 text-[hsl(var(--admin-active))] ${isLoading ? "animate-spin" : ""}`}
                   />
                   <div className="space-y-1 text-sm">
-                    <AlertTitle>Upload & đồng bộ audio</AlertTitle>
+                    <AlertTitle>Upload & Sync Audio</AlertTitle>
                     <AlertDescription>
-                      Quá trình tải file lên S3, tạo HLS và đăng ký ACRCloud có thể mất 1–2 phút.
+                      The process of uploading file to S3, creating HLS and registering with ACRCloud may take 1–2 minutes.
                       {isLoading
-                        ? " Vui lòng giữ cửa sổ này mở cho đến khi hoàn tất."
-                        : " Nhấn “Tạo” và chờ quá trình hoàn tất."}
+                        ? " Please keep this window open until completion."
+                        : " Click 'Create' and wait for the process to complete."}
                     </AlertDescription>
                   </div>
                 </div>
@@ -1135,14 +1135,14 @@ export const SongFormDialog = ({
                 disabled={isLoading || uploading}
                 className="border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-active-foreground))] transition-all duration-200"
               >
-                Hủy
+                Cancel
               </Button>
               <Button
                 type="submit"
                 disabled={isLoading}
                 className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 transition-all duration-200"
               >
-                {isLoading ? "Đang lưu..." : mode === "create" ? "Tạo" : "Cập nhật"}
+                {isLoading ? "Saving..." : mode === "create" ? "Create" : "Update"}
               </Button>
             </DialogFooter>
           </form>
@@ -1160,12 +1160,12 @@ export const SongFormDialog = ({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="w-5 h-5" />
-              {isClosingDialog ? "Xác nhận đóng form" : "Xác nhận thay đổi quan trọng"}
+              {isClosingDialog ? "Confirm Close Form" : "Confirm Important Changes"}
             </DialogTitle>
             <DialogDescription>
               {isClosingDialog 
-                ? "Bạn đang tạo bài hát mới. Bạn có chắc chắn muốn đóng form? Dữ liệu chưa lưu sẽ bị mất."
-                : "Bạn đang thay đổi các trường quan trọng có thể ảnh hưởng đến việc nhận diện bài hát:"}
+                ? "You are creating a new song. Are you sure you want to close the form? Unsaved data will be lost."
+                : "You are changing important fields that may affect song recognition:"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
@@ -1179,13 +1179,13 @@ export const SongFormDialog = ({
               variant="outline"
               onClick={handleCancelConfirm}
             >
-              Hủy
+              Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={isClosingDialog ? handleConfirmClose : handleConfirmSubmit}
             >
-              {isClosingDialog ? "Đóng form" : "Xác nhận thay đổi"}
+              {isClosingDialog ? "Close Form" : "Confirm Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

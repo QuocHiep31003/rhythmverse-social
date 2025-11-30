@@ -72,7 +72,7 @@ export const getTimeUntilExpiration = (token: string | null): number => {
   return Math.max(0, timeUntilExpiration);
 };
 
-// Auth helpers for API requests
+// Auth helpers for API requests - DÙNG localStorage để chia sẻ giữa các tab
 export const getAuthToken = (): string | null => {
   try {
     if (typeof window !== 'undefined') {
@@ -97,7 +97,7 @@ export const getAuthToken = (): string | null => {
   }
 };
 
-// Helper để lấy admin token (ưu tiên adminToken)
+// Helper để lấy admin token (ưu tiên adminToken) - DÙNG localStorage để chia sẻ giữa các tab
 export const getAdminToken = (): string | null => {
   try {
     return typeof window !== 'undefined'
@@ -112,7 +112,7 @@ export const getAdminToken = (): string | null => {
   }
 };
 
-// Get refresh token from storage
+// Get refresh token from storage - DÙNG localStorage để chia sẻ giữa các tab
 export const getRefreshToken = (): string | null => {
   try {
     return typeof window !== 'undefined'
@@ -127,11 +127,13 @@ export const getRefreshToken = (): string | null => {
   }
 };
 
-// Set tokens in storage
+// Set tokens in storage - DÙNG localStorage để chia sẻ giữa các tab
 export const setTokens = (token: string, refreshToken?: string) => {
   try {
+    if (typeof window === 'undefined') return;
+    
     // Kiểm tra xem đang ở admin page hay không
-    const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    const isAdminPage = window.location.pathname.startsWith('/admin');
 
     if (isAdminPage) {
       // Lưu vào adminToken và adminRefreshToken nếu đang ở admin page
@@ -146,30 +148,52 @@ export const setTokens = (token: string, refreshToken?: string) => {
         localStorage.setItem('refreshToken', refreshToken);
       }
     }
-
-    // Cũng lưu vào sessionStorage để đồng bộ
-    try {
-      sessionStorage.setItem('token', token);
-      if (refreshToken) {
-        sessionStorage.setItem('refreshToken', refreshToken);
+    
+    console.log('[setTokens] Tokens saved to localStorage:', { 
+      isAdminPage, 
+      hasToken: !!token, 
+      hasRefreshToken: !!refreshToken 
+    });
+    
+    // Dispatch custom event để các component trong cùng tab có thể listen
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tokenUpdated'));
+    }
+    
+    // localStorage tự động share giữa các tab, không cần BroadcastChannel
+    // Nhưng vẫn broadcast để các tab biết và check auth lại ngay lập tức
+    if (typeof window !== 'undefined' && window.BroadcastChannel) {
+      try {
+        const authChannel = new BroadcastChannel('auth_channel');
+        authChannel.postMessage({
+          type: 'TOKEN_UPDATED',
+          timestamp: Date.now()
+        });
+        setTimeout(() => authChannel.close(), 100);
+        console.log('[setTokens] Broadcasted TOKEN_UPDATED to other tabs');
+      } catch (error) {
+        console.warn('[setTokens] Failed to broadcast token update:', error);
       }
-    } catch (e) {
-      // Ignore sessionStorage errors
     }
   } catch (error) {
-    console.error('Failed to save tokens:', error);
+    console.error('[setTokens] Failed to save tokens:', error);
   }
 };
 
-// Clear tokens from storage
+// Clear tokens from storage - DÙNG localStorage để chia sẻ giữa các tab
 export const clearTokens = () => {
   try {
+    if (typeof window === 'undefined') return;
+    
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminRefreshToken');
+    localStorage.removeItem('userId'); // Clear userId khi logout
+    
+    console.log('[clearTokens] All tokens and userId cleared from localStorage');
   } catch (error) {
-    console.error('Failed to clear tokens:', error);
+    console.error('[clearTokens] Failed to clear tokens:', error);
   }
 };
 
@@ -188,26 +212,27 @@ apiClient.interceptors.request.use(
   async (config) => {
     const token = getAuthToken();
     
-    // Check if token is expiring soon before sending request
-    if (token && isTokenExpiringSoon(token, 15)) {
-      console.log('[apiClient] Token expiring soon, refreshing before request...');
+    // Check if token is expiring soon before sending request (refresh nếu còn 5 phút)
+    if (token && isTokenExpiringSoon(token, 5)) {
+      console.log('[apiClient] Token expiring soon (within 5 min), refreshing before request...');
       try {
-        await refreshTokenIfNeeded();
-        // Get fresh token after refresh
-        const newToken = getAuthToken();
-        if (newToken) {
-          config.headers.Authorization = `Bearer ${newToken}`;
-        } else if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
+        const refreshed = await refreshTokenIfNeeded();
+        if (refreshed) {
+          // Get fresh token after refresh
+          const newToken = getAuthToken();
+          if (newToken) {
+            config.headers.Authorization = `Bearer ${newToken}`;
+            console.log('[apiClient] Using refreshed token');
+            return config;
+          }
         }
       } catch (error) {
         console.error('[apiClient] Failed to refresh token before request:', error);
         // Continue with existing token, let response interceptor handle 401
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
       }
-    } else if (token) {
+    }
+    
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     
@@ -556,39 +581,48 @@ export const refreshTokenIfNeeded = async (): Promise<boolean> => {
 
   // No token or refresh token available
   if (!token || !refreshToken) {
+    console.log('[refreshTokenIfNeeded] No token or refresh token available');
     return false;
   }
 
-  // Check if token is expiring soon (within 15 minutes)
-  if (!isTokenExpiringSoon(token, 15)) {
+  // Check if token is expiring soon (within 5 minutes) - refresh sớm hơn để tránh hết hạn
+  if (!isTokenExpiringSoon(token, 5)) {
     return false; // Token is still valid, no need to refresh
   }
 
   // Prevent multiple simultaneous refresh attempts
   if (isRefreshingProactively) {
-    console.log('[refreshTokenIfNeeded] Refresh already in progress, skipping...');
-    return false;
+    console.log('[refreshTokenIfNeeded] Refresh already in progress, waiting...');
+    // Wait for current refresh to complete
+    let waitCount = 0;
+    while (isRefreshingProactively && waitCount < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      waitCount++;
+    }
+    // Check if we got a new token
+    const newToken = getAuthToken();
+    return newToken !== token;
   }
 
   isRefreshingProactively = true;
 
   try {
-    console.log('[refreshTokenIfNeeded] Token expiring soon, refreshing proactively...');
+    console.log('[refreshTokenIfNeeded] Token expiring soon (within 5 min), refreshing proactively...');
     const { authApi } = await import('./authApi');
     const response = await authApi.refreshToken(refreshToken);
 
     if (response.token && response.refreshToken) {
-      console.log('[refreshTokenIfNeeded] Token refreshed successfully');
+      console.log('[refreshTokenIfNeeded] ✅ Token refreshed successfully');
       setTokens(response.token, response.refreshToken);
       isRefreshingProactively = false;
       return true;
     } else {
-      console.error('[refreshTokenIfNeeded] Invalid refresh response:', response);
+      console.error('[refreshTokenIfNeeded] ❌ Invalid refresh response:', response);
       isRefreshingProactively = false;
       return false;
     }
   } catch (error) {
-    console.error('[refreshTokenIfNeeded] Failed to refresh token:', error);
+    console.error('[refreshTokenIfNeeded] ❌ Failed to refresh token:', error);
     isRefreshingProactively = false;
     // Don't clear tokens here, let the interceptor handle 401 errors
     return false;
@@ -667,13 +701,14 @@ export const stopTokenRefreshInterval = (): void => {
 // Start token refresh interval when module loads (if in browser and token exists)
 // This handles page refresh scenarios
 if (typeof window !== 'undefined') {
-  // Wait a bit for localStorage to be ready
+  // Wait a bit for sessionStorage to be ready
   setTimeout(() => {
     const token = getAuthToken();
     if (token && !tokenRefreshInterval) {
+      console.log('[config] Starting token refresh interval');
       startTokenRefreshInterval();
     }
-  }, 1000);
+  }, 500);
 }
 
 export default apiClient;

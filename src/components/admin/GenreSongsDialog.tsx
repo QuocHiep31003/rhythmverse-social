@@ -123,9 +123,9 @@ export const GenreSongsDialog = ({ open, onOpenChange, genreId, genreName }: Gen
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Quản lý bài hát - {genreName || "Genre"}</DialogTitle>
+          <DialogTitle>Manage Songs - {genreName || "Genre"}</DialogTitle>
           <DialogDescription>
-            Xem và chỉnh sửa score của các bài hát thuộc thể loại này
+            View and edit scores of songs in this genre
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 overflow-auto">
@@ -142,10 +142,10 @@ export const GenreSongsDialog = ({ open, onOpenChange, genreId, genreName }: Gen
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-16">STT</TableHead>
-                  <TableHead>Tên bài hát</TableHead>
-                  <TableHead>Nghệ sĩ</TableHead>
-                  <TableHead className="w-32">Năm phát hành</TableHead>
+                  <TableHead className="w-16">No.</TableHead>
+                  <TableHead>Song Name</TableHead>
+                  <TableHead>Artist</TableHead>
+                  <TableHead className="w-32">Release Year</TableHead>
                   <TableHead className="w-32">Duration</TableHead>
                   <TableHead className="w-32 text-center">Score</TableHead>
                   <TableHead className="w-32 text-right">Hành động</TableHead>

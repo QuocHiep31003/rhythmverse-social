@@ -83,7 +83,7 @@ const AdminPromotions = () => {
       setOpenForm(false);
       load();
     } catch (e: any) {
-      toast.error(e?.message || (formMode === "create" ? "Failed to create banner" : "Update failed"));
+      toast.error(e?.message || (formMode === "create" ? "Failed to create banner" : "Failed to update banner"));
     } finally {
       setSubmitting(false);
     }
@@ -156,7 +156,7 @@ const AdminPromotions = () => {
     try {
       setImporting(true);
       const msg = await promotionsApi.import(file);
-      toast.success(msg || "Banners imported");
+      toast.success(msg || "Banners imported successfully");
       load();
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
@@ -176,7 +176,7 @@ const AdminPromotions = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Banner Management</h1>
-              <p className="text-muted-foreground mt-1">Display Active label and allow enable/disable</p>
+              <p className="text-muted-foreground mt-1">Hiển thị nhãn Active và cho phép bật/tắt</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -189,10 +189,10 @@ const AdminPromotions = () => {
             </Button>
            
             <Button variant="destructive" disabled={selectedIds.length === 0} onClick={handleDeleteSelected} className="gap-2">
-              <Trash2 className="w-4 h-4" /> Delete selected ({selectedIds.length})
+              <Trash2 className="w-4 h-4" /> Delete Selected ({selectedIds.length})
             </Button>
             <Button onClick={() => setOpenForm(true)} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg">
-              <Plus className="w-4 h-4" /> Create banner
+              <Plus className="w-4 h-4" /> Create Banner
             </Button>
           </div>
         </div>
@@ -213,7 +213,7 @@ const AdminPromotions = () => {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Show:</span>
+                  <span className="text-sm text-muted-foreground">Display:</span>
                   <select
                     value={size}
                     onChange={(e) => {
@@ -236,7 +236,7 @@ const AdminPromotions = () => {
             {loading ? (
               <div className="text-center py-8">Loading...</div>
             ) : items.length === 0 ? (
-              <div className="text-center py-8">No banners found</div>
+              <div className="text-center py-8">No banners available</div>
             ) : (
               <Table>
                 <TableHeader>

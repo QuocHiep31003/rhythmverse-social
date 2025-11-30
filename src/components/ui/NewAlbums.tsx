@@ -47,7 +47,7 @@ const NewAlbums = () => {
     <section className="mb-12">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground">Album mới phát hành</h2>
+        <h2 className="text-2xl font-bold text-foreground">New Releases</h2>
       </div>
 
       {/* Horizontal scrolling container */}
@@ -65,7 +65,7 @@ const NewAlbums = () => {
                 ))}
               </div>
             ) : albums.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-8">Không có album nào.</p>
+              <p className="text-muted-foreground text-sm py-8">No albums available.</p>
             ) : (
               albums.map((album) => {
                 const artistName = getArtistName(album.artist);

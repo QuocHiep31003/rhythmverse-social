@@ -65,8 +65,8 @@ import type { Song, SongCreateUpdateData } from "@/services/api/songApi";
 import { Switch } from "@/components/ui/switch";
 
 const metadataSchema = z.object({
-  name: z.string().min(1, "Tên bài hát không được để trống").max(200),
-  releaseAt: z.string().min(1, "Ngày phát hành không được để trống"),
+  name: z.string().min(1, "Song name cannot be empty").max(200),
+  releaseAt: z.string().min(1, "Release date cannot be empty"),
   duration: z.string().optional(),
   status: z.enum(["ACTIVE", "INACTIVE", "PENDING_RELEASE"]).default("ACTIVE"),
 });
@@ -311,8 +311,8 @@ export const SongEditDialog = ({
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
-        title: "Lỗi",
-        description: "Không thể tải dữ liệu bài hát",
+        title: "Error",
+        description: "Failed to load song data",
         variant: "destructive",
       });
     } finally {
@@ -349,16 +349,16 @@ export const SongEditDialog = ({
       }
 
       toast({
-        title: "Thành công",
-        description: "Đã cập nhật metadata bài hát",
+        title: "Success",
+        description: "Song metadata updated successfully",
       });
       await loadData();
       onSuccess?.();
     } catch (error) {
       console.error("Error updating metadata:", error);
       toast({
-        title: "Lỗi",
-        description: "Không thể cập nhật metadata",
+        title: "Error",
+        description: "Failed to update metadata",
         variant: "destructive",
       });
     } finally {
@@ -369,8 +369,8 @@ export const SongEditDialog = ({
   const handleAddContributor = async () => {
     if (!newContributorArtistId) {
       toast({
-        title: "Lỗi",
-        description: "Vui lòng chọn nghệ sĩ",
+        title: "Error",
+        description: "Please select an artist",
         variant: "destructive",
       });
       return;
@@ -380,8 +380,8 @@ export const SongEditDialog = ({
       setIsLoading(true);
       await songContributorApi.add(songId, newContributorArtistId, newContributorRole);
       toast({
-        title: "Thành công",
-        description: "Đã thêm contributor",
+        title: "Success",
+        description: "Contributor added successfully",
       });
       setShowAddContributor(false);
       setNewContributorArtistId(null);
@@ -391,7 +391,7 @@ export const SongEditDialog = ({
       console.error("Error adding contributor:", error);
       toast({
         title: "Lỗi",
-        description: getErrorMessage(error, "Không thể thêm contributor"),
+        description: getErrorMessage(error, "Failed to add contributor"),
         variant: "destructive",
       });
     } finally {
@@ -404,15 +404,15 @@ export const SongEditDialog = ({
       setIsLoading(true);
       await songContributorApi.remove(contributorId, songId);
       toast({
-        title: "Thành công",
-        description: "Đã xóa contributor",
+        title: "Success",
+        description: "Contributor deleted successfully",
       });
       await loadData();
     } catch (error) {
       console.error("Error removing contributor:", error);
       toast({
         title: "Lỗi",
-        description: getErrorMessage(error, "Không thể xóa contributor"),
+        description: getErrorMessage(error, "Failed to delete contributor"),
         variant: "destructive",
       });
     } finally {
@@ -423,8 +423,8 @@ export const SongEditDialog = ({
   const handleAddGenre = async () => {
     if (!newGenreId) {
       toast({
-        title: "Lỗi",
-        description: "Vui lòng chọn thể loại",
+        title: "Error",
+        description: "Please select a genre",
         variant: "destructive",
       });
       return;
@@ -435,8 +435,8 @@ export const SongEditDialog = ({
       const score = parseFloat(newGenreScore);
       await songGenreApi.add(songId, newGenreId, Number.isFinite(score) ? score : 1.0);
       toast({
-        title: "Thành công",
-        description: "Đã thêm genre mới vào bài hát",
+        title: "Success",
+        description: "Genre added to song successfully",
       });
       setNewGenreId(null);
       setNewGenreScore("1.0");
@@ -446,7 +446,7 @@ export const SongEditDialog = ({
       console.error("Error adding genre:", error);
       toast({
         title: "Lỗi",
-        description: getErrorMessage(error, "Không thể thêm thể loại"),
+        description: getErrorMessage(error, "Failed to add genre"),
         variant: "destructive",
       });
     } finally {
@@ -460,8 +460,8 @@ export const SongEditDialog = ({
       setIsSavingGenre(true);
       await songGenreApi.update(songGenreId, score);
       toast({
-        title: "Thành công",
-        description: "Đã cập nhật thể loại",
+        title: "Success",
+        description: "Genre updated successfully",
       });
       setEditingGenreId(null);
       setGenreScoreDraft("");
@@ -469,8 +469,8 @@ export const SongEditDialog = ({
     } catch (error) {
       console.error("Error updating genre:", error);
       toast({
-        title: "Lỗi",
-        description: "Không thể cập nhật thể loại",
+        title: "Error",
+        description: "Failed to update genre",
         variant: "destructive",
       });
     } finally {
@@ -484,15 +484,15 @@ export const SongEditDialog = ({
       setIsLoading(true);
       await songGenreApi.remove(songGenreId, songId);
       toast({
-        title: "Thành công",
-        description: "Đã xóa thể loại",
+        title: "Success",
+        description: "Genre deleted",
       });
       await loadData();
     } catch (error) {
       console.error("Error removing genre:", error);
       toast({
-        title: "Lỗi",
-        description: getErrorMessage(error, "Không thể xóa thể loại"),
+        title: "Error",
+        description: getErrorMessage(error, "Failed to delete genre"),
         variant: "destructive",
       });
     } finally {
@@ -637,7 +637,7 @@ export const SongEditDialog = ({
           <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
             <div className="flex flex-col items-center gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Đang xử lý...</p>
+              <p className="text-sm text-muted-foreground">Processing...</p>
             </div>
           </div>
         )}
@@ -658,10 +658,10 @@ export const SongEditDialog = ({
         </button>
         <DialogHeader className="px-6 pt-6 pb-4 border-b">
           <DialogTitle className="text-2xl font-bold">
-            Chỉnh sửa bài hát
+            Edit Song
           </DialogTitle>
           <DialogDescription>
-            Quản lý metadata, contributors, genres và moods của bài hát
+            Manage song metadata, contributors, genres and moods
           </DialogDescription>
         </DialogHeader>
 
@@ -675,7 +675,7 @@ export const SongEditDialog = ({
           <TabsList className="mx-6 mt-4 mb-0">
             <TabsTrigger value="metadata">Metadata</TabsTrigger>
             <TabsTrigger value="contributor">Contributor</TabsTrigger>
-            <TabsTrigger value="genre-mood">Genre và Mood</TabsTrigger>
+            <TabsTrigger value="genre-mood">Genre & Mood</TabsTrigger>
           </TabsList>
 
           <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -700,9 +700,9 @@ export const SongEditDialog = ({
                       name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Tên bài hát *</FormLabel>
+                          <FormLabel>Song Name *</FormLabel>
                           <FormControl>
-                            <Input placeholder="Tên bài hát" {...field} />
+                            <Input placeholder="Song name" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -715,7 +715,7 @@ export const SongEditDialog = ({
                       name="releaseAt"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Ngày phát hành *</FormLabel>
+                          <FormLabel>Release Date *</FormLabel>
                           <FormControl>
                             <Input
                               type="datetime-local"
@@ -733,23 +733,23 @@ export const SongEditDialog = ({
                       name="status"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Trạng thái</FormLabel>
+                          <FormLabel>Status</FormLabel>
                           <FormControl>
                             <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
                               <div>
                                 <p className="text-sm font-semibold text-foreground">
                                   {field.value === "PENDING_RELEASE"
-                                    ? "Chờ phát hành"
+                                    ? "Pending Release"
                                     : field.value === "ACTIVE"
-                                    ? "Đang hiển thị"
-                                    : "Tạm ẩn"}
+                                    ? "Active"
+                                    : "Inactive"}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
                                   {field.value === "PENDING_RELEASE"
-                                    ? "Bài hát sẽ tự động Active khi đến thời gian phát hành."
+                                    ? "Song will automatically become Active when release time arrives."
                                     : field.value === "ACTIVE"
-                                    ? "Bài hát sẽ xuất hiện trên tất cả màn hình người dùng"
-                                    : "Ẩn khỏi người dùng, chỉ quản trị viên nhìn thấy"}
+                                    ? "Song will appear on all user screens"
+                                    : "Hidden from users, only administrators can see"}
                                 </p>
                               </div>
                               <Switch
@@ -773,7 +773,7 @@ export const SongEditDialog = ({
                       name="duration"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Thời lượng (mm:ss)</FormLabel>
+                          <FormLabel>Duration (mm:ss)</FormLabel>
                           <FormControl>
                             <Input 
                               placeholder="3:45" 
@@ -789,7 +789,7 @@ export const SongEditDialog = ({
 
                     {/* Preview audio */}
                     <FormItem className="md:col-span-2">
-                      <FormLabel>Nghe thử</FormLabel>
+                      <FormLabel>Preview</FormLabel>
                       <div className="flex items-center gap-3">
                         <Button
                           type="button"
@@ -810,8 +810,8 @@ export const SongEditDialog = ({
                             } catch (error) {
                               console.error("Error previewing song:", error);
                               toast({
-                                title: "Lỗi",
-                                description: "Không thể phát thử bài hát",
+                                title: "Error",
+                                description: "Failed to preview song",
                                 variant: "destructive",
                               });
                             } finally {
@@ -822,12 +822,12 @@ export const SongEditDialog = ({
                           {isPreviewing ? (
                             <>
                               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Đang tải...
+                              Loading...
                             </>
                           ) : (
                             <>
                               <Play className="w-4 h-4 mr-2" />
-                              Nghe thử
+                              Preview
                             </>
                           )}
                         </Button>
@@ -845,7 +845,7 @@ export const SongEditDialog = ({
 
                     {/* Play Count - Read only */}
                     <FormItem>
-                      <FormLabel>Lượt phát</FormLabel>
+                      <FormLabel>Play Count</FormLabel>
                       <Input 
                         value={songData?.playCount?.toLocaleString() || "0"} 
                         disabled 
@@ -857,7 +857,7 @@ export const SongEditDialog = ({
                     <FormItem>
                       <FormLabel>Album</FormLabel>
                       <Input 
-                        value={albumName || "Chưa có album"} 
+                        value={albumName || "No album"} 
                         disabled 
                         className="bg-muted"
                       />
@@ -867,7 +867,7 @@ export const SongEditDialog = ({
                     <FormItem>
                       <FormLabel>UUID (S3)</FormLabel>
                       <Input 
-                        value={songData?.uuid ? (songData.uuid.length > 60 ? songData.uuid.substring(0, 60) + "..." : songData.uuid) : "Chưa có"} 
+                        value={songData?.uuid ? (songData.uuid.length > 60 ? songData.uuid.substring(0, 60) + "..." : songData.uuid) : "None"} 
                         disabled 
                         className="bg-muted"
                       />
@@ -881,7 +881,7 @@ export const SongEditDialog = ({
                           value={songData?.acrId || ""} 
                           disabled 
                           className="bg-muted flex-1"
-                          placeholder="Chưa có ACR ID"
+                          placeholder="No ACR ID"
                         />
                         {songData?.acrId && (
                           <Button
@@ -989,7 +989,7 @@ export const SongEditDialog = ({
 
                     {/* Created At - Read only */}
                     <FormItem>
-                      <FormLabel>Ngày tạo</FormLabel>
+                      <FormLabel>Created Date</FormLabel>
                       <Input 
                         value={songData?.createdAt ? new Date(songData.createdAt).toLocaleString("vi-VN") : "N/A"} 
                         disabled 
@@ -999,7 +999,7 @@ export const SongEditDialog = ({
 
                     {/* Updated At - Read only */}
                     <FormItem>
-                      <FormLabel>Ngày cập nhật</FormLabel>
+                      <FormLabel>Updated Date</FormLabel>
                       <Input 
                         value={songData?.updatedAt ? new Date(songData.updatedAt).toLocaleString("vi-VN") : "N/A"} 
                         disabled 
@@ -1010,7 +1010,7 @@ export const SongEditDialog = ({
 
                   {/* File Upload - Full width */}
                   <FormItem>
-                    <FormLabel>Upload file nhạc mới (chỉ upload khi cần thay đổi)</FormLabel>
+                    <FormLabel>Upload New Audio File (only upload when you need to change)</FormLabel>
                     <FormControl>
                       <Input
                         type="file"
@@ -1024,7 +1024,7 @@ export const SongEditDialog = ({
                     </FormControl>
                     {selectedFile && (
                       <div className="text-sm text-muted-foreground">
-                        File đã chọn: {selectedFile.name}
+                        Selected file: {selectedFile.name}
                       </div>
                     )}
                     <FormMessage />
@@ -1037,7 +1037,7 @@ export const SongEditDialog = ({
                       size="sm"
                       className="bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))]/90"
                     >
-                      {isLoading ? "Đang lưu..." : "Lưu metadata"}
+                      {isLoading ? "Saving..." : "Save Metadata"}
                     </Button>
                   </div>
                 </form>
@@ -1050,7 +1050,7 @@ export const SongEditDialog = ({
                 <div>
                   <h3 className="text-lg font-semibold">Contributors</h3>
                   <p className="text-sm text-muted-foreground">
-                    Nhóm theo vai trò để quản lý dễ hơn
+                    Grouped by role for easier management
                   </p>
                 </div>
                 <Button
@@ -1072,7 +1072,7 @@ export const SongEditDialog = ({
                   )}
                 >
                   <Plus className="w-4 h-4" />
-                  {showAddContributor ? "Đóng form" : "Thêm Contributor"}
+                  {showAddContributor ? "Close Form" : "Add Contributor"}
                 </Button>
               </div>
 
@@ -1083,7 +1083,7 @@ export const SongEditDialog = ({
                       <label className="text-sm font-medium">Role</label>
                       <Select value={newContributorRole} onValueChange={setNewContributorRole}>
                         <SelectTrigger>
-                          <SelectValue placeholder="Chọn role" />
+                          <SelectValue placeholder="Select role" />
                         </SelectTrigger>
                         <SelectContent>
                           {Object.entries(ROLE_LABELS).map(([value, label]) => (
@@ -1095,7 +1095,7 @@ export const SongEditDialog = ({
                       </Select>
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-medium">Nghệ sĩ</label>
+                      <label className="text-sm font-medium">Artist</label>
                       <Popover open={artistPickerOpen} onOpenChange={setArtistPickerOpen}>
                         <PopoverTrigger asChild>
                           <Button
@@ -1107,15 +1107,15 @@ export const SongEditDialog = ({
                             )}
                           >
                             {newContributorArtistId
-                              ? selectedArtist?.name || "Chọn nghệ sĩ"
-                              : "Tìm và chọn nghệ sĩ"}
+                              ? selectedArtist?.name || "Select artist"
+                              : "Search and select artist"}
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-0" align="end">
                           <Command>
-                            <CommandInput placeholder="Tìm nghệ sĩ..." />
-                            <CommandEmpty>Không tìm thấy nghệ sĩ.</CommandEmpty>
+                            <CommandInput placeholder="Search artist..." />
+                            <CommandEmpty>No artist found.</CommandEmpty>
                             <CommandList>
                               <CommandGroup>
                                 {allArtists.map((artist) => (
@@ -1229,7 +1229,7 @@ export const SongEditDialog = ({
                           </div>
                         ) : (
                           <p className="text-sm italic text-muted-foreground">
-                            Chưa có nghệ sĩ cho vai trò này
+                            No artists for this role
                           </p>
                         )}
                       </div>
@@ -1248,7 +1248,7 @@ export const SongEditDialog = ({
                   <div className="relative w-full max-w-xs">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Tìm genre..."
+                      placeholder="Search genre..."
                       className="pl-9"
                       value={genreSearch}
                       onChange={(e) => setGenreSearch(e.target.value)}
@@ -1261,7 +1261,7 @@ export const SongEditDialog = ({
                   <TableRow>
                     <TableHead>Genre</TableHead>
                     <TableHead>Score</TableHead>
-                    <TableHead className="text-right">Hành động</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1316,7 +1316,7 @@ export const SongEditDialog = ({
                                 }}
                                 disabled={isLoading}
                               >
-                                Lưu
+                                Save
                               </Button>
                               <Button
                                 variant="outline"
@@ -1328,7 +1328,7 @@ export const SongEditDialog = ({
                                 }}
                                 disabled={isLoading}
                               >
-                                Hủy
+                                Cancel
                               </Button>
                             </>
                           ) : (
@@ -1358,7 +1358,7 @@ export const SongEditDialog = ({
                   {filteredSongGenres.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        {songGenres.length === 0 ? "Chưa có genre nào" : "Không tìm thấy genre phù hợp"}
+                        {songGenres.length === 0 ? "No genres yet" : "No matching genres found"}
                       </TableCell>
                     </TableRow>
                   )}
@@ -1382,7 +1382,7 @@ export const SongEditDialog = ({
                     size="sm"
                   >
                     <Plus className="h-4 w-4" />
-                    Thêm genre mới
+                    Add New Genre
                   </Button>
                 </div>
               )}
@@ -1409,7 +1409,7 @@ export const SongEditDialog = ({
                         <PopoverContent className="w-80 p-0" align="start">
                           <Command>
                             <CommandInput placeholder="Tìm genre..." />
-                            <CommandEmpty>Không tìm thấy genre.</CommandEmpty>
+                            <CommandEmpty>No genre found.</CommandEmpty>
                             <CommandList>
                               <CommandGroup>
                                 {allGenres.map((genre) => (
@@ -1473,7 +1473,7 @@ export const SongEditDialog = ({
                   </div>
                   {!selectedGenre && (
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Chọn 1 genre và nhập score trong khoảng 0.0 - 1.0
+                      Select 1 genre and enter a score between 0.0 - 1.0
                     </p>
                   )}
                 </div>
@@ -1487,7 +1487,7 @@ export const SongEditDialog = ({
                   <div className="relative w-full max-w-xs">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Tìm mood..."
+                      placeholder="Search mood..."
                       className="pl-9"
                       value={moodSearch}
                       onChange={(e) => setMoodSearch(e.target.value)}
@@ -1500,7 +1500,7 @@ export const SongEditDialog = ({
                   <TableRow>
                     <TableHead>Mood</TableHead>
                     <TableHead>Score</TableHead>
-                    <TableHead className="text-right">Hành động</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1555,7 +1555,7 @@ export const SongEditDialog = ({
                                 }}
                                 disabled={isLoading}
                               >
-                                Lưu
+                                Save
                               </Button>
                               <Button
                                 variant="outline"
@@ -1567,7 +1567,7 @@ export const SongEditDialog = ({
                                 }}
                                 disabled={isLoading}
                               >
-                                Hủy
+                                Cancel
                               </Button>
                             </>
                           ) : (
@@ -1597,7 +1597,7 @@ export const SongEditDialog = ({
                   {filteredSongMoods.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={3} className="text-center text-muted-foreground">
-                        {songMoods.length === 0 ? "Chưa có mood nào" : "Không tìm thấy mood phù hợp"}
+                        {songMoods.length === 0 ? "No moods yet" : "No matching moods found"}
                       </TableCell>
                     </TableRow>
                   )}
@@ -1621,7 +1621,7 @@ export const SongEditDialog = ({
                     size="sm"
                   >
                     <Plus className="h-4 w-4" />
-                    Thêm mood mới
+                    Add New Mood
                   </Button>
                 </div>
               )}
@@ -1645,7 +1645,7 @@ export const SongEditDialog = ({
                         <PopoverContent className="w-80 p-0" align="start">
                           <Command>
                             <CommandInput placeholder="Tìm mood..." />
-                            <CommandEmpty>Không tìm thấy mood.</CommandEmpty>
+                            <CommandEmpty>No mood found.</CommandEmpty>
                             <CommandList>
                               <CommandGroup>
                                 {allMoods.map((mood) => (
@@ -1709,7 +1709,7 @@ export const SongEditDialog = ({
                   </div>
                   {!selectedMood && (
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Chọn 1 mood và nhập score trong khoảng 0.0 - 1.0
+                      Select 1 mood and enter a score between 0.0 - 1.0
                     </p>
                   )}
                 </div>
@@ -1723,18 +1723,18 @@ export const SongEditDialog = ({
       <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Xóa {deleteConfirm?.type === "contributor" ? "contributor" : deleteConfirm?.type === "genre" ? "genre" : "mood"}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {deleteConfirm?.type === "contributor" ? "contributor" : deleteConfirm?.type === "genre" ? "genre" : "mood"}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Bạn có chắc muốn xóa "{deleteConfirm?.name}" khỏi bài hát? Hành động này không thể hoàn tác.
+              Are you sure you want to delete "{deleteConfirm?.name}" from this song? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Hủy</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleConfirmDelete}
             >
-              Xóa
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

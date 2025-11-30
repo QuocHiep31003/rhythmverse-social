@@ -38,12 +38,12 @@ import {
 import { toast } from "@/hooks/use-toast";
 
 const genreFormSchema = z.object({
-  name: z.string().min(1, "Tên thể loại không được để trống").max(100),
+  name: z.string().min(1, "Genre name cannot be empty").max(100),
   iconKey: z.string().optional(),
   customIconUrl: z.string().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
 }).refine((data) => !!(data.iconKey || data.customIconUrl), {
-  message: "Vui lòng chọn icon hoặc upload icon riêng",
+  message: "Please select an icon or upload a custom icon",
   path: ["iconKey"],
 });
 
@@ -178,12 +178,12 @@ export const GenreFormDialog = ({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">
-            {mode === "create" ? "Thêm Thể loại mới" : "Chỉnh sửa Thể loại"}
+            {mode === "create" ? "Add New Genre" : "Edit Genre"}
           </DialogTitle>
           <DialogDescription>
             {mode === "create"
-              ? "Nhập tên thể loại nhạc mới"
-              : "Cập nhật tên thể loại"}
+              ? "Enter a new music genre name"
+              : "Update genre name"}
           </DialogDescription>
         </DialogHeader>
 
@@ -194,7 +194,7 @@ export const GenreFormDialog = ({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Tên thể loại *</FormLabel>
+                  <FormLabel>Genre Name *</FormLabel>
                   <FormControl>
                     <Input placeholder="Pop, Rock, Jazz..." {...field} />
                   </FormControl>
@@ -286,12 +286,12 @@ export const GenreFormDialog = ({
                 name="status"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Trạng thái</FormLabel>
+                    <FormLabel>Status</FormLabel>
                     <FormControl>
                       <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
                         <div>
                           <p className="text-sm font-semibold text-foreground">
-                            {field.value === "ACTIVE" ? "Đang hoạt động" : "Tạm ẩn"}
+                            {field.value === "ACTIVE" ? "Active" : "Inactive"}
                           </p>
                         </div>
                         <Switch
@@ -314,10 +314,10 @@ export const GenreFormDialog = ({
                 onClick={() => onOpenChange(false)}
                 disabled={isLoading || uploading}
               >
-                Hủy
+                Cancel
               </Button>
               <Button type="submit" disabled={isLoading || uploading}>
-                {isLoading ? "Đang lưu..." : uploading ? "Đang upload..." : mode === "create" ? "Tạo" : "Cập nhật"}
+                {isLoading ? "Saving..." : uploading ? "Uploading..." : mode === "create" ? "Create" : "Update"}
               </Button>
             </DialogFooter>
           </form>
@@ -327,21 +327,21 @@ export const GenreFormDialog = ({
         <AlertDialog open={showDeactivationWarning} onOpenChange={setShowDeactivationWarning}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Cảnh báo khi tắt hoạt động</AlertDialogTitle>
+              <AlertDialogTitle>Deactivation Warning</AlertDialogTitle>
               <AlertDialogDescription>
-                {deactivationWarning?.message || "Khi tắt genre này, các bài hát liên quan sẽ bị ảnh hưởng."}
+                {deactivationWarning?.message || "When deactivating this genre, related songs will be affected."}
                 <br />
                 <br />
-                <strong>Số bài hát sẽ bị ảnh hưởng: {deactivationWarning?.affectedSongsCount || 0}</strong>
+                <strong>Number of songs that will be affected: {deactivationWarning?.affectedSongsCount || 0}</strong>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={handleCancelDeactivation}>Hủy</AlertDialogCancel>
+              <AlertDialogCancel onClick={handleCancelDeactivation}>Cancel</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmDeactivation}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Xác nhận tắt
+                Confirm Deactivation
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -26,6 +26,7 @@ export { songContributorApi } from './api/songContributorApi';
 export { songGenreApi } from './api/songGenreApi';
 export { songMoodApi } from './api/songMoodApi';
 export { dashboardApi } from './api/dashboardApi';
+export { playbackApi } from './api/playbackApi';
 
 
 // Import mock data for fallback

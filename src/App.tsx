@@ -29,6 +29,7 @@ import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
 import MusicPlayer from "./components/MusicPlayer";
+import ControlMusicPlayer from "./components/ControlMusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
@@ -55,6 +56,7 @@ import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
+import AcrHummingTest from "./pages/AcrHummingTest";
 
 import PaymentCancel from "./pages/PaymentCancel";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -132,6 +134,7 @@ const App = () => (
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
+                    <Route path="/acr-humming-test" element={<AcrHummingTest />} />
 
                     {/* ⭐ Public profile is inline via /social?u=... */}
 
@@ -150,6 +153,7 @@ const App = () => (
             </Routes>
 
             <MusicPlayer />
+            <ControlMusicPlayer />
 
             {(() => {
               try {
