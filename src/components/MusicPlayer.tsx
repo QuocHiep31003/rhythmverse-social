@@ -583,12 +583,20 @@ const MusicPlayer = () => {
         try {
           switch (data.action) {
             case "togglePlay": {
-              console.log('[MusicPlayer] Gọi togglePlay, currentSong:', currentSong, 'isPlaying:', isPlaying, 'queue length:', queue.length);
+              console.log('[MusicPlayer] Gọi togglePlay, currentSong:', currentSong, 'isPlaying:', isPlaying, 'queue length:', queue.length, 'noMainTab:', data.noMainTab);
               // Chỉ toggle play/pause nếu đã có currentSong
               if (!currentSong) {
                 console.warn('[MusicPlayer] Không có currentSong, không thể toggle play. Command từ MiniPlayer sẽ bị bỏ qua.');
                 break;
               }
+              
+              // Nếu có flag noMainTab = true, tab này sẽ trở thành tab chính
+              if (data.noMainTab && data.tabId === tabIdRef.current) {
+                console.log('[MusicPlayer] Nhận được togglePlay với flag noMainTab, tab này sẽ trở thành tab chính');
+                setIsMainTab(true);
+                noMainTabRef.current = false;
+              }
+              
               // Toggle isPlaying state local ngay lập tức
               const newIsPlaying = !isPlaying;
               setIsPlaying(newIsPlaying);
@@ -605,6 +613,16 @@ const MusicPlayer = () => {
                   });
                 } else {
                   audioRef.current.pause();
+                }
+              }
+              
+              // Nếu trở thành tab chính, gửi MAIN_TAB_ACTIVE
+              if (data.noMainTab && data.tabId === tabIdRef.current && newIsPlaying) {
+                if (channelRef.current) {
+                  channelRef.current.postMessage({
+                    type: "MAIN_TAB_ACTIVE",
+                    tabId: tabIdRef.current,
+                  });
                 }
               }
               

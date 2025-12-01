@@ -558,7 +558,11 @@ const AlbumDetail = () => {
                 return (
                   <AlbumSongRow
                     key={song.id}
-                    onClick={async () => {
+                    song={song}
+                    index={index}
+                    active={active}
+                    isPlaying={isPlaying && active}
+                    onPlay={async () => {
                       if (active && isPlaying) {
                         togglePlay();
                       } else {
@@ -566,108 +570,23 @@ const AlbumDetail = () => {
                         await playSongWithStreamUrl(song, playSong, setQueue);
                       }
                     }}
-                    className={`grid grid-cols-[56px_1fr_96px_96px_96px] md:grid-cols-[72px_1fr_160px_120px_120px]
-                      items-center gap-3 px-6 py-3 cursor-pointer transition-colors
-                      ${active ? "bg-primary/10" : "hover:bg-muted/30"}`}
-                  >
-                    <div className="flex justify-center">
-                      {active ? (
-                        isPlaying ? (
-                          <span className="flex gap-0.5 h-4 items-end">
-                            <i className="bar" />
-                            <i className="bar delay-100" />
-                            <i className="bar delay-200" />
-                          </span>
-                        ) : (
-                          <Play className="w-4 h-4" />
-                        )
-                      ) : (
-                        <span>{song.index}</span>
-                      )}
-                    </div>
-
-                    <div>
-                      <div
-                        className={`truncate font-medium ${
-                          active ? "text-primary" : ""
-                        }`}
-                      >
-                        {song.name || song.songName || "Unknown Song"}
-                      </div>
-                      <div className="text-sm text-muted-foreground truncate">
-                        {song.artist}
-                      </div>
-                    </div>
-
-                    <div className="hidden sm:flex justify-center text-sm">
-                      {album?.releaseDate
-                        ? new Date(album.releaseDate).toLocaleDateString()
-                        : "—"}
-                    </div>
-                    <div className="flex justify-center text-sm">
-                      {toSeconds(song.duration) > 0 ? msToMMSS(toSeconds(song.duration)) : "-"}
-                    </div>
-                    <div className="flex justify-center gap-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className={`h-8 w-8 rounded-full ${
-                          liked.includes(song.id) ? "text-red-500" : ""
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLiked((prev) =>
-                            prev.includes(song.id)
-                              ? prev.filter((x) => x !== song.id)
-                              : [...prev, song.id]
-                          );
-                        }}
-                      >
-                        <Heart
-                          className={`w-4 h-4 ${
-                            liked.includes(song.id) ? "fill-current" : ""
-                          }`}
-                        />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedSongForPlaylist({
-                                id: song.id,
-                                name: song.name || song.songName || "Unknown Song",
-                                cover: song.urlImageAlbum || song.cover,
-                              });
-                              setAddToPlaylistOpen(true);
-                            }}
-                          >
-                            <ListPlus className="w-4 h-4 mr-2" />
-                            Thêm vào playlist
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShareSong({
-                                id: song.id,
-                                title: song.name || song.songName || "Unknown Song",
-                                url: `${window.location.origin}/song/${song.id}`,
-                              });
-                            }}
-                          >
-                            <Users className="w-4 h-4 mr-2" />
-                            Chia sẻ với bạn bè
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
+                    releaseDate={album?.releaseDate}
+                    onAddToPlaylist={() => {
+                      setSelectedSongForPlaylist({
+                        id: song.id,
+                        name: song.name || song.songName || "Unknown Song",
+                        cover: song.urlImageAlbum || song.cover,
+                      });
+                      setAddToPlaylistOpen(true);
+                    }}
+                    onShare={() => {
+                      setShareSong({
+                        id: song.id,
+                        title: song.name || song.songName || "Unknown Song",
+                        url: `${window.location.origin}/song/${song.id}`,
+                      });
+                    }}
+                  />
                 );
               })
             ) : (
