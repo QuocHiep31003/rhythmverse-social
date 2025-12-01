@@ -626,9 +626,24 @@ const ControlMusicPlayer = () => {
   }, []);
 
   // Handle controls
-  const handleTogglePlay = useCallback(() => {
-    sendCommand("togglePlay");
-  }, [sendCommand]);
+  const handleTogglePlay = useCallback(async () => {
+    // Nếu không có tab chính và tab này có currentSong, thì tab này sẽ trở thành tab chính
+    if (noMainTabRef.current && currentSong) {
+      console.log('[ControlMusicPlayer] Không có tab chính, gửi command để tab này trở thành tab chính và phát nhạc');
+      // Gửi command với flag noMainTab để MusicPlayer trong tab này biết cần trở thành tab chính
+      if (channelRef.current) {
+        channelRef.current.postMessage({
+          type: "PLAYER_CONTROL",
+          action: "togglePlay",
+          noMainTab: true, // Flag để MusicPlayer biết cần trở thành tab chính
+          tabId: tabIdRef.current,
+        });
+      }
+    } else {
+      // Gửi command qua BroadcastChannel như bình thường
+      sendCommand("togglePlay");
+    }
+  }, [sendCommand, currentSong]);
 
   const handleNext = useCallback(() => {
     sendCommand("next");
@@ -717,13 +732,21 @@ const ControlMusicPlayer = () => {
   // 1. Không phải trang login
   // 2. Không phải tab chính (isMainTab = false)
   // 3. Có songId trong localState (đã nhận được state từ tab chính) HOẶC đang chờ nhận state
+  // 4. Có bài hát trong queue (queue không rỗng)
   if (location.pathname === "/login" || isMainTab) {
+    return null;
+  }
+  
+  // Ẩn khi không có bài hát (không có songId hoặc queue rỗng)
+  const hasSongs = localState.songId !== null || (localState.queue && localState.queue.length > 0);
+  if (!hasSongs) {
     return null;
   }
   
   // Hiển thị ControlMusicPlayer khi:
   // - Không phải tab chính (isMainTab = false)
   // - Có songId trong localState (đã nhận được state từ tab chính)
+  // - Có bài hát trong queue
   // Nếu chưa có songId, vẫn hiển thị nhưng với state mặc định (đang chờ nhận state từ tab chính)
   // Không cần kiểm tra hasReceivedStateFromOtherTab vì có thể đang chờ nhận state
 
