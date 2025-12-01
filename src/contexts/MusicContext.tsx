@@ -96,6 +96,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const waitingForTokenRef = useRef<boolean>(false); // Track if we're waiting for token from another tab
   const queueSongMapRef = useRef<Map<number, Song>>(new Map()); // Cache song data by ID
   const checkingAuthRef = useRef<Promise<boolean> | null>(null); // Cache để tránh gọi đồng thời
+  const queueRef = useRef<Song[]>([]); // Ref để lưu queue mới nhất (tránh closure stale)
   
   // Get userId from token or storage
   const getUserId = useCallback((): number | null => {
@@ -541,6 +542,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [checkAuth, getUserId]);
   
+  // Cập nhật queueRef khi queue state thay đổi (để playSong có thể đọc queue mới nhất)
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+  
   // Request playback control
   const requestPlaybackControl = useCallback(async (): Promise<boolean> => {
     // Kiểm tra xem có đang ở trang login không
@@ -656,9 +662,13 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       
       // QUAN TRỌNG: Kiểm tra queue.length TRƯỚC để quyết định có reset queue không
       // Nếu queue có nhiều bài (ví dụ: 100 bài từ Top100), KHÔNG BAO GIỜ reset queue
-      const hasMultipleSongs = queue.length > 1;
-      const songIndex = queue.findIndex(s => String(s.id) === String(song.id));
+      // Sử dụng queueRef để đảm bảo đọc queue mới nhất (tránh closure stale)
+      const currentQueue = queueRef.current.length > 0 ? queueRef.current : queue;
+      console.log('[MusicContext] playSong được gọi, queue.length:', queue.length, 'queueRef.current.length:', queueRef.current.length, 'currentQueue.length:', currentQueue.length, 'song.id:', song.id, 'skipApiCall:', skipApiCall);
+      const hasMultipleSongs = currentQueue.length > 1;
+      const songIndex = currentQueue.findIndex(s => String(s.id) === String(song.id));
       const isSongInQueue = songIndex >= 0;
+      console.log('[MusicContext] hasMultipleSongs:', hasMultipleSongs, 'isSongInQueue:', isSongInQueue, 'songIndex:', songIndex);
       
       if (hasMultipleSongs) {
         // Queue có nhiều bài - KHÔNG BAO GIỜ reset queue, dù skipApiCall = true hay false
@@ -670,7 +680,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
         isNewRequest = true;
       } else {
         // skipApiCall = true: có thể là từ playNext/playPrevious hoặc từ playSongWithStreamUrl
-        // Queue chỉ có 1 bài hoặc rỗng
+        // QUAN TRỌNG: Nếu queue có nhiều bài (hasMultipleSongs = true), đã được xử lý ở trên
+        // Ở đây queue chỉ có 1 bài hoặc rỗng
         if (!isSongInQueue) {
           // Bài hát không có trong queue - đây là yêu cầu mới
           isNewRequest = true;
@@ -684,8 +695,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       }
       
       if (isNewRequest) {
-        // Chỉ reset queue nếu queue chỉ có 1 bài hoặc rỗng, và bài hát không có trong queue
-        const shouldReplaceQueue = !isSongInQueue || queue.length <= 1;
+        // QUAN TRỌNG: Chỉ reset queue nếu:
+        // 1. Queue chỉ có 1 bài hoặc rỗng, VÀ
+        // 2. Bài hát không có trong queue, VÀ
+        // 3. Không phải là từ queue có nhiều bài (hasMultipleSongs = false)
+        const shouldReplaceQueue = !isSongInQueue && currentQueue.length <= 1 && !hasMultipleSongs;
         
         if (shouldReplaceQueue) {
           console.log('[MusicContext] New song request detected, clearing old queue and setting new queue with this song');
@@ -697,8 +711,14 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
             console.log('[MusicContext] Old queue cleared, new queue set with song:', song.name || song.title || song.songName);
           }
         } else {
-          // Bài hát đã có trong queue và queue có nhiều hơn 1 bài, giữ nguyên queue
-          console.log('[MusicContext] Song is already in queue with multiple songs, keeping existing queue and playing this song');
+          // Bài hát đã có trong queue hoặc queue có nhiều bài, giữ nguyên queue
+          if (hasMultipleSongs) {
+            console.log('[MusicContext] Queue có nhiều bài (', queue.length, '), giữ nguyên queue và phát bài:', song.name || song.title || song.songName);
+          } else if (isSongInQueue) {
+            console.log('[MusicContext] Song is already in queue, keeping existing queue and playing this song');
+          } else {
+            console.log('[MusicContext] Không reset queue (queue.length =', queue.length, ', hasMultipleSongs =', hasMultipleSongs, ')');
+          }
         }
       } else {
         console.log('[MusicContext] Playing song from existing queue (keeping queue with', queue.length, 'songs)');
@@ -948,7 +968,9 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       
       // Set queue state (local only)
       setQueueState(songs);
-      console.log('[MusicContext] ✅ Queue state updated with', songs.length, 'songs');
+      // QUAN TRỌNG: Cập nhật queueRef ngay lập tức để playSong có thể đọc queue mới nhất
+      queueRef.current = songs;
+      console.log('[MusicContext] ✅ Queue state updated with', songs.length, 'songs, queueRef.current updated');
     } catch (error) {
       console.error('[MusicContext] ❌ Failed to set queue:', error);
       // Rollback optimistic update nếu có lỗi

@@ -8,27 +8,27 @@ import type { Song } from '@/services/api/songApi';
  * Helper function để phát nhạc đơn giản - chỉ cần gọi /play-now và set song vào context
  * Không gọi thêm playbackApi.playSong() để tránh gọi 2 API
  * 
- * Nếu không phải tab chính (tab phụ), sẽ gửi command qua BroadcastChannel thay vì tự phát nhạc
+ * Nếu không phải tab đang phát (tab khác), sẽ gửi command qua BroadcastChannel thay vì tự phát nhạc
  */
 export const playSongWithStreamUrl = async (
   song: Song | { id: string | number; [key: string]: unknown },
   playSongFromContext: (song: any, skipApiCall?: boolean) => Promise<void>,
   setQueue?: (songs: any[]) => Promise<void>,
   queue?: any[], // Queue hiện tại (nếu có)
-  currentSong?: any // CurrentSong để kiểm tra xem có phải tab chính không
+  currentSong?: any // CurrentSong để kiểm tra xem có phải tab đang phát không
 ) => {
-  // Kiểm tra xem có phải tab chính không
+  // Kiểm tra xem có phải tab đang phát không
   // QUAN TRỌNG: CHỈ CÓ 1 TAB ĐƯỢC PHÁT NHẠC TẠI MỘT THỜI ĐIỂM
   // Tab chính = tab có currentSong (đang phát nhạc)
   // Tab phụ = tab không có currentSong
-  // Nếu tab không có currentSong → chắc chắn là tab phụ, chỉ sửa queue và gửi command qua BroadcastChannel
+  // Nếu tab không có currentSong → chắc chắn là tab khác, chỉ sửa queue và gửi command qua BroadcastChannel
   const isMainTab = currentSong !== null && currentSong !== undefined;
   
-  // Nếu không phải tab chính (tab phụ), kiểm tra xem có tab chính nào đang phát không
+  // Nếu không phải tab đang phát (tab khác), kiểm tra xem có tab đang phát nào đang phát không
   if (!isMainTab && typeof window !== 'undefined' && window.BroadcastChannel) {
-    console.log('[playSongHelper] Tab phụ phát hiện, kiểm tra xem có tab chính nào đang phát không...');
+    console.log('[playSongHelper] Tab phụ phát hiện, kiểm tra xem có tab đang phát nào đang phát không...');
     
-    // Kiểm tra xem có tab chính nào đang phát nhạc không
+    // Kiểm tra xem có tab đang phát nào đang phát nhạc không
     let hasMainTab = false;
     const checkChannel = new BroadcastChannel('player');
     
@@ -50,7 +50,7 @@ export const playSongWithStreamUrl = async (
       
       checkChannel.addEventListener('message', checkHandler);
       
-      // Gửi message kiểm tra tab chính
+      // Gửi message kiểm tra tab đang phát
       checkChannel.postMessage({
         type: "MAIN_TAB_CHECK",
       });
@@ -58,9 +58,9 @@ export const playSongWithStreamUrl = async (
     
     hasMainTab = await checkPromise;
     
-    // Nếu có tab chính đang phát, gửi command qua BroadcastChannel
+    // Nếu có tab đang phát đang phát, gửi command qua BroadcastChannel
     if (hasMainTab) {
-      console.log('[playSongHelper] Có tab chính đang phát, gửi command qua BroadcastChannel');
+      console.log('[playSongHelper] Có tab đang phát đang phát, gửi command qua BroadcastChannel');
       try {
         // Gọi /play-now để lấy thông tin bài hát
         const songId = typeof song.id === 'string' ? parseInt(song.id, 10) : song.id;
@@ -115,7 +115,7 @@ export const playSongWithStreamUrl = async (
           console.log('[playSongHelper] Tab phụ đã cập nhật queue, queue length:', newQueue.length);
         }
 
-        // Gửi command qua BroadcastChannel để tab chính phát bài
+        // Gửi command qua BroadcastChannel để tab đang phát phát bài
         const channel = new BroadcastChannel('player');
         channel.postMessage({
           type: "PLAYER_CONTROL",
@@ -137,10 +137,10 @@ export const playSongWithStreamUrl = async (
         });
         channel.close();
         
-        console.log('[playSongHelper] Tab phụ đã gửi playNewSong command qua BroadcastChannel, tab chính sẽ phát bài');
-        return; // KHÔNG phát nhạc ở tab phụ
+        console.log('[playSongHelper] Tab phụ đã gửi playNewSong command qua BroadcastChannel, tab đang phát sẽ phát bài');
+        return; // KHÔNG phát nhạc ở tab khác
       } catch (error) {
-        console.error('[playSongHelper] Lỗi khi gửi command từ tab phụ:', error);
+        console.error('[playSongHelper] Lỗi khi gửi command từ tab khác:', error);
         toast({
           title: "Lỗi",
           description: "Không thể gửi yêu cầu phát nhạc. Vui lòng thử lại.",
@@ -149,13 +149,13 @@ export const playSongWithStreamUrl = async (
         return;
       }
     } else {
-      // Không có tab chính đang phát → tab phụ này sẽ trở thành tab chính và phát nhạc
-      console.log('[playSongHelper] Không có tab chính đang phát, tab phụ này sẽ trở thành tab chính và phát nhạc');
-      // Tiếp tục xử lý như tab chính (phần code bên dưới)
+      // Không có tab đang phát đang phát → tab khác này sẽ trở thành tab đang phát và phát nhạc
+      console.log('[playSongHelper] Không có tab đang phát đang phát, tab khác này sẽ trở thành tab đang phát và phát nhạc');
+      // Tiếp tục xử lý như tab đang phát (phần code bên dưới)
     }
   }
   
-  // Nếu là tab chính, phát nhạc bình thường
+  // Nếu là tab đang phát, phát nhạc bình thường
   try {
     const songId = typeof song.id === 'string' ? parseInt(song.id, 10) : song.id;
     if (isNaN(songId)) {
@@ -209,28 +209,44 @@ export const playSongWithStreamUrl = async (
       // Nếu có queue được truyền vào (ví dụ: Top100 với 100 bài), giữ nguyên queue đó
       if (setQueue) {
         if (queue && queue.length > 0) {
-          // Có queue được truyền vào → giữ nguyên queue, không reset
-          console.log('[playSongHelper] Tab chính: Giữ nguyên queue hiện tại, queue length:', queue.length);
+          // Có queue được truyền vào → set queue để đảm bảo queue trong context được cập nhật
+          console.log('[playSongHelper] Tab chính: Set queue từ parameter, queue length:', queue.length);
+          await setQueue(queue);
+          // Đợi đủ lâu để queue được cập nhật trong context (tránh race condition với React batching)
+          // Sử dụng requestAnimationFrame để đảm bảo React đã xử lý state update
+          await new Promise(resolve => {
+            requestAnimationFrame(() => {
+              setTimeout(resolve, 200);
+            });
+          });
         } else {
           // Không có queue → set queue mới với chỉ bài hát này
           console.log('[playSongHelper] Tab chính: Không có queue, set queue mới với 1 bài');
           await setQueue([formattedSong]);
+          // Đợi một chút để queue được cập nhật trong context
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
       
       // Gọi playSong với skipApiCall=true vì /play-now đã setup rồi
+      // QUAN TRỌNG: playSong sẽ đọc queue từ state, nên cần đảm bảo queue đã được cập nhật
       await playSongFromContext(formattedSong, true);
     } else {
       // Fallback: dùng song hiện tại nếu không có trong response
       const formattedSong = mapToPlayerSong(song);
       if (setQueue) {
         if (queue && queue.length > 0) {
-          // Có queue được truyền vào → giữ nguyên queue, không reset
-          console.log('[playSongHelper] Tab chính (fallback): Giữ nguyên queue hiện tại, queue length:', queue.length);
+          // Có queue được truyền vào → set queue để đảm bảo queue trong context được cập nhật
+          console.log('[playSongHelper] Tab chính (fallback): Set queue từ parameter, queue length:', queue.length);
+          await setQueue(queue);
+          // Đợi một chút để queue được cập nhật trong context (tránh race condition)
+          await new Promise(resolve => setTimeout(resolve, 100));
         } else {
           // Không có queue → set queue mới với chỉ bài hát này
           console.log('[playSongHelper] Tab chính (fallback): Không có queue, set queue mới với 1 bài');
           await setQueue([formattedSong]);
+          // Đợi một chút để queue được cập nhật trong context
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
       await playSongFromContext(formattedSong, true);

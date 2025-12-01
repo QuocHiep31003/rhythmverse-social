@@ -429,7 +429,6 @@ const ControlMusicPlayer = () => {
     return `tab_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   };
   const tabIdRef = useRef<string>(getOrCreateTabId());
-  // Flag để biết hiện tại có tab chính đang phát nhạc không
   const noMainTabRef = useRef<boolean>(false);
   // Ref để track songId mà không gây re-run useEffect
   const songIdRef = useRef<string | number | null>(null);
@@ -454,7 +453,7 @@ const ControlMusicPlayer = () => {
     const channel = new BroadcastChannel("player");
     channelRef.current = channel;
 
-    // Lắng nghe messages từ tab chính
+    // Lắng nghe messages từ tab đang phát
     channel.onmessage = (event) => {
       const data = event.data;
       
@@ -464,14 +463,18 @@ const ControlMusicPlayer = () => {
           return;
         }
         
-        // QUAN TRỌNG: Nếu nhận được state update từ tab khác (có tabId khác) → đây là tab phụ
+        // QUAN TRỌNG: Nếu nhận được state update từ tab khác (có tabId khác) → đây là tab khác
         if (data.tabId && data.tabId !== tabIdRef.current) {
           // Không log để tránh spam console
           setIsMainTab(false);
-          setHasReceivedStateFromOtherTab(true);
+          // Chỉ set hasReceivedStateFromOtherTab = true nếu chưa có songId (lần đầu nhận state)
+          if (!hasReceivedStateFromOtherTab && !localState.songId) {
+            setHasReceivedStateFromOtherTab(true);
+            // Không cần gửi REQUEST_STATE vì đã nhận được PLAYER_STATE_UPDATE
+          }
         }
         
-        // Cập nhật state từ tab chính
+        // Cập nhật state từ tab đang phát
         // QUAN TRỌNG: Giữ nguyên các field không được cập nhật (repeatMode, isShuffled, volume, isMuted)
         // Chỉ cập nhật các field được gửi từ PLAYER_STATE_UPDATE
         setLocalState(prev => {
@@ -497,7 +500,7 @@ const ControlMusicPlayer = () => {
           };
         });
       } else if (data.type === "QUEUE_UPDATE") {
-        // Nhận queue update từ tab chính
+        // Nhận queue update từ tab đang phát
         if (data.queue && data.queue.length > 0) {
           setLocalState(prev => ({
             ...prev,
@@ -506,10 +509,10 @@ const ControlMusicPlayer = () => {
         }
       } else if (data.type === "PLAYER_STATE_UPDATE_FULL") {
         // Nhận full state update (bao gồm repeatMode, isShuffled, volume, isMuted)
-        // QUAN TRỌNG: Chỉ cập nhật nếu nhận được từ tab khác (tab chính)
+        // QUAN TRỌNG: Chỉ cập nhật nếu nhận được từ tab khác (tab đang phát)
         // VÀ chỉ cập nhật nếu có tabId (để tránh cập nhật từ chính nó)
         if (data.tabId && data.tabId !== tabIdRef.current) {
-          console.log('[ControlMusicPlayer] Nhận được PLAYER_STATE_UPDATE_FULL từ tab chính:', {
+          console.log('[ControlMusicPlayer] Nhận được PLAYER_STATE_UPDATE_FULL từ tab đang phát:', {
             tabId: data.tabId,
             repeatMode: data.repeatMode,
             isShuffled: data.isShuffled,
@@ -536,7 +539,7 @@ const ControlMusicPlayer = () => {
           }));
         }
       } else if (data.type === "PLAYER_CONTROL") {
-        // Nhận command từ tab chính (ví dụ: pause khi tab chính tắt)
+        // Nhận command từ tab đang phát (ví dụ: pause khi tab đang phát tắt)
         if (data.action === "pause") {
           setLocalState(prev => ({
             ...prev,
@@ -545,7 +548,7 @@ const ControlMusicPlayer = () => {
         }
       } else if (data.type === "MAIN_TAB_CLOSED") {
         // Tab chính đã đóng → set flag "no main tab"
-        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_CLOSED, không còn tab chính');
+        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_CLOSED, không còn tab đang phát');
         noMainTabRef.current = true;
         setLocalState(prev => ({
           ...prev,
@@ -553,16 +556,26 @@ const ControlMusicPlayer = () => {
         }));
       } else if (data.type === "MAIN_TAB_ACTIVE") {
         // Tab chính mới đã bắt đầu phát nhạc → set flag
-        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_ACTIVE, đã có tab chính mới');
+        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_ACTIVE, đã có tab đang phát mới');
         noMainTabRef.current = false;
+        setHasReceivedStateFromOtherTab(true);
+        // Gửi REQUEST_STATE để lấy state đầy đủ từ tab đang phát
+        if (channelRef.current && !localState.songId) {
+          console.log('[ControlMusicPlayer] Gửi REQUEST_STATE sau khi nhận MAIN_TAB_ACTIVE');
+          channelRef.current.postMessage({
+            type: "REQUEST_STATE",
+            tabId: tabIdRef.current,
+          });
+        }
       }
     };
 
-    // Yêu cầu state ban đầu từ tab chính khi mount
-    // Gửi request để tab chính gửi lại state hiện tại
+    // Yêu cầu state ban đầu từ tab đang phát khi mount
+    // QUAN TRỌNG: Chỉ gửi request nếu có dấu hiệu có tab đang phát đang phát nhạc
+    // (nhận được MAIN_TAB_ACTIVE hoặc đã có state từ tab khác)
     const requestInitialState = () => {
       if (channelRef.current) {
-        console.log('[ControlMusicPlayer] Yêu cầu state ban đầu từ tab chính');
+        console.log('[ControlMusicPlayer] Yêu cầu state ban đầu từ tab đang phát');
         channelRef.current.postMessage({
           type: "REQUEST_STATE",
           tabId: tabIdRef.current,
@@ -570,14 +583,64 @@ const ControlMusicPlayer = () => {
       }
     };
     
-    // Gửi request ngay khi mount
-    requestInitialState();
+    // QUAN TRỌNG: Không gửi request ngay khi mount
+    // Chỉ gửi request khi:
+    // 1. Đã nhận được MAIN_TAB_ACTIVE (có tab đang phát mới)
+    // 2. Hoặc đã nhận được state từ tab khác (hasReceivedStateFromOtherTab = true)
+    // 3. Hoặc đợi một chút để xem có tab đang phát nào không
+    
+    // Đợi 1 giây để xem có tab đang phát nào gửi state không
+    const initialDelay = setTimeout(() => {
+      // Chỉ gửi request nếu chưa nhận được state và có dấu hiệu có tab đang phát
+      if (!localState.songId && !hasReceivedStateFromOtherTab) {
+        // Kiểm tra xem có tab đang phát nào đang phát không
+        const checkMainTab = () => {
+          if (typeof window !== 'undefined' && window.BroadcastChannel) {
+            let hasMainTab = false;
+            const checkChannel = new BroadcastChannel('player');
+            
+            const checkPromise = new Promise<boolean>((resolve) => {
+              const checkTimeout = setTimeout(() => {
+                checkChannel.close();
+                resolve(hasMainTab);
+              }, 200);
+              
+              const checkHandler = (event: MessageEvent) => {
+                if (event.data.type === "MAIN_TAB_RESPONSE" && event.data.isPlaying) {
+                  hasMainTab = true;
+                  clearTimeout(checkTimeout);
+                  checkChannel.removeEventListener('message', checkHandler);
+                  checkChannel.close();
+                  resolve(true);
+                }
+              };
+              
+              checkChannel.addEventListener('message', checkHandler);
+              checkChannel.postMessage({
+                type: "MAIN_TAB_CHECK",
+              });
+            });
+            
+            checkPromise.then((hasMain) => {
+              // Chỉ gửi REQUEST_STATE nếu có tab đang phát đang phát
+              if (hasMain && !localState.songId) {
+                requestInitialState();
+              }
+            });
+          }
+        };
+        
+        checkMainTab();
+      }
+    }, 1000);
     
     // Gửi request định kỳ mỗi 2 giây nếu chưa nhận được state (trong 10 giây đầu)
+    // NHƯNG chỉ khi đã có dấu hiệu có tab đang phát (hasReceivedStateFromOtherTab = true)
     let requestCount = 0;
     const maxRequests = 5; // Gửi tối đa 5 lần trong 10 giây
     const requestInterval = setInterval(() => {
-      if (requestCount < maxRequests && !localState.songId) {
+      // Chỉ gửi request nếu đã có dấu hiệu có tab đang phát hoặc đã nhận được state từ tab khác
+      if (requestCount < maxRequests && !localState.songId && hasReceivedStateFromOtherTab) {
         requestInitialState();
         requestCount++;
       } else {
@@ -585,35 +648,36 @@ const ControlMusicPlayer = () => {
       }
     }, 2000);
 
-    // Kiểm tra xem tab này có phải là tab chính không
-    // QUAN TRỌNG: Tab điều khiển KHÔNG BAO GIỜ trở thành tab chính
+    // Kiểm tra xem tab này có phải là tab đang phát không
+    // QUAN TRỌNG: Tab điều khiển KHÔNG BAO GIỜ trở thành tab đang phát
     // Chỉ set isMainTab = false để đảm bảo ControlMusicPlayer luôn hiển thị
     const checkMainTabInterval = setInterval(() => {
-      // Nếu đã nhận được state từ tab khác → chắc chắn là tab phụ
+      // Nếu đã nhận được state từ tab khác → chắc chắn là tab khác
       if (hasReceivedStateFromOtherTab) {
         setIsMainTab(false);
       }
-      // Nếu có localState.songId (đã nhận được state từ tab chính) → chắc chắn là tab phụ
+      // Nếu có localState.songId (đã nhận được state từ tab đang phát) → chắc chắn là tab khác
       else if (localState.songId) {
         setIsMainTab(false);
       }
-      // Nếu không có currentSong trong context → chắc chắn là tab phụ
+      // Nếu không có currentSong trong context → chắc chắn là tab khác
       else if (!currentSong) {
         setIsMainTab(false);
       }
-      // Nếu có currentSong nhưng chưa nhận được state từ tab khác → có thể là tab chính
-      // NHƯNG: ControlMusicPlayer không nên hiển thị khi là tab chính, nên vẫn set false
+      // Nếu có currentSong nhưng chưa nhận được state từ tab khác → có thể là tab đang phát
+      // NHƯNG: ControlMusicPlayer không nên hiển thị khi là tab đang phát, nên vẫn set false
       // (MusicPlayer sẽ hiển thị thay vì ControlMusicPlayer)
       else {
         // Có currentSong nhưng chưa nhận state từ tab khác
         // Đợi thêm một chút để xem có nhận được state từ tab khác không
-        // Nếu sau 2 giây vẫn chưa nhận được → có thể là tab chính
+        // Nếu sau 2 giây vẫn chưa nhận được → có thể là tab đang phát
         // Nhưng để an toàn, vẫn set false để ControlMusicPlayer hiển thị
         setIsMainTab(false);
       }
     }, 1000);
 
     return () => {
+      clearTimeout(initialDelay);
       clearInterval(checkMainTabInterval);
       clearInterval(requestInterval);
       if (channelRef.current) {
@@ -639,9 +703,9 @@ const ControlMusicPlayer = () => {
 
   // Handle controls
   const handleTogglePlay = useCallback(async () => {
-    // Nếu không có tab chính và có thông tin bài hát trong localState, thì tab này sẽ trở thành tab chính
+    // Nếu không có tab đang phát và có thông tin bài hát trong localState, thì tab này sẽ trở thành tab đang phát
     if (noMainTabRef.current && localState.songId) {
-      console.log('[ControlMusicPlayer] Không có tab chính, lấy stream URL và set currentSong trước khi phát');
+      console.log('[ControlMusicPlayer] Không có tab đang phát, lấy stream URL và set currentSong trước khi phát');
       
       try {
         // 1. Tạo song object từ localState
@@ -665,9 +729,10 @@ const ControlMusicPlayer = () => {
           await updatePosition(localState.currentTime * 1000); // Convert to milliseconds
         }
         
-        // 4. Đồng bộ queue trước (nếu có)
-        if (localState.queue && localState.queue.length > 0 && setQueue) {
-          const queueSongs = localState.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
+        // 4. Chuẩn bị queue songs từ localState.queue
+        let queueSongs: any[] = [];
+        if (localState.queue && localState.queue.length > 0) {
+          queueSongs = localState.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
             id: String(q.id),
             name: q.title || q.name || "Unknown Song",
             songName: q.title || q.name || "Unknown Song",
@@ -677,13 +742,25 @@ const ControlMusicPlayer = () => {
             duration: 0,
             cover: q.cover || "",
           }));
-          await setQueue(queueSongs);
+          console.log('[ControlMusicPlayer] Chuẩn bị queue từ localState, queue length:', queueSongs.length);
         }
         
-        // 5. Gọi playSongWithStreamUrl để lấy stream URL và set currentSong
-        // Lưu ý: playSongWithStreamUrl sẽ kiểm tra xem có tab chính không
-        // Vì không có tab chính (noMainTabRef.current = true), nó sẽ phát nhạc ở tab này
-        await playSongWithStreamUrl(songToPlay, playSong, setQueue, localState.queue || [], null);
+        // 5. Đồng bộ queue trước (nếu có) - QUAN TRỌNG: Set queue trước để playSong không reset
+        if (queueSongs.length > 0 && setQueue) {
+          console.log('[ControlMusicPlayer] Set queue trước khi gọi playSongWithStreamUrl, queue length:', queueSongs.length);
+          await setQueue(queueSongs);
+          // Đợi đủ lâu để queue được cập nhật trong context (tránh race condition)
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        // 6. Gọi playSongWithStreamUrl để lấy stream URL và set currentSong
+        // QUAN TRỌNG: 
+        // - Truyền queue vào để playSongWithStreamUrl không reset queue
+        // - Vì không có tab đang phát (noMainTabRef.current = true), nó sẽ phát nhạc ở tab này
+        // - playSongWithStreamUrl sẽ gọi playSong với skipApiCall=true, và playSong sẽ kiểm tra queue.length
+        // - Nếu queue.length > 1, playSong sẽ không reset queue
+        console.log('[ControlMusicPlayer] Gọi playSongWithStreamUrl với queue length:', queueSongs.length);
+        await playSongWithStreamUrl(songToPlay, playSong, setQueue, queueSongs, null);
         
         console.log('[ControlMusicPlayer] Đã gọi playSongWithStreamUrl, gửi command để đồng bộ và phát từ vị trí cũ');
         
@@ -715,13 +792,197 @@ const ControlMusicPlayer = () => {
     }
   }, [sendCommand, localState, playSong, setQueue, updatePosition]);
 
-  const handleNext = useCallback(() => {
-    sendCommand("next");
-  }, [sendCommand]);
+  const handleNext = useCallback(async () => {
+    // Nếu không có tab đang phát và có queue, tìm bài tiếp theo và phát
+    if (noMainTabRef.current && localState.queue && localState.queue.length > 0 && localState.songId) {
+      console.log('[ControlMusicPlayer] Không có tab đang phát, tìm bài tiếp theo trong queue');
+      
+      try {
+        // Tìm index của bài hiện tại
+        const currentIndex = localState.queue.findIndex((q: { id: string | number }) => 
+          String(q.id) === String(localState.songId)
+        );
+        
+        if (currentIndex >= 0) {
+          // Tìm bài tiếp theo
+          let nextIndex = currentIndex + 1;
+          
+          // Xử lý repeat mode
+          if (nextIndex >= localState.queue.length) {
+            if (localState.repeatMode === "all") {
+              nextIndex = 0; // Quay về đầu
+            } else {
+              console.log('[ControlMusicPlayer] Không có bài tiếp theo');
+              return;
+            }
+          }
+          
+          const nextSong = localState.queue[nextIndex];
+          if (!nextSong) {
+            console.log('[ControlMusicPlayer] Không tìm thấy bài tiếp theo');
+            return;
+          }
+          
+          // Tạo song object
+          const songToPlay = {
+            id: nextSong.id,
+            title: nextSong.title || nextSong.name || nextSong.songName || "Unknown Song",
+            name: nextSong.title || nextSong.name || nextSong.songName || "Unknown Song",
+            songName: nextSong.title || nextSong.name || nextSong.songName || "Unknown Song",
+            artist: nextSong.artist || "Unknown Artist",
+            cover: nextSong.cover || "",
+            album: "",
+            duration: 0,
+          };
+          
+          // Cập nhật position về 0 (bài mới)
+          if (updatePosition) {
+            await updatePosition(0);
+          }
+          
+          // Đồng bộ queue
+          if (setQueue) {
+            const queueSongs = localState.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
+              id: String(q.id),
+              name: q.title || q.name || "Unknown Song",
+              songName: q.title || q.name || "Unknown Song",
+              title: q.title || q.name || "Unknown Song",
+              artist: q.artist || "Unknown Artist",
+              album: "",
+              duration: 0,
+              cover: q.cover || "",
+            }));
+            await setQueue(queueSongs);
+          }
+          
+          // Gọi playSongWithStreamUrl để lấy stream URL và set currentSong
+          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+          await playSongWithStreamUrl(songToPlay, playSong, setQueue, localState.queue || [], null);
+          
+          // Đợi một chút để playSong hoàn thành
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Gửi command với toàn bộ thông tin
+          if (channelRef.current) {
+            channelRef.current.postMessage({
+              type: "BECOME_MAIN_TAB_AND_PLAY",
+              tabId: tabIdRef.current,
+              song: songToPlay,
+              queue: localState.queue || [],
+              currentTime: 0, // Bài mới, bắt đầu từ đầu
+              duration: 0,
+              isPlaying: true, // Phát ngay
+              repeatMode: localState.repeatMode || "off",
+              isShuffled: localState.isShuffled || false,
+              volume: localState.volume || 1,
+              isMuted: localState.isMuted || false,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[ControlMusicPlayer] Lỗi khi phát bài tiếp theo:', error);
+      }
+    } else {
+      // Gửi command qua BroadcastChannel như bình thường
+      sendCommand("next");
+    }
+  }, [sendCommand, localState, playSong, setQueue, updatePosition]);
 
-  const handlePrevious = useCallback(() => {
-    sendCommand("previous");
-  }, [sendCommand]);
+  const handlePrevious = useCallback(async () => {
+    // Nếu không có tab đang phát và có queue, tìm bài trước và phát
+    if (noMainTabRef.current && localState.queue && localState.queue.length > 0 && localState.songId) {
+      console.log('[ControlMusicPlayer] Không có tab đang phát, tìm bài trước trong queue');
+      
+      try {
+        // Tìm index của bài hiện tại
+        const currentIndex = localState.queue.findIndex((q: { id: string | number }) => 
+          String(q.id) === String(localState.songId)
+        );
+        
+        if (currentIndex >= 0) {
+          // Tìm bài trước
+          let prevIndex = currentIndex - 1;
+          
+          // Xử lý repeat mode
+          if (prevIndex < 0) {
+            if (localState.repeatMode === "all") {
+              prevIndex = localState.queue.length - 1; // Quay về cuối
+            } else {
+              console.log('[ControlMusicPlayer] Không có bài trước');
+              return;
+            }
+          }
+          
+          const prevSong = localState.queue[prevIndex];
+          if (!prevSong) {
+            console.log('[ControlMusicPlayer] Không tìm thấy bài trước');
+            return;
+          }
+          
+          // Tạo song object
+          const songToPlay = {
+            id: prevSong.id,
+            title: prevSong.title || prevSong.name || prevSong.songName || "Unknown Song",
+            name: prevSong.title || prevSong.name || prevSong.songName || "Unknown Song",
+            songName: prevSong.title || prevSong.name || prevSong.songName || "Unknown Song",
+            artist: prevSong.artist || "Unknown Artist",
+            cover: prevSong.cover || "",
+            album: "",
+            duration: 0,
+          };
+          
+          // Cập nhật position về 0 (bài mới)
+          if (updatePosition) {
+            await updatePosition(0);
+          }
+          
+          // Đồng bộ queue
+          if (setQueue) {
+            const queueSongs = localState.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
+              id: String(q.id),
+              name: q.title || q.name || "Unknown Song",
+              songName: q.title || q.name || "Unknown Song",
+              title: q.title || q.name || "Unknown Song",
+              artist: q.artist || "Unknown Artist",
+              album: "",
+              duration: 0,
+              cover: q.cover || "",
+            }));
+            await setQueue(queueSongs);
+          }
+          
+          // Gọi playSongWithStreamUrl để lấy stream URL và set currentSong
+          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+          await playSongWithStreamUrl(songToPlay, playSong, setQueue, localState.queue || [], null);
+          
+          // Đợi một chút để playSong hoàn thành
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Gửi command với toàn bộ thông tin
+          if (channelRef.current) {
+            channelRef.current.postMessage({
+              type: "BECOME_MAIN_TAB_AND_PLAY",
+              tabId: tabIdRef.current,
+              song: songToPlay,
+              queue: localState.queue || [],
+              currentTime: 0, // Bài mới, bắt đầu từ đầu
+              duration: 0,
+              isPlaying: true, // Phát ngay
+              repeatMode: localState.repeatMode || "off",
+              isShuffled: localState.isShuffled || false,
+              volume: localState.volume || 1,
+              isMuted: localState.isMuted || false,
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[ControlMusicPlayer] Lỗi khi phát bài trước:', error);
+      }
+    } else {
+      // Gửi command qua BroadcastChannel như bình thường
+      sendCommand("previous");
+    }
+  }, [sendCommand, localState, playSong, setQueue, updatePosition]);
 
   const handleToggleShuffle = useCallback(() => {
     // Optimistic update: cập nhật UI ngay lập tức
@@ -797,11 +1058,11 @@ const ControlMusicPlayer = () => {
     return currentIndex > 0;
   }, [localState.queue, localState.songId, localState.repeatMode]);
 
-  // Ẩn trên trang login hoặc khi là tab chính
+  // Ẩn trên trang login hoặc khi là tab đang phát
   // QUAN TRỌNG: Chỉ hiển thị ControlMusicPlayer khi:
   // 1. Không phải trang login
-  // 2. Không phải tab chính (isMainTab = false)
-  // 3. Có songId trong localState (đã nhận được state từ tab chính) HOẶC đang chờ nhận state
+  // 2. Không phải tab đang phát (isMainTab = false)
+  // 3. Có songId trong localState (đã nhận được state từ tab đang phát) HOẶC đang chờ nhận state
   // 4. Có bài hát trong queue (queue không rỗng)
   if (location.pathname === "/login" || isMainTab) {
     return null;
@@ -814,19 +1075,14 @@ const ControlMusicPlayer = () => {
   }
   
   // Hiển thị ControlMusicPlayer khi:
-  // - Không phải tab chính (isMainTab = false)
-  // - Có songId trong localState (đã nhận được state từ tab chính)
+  // - Không phải tab đang phát (isMainTab = false)
+  // - Có songId trong localState (đã nhận được state từ tab đang phát)
   // - Có bài hát trong queue
-  // Nếu chưa có songId, vẫn hiển thị nhưng với state mặc định (đang chờ nhận state từ tab chính)
+  // Nếu chưa có songId, vẫn hiển thị nhưng với state mặc định (đang chờ nhận state từ tab đang phát)
   // Không cần kiểm tra hasReceivedStateFromOtherTab vì có thể đang chờ nhận state
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-[55] w-full" data-control-music-player="true">
-      {/* Chấm xám chỉ tab điều khiển */}
-      <div className="absolute top-2 left-2 flex items-center gap-2 bg-muted/50 px-2 py-1 rounded-full">
-        <div className="w-2 h-2 rounded-full bg-gray-400" title="Tab điều khiển" />
-        <span className="text-xs text-muted-foreground font-medium">Tab điều khiển</span>
-      </div>
       <div className="w-full px-4 py-3">
         <div className="flex items-center justify-between gap-4 w-full">
           {/* Song Info - Bên trái */}

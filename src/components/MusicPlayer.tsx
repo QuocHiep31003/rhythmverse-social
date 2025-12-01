@@ -418,7 +418,6 @@ const MusicPlayer = () => {
     return `tab_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   };
   const tabIdRef = useRef<string>(getOrCreateTabId());
-  // Flag để biết hiện tại có tab chính đang phát nhạc không
   const noMainTabRef = useRef<boolean>(false);
   // Ref để track queue và tránh re-run useEffect
   const queueRef = useRef<Song[]>(queue);
@@ -443,14 +442,14 @@ const MusicPlayer = () => {
   // Detect khi tab bị đóng - pause audio và gửi message "MAIN_TAB_CLOSED"
   useEffect(() => {
     const handleBeforeUnload = () => {
-      // Khi tab chính bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
+      // Khi tab đang phát bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
       if (currentSong && isPlaying && audioRef.current && !audioRef.current.paused) {
-        console.log('[MusicPlayer] Tab chính bị đóng, pause audio và gửi message MAIN_TAB_CLOSED');
+        console.log('[MusicPlayer] Tab bị đóng, pause audio và gửi message MAIN_TAB_CLOSED');
         
         // Pause audio element
         audioRef.current.pause();
         
-        // Gửi message "MAIN_TAB_CLOSED" qua BroadcastChannel để các tab khác biết không còn tab chính
+        // Gửi message "MAIN_TAB_CLOSED" qua BroadcastChannel để các tab khác biết không còn tab đang phát
         if (channelRef.current) {
           channelRef.current.postMessage({
             type: "MAIN_TAB_CLOSED",
@@ -461,9 +460,9 @@ const MusicPlayer = () => {
     };
 
     const handleUnload = () => {
-      // Khi tab chính bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
+      // Khi tab đang phát bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
       if (currentSong && isPlaying && audioRef.current && !audioRef.current.paused) {
-        console.log('[MusicPlayer] Tab chính bị đóng (unload), pause audio và gửi message MAIN_TAB_CLOSED');
+        console.log('[MusicPlayer] Tab bị đóng (unload), pause audio và gửi message MAIN_TAB_CLOSED');
         
         // Pause audio element
         audioRef.current.pause();
@@ -493,7 +492,7 @@ const MusicPlayer = () => {
       return;
     }
 
-    // Chỉ setup khi là tab chính (có thể phát nhạc)
+    // Chỉ setup khi là tab đang phát (có thể phát nhạc)
     const isMainTab = location.pathname !== "/login";
     if (!isMainTab) {
       return;
@@ -507,7 +506,7 @@ const MusicPlayer = () => {
     // QUAN TRỌNG: Sử dụng queueRef để tránh closure stale
     const sendStateUpdate = () => {
       // Chỉ gửi khi có currentSong và giá trị hợp lệ
-      // CHỈ tab chính (tab đang phát nhạc) mới gửi state update
+      // CHỈ tab đang phát (tab đang phát nhạc) mới gửi state update
       if (currentSong && currentTime >= 0 && duration > 0) {
         channel.postMessage({
           type: "PLAYER_STATE_UPDATE",
@@ -527,7 +526,7 @@ const MusicPlayer = () => {
             cover: s.cover 
           })),
         });
-        // Đánh dấu đây là tab chính nếu đang phát nhạc
+        // Đánh dấu đây là tab đang phát nếu đang phát nhạc
         if (isPlaying && audioRef.current && !audioRef.current.paused) {
           setIsMainTab(true);
           channel.postMessage({
@@ -600,14 +599,14 @@ const MusicPlayer = () => {
           return;
         }
         
-        console.log('[MusicPlayer] Nhận được BECOME_MAIN_TAB_AND_PLAY, đồng bộ toàn bộ thông tin và trở thành tab chính');
+        console.log('[MusicPlayer] Nhận được BECOME_MAIN_TAB_AND_PLAY, đồng bộ toàn bộ thông tin và trở thành tab đang phát');
         
         try {
-          // 1. Trở thành tab chính
+          // 1. Trở thành tab đang phát
           setIsMainTab(true);
           noMainTabRef.current = false;
           
-          // 2. Đồng bộ queue
+          // 2. Đồng bộ queue - QUAN TRỌNG: Set queue trước để playSong không reset
           if (data.queue && data.queue.length > 0) {
             const queueSongs: Song[] = data.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
               id: String(q.id),
@@ -621,6 +620,14 @@ const MusicPlayer = () => {
             }));
             console.log('[MusicPlayer] Đồng bộ queue từ tab điều khiển, queue length:', queueSongs.length);
             await setQueue(queueSongs);
+            // Đợi một chút để queue được cập nhật trong context (tránh race condition)
+            await new Promise(resolve => setTimeout(resolve, 200));
+          } else {
+            // Nếu không có queue trong data, kiểm tra xem queue trong context đã có chưa
+            // Nếu queue đã có nhiều bài, giữ nguyên queue đó
+            if (queue && queue.length > 1) {
+              console.log('[MusicPlayer] Không có queue trong data nhưng queue trong context đã có', queue.length, 'bài, giữ nguyên queue');
+            }
           }
           
           // 3. Đồng bộ repeatMode, isShuffled, volume, isMuted
@@ -661,9 +668,16 @@ const MusicPlayer = () => {
             console.log('[MusicPlayer] Phát bài hát từ tab điều khiển:', song.title, 'tại vị trí:', data.currentTime, 'isPlaying:', data.isPlaying);
             
             // Kiểm tra xem bài hát đã có trong queue chưa
-            const songInQueue = queue.find(q => String(q.id) === String(song.id));
-            const skipApiCall = songInQueue !== undefined;
-            console.log('[MusicPlayer] Song in queue:', songInQueue !== undefined, 'skipApiCall:', skipApiCall);
+            // QUAN TRỌNG: Sử dụng queue từ data.queue hoặc queue trong context
+            // Nếu queue đã được set từ data.queue, dùng queue đó
+            const currentQueue = (data.queue && data.queue.length > 0) 
+              ? data.queue.map((q: { id: string | number }) => ({ id: String(q.id) }))
+              : queue;
+            const songInQueue = currentQueue.find((q: { id: string }) => String(q.id) === String(song.id));
+            // QUAN TRỌNG: Nếu queue có nhiều bài (> 1), luôn dùng skipApiCall = true để không reset queue
+            const hasMultipleSongs = currentQueue.length > 1;
+            const skipApiCall = songInQueue !== undefined || hasMultipleSongs;
+            console.log('[MusicPlayer] Song in queue:', songInQueue !== undefined, 'hasMultipleSongs:', hasMultipleSongs, 'skipApiCall:', skipApiCall, 'queue length:', currentQueue.length);
             
             // Phát bài hát
             await playSong(song, skipApiCall);
@@ -838,9 +852,9 @@ const MusicPlayer = () => {
                 break;
               }
               
-              // Nếu có flag noMainTab = true, tab này sẽ trở thành tab chính
+              // Nếu có flag noMainTab = true, tab này sẽ trở thành tab đang phát
               if (data.noMainTab && data.tabId === tabIdRef.current) {
-                console.log('[MusicPlayer] Nhận được togglePlay với flag noMainTab, tab này sẽ trở thành tab chính');
+                console.log('[MusicPlayer] Nhận được togglePlay với flag noMainTab, tab này sẽ trở thành tab đang phát');
                 setIsMainTab(true);
                 noMainTabRef.current = false;
               }
@@ -864,7 +878,7 @@ const MusicPlayer = () => {
                 }
               }
               
-              // Nếu trở thành tab chính, gửi MAIN_TAB_ACTIVE
+              // Nếu trở thành tab đang phát, gửi MAIN_TAB_ACTIVE
               if (data.noMainTab && data.tabId === tabIdRef.current && newIsPlaying) {
                 if (channelRef.current) {
                   channelRef.current.postMessage({
@@ -925,34 +939,34 @@ const MusicPlayer = () => {
                   }
                 } else {
                   console.warn('[MusicPlayer] Không tìm thấy bài hát trong queue với songId:', data.songId);
-                  // Nếu không tìm thấy trong queue, có thể là bài hát mới từ tab phụ
-                  // Trong trường hợp này, tab phụ nên gửi thông tin bài hát đầy đủ qua command "playNewSong"
+                  // Nếu không tìm thấy trong queue, có thể là bài hát mới từ tab khác
+                  // Trong trường hợp này, tab khác nên gửi thông tin bài hát đầy đủ qua command "playNewSong"
                 }
               } else {
                 console.warn('[MusicPlayer] Không có songId');
               }
               break;
             case "playNewSong": {
-              // Tab phụ yêu cầu phát bài hát mới (không có trong queue hiện tại)
-              // Nếu tab này đã có currentSong → chắc chắn là tab chính, phát nhạc
+              // Yêu cầu phát bài hát mới (không có trong queue hiện tại)
+              // Nếu tab này đã có currentSong → chắc chắn là tab đang phát, phát nhạc
               // Nếu tab này chưa có currentSong → kiểm tra xem có tab nào khác đang phát không
-              // Nếu flag "no main tab" = true → tab này sẽ phát nhạc và trở thành tab chính
-              // Nếu không có tab chính → tab này sẽ phát nhạc và trở thành tab chính
+              // Nếu flag "no main tab" = true → tab này sẽ phát nhạc và trở thành tab đang phát
+              // Nếu không có tab đang phát → tab này sẽ phát nhạc và trở thành tab đang phát
               const hasCurrentSong = currentSong !== null && currentSong !== undefined;
               
               if (hasCurrentSong) {
-                // Tab này đã có currentSong → chắc chắn là tab chính, phát nhạc
-                console.log('[MusicPlayer] Nhận được playNewSong command, tab này đã có currentSong → Tab chính, phát nhạc');
-                // Đánh dấu đây là tab chính
+                // Tab này đã có currentSong → chắc chắn là tab đang phát, phát nhạc
+                console.log('[MusicPlayer] Nhận được playNewSong command, tab này đã có currentSong, phát nhạc');
+                // Đánh dấu đây là tab đang phát
                 setIsMainTab(true);
               } else {
                 // Tab này chưa có currentSong → kiểm tra xem có tab nào đang phát nhạc không
                 // QUAN TRỌNG: Chỉ có 1 tab được phát nhạc tại một thời điểm
                 console.log('[MusicPlayer] Nhận được playNewSong command nhưng tab này chưa có currentSong, kiểm tra xem có tab nào đang phát không...');
                 
-                // Nếu flag "no main tab" = true → tab này sẽ trở thành tab chính
+                // Nếu flag "no main tab" = true → tab này sẽ trở thành tab đang phát
                 if (noMainTabRef.current) {
-                  console.log('[MusicPlayer] Flag "no main tab" = true, tab này sẽ trở thành tab chính và phát nhạc');
+                  console.log('[MusicPlayer] Flag "no main tab" = true, tab này sẽ trở thành tab đang phát và phát nhạc');
                 } else {
                   // Đợi một khoảng thời gian ngẫu nhiên nhỏ (0-100ms) để tránh race condition
                   const randomDelay = Math.random() * 100;
@@ -987,7 +1001,7 @@ const MusicPlayer = () => {
                     
                     checkChannel.addEventListener('message', checkHandler);
                     
-                    // Gửi message kiểm tra tab chính
+                    // Gửi message kiểm tra tab đang phát
                     checkChannel.postMessage({
                       type: "MAIN_TAB_CHECK",
                     });
@@ -1006,14 +1020,14 @@ const MusicPlayer = () => {
                     console.log('[MusicPlayer] Có tab khác đang phát nhạc, bỏ qua command này');
                     break;
                   } else {
-                    console.log('[MusicPlayer] Không có tab nào đang phát, tab này sẽ phát nhạc và trở thành tab chính');
+                    console.log('[MusicPlayer] Không có tab nào đang phát, tab này sẽ phát nhạc và trở thành tab đang phát');
                   }
                 }
               }
               
               console.log('[MusicPlayer] Xử lý playNewSong command:', data.song, 'currentSong:', currentSong?.id, 'isPlaying:', isPlaying);
               if (data.song) {
-                // Cập nhật queue: nếu có queue mới từ tab phụ, dùng queue đó, nếu không thì set queue với bài hát này
+                // Cập nhật queue: nếu có queue mới từ tab khác, dùng queue đó, nếu không thì set queue với bài hát này
                 if (data.queue && data.queue.length > 0) {
                   // Chuyển đổi queue từ format BroadcastChannel sang format Song
                   const queueSongs: Song[] = data.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
@@ -1026,7 +1040,7 @@ const MusicPlayer = () => {
                     duration: 0,
                     cover: q.cover || "",
                   }));
-                  console.log('[MusicPlayer] Cập nhật queue từ tab phụ, queue length:', queueSongs.length);
+                  console.log('[MusicPlayer] Cập nhật queue từ tab khác, queue length:', queueSongs.length);
                   await setQueue(queueSongs);
                 } else {
                   // Nếu không có queue, set queue với bài hát này
@@ -1055,9 +1069,9 @@ const MusicPlayer = () => {
                   duration: 0,
                   cover: data.song.cover || "",
                 };
-                console.log('[MusicPlayer] Phát bài hát mới từ tab phụ:', songToPlay.title);
+                console.log('[MusicPlayer] Phát bài hát mới từ tab khác:', songToPlay.title);
                 await playSong(songToPlay, false); // skipApiCall = false vì đây là bài hát mới, cần gọi API
-                // Đánh dấu đây là tab chính
+                // Đánh dấu đây là tab đang phát
                 setIsMainTab(true);
                 // Gửi state update ngay sau khi phát bài
                 setTimeout(() => sendStateUpdate(), 300);
@@ -1067,7 +1081,7 @@ const MusicPlayer = () => {
               break;
             }
             case "pause":
-              console.log('[MusicPlayer] Nhận được command pause từ tab phụ');
+              console.log('[MusicPlayer] Nhận được command pause từ tab khác');
               if (currentSong && isPlaying && audioRef.current) {
                 setIsPlaying(false);
                 audioRef.current.pause();
@@ -1078,7 +1092,7 @@ const MusicPlayer = () => {
               break;
             case "addToQueue": {
               // Tab phụ yêu cầu thêm bài hát vào queue
-              console.log('[MusicPlayer] Nhận được command addToQueue từ tab phụ:', data.song);
+              console.log('[MusicPlayer] Nhận được command addToQueue từ tab khác:', data.song);
               if (data.song) {
                 const songToAdd: Song = {
                   id: String(data.song.id),
@@ -1189,30 +1203,30 @@ const MusicPlayer = () => {
           return;
         }
         
-        // QUAN TRỌNG: Tab chính KHÔNG BAO GIỜ trở thành tab phụ
-        // Nếu tab này là tab chính (isMainTab = true), bỏ qua state update từ tab khác
+        // QUAN TRỌNG: Tab chính KHÔNG BAO GIỜ trở thành tab khác
+        // Nếu tab này là tab đang phát (isMainTab = true), bỏ qua state update từ tab khác
         const isFromOtherTab = data.tabId && data.tabId !== tabIdRef.current;
         
         if (isFromOtherTab && isMainTab) {
-          // Tab này là tab chính, nhận được state update từ tab khác
-          // Không làm gì cả, tab chính vẫn là tab chính
+          // Tab này là tab đang phát, nhận được state update từ tab khác
+          // Không làm gì cả, tab đang phát vẫn là tab đang phát
           // Không log để tránh spam console
           return;
         } else if (isFromOtherTab && !isMainTab) {
-          // Tab này là tab phụ, nhận được state update từ tab chính
+          // Tab này là tab khác, nhận được state update từ tab đang phát
           // Chỉ cập nhật UI, không làm gì cả
           // Không log để tránh spam console
           return;
         }
       } else if (data.type === "FOCUS_REQUEST") {
-        // MiniPlayer yêu cầu focus vào tab chính
+        // MiniPlayer yêu cầu focus vào tab đang phát
         console.log('[MusicPlayer] Nhận được yêu cầu focus từ MiniPlayer');
         try {
           // Cố gắng focus window (chỉ hoạt động nếu tab đang mở)
           if (window.focus) {
             window.focus();
           }
-          // Gửi response để MiniPlayer biết tab chính còn sống
+          // Gửi response để MiniPlayer biết tab đang phát còn sống
           channel.postMessage({
             type: "FOCUS_RESPONSE",
           });
@@ -1220,7 +1234,7 @@ const MusicPlayer = () => {
           console.error('[MusicPlayer] Không thể focus window:', error);
         }
       } else if (data.type === "MAIN_TAB_CHECK") {
-        // Tab khác đang kiểm tra xem có tab chính nào đang phát nhạc không
+        // Tab khác đang kiểm tra xem có tab đang phát nào đang phát nhạc không
         // Nếu tab này đang phát nhạc (isPlaying = true và có currentSong), gửi response
         if (currentSong && isPlaying) {
           console.log('[MusicPlayer] Nhận được MAIN_TAB_CHECK, tab này đang phát nhạc, gửi response');
@@ -1327,6 +1341,60 @@ const MusicPlayer = () => {
       });
     }
   }, [repeatMode, isShuffled, volume, isMuted, currentSong]);
+
+  // QUAN TRỌNG: Set isMainTab = true ngay khi có currentSong và không có tab đang phát khác
+  // Để tránh hiển thị ControlMusicPlayer khi lần đầu phát nhạc
+  useEffect(() => {
+    if (currentSong && !isMainTab && location.pathname !== "/login") {
+      // Kiểm tra xem có tab đang phát nào khác đang phát không
+      const checkMainTab = async () => {
+        if (typeof window !== 'undefined' && window.BroadcastChannel) {
+          let hasMainTab = false;
+          const checkChannel = new BroadcastChannel('player');
+          
+          const checkPromise = new Promise<boolean>((resolve) => {
+            const checkTimeout = setTimeout(() => {
+              checkChannel.close();
+              resolve(hasMainTab);
+            }, 200);
+            
+            const checkHandler = (event: MessageEvent) => {
+              if (event.data.type === "MAIN_TAB_RESPONSE" && event.data.isPlaying) {
+                hasMainTab = true;
+                clearTimeout(checkTimeout);
+                checkChannel.removeEventListener('message', checkHandler);
+                checkChannel.close();
+                resolve(true);
+              }
+            };
+            
+            checkChannel.addEventListener('message', checkHandler);
+            
+            // Gửi message kiểm tra tab đang phát
+            checkChannel.postMessage({
+              type: "MAIN_TAB_CHECK",
+            });
+          });
+          
+          hasMainTab = await checkPromise;
+          
+          // Nếu không có tab đang phát nào, tab này sẽ trở thành tab đang phát
+          if (!hasMainTab && !noMainTabRef.current) {
+            console.log('[MusicPlayer] Không có tab đang phát nào, set isMainTab = true ngay khi có currentSong');
+            setIsMainTab(true);
+            noMainTabRef.current = false;
+          }
+        } else {
+          // Không có BroadcastChannel, tab này là tab đang phát
+          console.log('[MusicPlayer] Không có BroadcastChannel, set isMainTab = true');
+          setIsMainTab(true);
+          noMainTabRef.current = false;
+        }
+      };
+      
+      checkMainTab();
+    }
+  }, [currentSong, isMainTab, location.pathname]);
 
   // Load and play stream from songID
   useEffect(() => {
@@ -1554,7 +1622,7 @@ const MusicPlayer = () => {
             }
             audio.play().then(() => {
               setIsPlaying(true);
-              // Đánh dấu đây là tab chính khi bắt đầu phát nhạc
+              // Đánh dấu đây là tab đang phát khi bắt đầu phát nhạc
               setIsMainTab(true);
             }).catch((err) => {
               console.error('Play failed:', err);
@@ -1769,28 +1837,31 @@ const MusicPlayer = () => {
   const handleTogglePlay = useCallback(async () => {
     // Nếu không có currentSong nhưng có queue, phát bài đầu tiên trong queue
     if (!currentSong && queue && queue.length > 0) {
-      console.log('[MusicPlayer] Không có currentSong, phát bài đầu tiên trong queue');
-      await playSong(queue[0], false);
+      console.log('[MusicPlayer] Không có currentSong, phát bài đầu tiên trong queue, queue length:', queue.length);
+      // QUAN TRỌNG: Nếu queue có nhiều bài, dùng skipApiCall = true để không reset queue
+      // Chỉ dùng skipApiCall = false nếu queue chỉ có 1 bài (yêu cầu mới)
+      const skipApiCall = queue.length > 1;
+      await playSong(queue[0], skipApiCall);
       return;
     }
     
     if (!audioRef.current || !currentSong) return;
     
-    // Kiểm tra xem có tab chính nào đang phát nhạc không
+    // Kiểm tra xem có tab đang phát nào đang phát nhạc không
     // Nếu đang play (sẽ chuyển sang pause), không cần kiểm tra
-    // Nếu đang pause (sẽ chuyển sang play), cần kiểm tra xem có tab chính nào đang phát không
+    // Nếu đang pause (sẽ chuyển sang play), cần kiểm tra xem có tab đang phát nào đang phát không
     if (!isPlaying && channelRef.current) {
-      console.log('[MusicPlayer] Đang kiểm tra xem có tab chính nào đang phát nhạc không...');
+      console.log('[MusicPlayer] Đang kiểm tra xem có tab đang phát nào đang phát nhạc không...');
       
       let hasMainTab = false;
       const checkTimeout = setTimeout(() => {
         if (!hasMainTab) {
-          console.log('[MusicPlayer] Không có tab chính nào phản hồi, tab này sẽ trở thành tab chính');
-          // Tab này sẽ trở thành tab chính, tiếp tục phát nhạc
+          console.log('[MusicPlayer] Không có tab đang phát nào phản hồi, tab này sẽ trở thành tab đang phát');
+          // Tab này sẽ trở thành tab đang phát, tiếp tục phát nhạc
         }
       }, 200);
       
-      // Gửi message kiểm tra tab chính
+      // Gửi message kiểm tra tab đang phát
       const checkChannel = new BroadcastChannel('player');
       const checkHandler = (event: MessageEvent) => {
         if (event.data.type === "MAIN_TAB_RESPONSE" && event.data.isPlaying) {
@@ -1798,9 +1869,9 @@ const MusicPlayer = () => {
           clearTimeout(checkTimeout);
           checkChannel.removeEventListener('message', checkHandler);
           checkChannel.close();
-          console.log('[MusicPlayer] Có tab chính đang phát nhạc, gửi command play thay vì phát ở tab này');
+          console.log('[MusicPlayer] Có tab đang phát đang phát nhạc, gửi command play thay vì phát ở tab này');
           
-          // Gửi command play đến tab chính
+          // Gửi command play đến tab đang phát
           if (channelRef.current) {
             channelRef.current.postMessage({
               type: "PLAYER_CONTROL",
@@ -1821,9 +1892,9 @@ const MusicPlayer = () => {
         checkChannel.removeEventListener('message', checkHandler);
         checkChannel.close();
         
-        // Nếu không có tab chính nào phản hồi HOẶC flag "no main tab" = true, tab này sẽ trở thành tab chính
+        // Nếu không có tab đang phát nào phản hồi HOẶC flag "no main tab" = true, tab này sẽ trở thành tab đang phát
         if (!hasMainTab || noMainTabRef.current) {
-          console.log('[MusicPlayer] Không có tab chính nào (hoặc flag noMainTab = true), tab này sẽ trở thành tab chính và phát nhạc');
+          console.log('[MusicPlayer] Không có tab đang phát nào (hoặc flag noMainTab = true), tab này sẽ trở thành tab đang phát và phát nhạc');
           
           // Toggle isPlaying state local ngay lập tức
           const newIsPlaying = !isPlaying;
@@ -1842,10 +1913,10 @@ const MusicPlayer = () => {
             audioRef.current.pause();
           }
           
-          // Đánh dấu đây là tab chính
+          // Đánh dấu đây là tab đang phát
           setIsMainTab(true);
           
-          // Gửi message "MAIN_TAB_ACTIVE" để các tab khác biết đã có tab chính mới
+          // Gửi message "MAIN_TAB_ACTIVE" để các tab khác biết đã có tab đang phát mới
           if (channelRef.current && newIsPlaying) {
             channelRef.current.postMessage({
               type: "MAIN_TAB_ACTIVE",
@@ -1876,7 +1947,7 @@ const MusicPlayer = () => {
       return;
     }
     
-    // Nếu đang play (sẽ chuyển sang pause), hoặc không cần kiểm tra tab chính
+    // Nếu đang play (sẽ chuyển sang pause), hoặc không cần kiểm tra tab đang phát
     // Toggle isPlaying state local ngay lập tức
     const newIsPlaying = !isPlaying;
     setIsPlaying(newIsPlaying);
@@ -2043,24 +2114,19 @@ const MusicPlayer = () => {
     return null;
   }
   
-  // QUAN TRỌNG: Chỉ hiển thị MusicPlayer khi tab này là tab chính
+  // QUAN TRỌNG: Chỉ hiển thị MusicPlayer khi tab này là tab đang phát
   // Tab chính = tab có isMainTab = true (dù đang play hay pause)
   // Tab phụ = tab có currentSong nhưng isMainTab = false → ẩn MusicPlayer, hiển thị ControlMusicPlayer
-  // Tab chính vẫn là tab chính dù đang pause, không cần kiểm tra isActuallyPlaying
+  // Tab chính vẫn là tab đang phát dù đang pause, không cần kiểm tra isActuallyPlaying
   
-  // Chỉ hiển thị MusicPlayer khi tab này là tab chính
-  // Nếu không phải tab chính → ẩn MusicPlayer (ControlMusicPlayer sẽ hiển thị)
+  // Chỉ hiển thị MusicPlayer khi tab này là tab đang phát
+  // Nếu không phải tab đang phát → ẩn MusicPlayer (ControlMusicPlayer sẽ hiển thị)
   if (!isMainTab) {
     return null;
   }
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border z-[60] w-full" data-music-player="true">
-      {/* Chấm xanh chỉ tab chính */}
-      <div className="absolute top-2 left-2 flex items-center gap-2 bg-primary/10 px-2 py-1 rounded-full">
-        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Tab chính đang phát nhạc" />
-        <span className="text-xs text-primary font-medium">Tab chính</span>
-      </div>
       <div className="w-full px-4 py-3">
         <div className="flex items-center justify-between gap-4 w-full">
           {/* Song Info - Bên trái */}
