@@ -50,9 +50,9 @@ const AdminSongs = () => {
 
   const statusOptions = useMemo(
     () => [
-      { value: "ACTIVE", label: "Đang hoạt động" },
-      { value: "PENDING_RELEASE", label: "Chờ phát hành" },
-      { value: "INACTIVE", label: "Ngưng hoạt động" },
+      { value: "ACTIVE", label: "Active" },
+      { value: "PENDING_RELEASE", label: "Pending Release" },
+      { value: "INACTIVE", label: "Inactive" },
     ],
     []
   );
@@ -104,8 +104,8 @@ const AdminSongs = () => {
       setTotalElements(data.totalElements || 0);
     } catch (error) {
       toast({
-        title: "Lỗi",
-        description: "Không thể tải danh sách bài hát",
+        title: "Error",
+        description: "Failed to load songs list",
         variant: "destructive",
       });
     } finally {
@@ -144,8 +144,8 @@ const AdminSongs = () => {
     try {
       if (formMode === "create") {
         toast({
-          title: "Đang tải lên và xử lý audio",
-          description: "Upload lên S3, tạo HLS và đồng bộ ACR có thể mất 1-2 phút. Vui lòng giữ trang này mở.",
+          title: "Uploading and processing audio",
+          description: "Uploading to S3, creating HLS and syncing ACR may take 1-2 minutes. Please keep this page open.",
           duration: 60000,
         });
       }
@@ -157,8 +157,8 @@ const AdminSongs = () => {
 
         if (!file) {
           toast({
-            title: "Thiếu file audio",
-            description: "Vui lòng chọn file nhạc trước khi tạo bài hát mới.",
+            title: "Missing audio file",
+            description: "Please select an audio file before creating a new song.",
             variant: "destructive",
           });
           return;
@@ -201,21 +201,21 @@ const AdminSongs = () => {
           await songsApi.update(String(selectedSong.id), data);
         }
       } else {
-        throw new Error("Không xác định được bài hát cần cập nhật");
+        throw new Error("Could not identify the song to update");
       }
 
       toast({
-        title: "Thành công",
+        title: "Success",
         description:
-          formMode === "create" ? "Đã tạo bài hát mới" : "Đã cập nhật bài hát",
+          formMode === "create" ? "Song created successfully" : "Song updated successfully",
       });
       setFormOpen(false);
       loadSongs();
     } catch (error) {
       console.error(error);
       toast({
-        title: "Lỗi",
-        description: "Không thể lưu bài hát",
+        title: "Error",
+        description: "Failed to save song",
         variant: "destructive",
       });
     } finally {
@@ -228,13 +228,13 @@ const AdminSongs = () => {
       setIsSubmitting(true);
       if (!selectedSong) return;
       await songsApi.delete(String(selectedSong.id));
-      toast({ title: "Thành công", description: "Đã xóa bài hát" });
+      toast({ title: "Success", description: "Song deleted successfully" });
       setDeleteOpen(false);
       loadSongs();
     } catch (error) {
       toast({
-        title: "Lỗi",
-        description: "Không thể xóa bài hát",
+        title: "Error",
+        description: "Failed to delete song",
         variant: "destructive",
       });
     } finally {
@@ -257,11 +257,11 @@ const AdminSongs = () => {
   const handleExport = async () => {
     try {
       await songsApi.exportExcel();
-      toast({ title: "Thành công", description: "Xuất file Excel thành công" });
+      toast({ title: "Success", description: "Excel file exported successfully" });
     } catch (error) {
       toast({
-        title: "Lỗi",
-        description: "Lỗi khi xuất file Excel",
+        title: "Error",
+        description: "Failed to export Excel file",
         variant: "destructive",
       });
     }
@@ -274,8 +274,8 @@ const AdminSongs = () => {
     if (!file) return;
     if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
       toast({
-        title: "Lỗi",
-        description: "Vui lòng chọn file Excel (.xlsx hoặc .xls)",
+        title: "Error",
+        description: "Please select an Excel file (.xlsx or .xls)",
         variant: "destructive",
       });
       return;
@@ -283,12 +283,12 @@ const AdminSongs = () => {
     try {
       setIsSubmitting(true);
       const result = await songsApi.importExcel(file);
-      toast({ title: "Thành công", description: result });
+      toast({ title: "Success", description: result });
       loadSongs();
     } catch (error: any) {
       toast({
-        title: "Lỗi",
-        description: error.message || "Lỗi khi nhập file Excel",
+        title: "Error",
+        description: error.message || "Failed to import Excel file",
         variant: "destructive",
       });
     } finally {
@@ -331,13 +331,13 @@ const AdminSongs = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
-                Quản lý Bài hát
+                Song Management
               </h1>
               <div className="text-muted-foreground flex items-center gap-2 mt-1">
                 <Badge variant="secondary" className="font-normal">
-                  {totalElements} bài hát
+                  {totalElements} songs
                 </Badge>
-                {loading && <span className="text-xs">Đang tải...</span>}
+                {loading && <span className="text-xs">Loading...</span>}
               </div>
             </div>
           </div>
@@ -378,7 +378,7 @@ const AdminSongs = () => {
               className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"
             >
               <Plus className="w-4 h-4" />
-              Thêm bài hát
+              Add Song
             </Button>
           </div>
         </div>
@@ -523,12 +523,12 @@ const AdminSongs = () => {
           </CardHeader>
           <CardContent className="flex-1 flex flex-col min-h-0">
             {loading ? (
-              <div className="text-center py-8">Đang tải...</div>
+              <div className="text-center py-8">Loading...</div>
             ) : songsList.length === 0 ? (
               <div className="text-center py-8">
                 {searchQuery
-                  ? "Không tìm thấy bài hát phù hợp"
-                  : "Chưa có bài hát nào"}
+                  ? "No songs found"
+                  : "No songs yet"}
               </div>
             ) : (
               <div className="flex-1 overflow-auto scroll-smooth scrollbar-admin rounded-b-lg">
@@ -536,19 +536,19 @@ const AdminSongs = () => {
                   <TableHeader className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b border-border/70">
                     <TableRow>
                       <TableHead className="w-16 text-center text-sm font-medium text-muted-foreground">
-                        STT
+                        #
                       </TableHead>
                       <TableHead className="w-1/2 text-sm font-medium text-muted-foreground">
-                        Bài hát
+                        Song
                       </TableHead>
                       <TableHead className="text-sm font-medium text-muted-foreground">
-                        Nghệ sĩ
+                        Artist
                       </TableHead>
                       <TableHead className="w-28 text-center text-sm font-medium text-muted-foreground">
-                        Trạng thái
+                        Status
                       </TableHead>
                       <TableHead className="w-24 text-right text-sm font-medium text-muted-foreground">
-                        Hành động
+                        Actions
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -562,7 +562,7 @@ const AdminSongs = () => {
                           <div className="flex flex-col">
                             <span>{song.name}</span>
                             <span className="text-xs text-muted-foreground">
-                              {song.releaseYear ? `Năm phát hành: ${song.releaseYear}` : "Chưa rõ"}
+                              {song.releaseYear ? `Release year: ${song.releaseYear}` : "Unknown"}
                               {song.duration ? ` • ${song.duration}` : ""}
                             </span>
                           </div>
@@ -583,7 +583,7 @@ const AdminSongs = () => {
                             {song.status === "INACTIVE"
                               ? "Inactive"
                               : song.status === "PENDING_RELEASE"
-                              ? "Chờ phát hành"
+                              ? "Pending Release"
                               : "Active"}
                           </Badge>
                         </TableCell>
@@ -702,8 +702,8 @@ const AdminSongs = () => {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         onConfirm={handleDelete}
-        title="Xóa bài hát?"
-        description={`Bạn có chắc muốn xóa bài hát "${selectedSong?.name}"? Hành động này không thể hoàn tác.`}
+        title="Delete Song?"
+        description={`Are you sure you want to delete song "${selectedSong?.name}"? This action cannot be undone.`}
         isLoading={isSubmitting}
       />
     </div>

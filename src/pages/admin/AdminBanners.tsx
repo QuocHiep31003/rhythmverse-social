@@ -5,14 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { promotionsApi, type Promotion } from "@/services/api/promotionApi";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { bannersApi, type Banner } from "@/services/api/bannerApi";
 import { Plus, RefreshCw, Tag, Pencil, Trash2, Upload as UploadIcon, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { toast } from "sonner";
-import PromotionFormDialog, { PromotionFormValues } from "@/components/admin/PromotionFormDialog";
+import BannerFormDialog, { BannerFormValues } from "@/components/admin/BannerFormDialog";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 
-const AdminPromotions = () => {
-  const [items, setItems] = useState<Promotion[]>([]);
+const AdminBanners = () => {
+  const [items, setItems] = useState<Banner[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [query, setQuery] = useState<string>("");
   const [page, setPage] = useState<number>(0);
@@ -22,7 +23,7 @@ const AdminPromotions = () => {
   const [openForm, setOpenForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [selected, setSelected] = useState<Promotion | null>(null);
+  const [selected, setSelected] = useState<Banner | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [sortMode, setSortMode] = useState<"activatedDesc" | "activatedAsc" | "idDesc">("activatedDesc");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -32,7 +33,7 @@ const AdminPromotions = () => {
   const load = async () => {
     try {
       setLoading(true);
-      const res = await promotionsApi.getAll({ page, size, sort: "id,desc", search: query || undefined });
+      const res = await bannersApi.getAll({ page, size, sort: "id,desc", search: query || undefined });
       setItems(res.content || []);
       setTotalElements((res as any).totalElements || 0);
       setTotalPages((res as any).totalPages || 0);
@@ -50,7 +51,7 @@ const AdminPromotions = () => {
 
   const handleToggleActive = async (id: number, value: boolean) => {
     try {
-      await promotionsApi.setActive(id, value);
+      await bannersApi.setActive(id, value);
       setItems((prev) => prev.map((p) => (p.id === id ? { ...p, active: value } : p)));
       toast.success(value ? "Active enabled" : "Active disabled");
     } catch (e) {
@@ -58,7 +59,7 @@ const AdminPromotions = () => {
     }
   };
 
-  const handleCreate = async (data: PromotionFormValues) => {
+  const handleCreate = async (data: BannerFormValues) => {
     try {
       setSubmitting(true);
       const payload: any = {
@@ -74,16 +75,16 @@ const AdminPromotions = () => {
       if ((data as any).icon) payload.icon = (data as any).icon;
 
       if (formMode === "create") {
-        await promotionsApi.create(payload);
+        await bannersApi.create(payload);
         toast.success("Banner created");
       } else if (formMode === "edit" && selected) {
-        await promotionsApi.update(selected.id, payload);
+        await bannersApi.update(selected.id, payload);
         toast.success("Banner updated");
       }
       setOpenForm(false);
       load();
     } catch (e: any) {
-      toast.error(e?.message || (formMode === "create" ? "Failed to create banner" : "Update failed"));
+      toast.error(e?.message || (formMode === "create" ? "Failed to create banner" : "Failed to update banner"));
     } finally {
       setSubmitting(false);
     }
@@ -100,13 +101,13 @@ const AdminPromotions = () => {
     return sortMode === "activatedAsc" ? da - db : db - da;
   });
 
-  const handleEditClick = (p: Promotion) => {
+  const handleEditClick = (p: Banner) => {
     setSelected(p);
     setFormMode("edit");
     setOpenForm(true);
   };
 
-  const handleDeleteClick = (p: Promotion) => {
+  const handleDeleteClick = (p: Banner) => {
     setSelected(p);
     setDeleteOpen(true);
   };
@@ -115,7 +116,7 @@ const AdminPromotions = () => {
     if (!selected) return;
     try {
       setSubmitting(true);
-      await promotionsApi.delete(selected.id);
+      await bannersApi.delete(selected.id);
       toast.success("Banner deleted");
       setDeleteOpen(false);
       load();
@@ -130,7 +131,7 @@ const AdminPromotions = () => {
     if (selectedIds.length === 0) return;
     try {
       setSubmitting(true);
-      await promotionsApi.deleteMany(selectedIds);
+      await bannersApi.deleteMany(selectedIds);
       toast.success("Selected banners deleted");
       setSelectedIds([]);
       load();
@@ -155,8 +156,8 @@ const AdminPromotions = () => {
     if (!file) return;
     try {
       setImporting(true);
-      const msg = await promotionsApi.import(file);
-      toast.success(msg || "Banners imported");
+      const msg = await bannersApi.import(file);
+      toast.success(msg || "Banners imported successfully");
       load();
     } catch (err: any) {
       toast.error(err?.message || "Import failed");
@@ -167,19 +168,19 @@ const AdminPromotions = () => {
   };
 
   return (
-    <div className="h-screen overflow-hidden p-6 flex flex-col">
+    <div className="h-screen overflow-hidden p-4 md:p-6 flex flex-col">
       <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
-        <div className="flex items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0 mb-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-4 md:p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0 mb-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-[hsl(var(--admin-active))] rounded-xl flex items-center justify-center shadow-lg">
+            <div className="w-12 h-12 bg-[hsl(var(--admin-active))] rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
               <Tag className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Banner Management</h1>
-              <p className="text-muted-foreground mt-1">Display Active label and allow enable/disable</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Banner Management</h1>
+              <p className="text-sm md:text-base text-muted-foreground mt-1">Hiển thị nhãn Active và cho phép bật/tắt</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <input ref={fileInputRef as any} type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
             <Button variant="outline" onClick={load} className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]">
               <RefreshCw className="w-4 h-4" /> Refresh
@@ -188,11 +189,11 @@ const AdminPromotions = () => {
               <UploadIcon className="w-4 h-4" /> {importing ? "Importing..." : "Import"}
             </Button>
            
-            <Button variant="destructive" disabled={selectedIds.length === 0} onClick={handleDeleteSelected} className="gap-2">
-              <Trash2 className="w-4 h-4" /> Delete selected ({selectedIds.length})
+            <Button variant="destructive" disabled={selectedIds.length === 0} onClick={handleDeleteSelected} className="gap-2 text-xs sm:text-sm">
+              <Trash2 className="w-4 h-4" /> <span className="hidden sm:inline">Delete Selected</span> <span className="sm:hidden">Delete</span> ({selectedIds.length})
             </Button>
-            <Button onClick={() => setOpenForm(true)} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg">
-              <Plus className="w-4 h-4" /> Create banner
+            <Button onClick={() => { setFormMode("create"); setSelected(null); setOpenForm(true); }} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg text-xs sm:text-sm">
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Create Banner</span> <span className="sm:hidden">Create</span>
             </Button>
           </div>
         </div>
@@ -213,7 +214,7 @@ const AdminPromotions = () => {
                   />
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Show:</span>
+                  <span className="text-sm text-muted-foreground">Display:</span>
                   <select
                     value={size}
                     onChange={(e) => {
@@ -232,64 +233,104 @@ const AdminPromotions = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="flex-1 overflow-auto">
+          <CardContent className="flex-1 overflow-hidden">
             {loading ? (
               <div className="text-center py-8">Loading...</div>
             ) : items.length === 0 ? (
-              <div className="text-center py-8">No banners found</div>
+              <div className="text-center py-8">No banners available</div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">
-                      <input type="checkbox" checked={allSelected} onChange={(e) => toggleSelectAll(e.target.checked)} />
-                    </TableHead>
-                    <TableHead className="w-16">No.</TableHead>
-                    <TableHead className="w-24">Image</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Subtitle</TableHead>
-                    <TableHead className="w-28 text-center">Status</TableHead>
-                    <TableHead className="w-28 text-center">Active</TableHead>
-                    <TableHead className="w-28 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedItems.map((p, idx) => (
-                    <TableRow key={p.id}>
-                      <TableCell>
-                        <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={(e) => toggleSelectRow(p.id, e.target.checked)} />
-                      </TableCell>
-                      <TableCell>{page * size + idx + 1}</TableCell>
-                      <TableCell>
-                        <img
-                          src={p.imageUrl || (p as any).image || "/placeholder.svg"}
-                          alt={p.title}
-                          className="w-10 h-10 rounded object-cover"
-                          onError={(e) => (e.currentTarget.src = "/placeholder.svg")}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium truncate">{p.title}</TableCell>
-                      <TableCell className="truncate text-muted-foreground">{p.subtitle || "—"}</TableCell>
-                      <TableCell className="text-center">
-                        {p.active ? <Badge variant="secondary">Active</Badge> : <Badge variant="outline">Inactive</Badge>}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Switch checked={!!p.active} onCheckedChange={(v) => handleToggleActive(p.id, v)} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditClick(p)}>
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(p)} className="text-destructive hover:text-destructive">
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto h-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12 min-w-[48px]">
+                        <input type="checkbox" checked={allSelected} onChange={(e) => toggleSelectAll(e.target.checked)} />
+                      </TableHead>
+                      <TableHead className="w-16 min-w-[64px]">No.</TableHead>
+                      <TableHead className="w-24 min-w-[96px]">Image</TableHead>
+                      <TableHead className="min-w-[150px] max-w-[200px]">Title</TableHead>
+                      <TableHead className="min-w-[150px] max-w-[250px]">Subtitle</TableHead>
+                      <TableHead className="w-28 min-w-[112px] text-center">Status</TableHead>
+                      <TableHead className="w-28 min-w-[112px] text-center">Active</TableHead>
+                      <TableHead className="w-32 min-w-[128px] text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    <TooltipProvider>
+                      {sortedItems.map((p, idx) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="w-12">
+                            <input type="checkbox" checked={selectedIds.includes(p.id)} onChange={(e) => toggleSelectRow(p.id, e.target.checked)} />
+                          </TableCell>
+                          <TableCell className="w-16">{page * size + idx + 1}</TableCell>
+                          <TableCell className="w-24">
+                            <img
+                              src={p.imageUrl || (p as any).image || "/placeholder.svg"}
+                              alt={p.title}
+                              className="w-10 h-10 rounded object-cover"
+                              onError={(e) => (e.currentTarget.src = "/placeholder.svg")}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium min-w-[150px] max-w-[200px]">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="truncate">{p.title}</div>
+                              </TooltipTrigger>
+                              {p.title.length > 30 && (
+                                <TooltipContent>
+                                  <p className="max-w-xs">{p.title}</p>
+                                </TooltipContent>
+                              )}
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="min-w-[150px] max-w-[250px]">
+                            {p.subtitle ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="truncate text-muted-foreground">{p.subtitle}</div>
+                                </TooltipTrigger>
+                                {p.subtitle.length > 40 && (
+                                  <TooltipContent>
+                                    <p className="max-w-xs">{p.subtitle}</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center w-28">
+                            {p.active ? <Badge variant="secondary">Active</Badge> : <Badge variant="outline">Inactive</Badge>}
+                          </TableCell>
+                          <TableCell className="text-center w-28">
+                            <Switch checked={!!p.active} onCheckedChange={(v) => handleToggleActive(p.id, v)} />
+                          </TableCell>
+                          <TableCell className="text-right w-32">
+                            <div className="flex justify-end gap-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => handleEditClick(p)}>
+                                    <Pencil className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(p)} className="text-destructive hover:text-destructive">
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Delete</TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TooltipProvider>
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -326,7 +367,7 @@ const AdminPromotions = () => {
           </div>
         )}
 
-        <PromotionFormDialog
+        <BannerFormDialog
           open={openForm}
           onOpenChange={setOpenForm}
           onSubmit={handleCreate}
@@ -340,7 +381,7 @@ const AdminPromotions = () => {
             ctaUrl: (selected as any).ctaUrl || "",
             gradient: (selected as any).gradient || "",
             badge: (selected as any).badge || "",
-            iconName: (selected as any).iconName || "",
+            icon: (selected as any).icon || "",
             active: !!selected.active,
           } : undefined}
         />
@@ -358,6 +399,5 @@ const AdminPromotions = () => {
   );
 };
 
-export default AdminPromotions;
-
+export default AdminBanners;
 

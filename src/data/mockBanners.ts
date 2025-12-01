@@ -1,7 +1,7 @@
-// Mock Promotion Data để xem trước
+// Mock Banner Data để xem trước
 // Nếu đẹp thì sẽ thêm vào DataLoader.java
 
-export const mockPromotions = [
+export const mockBanners = [
   {
     id: 1,
     title: "Tìm bài hát chỉ bằng giai điệu",
@@ -39,4 +39,5 @@ export const mockPromotions = [
     sortOrder: 3,
   },
 ];
+
 

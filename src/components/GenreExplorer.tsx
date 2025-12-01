@@ -119,7 +119,8 @@ const GenreExplorer = () => {
           // Set queue với 50 bài và phát ngẫu nhiên
           const playerSongs = shuffled.map(mapToPlayerSong);
           setQueue(playerSongs);
-          playSong(playerSong);
+          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+          await playSongWithStreamUrl(playerSong, playSong);
         }
       } catch (error) {
         console.error("Error loading genre preview:", error);
@@ -161,7 +162,8 @@ const GenreExplorer = () => {
           // Set queue với 50 bài và phát ngẫu nhiên
           const playerSongs = shuffled.map(mapToPlayerSong);
           setQueue(playerSongs);
-          playSong(playerSong);
+          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+          await playSongWithStreamUrl(playerSong, playSong);
         }
       } catch (error) {
         console.error("Error loading mood preview:", error);

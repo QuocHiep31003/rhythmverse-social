@@ -59,10 +59,10 @@ const AdminGenres = () => {
     if (!status) return null;
     const normalized = status.toUpperCase();
     if (normalized === "ACTIVE") {
-      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20">Hoạt động</Badge>;
+      return <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/20">Active</Badge>;
     }
     if (normalized === "INACTIVE") {
-      return <Badge variant="outline" className="text-destructive border-destructive/40">Ngưng hoạt động</Badge>;
+      return <Badge variant="outline" className="text-destructive border-destructive/40">Inactive</Badge>;
     }
     return <Badge variant="outline">{normalized}</Badge>;
   };
@@ -76,7 +76,7 @@ const AdminGenres = () => {
       setLoading(true);
       const data = await genresApi.getAll({ page: currentPage, size: pageSize, sort: sortOption, search: searchQuery || undefined });
       setGenres(data.content || []); setTotalPages(data.totalPages || 0); setTotalElements(data.totalElements || 0);
-    } catch (error) { toast({ title: "Lỗi", description: "Không thể tải danh sách thể loại", variant: "destructive" }); }
+    } catch (error) { toast({ title: "Error", description: "Failed to load genres list", variant: "destructive" }); }
     finally { setLoading(false); }
   };
 
@@ -86,30 +86,30 @@ const AdminGenres = () => {
   const handleFormSubmit = async (data: any) => {
     try {
       setIsSubmitting(true);
-      if (formMode === "create") { await genresApi.create(data); toast({ title: "Thành công", description: "Đã tạo thể loại mới" }); }
-      else { await genresApi.update(selectedGenre.id, data); toast({ title: "Thành công", description: "Đã cập nhật thể loại" }); }
+      if (formMode === "create") { await genresApi.create(data); toast({ title: "Success", description: "Genre created successfully" }); }
+      else { await genresApi.update(selectedGenre.id, data); toast({ title: "Success", description: "Genre updated successfully" }); }
       setFormOpen(false); loadGenres();
-    } catch (error) { toast({ title: "Lỗi", description: "Không thể lưu thể loại", variant: "destructive" }); }
+    } catch (error) { toast({ title: "Error", description: "Failed to save genre", variant: "destructive" }); }
     finally { setIsSubmitting(false); }
   };
 
   const handleDelete = async () => {
-    try { setIsSubmitting(true); await genresApi.delete(selectedGenre.id); toast({ title: "Thành công", description: "Đã xóa thể loại" }); setDeleteOpen(false); loadGenres(); }
-    catch (error) { toast({ title: "Lỗi", description: "Không thể xóa thể loại", variant: "destructive" }); }
+    try { setIsSubmitting(true); await genresApi.delete(selectedGenre.id); toast({ title: "Success", description: "Genre deleted successfully" }); setDeleteOpen(false); loadGenres(); }
+    catch (error) { toast({ title: "Error", description: "Failed to delete genre", variant: "destructive" }); }
     finally { setIsSubmitting(false); }
   };
 
   const handleExport = async () => {
-    try { await genresApi.exportExcel(); toast({ title: "Thành công", description: "Xuất file Excel thành công" }); }
-    catch (error) { toast({ title: "Lỗi", description: "Lỗi khi xuất file Excel", variant: "destructive" }); }
+    try { await genresApi.exportExcel(); toast({ title: "Success", description: "Excel file exported successfully" }); }
+    catch (error) { toast({ title: "Error", description: "Failed to export Excel file", variant: "destructive" }); }
   };
 
   const handleImportClick = () => fileInputRef.current?.click();
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]; if (!file) return;
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Lỗi", description: "Vui lòng chọn file Excel", variant: "destructive" }); return; }
-    try { setIsSubmitting(true); const result = await genresApi.importExcel(file); toast({ title: "Thành công", description: result }); loadGenres(); }
-    catch (error: any) { toast({ title: "Lỗi", description: error.message || "Lỗi khi nhập file Excel", variant: "destructive" }); }
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) { toast({ title: "Error", description: "Please select an Excel file", variant: "destructive" }); return; }
+    try { setIsSubmitting(true); const result = await genresApi.importExcel(file); toast({ title: "Success", description: result }); loadGenres(); }
+    catch (error: any) { toast({ title: "Error", description: error.message || "Failed to import Excel file", variant: "destructive" }); }
     finally { setIsSubmitting(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
@@ -137,10 +137,10 @@ const AdminGenres = () => {
               <Music className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Quản lý Thể loại</h1>
+              <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Genre Management</h1>
               <p className="text-muted-foreground flex items-center gap-2 mt-1">
-                <Badge variant="secondary" className="font-normal">{totalElements} thể loại</Badge>
-                {loading && <span className="text-xs">Đang tải...</span>}
+                <Badge variant="secondary" className="font-normal">{totalElements} genres</Badge>
+                {loading && <span className="text-xs">Loading...</span>}
               </p>
             </div>
           </div>
@@ -148,7 +148,7 @@ const AdminGenres = () => {
             <Button variant="outline" onClick={handleExport} className="border-[hsl(var(--admin-border))] gap-2 hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Download className="w-4 h-4" />Export</Button>
             <Button variant="outline" onClick={handleImportClick} disabled={isSubmitting} className="border-[hsl(var(--admin-border))] gap-2 hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))]"><Upload className="w-4 h-4" />Import</Button>
             <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleImport} className="hidden" />
-            <Button onClick={handleCreate} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"><Plus className="w-4 h-4" />Thêm thể loại</Button>
+            <Button onClick={handleCreate} className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"><Plus className="w-4 h-4" />Add Genre</Button>
           </div>
         </div>
           <Card className="bg-card/50 border-border/50 flex-1 flex flex-col overflow-hidden min-h-0">
@@ -175,9 +175,9 @@ const AdminGenres = () => {
             </CardHeader>
             <CardContent className="flex-1 flex flex-col min-h-0">
               {loading ? (
-                <div className="text-center py-8">Đang tải...</div>
+                <div className="text-center py-8">Loading...</div>
               ) : genres.length === 0 ? (
-                <div className="text-center py-8">{searchQuery ? "Không tìm thấy thể loại" : "Chưa có thể loại nào"}</div>
+                <div className="text-center py-8">{searchQuery ? "No genres found" : "No genres yet"}</div>
               ) : (
                 <>
                   {/* Scrollable Table with Sticky Header */}
@@ -185,15 +185,15 @@ const AdminGenres = () => {
                     <table className="w-full table-fixed border-collapse">
                       <thead className="sticky top-0 z-10 bg-[hsl(var(--admin-card))] border-b-2 border-[hsl(var(--admin-border))]">
                         <tr>
-                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">STT</th>
-                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Tên thể loại</th>
+                          <th className="w-16 text-center text-sm font-medium text-muted-foreground p-3">#</th>
+                          <th className="w-1/4 text-left text-sm font-medium text-muted-foreground p-3">Genre Name</th>
                           <th className="w-28 text-left text-sm font-medium text-muted-foreground p-3">Icon</th>
-                          <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Trọng số</th>
-                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Trạng thái</th>
-                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Số bài hát</th>
-                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Ngày tạo</th>
-                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Cập nhật</th>
-                          <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Hành động</th>
+                          <th className="w-24 text-left text-sm font-medium text-muted-foreground p-3">Weight</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Status</th>
+                          <th className="w-32 text-center text-sm font-medium text-muted-foreground p-3">Songs</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Created</th>
+                          <th className="w-40 text-left text-sm font-medium text-muted-foreground p-3">Updated</th>
+                          <th className="w-32 text-right text-sm font-medium text-muted-foreground p-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -225,7 +225,7 @@ const AdminGenres = () => {
                                 </div>
                                   );
                                 }
-                                return <Badge variant="outline" className="text-muted-foreground">Không có</Badge>;
+                                return <Badge variant="outline" className="text-muted-foreground">None</Badge>;
                               })()}
                             </td>
                             <td className="w-24 p-3 align-top">
@@ -257,7 +257,7 @@ const AdminGenres = () => {
                                     setSongsDialogOpen(true);
                                   }} 
                                   className="hover:bg-[hsl(var(--admin-hover))] hover:text-[hsl(var(--admin-hover-text))] transition-colors"
-                                  title="Xem bài hát"
+                                  title="View Songs"
                                 >
                                   <ListMusic className="w-4 h-4" />
                                 </Button>
@@ -324,7 +324,7 @@ const AdminGenres = () => {
               : undefined
           }
         />
-        <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Xóa thể loại?" description={`Bạn có chắc muốn xóa thể loại "${selectedGenre?.name}"?`} isLoading={isSubmitting} />
+        <DeleteConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} onConfirm={handleDelete} title="Delete Genre?" description={`Are you sure you want to delete genre "${selectedGenre?.name}"?`} isLoading={isSubmitting} />
         <GenreSongsDialog 
           open={songsDialogOpen} 
           onOpenChange={setSongsDialogOpen} 

@@ -167,12 +167,68 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Global Body Scrollbar - Purple Theme */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(280 100% 70% / 0.6) transparent;
+  }
+
+  html::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 10px;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+      180deg,
+      hsl(280 100% 65% / 0.5),
+      hsl(280 100% 70% / 0.7),
+      hsl(280 100% 65% / 0.5)
+    );
+    border-radius: 10px;
+    border: 1.5px solid hsl(280 100% 70% / 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 50px;
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(
+      180deg,
+      hsl(280 100% 70% / 0.7),
+      hsl(280 100% 75% / 0.9),
+      hsl(280 100% 70% / 0.7)
+    );
+    border-color: hsl(280 100% 75% / 0.5);
+    box-shadow: 
+      0 0 10px hsl(280 100% 70% / 0.4),
+      inset 0 0 10px hsl(280 100% 80% / 0.2);
+    transform: scaleX(1.1);
+  }
+
+  html::-webkit-scrollbar-thumb:active {
+    background: linear-gradient(
+      180deg,
+      hsl(280 100% 75% / 0.8),
+      hsl(280 100% 80% / 1),
+      hsl(280 100% 75% / 0.8)
+    );
+    box-shadow: 
+      0 0 15px hsl(280 100% 70% / 0.6),
+      inset 0 0 15px hsl(280 100% 85% / 0.3);
+    transform: scaleX(1.15);
+  }
 }
 
-/* Custom Scrollbar Styles */
+/* Custom Scrollbar Styles - Modern & Elegant (Purple Theme) */
 .scrollbar-custom {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--primary) / 0.5) hsl(var(--muted) / 0.3);
+  scrollbar-color: hsl(280 100% 70% / 0.6) transparent;
 }
 
 .scrollbar-custom::-webkit-scrollbar {
@@ -181,18 +237,124 @@ All colors MUST be HSL.
 }
 
 .scrollbar-custom::-webkit-scrollbar-track {
-  background: hsl(var(--muted) / 0.3);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 10px;
+  margin: 4px 0;
 }
 
 .scrollbar-custom::-webkit-scrollbar-thumb {
-  background: hsl(var(--primary) / 0.5);
-  border-radius: 4px;
-  transition: background 0.2s ease;
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 65% / 0.5),
+    hsl(280 100% 70% / 0.7),
+    hsl(280 100% 65% / 0.5)
+  );
+  border-radius: 10px;
+  border: 1.5px solid hsl(280 100% 70% / 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 50px;
+  position: relative;
 }
 
 .scrollbar-custom::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.8);
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 70% / 0.7),
+    hsl(280 100% 75% / 0.9),
+    hsl(280 100% 70% / 0.7)
+  );
+  border-color: hsl(280 100% 75% / 0.5);
+  box-shadow: 
+    0 0 10px hsl(280 100% 70% / 0.4),
+    inset 0 0 10px hsl(280 100% 80% / 0.2);
+  transform: scaleX(1.1);
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 75% / 0.8),
+    hsl(280 100% 80% / 1),
+    hsl(280 100% 75% / 0.8)
+  );
+  box-shadow: 
+    0 0 15px hsl(280 100% 70% / 0.6),
+    inset 0 0 15px hsl(280 100% 85% / 0.3);
+  transform: scaleX(1.15);
+}
+
+/* Invoice Dialog Scrollbar - Purple Theme */
+.scrollbar-invoice {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(280 100% 70% / 0.6) transparent;
+}
+
+.scrollbar-invoice::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-invoice::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+  margin: 4px 0;
+}
+
+.scrollbar-invoice::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 65% / 0.5),
+    hsl(280 100% 70% / 0.7),
+    hsl(280 100% 65% / 0.5)
+  );
+  border-radius: 10px;
+  border: 1.5px solid hsl(280 100% 70% / 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 50px;
+  position: relative;
+}
+
+.scrollbar-invoice::-webkit-scrollbar-thumb::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    hsl(280 100% 80% / 0.2),
+    transparent
+  );
+  border-radius: 10px;
+}
+
+.scrollbar-invoice::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 70% / 0.7),
+    hsl(280 100% 75% / 0.9),
+    hsl(280 100% 70% / 0.7)
+  );
+  border-color: hsl(280 100% 75% / 0.5);
+  box-shadow: 
+    0 0 10px hsl(280 100% 70% / 0.4),
+    inset 0 0 10px hsl(280 100% 80% / 0.2);
+  transform: scaleX(1.1);
+}
+
+.scrollbar-invoice::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 75% / 0.8),
+    hsl(280 100% 80% / 1),
+    hsl(280 100% 75% / 0.8)
+  );
+  box-shadow: 
+    0 0 15px hsl(280 100% 70% / 0.6),
+    inset 0 0 15px hsl(280 100% 85% / 0.3);
+  transform: scaleX(1.15);
 }
 
 /* Hide Scrollbar (but keep scrollable) */
@@ -206,30 +368,61 @@ All colors MUST be HSL.
   height: 0;
 }
 
-/* Admin Scrollbar Styles */
+/* Admin Scrollbar Styles - Purple Theme (Thinner) */
 .scrollbar-admin {
   scrollbar-width: thin;
-  scrollbar-color: hsl(var(--admin-hover)) hsl(var(--admin-card));
+  scrollbar-color: hsl(280 100% 70% / 0.6) transparent;
 }
 
 .scrollbar-admin::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 1px;
+  height: 1px;
 }
 
 .scrollbar-admin::-webkit-scrollbar-track {
-  background: hsl(var(--admin-card));
-  border-radius: 5px;
+  background: transparent;
+  border-radius: 10px;
+  margin: 4px 0;
 }
 
 .scrollbar-admin::-webkit-scrollbar-thumb {
-  background: hsl(var(--admin-active));
-  border-radius: 5px;
-  transition: background 0.2s ease;
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 65% / 0.5),
+    hsl(280 100% 70% / 0.7),
+    hsl(280 100% 65% / 0.5)
+  );
+  border-radius: 10px;
+  border: 1.5px solid hsl(280 100% 70% / 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 50px;
 }
 
 .scrollbar-admin::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--admin-active-foreground));
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 70% / 0.7),
+    hsl(280 100% 75% / 0.9),
+    hsl(280 100% 70% / 0.7)
+  );
+  border-color: hsl(280 100% 75% / 0.5);
+  box-shadow: 
+    0 0 10px hsl(280 100% 70% / 0.4),
+    inset 0 0 10px hsl(280 100% 80% / 0.2);
+  transform: scaleX(1.1);
+}
+
+.scrollbar-admin::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(
+    180deg,
+    hsl(280 100% 75% / 0.8),
+    hsl(280 100% 80% / 1),
+    hsl(280 100% 75% / 0.8)
+  );
+  box-shadow: 
+    0 0 15px hsl(280 100% 70% / 0.6),
+    inset 0 0 15px hsl(280 100% 85% / 0.3);
+  transform: scaleX(1.15);
 }
 
 /* Admin Input Focus Styles */
@@ -243,5 +436,19 @@ All colors MUST be HSL.
   border-color: hsl(var(--admin-active)) !important;
   box-shadow: 0 0 0 2px hsl(var(--admin-active) / 0.2) !important;
   outline: none !important;
+}
+
+/* Custom Animations */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

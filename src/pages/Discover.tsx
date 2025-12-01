@@ -248,7 +248,8 @@ const Discover = () => {
 
       if (mapped.length > 0) {
         setQueue(mapped);
-        playSong(mapped[0]);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(mapped[0], playSong);
         const moodText = selectedMoodIds.length > 0 ? `${selectedMoodIds.length} mood` : "";
         const genreText = selectedGenreIds.length > 0 ? `${selectedGenreIds.length} genre` : "";
         const filterText = [moodText, genreText].filter(Boolean).join(" và ");

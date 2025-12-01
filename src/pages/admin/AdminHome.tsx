@@ -75,7 +75,7 @@ const AdminHome = () => {
         console.log("[Dashboard] fetchSummary completed");
       } catch (err) {
         console.error("[Dashboard] load failed", err);
-        setError(err instanceof Error ? err.message : "Không thể tải dữ liệu dashboard");
+        setError(err instanceof Error ? err.message : "Failed to load dashboard data");
       } finally {
         setLoading(false);
       }
@@ -99,7 +99,7 @@ const AdminHome = () => {
   const metricCards = useMemo(
     () => [
       {
-        title: "Bài hát",
+        title: "Songs",
         metric: summary?.songs,
         icon: Music,
         color: "text-[hsl(var(--admin-primary))]",
@@ -113,14 +113,14 @@ const AdminHome = () => {
         datasetType: "playlists" as DatasetType,
       },
       {
-        title: "Lượt phát",
+        title: "Plays",
         metric: summary?.plays,
         icon: TrendingUp,
         color: "text-[hsl(var(--admin-accent))]",
         datasetType: "plays" as DatasetType,
       },
       {
-        title: "Người dùng",
+        title: "Users",
         metric: summary?.users,
         icon: Users,
         color: "text-[hsl(var(--admin-secondary))]",
@@ -152,30 +152,30 @@ const AdminHome = () => {
 
     const series = getSeriesForDataset(selectedDataset);
     const labels = series?.map((point) =>
-      new Date(point.date).toLocaleDateString("vi-VN", { day: "2-digit", month: "short" })
+      new Date(point.date).toLocaleDateString("en-US", { day: "2-digit", month: "short" })
     ) ?? [];
 
     const datasetConfig = {
       songs: {
-        label: "Bài hát mới",
+        label: "New Songs",
         data: buildSeries(summary?.songSeries),
         borderColor: "hsl(262, 83%, 58%)",
         backgroundColor: "hsla(262, 83%, 58%, 0.15)",
       },
       playlists: {
-        label: "Playlist mới",
+        label: "New Playlists",
         data: buildSeries(summary?.playlistSeries),
         borderColor: "hsl(195, 100%, 65%)",
         backgroundColor: "hsla(195, 100%, 65%, 0.15)",
       },
       plays: {
-        label: "Lượt phát",
+        label: "Plays",
         data: buildSeries(summary?.playSeries),
         borderColor: "hsl(280, 100%, 65%)",
         backgroundColor: "hsla(280, 100%, 65%, 0.15)",
       },
       users: {
-        label: "Người dùng mới",
+        label: "New Users",
         data: buildSeries(summary?.userSeries),
         borderColor: "hsl(142, 76%, 36%)",
         backgroundColor: "hsla(142, 76%, 36%, 0.15)",
@@ -213,7 +213,7 @@ const AdminHome = () => {
 
   const handleApplyFilter = () => {
     if (!startDate || !endDate) {
-      setError("Vui lòng chọn ngày bắt đầu và kết thúc");
+      setError("Please select start and end dates");
       return;
     }
     // Cập nhật ref và fetch
@@ -361,12 +361,12 @@ const AdminHome = () => {
       {/* Chart */}
       <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow">
         <CardHeader>
-          <CardTitle>Biểu đồ tăng trưởng</CardTitle>
+          <CardTitle>Growth Chart</CardTitle>
           <CardDescription>
-            {selectedDataset === "songs" && "Thống kê bài hát mới"}
-            {selectedDataset === "playlists" && "Thống kê playlist mới"}
-            {selectedDataset === "plays" && "Thống kê lượt phát"}
-            {selectedDataset === "users" && "Thống kê người dùng mới"}
+            {selectedDataset === "songs" && "New songs statistics"}
+            {selectedDataset === "playlists" && "New playlists statistics"}
+            {selectedDataset === "plays" && "Plays statistics"}
+            {selectedDataset === "users" && "New users statistics"}
           </CardDescription>
 
           <div className="flex flex-col sm:flex-row gap-2 mt-4">
@@ -411,8 +411,8 @@ const AdminHome = () => {
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
-            <CardTitle>Bài hát phổ biến</CardTitle>
-            <CardDescription>Top 5 được nghe nhiều</CardDescription>
+            <CardTitle>Popular Songs</CardTitle>
+            <CardDescription>Top 5 most played</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {mockSongs.slice(0, 5).map((song, index) => (
@@ -439,8 +439,8 @@ const AdminHome = () => {
 
         <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
-            <CardTitle>Người dùng mới</CardTitle>
-            <CardDescription>Người dùng đăng ký gần đây</CardDescription>
+            <CardTitle>New Users</CardTitle>
+            <CardDescription>Recently registered users</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {mockUsers.map((user) => (
@@ -471,10 +471,10 @@ const AdminHome = () => {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
-                  Phân tích sâu: Bài hát
+                  Deep Analysis: Songs
                 </CardTitle>
                 <CardDescription>
-                  Phân loại bài hát theo thể loại (Genre) và tâm trạng (Mood)
+                  Classify songs by genre and mood
                 </CardDescription>
               </div>
               <Button
@@ -496,10 +496,10 @@ const AdminHome = () => {
               </div>
             ) : deepAnalysisData ? (
               <div className="grid gap-6 md:grid-cols-2">
-                {/* Biểu đồ tròn theo Genre */}
+                {/* Doughnut chart by Genre */}
                 {deepAnalysisData.genre && deepAnalysisData.genre.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Phân bố theo Genre</h3>
+                    <h3 className="text-lg font-semibold">Distribution by Genre</h3>
                     <div className="h-[300px] flex items-center justify-center">
                       <Doughnut
                         data={{
@@ -579,10 +579,10 @@ const AdminHome = () => {
                   </div>
                 )}
 
-                {/* Biểu đồ tròn theo Mood */}
+                {/* Doughnut chart by Mood */}
                 {deepAnalysisData.mood && deepAnalysisData.mood.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Phân bố theo Mood</h3>
+                    <h3 className="text-lg font-semibold">Distribution by Mood</h3>
                     <div className="h-[300px] flex items-center justify-center">
                       <Doughnut
                         data={{
@@ -662,7 +662,7 @@ const AdminHome = () => {
               </div>
             ) : (
               <div className="flex items-center justify-center h-[400px] text-muted-foreground">
-                Không có dữ liệu phân tích
+                No analysis data available
               </div>
             )}
           </CardContent>

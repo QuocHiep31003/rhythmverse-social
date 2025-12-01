@@ -47,6 +47,9 @@ import { favoritesApi } from "@/services/api/favoritesApi";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
+import { useFeatureLimit } from "@/hooks/useFeatureLimit";
+import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
+import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import "./PlaylistDetail.css";
 
 const getTitleFontClass = (length: number) => {
@@ -173,10 +176,27 @@ const PlaylistDetail = () => {
   } | null>(null);
   const [playlistLikeCount, setPlaylistLikeCount] = useState<number | null>(null);
   const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const defaultTop = "rgb(43, 17, 96)";
   const defaultBottom = "rgb(5, 1, 15)";
   const defaultPrimary = "rgb(167, 139, 250)";
   const debouncedAddSearch = useDebounceValue(addSearch, 350);
+
+  const isCreateMode = slug === "create";
+
+  // Feature limit hook for create mode
+  const {
+    canUse,
+    remaining,
+    refresh: refreshLimit,
+    usage,
+    limit,
+    limitType,
+  } = useFeatureLimit({
+    featureName: FeatureName.PLAYLIST_CREATE,
+    autoCheck: isCreateMode,
+    onLimitReached: () => setShowLimitModal(true),
+  });
 
   const heroGradient = useMemo(() => {
     const top = palette?.surfaceTop ?? defaultTop;
@@ -678,8 +698,6 @@ const PlaylistDetail = () => {
       setRecommendedSongs([]);
     }
   }, [playlist, permissions.canEdit, permissions.isOwner, loadRecommended]);
-
-  const isCreateMode = slug === "create";
   
   const reloadPlaylist = useCallback(async () => {
     if (!slug || isCreateMode) return;
@@ -1761,48 +1779,45 @@ const PlaylistDetail = () => {
     return 0;
   }, [playlist]);
 
-  const playAllSongs = () => {
+  const togglePlaylistLike = () => {
+    setIsLiked(!isLiked);
+    toast({
+      title: isLiked ? "Removed from your playlists" : "Added to your playlists",
+      duration: 2000,
+    });
+  };
+
+  const toggleSongLike = (songId: string) => {
+    setLikedSongs(prev =>
+      prev.includes(songId)
+        ? prev.filter(id => id !== songId)
+        : [...prev, songId]
+    );
+  };
+
+  const playAllSongs = async () => {
     if (!playlist || !playlist.songs.length) return;
     if (isPlaying) {
       togglePlay();
     } else {
       // N?u dang c� b�i h�t trong playlist dang ph�t, resume b�i d�
       if (currentSong && playlist.songs.find((s) => s.id === currentSong.id)) {
-        playSong(currentSong);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(currentSong, playSong, setQueue);
       } else {
-        // N?u kh�ng, play b�i d?u ti�n
-        setQueue(playlist.songs);
-        playSong(playlist.songs[0]);
+        // Nếu không, play bài đầu tiên
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(playlist.songs[0], playSong, setQueue);
       }
     }
   };
 
-const shufflePlaylistSongs = () => {
-  if (!playlist || !playlist.songs.length) return;
-  const shuffled = [...playlist.songs].sort(() => Math.random() - 0.5);
-  setQueue(shuffled);
-  playSong(shuffled[0]);
-};
-
-const handleDownloadPlaylist = () => {
-  toast({
-    title: "T?i playlist",
-    description: "T�nh nang t?i playlist s? s?m ra m?t.",
-  });
-};
-
-const handlePlaylistActionComingSoon = () => {
-  toast({
-    title: "T�nh nang s?p ra m?t",
-    description: "Ch�ng t�i dang ho�n thi?n tr?i nghi?m n�y.",
-  });
-};
-
-const handlePlaySong = (song: Song) => {
-  if (!playlist) return;
-  setQueue(playlist.songs);
-  playSong(song);
-};
+  const handlePlaySong = async (song: Song) => {
+    if (!playlist) return;
+    // Dùng helper để phát nhạc với /play-now
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(song, playSong, setQueue);
+  };
 
   const confirmRemoveSong = (songId: string) => {
     setPendingDeleteSongId(songId);
@@ -2252,7 +2267,9 @@ const handlePlaySong = (song: Song) => {
                           } catch {
                             errorMessage = errorText || errorMessage;
                           }
-                          throw new Error(errorMessage);
+                          const error = new Error(errorMessage);
+                          (error as any).status = res.status;
+                          throw error;
                         }
                         
                         const data = await res.json();
@@ -2316,9 +2333,40 @@ const handlePlaySong = (song: Song) => {
                       }
                     } catch (e) {
                       if (e instanceof PlaylistPermissionError) {
+                        // Kiểm tra nếu là lỗi limit
+                        const isLimitError = 
+                          e.status === 403 ||
+                          e.message?.toLowerCase().includes("limit") ||
+                          e.message?.toLowerCase().includes("giới hạn") ||
+                          e.message?.toLowerCase().includes("đã đạt") ||
+                          e.message?.toLowerCase().includes("premium") ||
+                          e.message?.toLowerCase().includes("vô hiệu hóa");
+                        
+                        if (isLimitError && isCreateMode) {
+                          setShowLimitModal(true);
+                          await refreshLimit();
+                          return;
+                        }
                         toast({ title: 'Access Denied', description: e.message, variant: 'destructive' });
                       } else {
-                        const message = e instanceof Error ? e.message : "No matching songs found.";
+                        // Kiểm tra lỗi limit trong generic errors
+                        const error = e as any;
+                        const errorMessage = error?.message || "";
+                        const isLimitError = 
+                          error?.status === 403 ||
+                          errorMessage.toLowerCase().includes("limit") ||
+                          errorMessage.toLowerCase().includes("giới hạn") ||
+                          errorMessage.toLowerCase().includes("đã đạt") ||
+                          errorMessage.toLowerCase().includes("premium") ||
+                          errorMessage.toLowerCase().includes("vô hiệu hóa") ||
+                          errorMessage.toLowerCase().includes("nâng cấp");
+                        
+                        if (isLimitError && isCreateMode) {
+                          setShowLimitModal(true);
+                          await refreshLimit();
+                          return;
+                        }
+                        const message = error instanceof Error ? error.message : "Failed to create playlist";
                         toast({ title: 'Error', description: message, variant: 'destructive' });
                       }
                     }
@@ -2804,9 +2852,8 @@ const handlePlaySong = (song: Song) => {
                             if (isNaN(songId)) return;
                             const fullSong = await songsApi.getById(String(songId));
                             if (fullSong) {
-                              const mapped = mapToPlayerSong(fullSong);
-                              setQueue([mapped]);
-                              playSong(mapped);
+                              const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                              await playSongWithStreamUrl(fullSong, playSong, setQueue);
                             }
                           } catch (error) {
                             console.error("Failed to play song:", error);
@@ -3210,6 +3257,21 @@ const handlePlaySong = (song: Song) => {
         open={sharePlaylistOpen}
         onOpenChange={setSharePlaylistOpen}
       />
+
+      {isCreateMode && (
+        <FeatureLimitModal
+          open={showLimitModal}
+          onOpenChange={setShowLimitModal}
+          featureName={FeatureName.PLAYLIST_CREATE}
+          featureDisplayName="Create Playlist"
+          remaining={remaining}
+          limit={typeof limit === "number" ? limit : usage?.limit ?? undefined}
+          limitType={limitType}
+          isPremium={limitType === FeatureLimitType.UNLIMITED}
+          canUse={canUse}
+          onRefresh={refreshLimit}
+        />
+      )}
 
       <style>{`
         .bar {

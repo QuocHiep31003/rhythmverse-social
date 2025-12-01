@@ -29,6 +29,7 @@ import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
 import MusicPlayer from "./components/MusicPlayer";
+import ControlMusicPlayer from "./components/ControlMusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
@@ -46,7 +47,7 @@ import AdminGenres from "./pages/admin/AdminGenres";
 import AdminMoods from "./pages/admin/AdminMoods";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminTrending from "./pages/admin/AdminTrending";
-import AdminPromotions from "./pages/admin/AdminPromotions";
+import AdminBanners from "./pages/admin/AdminBanners";
 import AdminSnapshots from "./pages/admin/AdminSnapshots";
 import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
 import TermsOfService from "./pages/TermsOfService";
@@ -56,6 +57,7 @@ import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
+import AcrHummingTest from "./pages/AcrHummingTest";
 
 import PaymentCancel from "./pages/PaymentCancel";
 import PaymentSuccess from "./pages/PaymentSuccess";
@@ -98,7 +100,7 @@ const App = () => (
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="playlists" element={<AdminPlaylists />} />
                     <Route path="system-playlists" element={<AdminSystemPlaylists />} />
-                    <Route path="banners" element={<AdminPromotions />} />
+                    <Route path="banners" element={<AdminBanners />} />
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
@@ -134,6 +136,7 @@ const App = () => (
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />
                     <Route path="/music-recognition-result" element={<MusicRecognitionResult />} />
+                    <Route path="/acr-humming-test" element={<AcrHummingTest />} />
 
                     {/* ⭐ Public profile is inline via /social?u=... */}
 
@@ -152,6 +155,7 @@ const App = () => (
             </Routes>
 
             <MusicPlayer />
+            <ControlMusicPlayer />
 
             {(() => {
               try {

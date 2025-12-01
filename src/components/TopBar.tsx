@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
+import { stopTokenRefreshInterval, clearTokens, getAuthToken } from "@/services/api/config";
 
 import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -110,9 +110,7 @@ const TopBar = () => {
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
-      return typeof window !== "undefined"
-        ? !!localStorage.getItem("token")
-        : false;
+      return typeof window !== "undefined" ? !!getAuthToken() : false;
     } catch {
       return false;
     }
@@ -260,10 +258,14 @@ const TopBar = () => {
   /** ================= LOAD USER PROFILE + PREMIUM ================= **/
   useEffect(() => {
     const loadMe = async () => {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const token = getAuthToken();
       if (!token) {
         setIsAuthenticated(false);
+        setCurrentUserId(null);
+        setProfileName("");
+        setProfileEmail("");
+        setProfileAvatar("");
+        setProfileIsPremium(false);
         return;
       }
 
@@ -320,16 +322,40 @@ const TopBar = () => {
       } catch (err) {
         console.error("Failed to load profile", err);
         setIsAuthenticated(false);
+        setCurrentUserId(null);
       }
     };
+    
     loadMe();
+    
+    // Listen for storage changes (when user logs in/out in another tab or same tab)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token' || e.key === 'adminToken' || e.key === 'refreshToken' || e.key === 'adminRefreshToken') {
+        console.log('[TopBar] Token storage changed, reloading profile...');
+        loadMe();
+      }
+    };
+    
+    // Also listen for custom event (when login happens in same tab)
+    const handleTokenUpdate = () => {
+      console.log('[TopBar] Token updated event received, reloading profile...');
+      loadMe();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('tokenUpdated', handleTokenUpdate);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('tokenUpdated', handleTokenUpdate);
+    };
   }, []);
 
   /** ================= LOAD COLLAB INVITES ================= **/
   useEffect(() => {
     const loadInvites = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token = getAuthToken();
         if (!token) {
           setInviteCount(0);
           return;

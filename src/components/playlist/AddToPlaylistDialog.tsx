@@ -192,21 +192,33 @@ export const AddToPlaylistDialog = ({
       // Navigate to the new playlist
       navigate(`/playlist/${createSlug(newPlaylist.name, newPlaylist.id)}`);
     } catch (error: any) {
-      // Nếu lỗi từ backend về feature limit, show modal
+      // Kiểm tra các trường hợp lỗi về limit
       const errorMessage = error?.message || "";
-      if (errorMessage.includes("limit exceeded") || 
-          errorMessage.includes("Feature usage limit") ||
-          errorMessage.includes("403") ||
-          error?.status === 403) {
+      const isLimitError = 
+        error?.status === 403 ||
+        errorMessage.toLowerCase().includes("limit") ||
+        errorMessage.toLowerCase().includes("giới hạn") ||
+        errorMessage.toLowerCase().includes("đã đạt") ||
+        errorMessage.toLowerCase().includes("premium") ||
+        errorMessage.toLowerCase().includes("vô hiệu hóa") ||
+        errorMessage.toLowerCase().includes("nâng cấp") ||
+        errorMessage.includes("limit exceeded") ||
+        errorMessage.includes("Feature usage limit");
+      
+      if (isLimitError) {
         setShowLimitModal(true);
-      } else {
-        const message = error instanceof Error ? error.message : "Không thể tạo playlist";
-        toast({
-          title: "Lỗi",
-          description: message,
-          variant: "destructive",
-        });
+        await checkUsage();
+        // Không hiển thị toast error nếu đã show modal
+        return;
       }
+      
+      // Hiển thị toast cho các lỗi khác
+      const message = error instanceof Error ? error.message : "Không thể tạo playlist";
+      toast({
+        title: "Lỗi",
+        description: message,
+        variant: "destructive",
+      });
     } finally {
       setCreating(false);
       setNewPlaylistName("");

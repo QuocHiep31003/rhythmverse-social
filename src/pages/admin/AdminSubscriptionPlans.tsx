@@ -430,7 +430,7 @@ const AdminSubscriptionPlans = () => {
           </div>
 
           <div className="flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto scroll-smooth scrollbar-admin pb-6">
+            <div className="flex-1 overflow-y-auto scroll-smooth scrollbar-invoice pb-6">
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {plans.map((plan) => {
                   const isDefaultPlan = plan.planCode && DEFAULT_PLANS.includes(plan.planCode.toUpperCase());
@@ -535,7 +535,7 @@ const AdminSubscriptionPlans = () => {
       </div>
 
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto scrollbar-invoice bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]">
           <DialogHeader>
             <DialogTitle>
               {editingPlan ? "Edit plan" : "Create new plan"}

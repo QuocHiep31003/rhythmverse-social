@@ -172,9 +172,8 @@ const ArtistDetail = () => {
     );
   };
 
-  const handlePlaySong = (song: Song) => {
+  const handlePlaySong = async (song: Song) => {
     console.log("Playing song:", song.id);
-    setIsPlaying(true);
     
     // Map songs to format expected by player
     const formattedSongs = songs.map((s) => ({
@@ -187,7 +186,8 @@ const ArtistDetail = () => {
     setQueue(formattedSongs);
     const currentSong = formattedSongs.find(s => s.id === String(song.id));
     if (currentSong) {
-      playSongFromContext(currentSong);
+      const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+      await playSongWithStreamUrl(currentSong, playSongFromContext);
     }
   };
 

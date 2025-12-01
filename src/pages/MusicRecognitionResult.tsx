@@ -565,7 +565,7 @@ const MusicRecognitionResult = () => {
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 
-  const handlePlayOnEchoverse = () => {
+  const handlePlayOnEchoverse = async () => {
     if (!echoverseSong) return;
 
     const formattedSong: PlayerSong = {
@@ -592,7 +592,8 @@ const MusicRecognitionResult = () => {
     };
 
     setQueue([formattedSong]);
-    playSong(formattedSong);
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(formattedSong, playSong);
   };
 
   if (isLoading) {
@@ -789,7 +790,7 @@ const MusicRecognitionResult = () => {
                     <div className="flex items-center gap-2">
                       {isInternal ? (
                         <Button
-                          onClick={() => {
+                          onClick={async () => {
                             const song = item.song;
                             if (!song) return;
                             const formatted: PlayerSong = {
@@ -812,7 +813,8 @@ const MusicRecognitionResult = () => {
                               audioUrl: song.audioUrl,
                             };
                             setQueue([formatted]);
-                            playSong(formatted);
+                            const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                            await playSongWithStreamUrl(formatted, playSong);
                           }}
                           className="bg-primary hover:bg-primary/90 text-primary-foreground"
                         >

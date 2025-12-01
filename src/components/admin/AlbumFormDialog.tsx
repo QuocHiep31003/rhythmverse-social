@@ -274,7 +274,7 @@ export const AlbumFormDialog = ({
       <DialogContent className="sm:max-w-[700px] bg-zinc-950 border border-zinc-800 rounded-xl p-0 text-white">
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-zinc-800">
           <DialogTitle className="text-2l font-bold">
-            {mode === "create" ? "Tạo Album mới" : "Chỉnh sửa Album"}
+            {mode === "create" ? "Create New Album" : "Edit Album"}
           </DialogTitle>
           <DialogDescription className="text-gray-400">
             Fill in the album details. You can add songs later.
@@ -434,8 +434,8 @@ export const AlbumFormDialog = ({
                           >
                             <span>
                               {field.value?.length
-                                ? `Đã chọn ${field.value.length} bài hát`
-                                : "Chọn bài hát"}
+                                ? `${field.value.length} song${field.value.length !== 1 ? 's' : ''} selected`
+                                : "Select songs"}
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>

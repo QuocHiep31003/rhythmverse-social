@@ -355,13 +355,14 @@ const AlbumDetail = () => {
   }, [slug, navigate]);
 
   /* ========== Play / Pause logic chuẩn ========== */
-  const handlePlayAlbum = () => {
+  const handlePlayAlbum = async () => {
     if (!songs.length) return;
     if (isPlaying) togglePlay();
     else {
+      const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
       if (currentSong && songs.find((s) => s.id === currentSong.id))
-        playSong(currentSong); // resume đúng bài
-      else playSong(songs[0]); // play bài đầu
+        await playSongWithStreamUrl(currentSong, playSong, setQueue); // resume đúng bài
+      else await playSongWithStreamUrl(songs[0], playSong, setQueue); // play bài đầu
     }
   };
 
@@ -560,11 +561,16 @@ const AlbumDetail = () => {
                     song={song}
                     index={index}
                     active={active}
-                    isPlaying={isPlaying}
-                    releaseDate={album?.releaseDate ?? null}
-                    onPlay={() =>
-                      active && isPlaying ? togglePlay() : playSong(song)
-                    }
+                    isPlaying={isPlaying && active}
+                    onPlay={async () => {
+                      if (active && isPlaying) {
+                        togglePlay();
+                      } else {
+                        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+                        await playSongWithStreamUrl(song, playSong, setQueue);
+                      }
+                    }}
+                    releaseDate={album?.releaseDate}
                     onAddToPlaylist={() => {
                       setSelectedSongForPlaylist({
                         id: song.id,
