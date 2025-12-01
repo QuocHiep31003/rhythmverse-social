@@ -405,12 +405,25 @@ const MusicPlayer = () => {
   const [isTabActive, setIsTabActive] = useState(true);
   const [isMainTab, setIsMainTab] = useState(false); // Track if this tab is the main tab
   const channelRef = useRef<BroadcastChannel | null>(null);
-  // Tạo unique tab ID khi component mount
-  const tabIdRef = useRef<string>(`tab_${Date.now()}_${Math.random().toString(36).substring(7)}`);
+  // Lấy hoặc tạo tabId chung cho tab này (dùng sessionStorage để đảm bảo cùng tabId cho cả ControlMusicPlayer và MusicPlayer)
+  const getOrCreateTabId = () => {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      let tabId = sessionStorage.getItem('tabId');
+      if (!tabId) {
+        tabId = `tab_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        sessionStorage.setItem('tabId', tabId);
+      }
+      return tabId;
+    }
+    return `tab_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  };
+  const tabIdRef = useRef<string>(getOrCreateTabId());
   // Flag để biết hiện tại có tab chính đang phát nhạc không
   const noMainTabRef = useRef<boolean>(false);
   // Ref để track queue và tránh re-run useEffect
   const queueRef = useRef<Song[]>(queue);
+  // Ref để lưu currentTime cần set khi audio load (từ BECOME_MAIN_TAB_AND_PLAY)
+  const pendingCurrentTimeRef = useRef<number | null>(null);
 
   // Detect tab visibility (khi chuyển tab browser) - chỉ cập nhật state, không pause
   // Chỉ pause khi tab bị đóng, không pause khi chuyển tab
@@ -575,6 +588,241 @@ const MusicPlayer = () => {
           // Gửi QUEUE_UPDATE
           sendQueueUpdate();
         }
+        return;
+      }
+      
+      // Xử lý BECOME_MAIN_TAB_AND_PLAY từ tab điều khiển
+      if (data.type === "BECOME_MAIN_TAB_AND_PLAY") {
+        console.log('[MusicPlayer] Nhận được BECOME_MAIN_TAB_AND_PLAY, data.tabId:', data.tabId, 'tabIdRef.current:', tabIdRef.current);
+        // Chỉ xử lý nếu tabId khớp với tab này
+        if (data.tabId !== tabIdRef.current) {
+          console.log('[MusicPlayer] TabId không khớp, bỏ qua command');
+          return;
+        }
+        
+        console.log('[MusicPlayer] Nhận được BECOME_MAIN_TAB_AND_PLAY, đồng bộ toàn bộ thông tin và trở thành tab chính');
+        
+        try {
+          // 1. Trở thành tab chính
+          setIsMainTab(true);
+          noMainTabRef.current = false;
+          
+          // 2. Đồng bộ queue
+          if (data.queue && data.queue.length > 0) {
+            const queueSongs: Song[] = data.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
+              id: String(q.id),
+              name: q.title || q.name || "Unknown Song",
+              songName: q.title || q.name || "Unknown Song",
+              title: q.title || q.name || "Unknown Song",
+              artist: q.artist || "Unknown Artist",
+              album: "",
+              duration: 0,
+              cover: q.cover || "",
+            }));
+            console.log('[MusicPlayer] Đồng bộ queue từ tab điều khiển, queue length:', queueSongs.length);
+            await setQueue(queueSongs);
+          }
+          
+          // 3. Đồng bộ repeatMode, isShuffled, volume, isMuted
+          if (data.repeatMode !== undefined) {
+            await setRepeatMode(data.repeatMode);
+          }
+          if (data.isShuffled !== undefined && data.isShuffled !== isShuffled) {
+            // Chỉ toggle nếu state khác nhau
+            await toggleShuffle();
+          }
+          if (data.volume !== undefined && audioRef.current) {
+            audioRef.current.volume = data.volume;
+          }
+          if (data.isMuted !== undefined && audioRef.current) {
+            audioRef.current.muted = data.isMuted;
+          }
+          
+          // 4. Lưu currentTime vào ref để set sau khi audio load
+          if (data.currentTime !== undefined && data.currentTime > 0) {
+            console.log('[MusicPlayer] Lưu currentTime vào pendingCurrentTimeRef:', data.currentTime);
+            pendingCurrentTimeRef.current = data.currentTime;
+          }
+          
+          // 5. Phát bài hát từ vị trí đã lưu
+          if (data.song && data.song.id) {
+            const songToPlay = data.queue?.find((q: { id: string | number }) => String(q.id) === String(data.song.id)) || data.song;
+            const song: Song = {
+              id: String(songToPlay.id),
+              name: songToPlay.title || songToPlay.name || songToPlay.songName || "Unknown Song",
+              songName: songToPlay.title || songToPlay.name || songToPlay.songName || "Unknown Song",
+              title: songToPlay.title || songToPlay.name || songToPlay.songName || "Unknown Song",
+              artist: songToPlay.artist || "Unknown Artist",
+              album: "",
+              duration: data.duration || 0,
+              cover: songToPlay.cover || "",
+            };
+            
+            console.log('[MusicPlayer] Phát bài hát từ tab điều khiển:', song.title, 'tại vị trí:', data.currentTime, 'isPlaying:', data.isPlaying);
+            
+            // Kiểm tra xem bài hát đã có trong queue chưa
+            const songInQueue = queue.find(q => String(q.id) === String(song.id));
+            const skipApiCall = songInQueue !== undefined;
+            console.log('[MusicPlayer] Song in queue:', songInQueue !== undefined, 'skipApiCall:', skipApiCall);
+            
+            // Phát bài hát
+            await playSong(song, skipApiCall);
+            console.log('[MusicPlayer] Đã gọi playSong, currentSong:', currentSong?.id, 'audioRef.current:', audioRef.current);
+            
+            // Đợi một chút để playSong hoàn thành và audio element được cập nhật
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Đợi audio element sẵn sàng trước khi set currentTime
+            const waitForAudio = () => {
+              return new Promise<void>((resolve) => {
+                if (audioRef.current) {
+                  // Nếu audio đã có src và readyState >= 2, sẵn sàng
+                  if (audioRef.current.src && audioRef.current.readyState >= 2) {
+                    console.log('[MusicPlayer] Audio đã sẵn sàng, readyState:', audioRef.current.readyState, 'src:', audioRef.current.src);
+                    resolve();
+                    return;
+                  }
+                  
+                  // Đợi audio load
+                  const onCanPlay = () => {
+                    console.log('[MusicPlayer] Audio đã load xong, readyState:', audioRef.current?.readyState);
+                    audioRef.current?.removeEventListener('canplay', onCanPlay);
+                    audioRef.current?.removeEventListener('loadedmetadata', onCanPlay);
+                    resolve();
+                  };
+                  
+                  audioRef.current.addEventListener('canplay', onCanPlay);
+                  audioRef.current.addEventListener('loadedmetadata', onCanPlay);
+                  
+                  // Nếu audio đã có src, trigger load
+                  if (audioRef.current.src) {
+                    audioRef.current.load();
+                  }
+                  
+                  // Timeout sau 5 giây
+                  setTimeout(() => {
+                    audioRef.current?.removeEventListener('canplay', onCanPlay);
+                    audioRef.current?.removeEventListener('loadedmetadata', onCanPlay);
+                    console.log('[MusicPlayer] Timeout đợi audio, tiếp tục...');
+                    resolve();
+                  }, 5000);
+                } else {
+                  console.error('[MusicPlayer] audioRef.current là null sau khi playSong');
+                  resolve();
+                }
+              });
+            };
+            
+            await waitForAudio();
+            
+            // Set vị trí phát - đợi metadata load xong trước
+            if (data.currentTime !== undefined && data.currentTime > 0 && audioRef.current) {
+              console.log('[MusicPlayer] Đợi metadata load để set currentTime:', data.currentTime);
+              
+              // Đợi metadata load xong (cần để seek chính xác)
+              const waitForMetadata = () => {
+                return new Promise<void>((resolve) => {
+                  if (audioRef.current && audioRef.current.readyState >= 1) {
+                    // Metadata đã load
+                    console.log('[MusicPlayer] Metadata đã load, readyState:', audioRef.current.readyState);
+                    resolve();
+                  } else {
+                    // Đợi metadata load
+                    const onLoadedMetadata = () => {
+                      console.log('[MusicPlayer] Metadata đã load xong');
+                      audioRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata);
+                      resolve();
+                    };
+                    audioRef.current?.addEventListener('loadedmetadata', onLoadedMetadata);
+                    
+                    // Timeout sau 3 giây
+                    setTimeout(() => {
+                      audioRef.current?.removeEventListener('loadedmetadata', onLoadedMetadata);
+                      console.log('[MusicPlayer] Timeout đợi metadata, tiếp tục...');
+                      resolve();
+                    }, 3000);
+                  }
+                });
+              };
+              
+              await waitForMetadata();
+              
+              // Set currentTime
+              if (audioRef.current) {
+                console.log('[MusicPlayer] Set currentTime:', data.currentTime, 'duration:', audioRef.current.duration);
+                try {
+                  audioRef.current.currentTime = data.currentTime;
+                  await updatePosition(data.currentTime * 1000); // Convert to milliseconds
+                  console.log('[MusicPlayer] Đã set currentTime thành công, currentTime thực tế:', audioRef.current.currentTime);
+                  
+                  // Đợi một chút để đảm bảo seek đã hoàn thành
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (err) {
+                  console.error('[MusicPlayer] Lỗi khi set currentTime:', err);
+                }
+              }
+            }
+            
+            // Phát hoặc pause tùy theo isPlaying
+            if (data.isPlaying) {
+              console.log('[MusicPlayer] Bắt đầu phát nhạc từ vị trí:', audioRef.current?.currentTime || data.currentTime);
+              setIsPlaying(true);
+              if (audioRef.current) {
+                console.log('[MusicPlayer] Gọi audio.play(), audio.src:', audioRef.current.src, 'currentTime:', audioRef.current.currentTime);
+                audioRef.current.play().then(() => {
+                  console.log('[MusicPlayer] Phát nhạc thành công tại vị trí:', audioRef.current?.currentTime);
+                  
+                  // Kiểm tra lại currentTime sau khi play (có thể bị reset)
+                  if (data.currentTime !== undefined && data.currentTime > 0 && audioRef.current) {
+                    const actualTime = audioRef.current.currentTime;
+                    const expectedTime = data.currentTime;
+                    const diff = Math.abs(actualTime - expectedTime);
+                    
+                    // Nếu sai số > 1s, set lại
+                    if (diff > 1) {
+                      console.log('[MusicPlayer] Sai số lớn, set lại currentTime. Expected:', expectedTime, 'Actual:', actualTime, 'Diff:', diff);
+                      setTimeout(() => {
+                        if (audioRef.current) {
+                          audioRef.current.currentTime = expectedTime;
+                          updatePosition(expectedTime * 1000);
+                        }
+                      }, 200);
+                    }
+                  }
+                }).catch(err => {
+                  console.error('[MusicPlayer] Play failed:', err);
+                  setIsPlaying(false);
+                });
+              } else {
+                console.error('[MusicPlayer] audioRef.current là null, không thể phát');
+              }
+            } else {
+              console.log('[MusicPlayer] Pause nhạc');
+              setIsPlaying(false);
+              if (audioRef.current) {
+                audioRef.current.pause();
+              }
+            }
+          }
+          
+          // 5. Gửi MAIN_TAB_ACTIVE để các tab khác biết
+          if (channelRef.current) {
+            channelRef.current.postMessage({
+              type: "MAIN_TAB_ACTIVE",
+              tabId: tabIdRef.current,
+            });
+          }
+          
+          // 6. Gửi state update
+          setTimeout(() => {
+            sendStateUpdate();
+            sendFullStateUpdate();
+          }, 500);
+          
+        } catch (error) {
+          console.error('[MusicPlayer] Lỗi khi xử lý BECOME_MAIN_TAB_AND_PLAY:', error);
+        }
+        
         return;
       }
       
@@ -1263,9 +1511,12 @@ const MusicPlayer = () => {
         
         // Reset audio nhưng giữ volume
         audio.pause();
-        audio.currentTime = 0;
+        // Chỉ reset currentTime nếu không có pendingCurrentTimeRef
+        if (pendingCurrentTimeRef.current === null) {
+          audio.currentTime = 0;
+          setCurrentTime(0);
+        }
         audio.volume = volume; // Đảm bảo volume được giữ nguyên
-        setCurrentTime(0);
         // isPlaying được cập nhật tự động từ context qua Firebase
 
         // Load HLS
@@ -1290,8 +1541,17 @@ const MusicPlayer = () => {
             }
             // Đảm bảo volume được set đúng
             audio.volume = volume;
-            // Auto play from beginning
-            audio.currentTime = 0;
+            // Set currentTime từ pendingCurrentTimeRef nếu có (từ BECOME_MAIN_TAB_AND_PLAY)
+            if (pendingCurrentTimeRef.current !== null && pendingCurrentTimeRef.current > 0) {
+              console.log('[MusicPlayer] Set currentTime từ pendingCurrentTimeRef:', pendingCurrentTimeRef.current);
+              audio.currentTime = pendingCurrentTimeRef.current;
+              setCurrentTime(pendingCurrentTimeRef.current);
+              updatePosition(pendingCurrentTimeRef.current * 1000);
+              pendingCurrentTimeRef.current = null; // Reset sau khi set
+            } else {
+              // Auto play from beginning
+              audio.currentTime = 0;
+            }
             audio.play().then(() => {
               setIsPlaying(true);
               // Đánh dấu đây là tab chính khi bắt đầu phát nhạc
@@ -1331,7 +1591,16 @@ const MusicPlayer = () => {
             setDuration(audio.duration);
             // Đảm bảo volume được set đúng
             audio.volume = volume;
-            audio.currentTime = 0;
+            // Set currentTime từ pendingCurrentTimeRef nếu có (từ BECOME_MAIN_TAB_AND_PLAY)
+            if (pendingCurrentTimeRef.current !== null && pendingCurrentTimeRef.current > 0) {
+              console.log('[MusicPlayer] Set currentTime từ pendingCurrentTimeRef (Safari):', pendingCurrentTimeRef.current);
+              audio.currentTime = pendingCurrentTimeRef.current;
+              setCurrentTime(pendingCurrentTimeRef.current);
+              updatePosition(pendingCurrentTimeRef.current * 1000);
+              pendingCurrentTimeRef.current = null; // Reset sau khi set
+            } else {
+              audio.currentTime = 0;
+            }
             audio.play().then(() => {
               setIsPlaying(true);
             }).catch((err) => {
