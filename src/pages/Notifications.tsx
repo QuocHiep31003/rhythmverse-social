@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
 import { subscribeTempNotification } from "@/utils/notificationBus";
-import { BellRing, CheckCircle2, Share2, UserPlus, Users } from "lucide-react";
+import { BellRing, CheckCircle2, Share2, UserPlus, Users, AlertTriangle, Ban } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const typeMeta: Record<
@@ -56,6 +56,24 @@ const typeMeta: Record<
     icon: CheckCircle2,
     badge: "border-lime-500/30 bg-lime-500/12 text-lime-700 dark:text-lime-100",
     tone: "from-lime-500/10 via-transparent to-transparent",
+  },
+  PLAYLIST_WARNED: {
+    label: "Cảnh báo Playlist",
+    icon: AlertTriangle,
+    badge: "border-yellow-500/30 bg-yellow-500/12 text-yellow-700 dark:text-yellow-100",
+    tone: "from-yellow-500/10 via-transparent to-transparent",
+  },
+  PLAYLIST_BANNED: {
+    label: "Playlist bị xóa",
+    icon: Ban,
+    badge: "border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-100",
+    tone: "from-red-500/10 via-transparent to-transparent",
+  },
+  PLAYLIST_RESTORED: {
+    label: "Playlist được phục hồi",
+    icon: CheckCircle2,
+    badge: "border-green-500/30 bg-green-500/12 text-green-700 dark:text-green-100",
+    tone: "from-green-500/10 via-transparent to-transparent",
   },
   DEFAULT: {
     label: "Thông báo",
@@ -133,7 +151,28 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
         meta?.albumName ||
         notification.title ||
         "một nội dung";
-      return `đã chia sẻ: “${title}”`;
+      return `đã chia sẻ: "${title}"`;
+    }
+    case "PLAYLIST_WARNED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      const warningCount = (meta as any)?.warningCount || 0;
+      const warningReason = (meta as any)?.warningReason || "";
+      if (warningReason) {
+        return `Playlist "${playlistName}" đã nhận cảnh báo (${warningCount}/3): ${warningReason}`;
+      }
+      return `Playlist "${playlistName}" đã nhận cảnh báo (${warningCount}/3)`;
+    }
+    case "PLAYLIST_BANNED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      const banReason = (meta as any)?.banReason || "";
+      if (banReason) {
+        return `Playlist "${playlistName}" đã bị xóa khỏi hệ thống. Lý do: ${banReason}`;
+      }
+      return `Playlist "${playlistName}" đã bị xóa khỏi hệ thống`;
+    }
+    case "PLAYLIST_RESTORED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      return `Playlist "${playlistName}" đã được phục hồi`;
     }
     default: {
       const fallback = String(notification.body || notification.title || "").trim();
@@ -248,13 +287,20 @@ const Notifications = () => {
         navigate("/social?tab=friends");
       } else if (type === 'FRIEND_REQUEST' || type === 'FRIEND_REQUEST_ACCEPTED') {
         // Navigate đến social với tab friends để xem friend requests
-      navigate("/social?tab=friends");
+        navigate("/social?tab=friends");
       } else if (type === 'SHARE') {
         // Navigate đến social để xem chat/share
         if (meta?.roomId) {
           navigate(`/social?chat=${meta.roomId}`);
         } else {
           navigate("/social");
+        }
+      } else if (type === 'PLAYLIST_BANNED' || type === 'PLAYLIST_WARNED' || type === 'PLAYLIST_RESTORED') {
+        // Navigate đến playlist detail nếu có playlistId
+        if (meta?.playlistId) {
+          navigate(`/playlists/${meta.playlistId}`);
+        } else {
+          navigate("/playlists");
         }
       } else {
         // Default: navigate đến social
@@ -404,6 +450,57 @@ const Notifications = () => {
             Xem nội dung
           </Button>
         );
+      case "PLAYLIST_WARNED": {
+        const meta = notification.metadata as { playlistId?: number } | undefined;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+            onClick={withStop(() => {
+              if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              }
+            })}
+          >
+            Xem Playlist
+          </Button>
+        );
+      }
+      case "PLAYLIST_BANNED": {
+        const meta = notification.metadata as { playlistId?: number } | undefined;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+            onClick={withStop(() => {
+              if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              }
+            })}
+          >
+            Xem Playlist
+          </Button>
+        );
+      }
+      case "PLAYLIST_RESTORED": {
+        const meta = notification.metadata as { playlistId?: number } | undefined;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+            onClick={withStop(() => {
+              if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              }
+            })}
+          >
+            Xem Playlist
+          </Button>
+        );
+      }
       default:
         return null;
     }

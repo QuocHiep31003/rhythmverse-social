@@ -94,22 +94,50 @@ export const PlaylistCard = ({
     }
   }, [playlistNumericId, isPublicVisibility]);
 
+  // Helper function để lấy ảnh cover: ưu tiên cover, sau đó ảnh bài hát đầu tiên, cuối cùng là placeholder
+  const getPlaylistCover = () => {
+    // 1. Ưu tiên cover của playlist
+    if (playlist.cover) {
+      return playlist.cover;
+    }
+    // 2. Nếu không có, lấy ảnh album của bài hát đầu tiên
+    if (Array.isArray(playlist.songs) && playlist.songs.length > 0) {
+      const firstSong = playlist.songs[0] as any;
+      if (firstSong?.urlImageAlbum || firstSong?.albumCoverImg || firstSong?.cover) {
+        return firstSong.urlImageAlbum || firstSong.albumCoverImg || firstSong.cover;
+      }
+    }
+    // 3. Cuối cùng là null (sẽ hiển thị placeholder)
+    return null;
+  };
+
+  const coverImage = getPlaylistCover();
+  const showPlaceholder = !coverImage;
+
   return (
     <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group h-full flex flex-col">
       <CardContent className="p-0 flex flex-col flex-1">
         <div className="relative aspect-square overflow-hidden">
-          {playlist.cover ? (
+          {!showPlaceholder ? (
             <img
-              src={playlist.cover}
+              src={coverImage}
               alt={playlist.title}
               className="w-full h-full object-cover rounded-t-lg"
               style={{ objectFit: 'cover', objectPosition: 'center' }}
+              onError={(e) => {
+                // Nếu ảnh load lỗi, hiển thị placeholder
+                e.currentTarget.style.display = 'none';
+                const parent = e.currentTarget.parentElement;
+                if (parent) {
+                  const placeholder = parent.querySelector('.music-placeholder') as HTMLElement;
+                  if (placeholder) placeholder.style.display = 'flex';
+                }
+              }}
             />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg">
-              <Music className="w-16 h-16 text-white/80" />
-            </div>
-          )}
+          ) : null}
+          <div className={`w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg music-placeholder ${showPlaceholder ? '' : 'hidden'}`}>
+            <Music className="w-16 h-16 text-white/80" />
+          </div>
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <Button
               size="icon"
@@ -121,6 +149,17 @@ export const PlaylistCard = ({
           </div>
           
           <div className="absolute top-3 right-3 flex gap-2 flex-wrap">
+            {playlist.isWarned === true && !playlist.isBanned && (playlist.warningCount ?? 0) > 0 && (
+              <Badge variant="default" className="bg-yellow-500/20 text-yellow-200 border-yellow-400/30 font-semibold">
+                ⚠️ Warned ({playlist.warningCount}/3)
+              </Badge>
+            )}
+            {/* Playlist Type Badges - Chỉ hiển thị "By EchoVerse" cho SYSTEM_GLOBAL và EDITORIAL */}
+            {((playlist as any).type === "EDITORIAL" || (playlist as any).type === "SYSTEM_GLOBAL") && (
+              <Badge variant="default" className="bg-indigo-500/20 text-indigo-200 border-indigo-400/30 font-semibold">
+                By EchoVerse
+              </Badge>
+            )}
             {playlist.isOwner && (
               <Badge variant="default" className="bg-blue-500/20 text-blue-200 border-blue-400/30 font-semibold">
                 Owner

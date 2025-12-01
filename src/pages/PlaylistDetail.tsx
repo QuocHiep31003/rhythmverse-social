@@ -2,13 +2,14 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music, Shuffle, Share2, Download, Globe, Lock } from "lucide-react";
+import { Play, Pause, Heart, MoreHorizontal, Users, Plus, Search, Edit, LogOut, User as UserIcon, Music, Shuffle, Share2, Download, Globe, Lock, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
 import ShareButton from "@/components/ShareButton";
@@ -45,6 +46,7 @@ import { useFavoritePlaylist } from "@/hooks/useFavorites";
 import { favoritesApi } from "@/services/api/favoritesApi";
 import { CollaboratorDialog } from "@/components/playlist/CollaboratorDialog";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
 import "./PlaylistDetail.css";
 
 const getTitleFontClass = (length: number) => {
@@ -726,11 +728,43 @@ const PlaylistDetail = () => {
         totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
         updatedAt: extendedData?.dateUpdate || null,
         songs: mappedSongs,
+        isWarned: data.isWarned,
+        isBanned: data.isBanned,
+        warningCount: data.warningCount,
+        warningReason: data.warningReason,
       });
     } catch (e) {
       console.warn('Failed to reload playlist:', e);
     }
   }, [slug, isCreateMode]);
+
+  // Lắng nghe notification ban để tự động redirect nếu playlist hiện tại bị ban
+  useEffect(() => {
+    if (!meId || !playlist?.id || isCreateMode) return;
+
+    const unsubscribe = watchNotifications(meId, (notifications) => {
+      // Tìm notification ban cho playlist hiện tại
+      const banNotification = notifications.find(n => 
+        n.type === 'PLAYLIST_BANNED' && 
+        n.metadata?.playlistId === playlist.id &&
+        n.read !== true
+      );
+
+      if (banNotification) {
+        // Tự động redirect về library
+        toast({
+          title: "Playlist đã bị xóa",
+          description: `Playlist "${playlist.title}" đã bị xóa khỏi hệ thống do vi phạm quy tắc.`,
+          variant: "destructive",
+        });
+        navigate("/playlists");
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [meId, playlist?.id, playlist?.title, isCreateMode, navigate]);
   
   useEffect(() => {
     const load = async () => {
@@ -818,6 +852,10 @@ const PlaylistDetail = () => {
           totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
           updatedAt: extendedData?.dateUpdate || null,
           songs: mappedSongs,
+          isWarned: data.isWarned,
+          isBanned: data.isBanned,
+          warningCount: data.warningCount,
+          warningReason: data.warningReason,
         });
         setEditedTitle(data.name || '');
         setEditedDescription(data.description || '');
@@ -1700,14 +1738,27 @@ const PlaylistDetail = () => {
   };
 
   const formatTotalDuration = (seconds: number) => {
+    if (!seconds || seconds <= 0) return "";
     const hours = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${mins}m`;
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
   const totalDuration = useMemo(() => {
     if (!playlist) return 0;
-    return playlist.songs.reduce((acc, song) => acc + toSeconds(song.duration), 0);
+    const anyPlaylist = playlist as any;
+
+    // Ưu tiên tính từ danh sách songs nếu có
+    if (Array.isArray(playlist.songs) && playlist.songs.length > 0) {
+      return playlist.songs.reduce((acc, song) => acc + toSeconds((song as any).duration), 0);
+    }
+
+    // Nếu API trả về tổng duration (seconds) thì dùng làm fallback
+    if (typeof anyPlaylist.totalDuration === "number" && Number.isFinite(anyPlaylist.totalDuration)) {
+      return anyPlaylist.totalDuration;
+    }
+
+    return 0;
   }, [playlist]);
 
   const playAllSongs = () => {
@@ -1945,11 +1996,50 @@ const handlePlaySong = (song: Song) => {
               title={isEditing ? 'Click to change cover' : undefined}
             >
               {(() => {
-                const src = isEditing ? (editedCoverUrl || playlist?.cover || '') : (playlist?.cover || '');
-                return src ? (
-                  <img src={src} alt={playlist?.title} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center">
+                // Helper function để lấy ảnh cover: ưu tiên cover, sau đó ảnh bài hát đầu tiên, cuối cùng là placeholder
+                const getPlaylistCover = () => {
+                  if (isEditing) {
+                    // Khi đang edit, ưu tiên editedCoverUrl
+                    if (editedCoverUrl) return editedCoverUrl;
+                    if (playlist?.cover) return playlist.cover;
+                  } else {
+                    // Khi không edit, ưu tiên cover của playlist
+                    if (playlist?.cover) return playlist.cover;
+                  }
+                  // Nếu không có cover, lấy ảnh album của bài hát đầu tiên
+                  if (playlist?.songs && Array.isArray(playlist.songs) && playlist.songs.length > 0) {
+                    const firstSong = playlist.songs[0] as any;
+                    if (firstSong?.urlImageAlbum || firstSong?.albumCoverImg || firstSong?.cover) {
+                      return firstSong.urlImageAlbum || firstSong.albumCoverImg || firstSong.cover;
+                    }
+                  }
+                  // Cuối cùng là null (sẽ hiển thị placeholder)
+                  return null;
+                };
+
+                const coverImage = getPlaylistCover();
+                const showPlaceholder = !coverImage;
+
+                if (!showPlaceholder) {
+                  return (
+                    <img 
+                      src={coverImage} 
+                      alt={playlist?.title} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Nếu ảnh load lỗi, hiển thị placeholder
+                        e.currentTarget.style.display = 'none';
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          const placeholder = parent.querySelector('.music-placeholder') as HTMLElement;
+                          if (placeholder) placeholder.style.display = 'flex';
+                        }
+                      }}
+                    />
+                  );
+                }
+                return (
+                  <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center music-placeholder">
                     <Music className="w-24 h-24 text-white/80" />
                   </div>
                 );
@@ -1981,7 +2071,7 @@ const handlePlaySong = (song: Song) => {
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="mb-2">
+            <div className="mb-2 flex items-center gap-2 flex-wrap">
               {(() => {
                 const currentVisibility = isEditing ? editedVisibility : (playlist?.visibility || PlaylistVisibility.PUBLIC);
                 const visibilityConfig = {
@@ -2011,6 +2101,12 @@ const handlePlaySong = (song: Song) => {
                   </span>
                 );
               })()}
+              {!isEditing && playlist?.isWarned === true && !playlist?.isBanned && (playlist?.warningCount ?? 0) > 0 && (
+                <Badge variant="default" className="bg-yellow-500/20 text-yellow-200 border-yellow-400/30 font-semibold flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Cảnh báo ({playlist.warningCount}/3)
+                </Badge>
+              )}
             </div>
             {isEditing ? (
               <div className="space-y-3 mb-2 min-w-0 max-w-full">
@@ -2174,7 +2270,47 @@ const handlePlaySong = (song: Song) => {
                           dateUpdate: new Date().toISOString().split('T')[0],
                           songIds: playlist.songs.map(s => Number(s.id)),
                         });
-                        setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, visibility: editedVisibility });
+                        
+                        // Reload playlist data to get updated isWarned and warningCount
+                        try {
+                          const normalizeVisibility = (v: unknown): PlaylistVisibility => {
+                            const raw = typeof v === 'string' ? v.toUpperCase() : '';
+                            if (raw === 'FRIENDS_ONLY') return PlaylistVisibility.FRIENDS_ONLY;
+                            if (raw === 'PRIVATE') return PlaylistVisibility.PRIVATE;
+                            if (raw === 'PUBLIC') return PlaylistVisibility.PUBLIC;
+                            return PlaylistVisibility.PUBLIC;
+                          };
+                          const updatedData = await playlistsApi.getById(playlist.id);
+                          const extendedData = await playlistsApi.getExtendedById(playlist.id);
+                          const visibility = normalizeVisibility((updatedData as PlaylistDTO).visibility);
+                          const ownerName = extendedData?.owner?.name 
+                            ?? (updatedData.owner as { name?: string } | undefined)?.name 
+                            ?? (updatedData as { ownerName?: string }).ownerName
+                            ?? undefined;
+                          const ownerAvatar = extendedData?.owner?.avatar 
+                            ?? (updatedData.owner as { avatar?: string | null } | undefined)?.avatar 
+                            ?? (updatedData as { ownerAvatar?: string | null }).ownerAvatar
+                            ?? null;
+                          const playlistCover = updatedData.coverUrl || extendedData.urlImagePlaylist || null;
+                          setPlaylist({
+                            ...playlist,
+                            title: editedTitle.trim() || playlist.title,
+                            description: editedDescription,
+                            cover: editedCoverUrl || playlist.cover,
+                            visibility: editedVisibility,
+                            isWarned: updatedData.isWarned ?? false,
+                            warningCount: updatedData.warningCount ?? 0,
+                            warningReason: updatedData.warningReason ?? null,
+                            ownerName,
+                            ownerAvatar,
+                            updatedAt: extendedData?.dateUpdate || null,
+                          });
+                        } catch (reloadError) {
+                          // Fallback to local update if reload fails
+                          console.warn('Failed to reload playlist after update:', reloadError);
+                          setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, visibility: editedVisibility });
+                        }
+                        
                         setIsEditing(false);
                         toast({ title: 'Playlist updated' });
                       }
@@ -2243,28 +2379,66 @@ const handlePlaySong = (song: Song) => {
                         }
                       </AvatarFallback>
                     </Avatar>
-                    {ownerName && (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger className="text-left">
-                            <span className="font-medium truncate">{ownerName}</span>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-sm font-medium">{ownerName}</p>
-                            {playlist?.ownerId && <p className="text-xs text-muted-foreground">User ID: {playlist.ownerId}</p>}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
+            {(() => {
+              const isSystem =
+                (playlist as any)?.type === "SYSTEM_GLOBAL" ||
+                (playlist as any)?.type === "EDITORIAL" ||
+                (playlist as any)?.isSystemGenerated === true;
+
+              if (isSystem) {
+                return (
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center">
+                      <Globe className="h-4 w-4 text-white" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold tracking-[0.18em] uppercase text-emerald-200">
+                        EchoVerse
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        Public Playlist
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (!ownerName) return null;
+
+              return (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger className="text-left">
+                      <span className="font-medium truncate">{ownerName}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-sm font-medium">{ownerName}</p>
+                      {playlist?.ownerId && (
+                        <p className="text-xs text-muted-foreground">
+                          User ID: {playlist.ownerId}
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+            })()}
                   </>
                 );
               })()}
               <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground">{(playlist?.songs.length || 0) > 0 ? playlist?.songs.length : (playlist?.totalSongs ?? 0)} songs</span>
-              {playlist && playlist.songs.length > 0 && (
+              <span className="text-muted-foreground">
+                {(playlist?.songs.length || 0) > 0
+                  ? playlist?.songs.length
+                  : (playlist as any)?.totalSongs ?? 0}{" "}
+                songs
+              </span>
+              {totalDuration > 0 && (
                 <>
                   <span className="text-muted-foreground">·</span>
-                  <span className="text-muted-foreground">{formatTotalDuration(totalDuration)}</span>
+                  <span className="text-muted-foreground">
+                    {formatTotalDuration(totalDuration)}
+                  </span>
                 </>
               )}
               {playlistLikeCount !== null && (
@@ -2290,7 +2464,10 @@ const handlePlaySong = (song: Song) => {
             </div>
             )}
 
-            {!isEditing && collaboratorEntries.length > 0 && (
+            {!isEditing && collaboratorEntries.length > 0 && 
+             (playlist as any)?.type !== "EDITORIAL" && 
+             (playlist as any)?.type !== "SYSTEM_GLOBAL" && 
+             (playlist as any)?.type !== "SYSTEM_PERSONALIZED" && (
               <div className="mb-6 flex items-center gap-2">
                 <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
                   <Users className="w-3 h-3" />
@@ -2417,7 +2594,10 @@ const handlePlaySong = (song: Song) => {
                     Add songs
                   </Button>
                 )}
-                {(permissions.canManageCollaborators || permissions.isOwner) && (
+                {(permissions.canManageCollaborators || permissions.isOwner) && 
+                 (playlist as any)?.type !== "EDITORIAL" && 
+                 (playlist as any)?.type !== "SYSTEM_GLOBAL" && 
+                 (playlist as any)?.type !== "SYSTEM_PERSONALIZED" && (
                   <Button
                     variant="outline"
                     className="bg-white/5 text-white border-white/20 hover:bg-white/10"
@@ -2427,7 +2607,10 @@ const handlePlaySong = (song: Song) => {
                     Collaborators
                   </Button>
                 )}
-                {!permissions.isOwner && isCurrentCollaborator && (
+                {!permissions.isOwner && isCurrentCollaborator && 
+                 (playlist as any)?.type !== "EDITORIAL" && 
+                 (playlist as any)?.type !== "SYSTEM_GLOBAL" && 
+                 (playlist as any)?.type !== "SYSTEM_PERSONALIZED" && (
                   <Button
                     variant="outline"
                     onClick={handleLeaveCollaboration}

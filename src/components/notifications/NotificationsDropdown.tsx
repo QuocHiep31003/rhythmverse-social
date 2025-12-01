@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
 import { subscribeTempNotification } from "@/utils/notificationBus";
-import { BellRing, CheckCircle2, Share2, UserPlus, Users } from "lucide-react";
+import { BellRing, CheckCircle2, Share2, UserPlus, Users, AlertTriangle, Ban } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const MAX_DROPDOWN_ITEMS = 5;
@@ -65,6 +65,21 @@ const typeMeta: Record<
     label: "Bạn bè",
     icon: CheckCircle2,
     badge: "border-lime-500/30 bg-lime-500/12 text-lime-700 dark:text-lime-100",
+  },
+  PLAYLIST_WARNED: {
+    label: "Cảnh báo Playlist",
+    icon: AlertTriangle,
+    badge: "border-yellow-500/30 bg-yellow-500/12 text-yellow-700 dark:text-yellow-100",
+  },
+  PLAYLIST_BANNED: {
+    label: "Playlist bị xóa",
+    icon: Ban,
+    badge: "border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-100",
+  },
+  PLAYLIST_RESTORED: {
+    label: "Playlist được phục hồi",
+    icon: CheckCircle2,
+    badge: "border-green-500/30 bg-green-500/12 text-green-700 dark:text-green-100",
   },
   DEFAULT: {
     label: "Thông báo",
@@ -141,7 +156,28 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
         meta?.albumName ||
         notification.title ||
         "một nội dung";
-      return `đã chia sẻ: “${title}”`;
+      return `đã chia sẻ: "${title}"`;
+    }
+    case "PLAYLIST_WARNED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      const warningCount = (meta as any)?.warningCount || 0;
+      const warningReason = (meta as any)?.warningReason || "";
+      if (warningReason) {
+        return `Playlist "${playlistName}" đã nhận cảnh báo (${warningCount}/3): ${warningReason}`;
+      }
+      return `Playlist "${playlistName}" đã nhận cảnh báo (${warningCount}/3)`;
+    }
+    case "PLAYLIST_BANNED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      const banReason = (meta as any)?.banReason || "";
+      if (banReason) {
+        return `Playlist "${playlistName}" đã bị xóa khỏi hệ thống. Lý do: ${banReason}`;
+      }
+      return `Playlist "${playlistName}" đã bị xóa khỏi hệ thống`;
+    }
+    case "PLAYLIST_RESTORED": {
+      const playlistName = meta?.playlistName || "một playlist";
+      return `Playlist "${playlistName}" đã được phục hồi`;
     }
     default: {
       const fallback = String(notification.body || notification.title || "").trim();
@@ -370,6 +406,13 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
                         navigate(`/social?chat=${meta.roomId}`);
                       } else {
                       navigate('/social');
+                      }
+                      return;
+                    }
+                    if (t === 'PLAYLIST_BANNED' || t === 'PLAYLIST_WARNED' || t === 'PLAYLIST_RESTORED') {
+                      // Navigate đến playlist detail nếu có playlistId
+                      if (meta?.playlistId) {
+                        navigate(`/playlists/${meta.playlistId}`);
                       }
                       return;
                     }

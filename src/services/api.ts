@@ -343,7 +343,7 @@ export const searchApi = {
       return await response.json();
     } catch (error) {
       console.error("Error fetching search results:", error);
-      return { artists: [], songs: [], albums: [] };
+      return { artists: [], songs: [], albums: [], playlists: [] };
     }
   },
 };

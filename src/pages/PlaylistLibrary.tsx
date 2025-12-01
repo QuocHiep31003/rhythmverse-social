@@ -35,6 +35,7 @@ import { favoritesApi, FavoriteSongDTO, FavoritePlaylistDTO, FavoriteAlbumDTO, F
 import { AlbumCard } from "@/components/AlbumCard";
 import { useFavoriteAlbum, useFavoritePlaylist } from "@/hooks/useFavorites";
 import { HorizontalScrollableCards } from "@/components/HorizontalScrollableCards";
+import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
 
 const FavoriteAlbumCardInline = ({
   album,
@@ -133,6 +134,10 @@ const toPlaylistItemFromFavorite = (dto: FavoritePlaylistDTO): PlaylistItem => {
     ownerAvatar: dto.ownerAvatar ?? (dto.owner as { avatar?: string | null })?.avatar ?? null,
     isOwner: false,
     isCollaborator: false,
+    isWarned: dto.isWarned,
+    isBanned: dto.isBanned,
+    warningCount: dto.warningCount,
+    warningReason: dto.warningReason,
   };
 };
 
@@ -234,6 +239,57 @@ const PlaylistLibrary = () => {
   const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [favoritesError, setFavoritesError] = useState<string | null>(null);
 
+  // Lắng nghe notification ban để tự động ẩn playlist
+  useEffect(() => {
+    const meId = (() => {
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+        const n = raw ? Number(raw) : NaN;
+        return Number.isFinite(n) ? n : undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+
+    if (!meId) return;
+
+    const unsubscribe = watchNotifications(meId, (notifications) => {
+      // Tìm notification ban mới nhất
+      const banNotifications = notifications
+        .filter(n => n.type === 'PLAYLIST_BANNED' && n.read !== true)
+        .sort((a, b) => {
+          const timeA = typeof a.createdAt === 'number' ? a.createdAt : 0;
+          const timeB = typeof b.createdAt === 'number' ? b.createdAt : 0;
+          return timeB - timeA;
+        });
+
+      if (banNotifications.length > 0) {
+        // Lấy playlistId từ notification
+        const bannedPlaylistIds = banNotifications
+          .map(n => n.metadata?.playlistId)
+          .filter((id): id is number => typeof id === 'number' && Number.isFinite(id));
+
+        if (bannedPlaylistIds.length > 0) {
+          // Tự động remove playlist bị ban khỏi state
+          setPlaylists(prev => prev.filter(p => {
+            const playlistId = Number(p.id);
+            return !bannedPlaylistIds.includes(playlistId);
+          }));
+
+          // Cũng remove khỏi favorite playlists nếu có
+          setFavoritePlaylists(prev => prev.filter(p => {
+            const playlistId = typeof p.id === 'number' ? p.id : Number(p.id);
+            return !bannedPlaylistIds.includes(playlistId);
+          }));
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -299,6 +355,10 @@ const PlaylistLibrary = () => {
                 songCount: songsCount,
                 totalDuration: (p as { totalDuration?: string }).totalDuration,
                 likes: (p as { likes?: number }).likes,
+                isBanned: p.isBanned,
+                isWarned: p.isWarned,
+                warningCount: p.warningCount,
+                warningReason: p.warningReason,
                 createdAt: (p as { createdAt?: string }).createdAt ?? undefined,
                 updatedAt: p.dateUpdate ?? (p as { updatedAt?: string }).updatedAt ?? undefined,
               };
@@ -323,6 +383,10 @@ const PlaylistLibrary = () => {
             likes: (p as { likes?: number }).likes,
             createdAt: (p as { createdAt?: string }).createdAt ?? undefined,
             updatedAt: p.dateUpdate ?? (p as { updatedAt?: string }).updatedAt ?? undefined,
+            isBanned: p.isBanned,
+            isWarned: p.isWarned,
+            warningCount: p.warningCount,
+            warningReason: p.warningReason,
           }));
         }
 
@@ -417,6 +481,10 @@ const PlaylistLibrary = () => {
             visibility: normalizedVisibility ?? (visibilityRaw ?? null),
             likes,
             createdAt,
+            isWarned: p.isWarned,
+            isBanned: p.isBanned,
+            warningCount: p.warningCount,
+            warningReason: p.warningReason,
             updatedAt,
             ownerId: resolvedOwnerId,
             ownerName: p.ownerName,
@@ -589,6 +657,44 @@ const PlaylistLibrary = () => {
     () => favoritePlaylists.map((playlist) => toPlaylistItemFromFavorite(playlist)),
     [favoritePlaylists]
   );
+
+  // Tính duration cho các playlist yêu thích (dùng /api/playlists/{id})
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const ids = favoritePlaylistItems.map((p) => p.id);
+        if (!ids.length) return;
+        const responses = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const detail = await playlistsApi.getById(id);
+              const secs = Array.isArray(detail.songs)
+                ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0)
+                : 0;
+              return { id, duration: formatTotal(secs) };
+            } catch {
+              return { id, duration: "--" };
+            }
+          })
+        );
+        if (cancelled) return;
+        const durationMap: Record<string, string> = {};
+        responses.forEach(({ id, duration }) => {
+          durationMap[String(id)] = duration;
+        });
+        setDurations((prev) => ({ ...prev, ...durationMap }));
+      } catch {
+        // ignore
+      }
+    };
+    if (favoritePlaylistItems.length) {
+      run();
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [favoritePlaylistItems]);
 
   const filteredOwnedPlaylists = useMemo(() => {
     if (!normalizedSearch) return ownedPlaylists;

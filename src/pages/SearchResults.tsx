@@ -22,7 +22,7 @@ import {
   MoreHorizontal,
   Copy,
 } from "lucide-react";
-import { searchApi, songsApi, artistsApi, albumsApi } from "@/services/api";
+import { searchApi, songsApi, artistsApi, albumsApi, playlistsApi } from "@/services/api";
 import type { Song } from "@/services/api/songApi";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
@@ -49,10 +49,13 @@ const SearchResults = () => {
     artists: any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     albums: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    playlists: any[];
   }>({
     songs: [],
     artists: [],
     albums: [],
+    playlists: [],
   });
   const [detailedResults, setDetailedResults] = useState<{
     songs: Song[];
@@ -60,10 +63,13 @@ const SearchResults = () => {
     artists: any[];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     albums: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    playlists: any[];
   }>({
     songs: [],
     artists: [],
     albums: [],
+    playlists: [],
   });
   const [loading, setLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
@@ -78,7 +84,10 @@ const SearchResults = () => {
     if (!queryParam.trim()) return;
     setLoading(true);
     try {
-      // Gọi API riêng biệt cho từng loại kết quả
+      // Gọi search API tổng hợp (bao gồm playlists)
+      const searchResponse = await searchApi.getAll(queryParam);
+      
+      // Gọi API riêng biệt cho từng loại kết quả (fallback nếu search API không có)
       const [songsResponse, artistsResponse, albumsResponse] = await Promise.all([
         songsApi.searchPublic({ query: queryParam, size: 5, page: 0 }),
         artistsApi.getAll({ search: queryParam, size: 4, page: 0 }),
@@ -88,19 +97,21 @@ const SearchResults = () => {
       const publicSongs = songsResponse.content || [];
 
       setSearchResults({
-        songs: publicSongs,
-        artists: artistsResponse.content || [],
-        albums: albumsResponse.content || [],
+        songs: searchResponse.songs || publicSongs,
+        artists: searchResponse.artists || artistsResponse.content || [],
+        albums: searchResponse.albums || albumsResponse.content || [],
+        playlists: searchResponse.playlists || [],
       });
-      setDetailedResults({ songs: [], artists: [], albums: [] });
+      setDetailedResults({ songs: [], artists: [], albums: [], playlists: [] });
       console.log('Search results:', {
-        songs: songsResponse.content?.length || 0,
-        artists: artistsResponse.content?.length || 0,
-        albums: albumsResponse.content?.length || 0,
+        songs: (searchResponse.songs || publicSongs).length,
+        artists: (searchResponse.artists || artistsResponse.content || []).length,
+        albums: (searchResponse.albums || albumsResponse.content || []).length,
+        playlists: (searchResponse.playlists || []).length,
       });
     } catch (error) {
       console.error('Error fetching search results:', error);
-      setSearchResults({ songs: [], artists: [], albums: [] });
+      setSearchResults({ songs: [], artists: [], albums: [], playlists: [] });
     } finally {
       setLoading(false);
     }
@@ -143,9 +154,24 @@ const SearchResults = () => {
       } else if (filterId === 'artists') {
         const data = await artistsApi.getAll({ search: queryParam, size: 20, page: 0 });
         setDetailedResults((prev) => ({ ...prev, artists: data.content || [] }));
-      } else if (filterId === 'albums') {
+      } else       if (filterId === 'albums') {
         const data = await albumsApi.getAll({ search: queryParam, size: 20, page: 0 });
         setDetailedResults((prev) => ({ ...prev, albums: data.content || [] }));
+      } else if (filterId === 'playlists') {
+        // Gọi search API và playlist API để lấy nhiều playlists hơn
+        const [searchData, playlistsData] = await Promise.all([
+          searchApi.getAll(queryParam),
+          playlistsApi.getAll({ search: queryParam, size: 50, page: 0 }).catch(() => ({ content: [] }))
+        ]);
+        // Kết hợp kết quả từ cả 2 API, loại bỏ trùng lặp
+        const allPlaylists = [
+          ...(searchData.playlists || []),
+          ...(playlistsData.content || [])
+        ];
+        const uniquePlaylists = allPlaylists.filter((p, index, self) => 
+          index === self.findIndex((pl) => pl.id === p.id)
+        );
+        setDetailedResults((prev) => ({ ...prev, playlists: uniquePlaylists }));
       }
     } catch (error) {
       console.error('Error fetching detailed results:', error);
@@ -204,12 +230,13 @@ const SearchResults = () => {
   //   { genre: "Electronic", songs: 620, icon: "🔊" }
   // ];
 
-  const totalCount = searchResults.songs.length + searchResults.artists.length + searchResults.albums.length;
+  const totalCount = searchResults.songs.length + searchResults.artists.length + searchResults.albums.length + searchResults.playlists.length;
   const filters = [
     { id: "all", label: "All", count: totalCount },
     { id: "songs", label: "Songs", count: searchResults.songs.length },
     { id: "artists", label: "Artists", count: searchResults.artists.length },
     { id: "albums", label: "Albums", count: searchResults.albums.length },
+    { id: "playlists", label: "Playlists", count: searchResults.playlists.length },
   ];
 
   const formatTimecode = (timecode: string) => {
@@ -441,6 +468,91 @@ const SearchResults = () => {
                       </CardContent>
                     </Card>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {(activeFilter === "all" || activeFilter === "playlists") && (detailedResults.playlists.length > 0 ? detailedResults.playlists : searchResults.playlists).length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-xl font-bold mb-4 text-foreground">Playlists</h3>
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {(detailedResults.playlists.length > 0 ? detailedResults.playlists : searchResults.playlists).slice(0, activeFilter === "all" ? 3 : 50).map((playlist) => {
+                    // Helper function để lấy ảnh cover: ưu tiên coverUrl, sau đó ảnh bài hát đầu tiên, cuối cùng là placeholder
+                    const getPlaylistCover = () => {
+                      // 1. Ưu tiên coverUrl của playlist
+                      if (playlist.coverUrl) {
+                        return playlist.coverUrl;
+                      }
+                      // 2. Nếu không có, lấy ảnh album của bài hát đầu tiên
+                      if (Array.isArray(playlist.songs) && playlist.songs.length > 0) {
+                        const firstSong = playlist.songs[0] as { urlImageAlbum?: string; albumCoverImg?: string; cover?: string };
+                        if (firstSong?.urlImageAlbum || firstSong?.albumCoverImg || firstSong?.cover) {
+                          return firstSong.urlImageAlbum || firstSong.albumCoverImg || firstSong.cover;
+                        }
+                      }
+                      // 3. Cuối cùng là null (sẽ hiển thị placeholder)
+                      return null;
+                    };
+
+                    const coverImage = getPlaylistCover();
+                    const showPlaceholder = !coverImage;
+
+                    return (
+                      <Card
+                        key={playlist.id}
+                        onClick={() => navigate(`/playlist/${createSlug(playlist.name || playlist.title || 'playlist', playlist.id)}`)}
+                        className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer"
+                      >
+                        <CardContent className="p-6 text-center">
+                          <div className="w-32 h-32 bg-muted rounded-lg mx-auto mb-4 overflow-hidden flex items-center justify-center">
+                            {!showPlaceholder ? (
+                              <img
+                                src={coverImage}
+                                alt={playlist.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  // Nếu ảnh load lỗi, hiển thị placeholder
+                                  e.currentTarget.style.display = 'none';
+                                  const parent = e.currentTarget.parentElement;
+                                  if (parent) {
+                                    const placeholder = parent.querySelector('.music-placeholder') as HTMLElement;
+                                    if (placeholder) placeholder.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <div className={`w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center music-placeholder ${showPlaceholder ? '' : 'hidden'}`}>
+                              <Music className="w-16 h-16 text-white/80" />
+                            </div>
+                          </div>
+                          <h3 className="font-bold text-lg mb-1 text-foreground truncate">{playlist.name || playlist.title}</h3>
+                          <p className="text-sm text-muted-foreground truncate">
+                            {playlist.ownerName || playlist.owner?.name || "EchoVerse"}
+                          </p>
+                          {playlist.type && (
+                            <Badge 
+                              variant="outline" 
+                              className={`mt-2 text-xs ${
+                                playlist.type === "EDITORIAL" ? "bg-indigo-500/20 text-indigo-200 border-indigo-400/30" :
+                                playlist.type === "SYSTEM_GLOBAL" ? "bg-green-500/20 text-green-200 border-green-400/30" :
+                                playlist.type === "SYSTEM_PERSONALIZED" ? "bg-pink-500/20 text-pink-200 border-pink-400/30" :
+                                ""
+                              }`}
+                            >
+                              {playlist.type === "EDITORIAL" ? "By EchoVerse" :
+                               playlist.type === "SYSTEM_GLOBAL" ? "Auto-Generated" :
+                               playlist.type === "SYSTEM_PERSONALIZED" ? "For You" : ""}
+                            </Badge>
+                          )}
+                          {playlist.songs && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {playlist.songs.length} songs
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               </div>
             )}

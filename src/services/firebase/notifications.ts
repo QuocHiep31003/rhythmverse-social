@@ -3,13 +3,13 @@ import { firebaseDb } from '@/config/firebase-config';
 
 export interface NotificationDTO {
   id?: string; // Firebase key
-  type?: 'MESSAGE' | 'SHARE' | 'INVITE' | 'INVITE_ACCEPTED' | 'INVITE_REJECTED' | 'FRIEND_REQUEST' | 'FRIEND_REQUEST_ACCEPTED';
+  type?: 'MESSAGE' | 'SHARE' | 'INVITE' | 'INVITE_ACCEPTED' | 'INVITE_REJECTED' | 'FRIEND_REQUEST' | 'FRIEND_REQUEST_ACCEPTED' | 'PLAYLIST_BANNED' | 'PLAYLIST_WARNED' | 'PLAYLIST_RESTORED';
   title?: string;
   body?: string;
   senderId?: number;
   senderName?: string;
   senderAvatar?: string | null;
-  metadata?: { [key: string]: unknown; playlistName?: string; songName?: string; albumName?: string; type?: string };
+  metadata?: { [key: string]: unknown; playlistName?: string; songName?: string; albumName?: string; type?: string; playlistId?: number; warningCount?: number; banReason?: string; warningReason?: string };
   createdAt?: string | number;
   read?: boolean;
 }
@@ -66,6 +66,9 @@ export const watchNotifications = (
     
     const friendRequests = notifications.filter(n => n.type === 'FRIEND_REQUEST');
     const invites = notifications.filter(n => n.type === 'INVITE');
+    const playlistBanned = notifications.filter(n => n.type === 'PLAYLIST_BANNED');
+    const playlistWarned = notifications.filter(n => n.type === 'PLAYLIST_WARNED');
+    const playlistRestored = notifications.filter(n => n.type === 'PLAYLIST_RESTORED');
     
     console.log('[Firebase Notifications] Notification types:', {
       total: notifications.length,
@@ -99,6 +102,42 @@ export const watchNotifications = (
           senderName: n.senderName,
           createdAt: n.createdAt
         }))
+      },
+      playlistModeration: {
+        banned: {
+          total: playlistBanned.length,
+          unread: playlistBanned.filter(n => n.read !== true).length,
+          details: playlistBanned.slice(0, 5).map(n => ({
+            id: n.id,
+            type: n.type,
+            read: n.read,
+            playlistName: n.metadata?.playlistName,
+            createdAt: n.createdAt
+          }))
+        },
+        warned: {
+          total: playlistWarned.length,
+          unread: playlistWarned.filter(n => n.read !== true).length,
+          details: playlistWarned.slice(0, 5).map(n => ({
+            id: n.id,
+            type: n.type,
+            read: n.read,
+            playlistName: n.metadata?.playlistName,
+            warningCount: n.metadata?.warningCount,
+            createdAt: n.createdAt
+          }))
+        },
+        restored: {
+          total: playlistRestored.length,
+          unread: playlistRestored.filter(n => n.read !== true).length,
+          details: playlistRestored.slice(0, 5).map(n => ({
+            id: n.id,
+            type: n.type,
+            read: n.read,
+            playlistName: n.metadata?.playlistName,
+            createdAt: n.createdAt
+          }))
+        }
       }
     });
     
