@@ -1,9 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-<<<<<<< HEAD
 import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown, ChevronDown, ChevronRight, FolderTree, BarChart3 } from "lucide-react";
->>>>>>> cdde800c801e665983b725cb408d092a3ca23bcd
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
