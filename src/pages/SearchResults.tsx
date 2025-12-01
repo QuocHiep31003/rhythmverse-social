@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Footer from "@/components/Footer";
 import ChatBubble from "@/components/ChatBubble";
-import PromotionCarousel from "@/components/PromotionCarousel";
+import BannerCarousel from "@/components/BannerCarousel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -317,8 +317,8 @@ const SearchResults = () => {
       <ChatBubble />
 
       <div className="pt-6 pb-6 container mx-auto px-4">
-        {/* Promotion Carousel */}
-        <PromotionCarousel />
+        {/* Banner Carousel */}
+        <BannerCarousel />
       </div>
 
       {/* Filter Tabs */}
