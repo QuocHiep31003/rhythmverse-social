@@ -64,7 +64,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         { label: "Moods", path: "/admin/moods" },
         { label: "Albums", path: "/admin/albums" },
         { label: "Playlists", path: "/admin/playlists" },
-        { label: "Promotions", path: "/admin/promotions" },
+        { label: "Banners", path: "/admin/banners" },
       ]
     },
     { 
@@ -95,7 +95,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
                           location.pathname === "/admin/moods" ||
                           location.pathname === "/admin/albums" ||
                           location.pathname === "/admin/playlists" ||
-                          location.pathname === "/admin/promotions";
+                          location.pathname === "/admin/banners";
     if (isContentPath) {
       setContentMenuOpen(true);
     }

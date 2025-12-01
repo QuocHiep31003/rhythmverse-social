@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import PromotionCarousel from "@/components/PromotionCarousel";
+import BannerCarousel from "@/components/BannerCarousel";
 import FeaturedMusic from "@/components/FeaturedMusic";
 import GenreExplorer from "@/components/GenreExplorer";
 import Footer from "@/components/Footer";
@@ -104,7 +104,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-gradient-dark">
-      <PromotionCarousel />
+      <BannerCarousel />
       
       {/* Find songs by melody only - Right below banner */}
       <FeaturedMusic />

@@ -1,6 +1,6 @@
 const API_BASE_URL = "http://localhost:8080/api";
 
-export interface PromotionDTO {
+export interface BannerDTO {
   id: number;
   title: string;
   subtitle?: string;
@@ -18,7 +18,7 @@ export interface PaginationParams {
   search?: string;
 }
 
-export interface PromotionFilterParams extends PaginationParams {
+export interface BannerFilterParams extends PaginationParams {
   status?: "all" | "active" | "inactive";
 }
 
@@ -30,8 +30,8 @@ export interface PaginatedResponse<T> {
   number: number;
 }
 
-export const promotionsApi = {
-  getAll: async (params?: PromotionFilterParams): Promise<PaginatedResponse<PromotionDTO>> => {
+export const bannersApi = {
+  getAll: async (params?: BannerFilterParams): Promise<PaginatedResponse<BannerDTO>> => {
     const query = new URLSearchParams();
     if (params?.page !== undefined) query.append("page", String(params.page));
     if (params?.size !== undefined) query.append("size", String(params.size));
@@ -41,52 +41,52 @@ export const promotionsApi = {
       query.append("active", params.status === "active" ? "true" : "false");
     }
     const res = await fetch(`${API_BASE_URL}/promotions?${query.toString()}`);
-    if (!res.ok) throw new Error("Failed to fetch promotions");
+    if (!res.ok) throw new Error("Failed to fetch banners");
     return res.json();
   },
 
-  getActive: async (): Promise<PromotionDTO[]> => {
+  getActive: async (): Promise<BannerDTO[]> => {
     const res = await fetch(`${API_BASE_URL}/promotions/active`);
-    if (!res.ok) throw new Error("Failed to fetch active promotions");
+    if (!res.ok) throw new Error("Failed to fetch active banners");
     return res.json();
   },
 
-  create: async (data: PromotionDTO): Promise<PromotionDTO> => {
+  create: async (data: BannerDTO): Promise<BannerDTO> => {
     const res = await fetch(`${API_BASE_URL}/promotions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(await res.text() || "Failed to create promotion");
+    if (!res.ok) throw new Error(await res.text() || "Failed to create banner");
     return res.json();
   },
 
-  update: async (id: number, data: PromotionDTO): Promise<PromotionDTO> => {
+  update: async (id: number, data: BannerDTO): Promise<BannerDTO> => {
     const res = await fetch(`${API_BASE_URL}/promotions/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    if (!res.ok) throw new Error(await res.text() || "Failed to update promotion");
+    if (!res.ok) throw new Error(await res.text() || "Failed to update banner");
     return res.json();
   },
 
   delete: async (id: number): Promise<void> => {
     const res = await fetch(`${API_BASE_URL}/promotions/${id}`, { method: "DELETE" });
-    if (!res.ok) throw new Error("Failed to delete promotion");
+    if (!res.ok) throw new Error("Failed to delete banner");
   },
 
-  // Bulk delete promotions
+  // Bulk delete banners
   deleteMany: async (ids: number[]): Promise<void> => {
     const res = await fetch(`${API_BASE_URL}/promotions`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(ids),
     });
-    if (!res.ok) throw new Error("Failed to delete promotions");
+    if (!res.ok) throw new Error("Failed to delete banners");
   },
 
-  setActive: async (id: number, active: boolean): Promise<PromotionDTO> => {
+  setActive: async (id: number, active: boolean): Promise<BannerDTO> => {
     const res = await fetch(`${API_BASE_URL}/promotions/${id}/active`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -96,7 +96,7 @@ export const promotionsApi = {
     return res.json();
   },
 
-  // Import promotions (xlsx/xls/csv) via backend
+  // Import banners (xlsx/xls/csv) via backend
   import: async (file: File): Promise<string> => {
     const fd = new FormData();
     fd.append("file", file);
@@ -106,7 +106,7 @@ export const promotionsApi = {
     });
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(txt || "Failed to import promotions");
+      throw new Error(txt || "Failed to import banners");
     }
     const ct = res.headers.get("content-type") || "";
     if (ct.includes("application/json")) {
@@ -117,6 +117,6 @@ export const promotionsApi = {
   },
 };
 
-export type { PromotionDTO as Promotion };
+export type { BannerDTO as Banner };
 
 

@@ -46,7 +46,7 @@ import AdminGenres from "./pages/admin/AdminGenres";
 import AdminMoods from "./pages/admin/AdminMoods";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminTrending from "./pages/admin/AdminTrending";
-import AdminPromotions from "./pages/admin/AdminPromotions";
+import AdminBanners from "./pages/admin/AdminBanners";
 import AdminSnapshots from "./pages/admin/AdminSnapshots";
 import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
 import TermsOfService from "./pages/TermsOfService";
@@ -98,7 +98,7 @@ const App = () => (
                     <Route path="moods" element={<AdminMoods />} />
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="playlists" element={<AdminPlaylists />} />
-                    <Route path="banners" element={<AdminPromotions />} />
+                    <Route path="banners" element={<AdminBanners />} />
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
