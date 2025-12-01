@@ -1813,7 +1813,7 @@ const PlaylistDetail = () => {
   };
 
   const shufflePlaylistSongs = async () => {
-    if (!playlist || !playlist.songs.length) return;
+  if (!playlist || !playlist.songs.length) return;
     // Shuffle songs array
     const shuffledSongs = [...playlist.songs].sort(() => Math.random() - 0.5);
     if (isPlaying) {
@@ -1826,11 +1826,11 @@ const PlaylistDetail = () => {
   };
 
   const handlePlaySong = async (song: Song) => {
-    if (!playlist) return;
+  if (!playlist) return;
     // Dùng helper để phát nhạc với /play-now
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
     await playSongWithStreamUrl(song, playSong, setQueue);
-  };
+};
 
   const confirmRemoveSong = (songId: string) => {
     setPendingDeleteSongId(songId);
@@ -1858,31 +1858,6 @@ const PlaylistDetail = () => {
     }
   };
 
-  const handleDownloadPlaylist = () => {
-    if (!playlist || !playlist.songs.length) return;
-    try {
-      const data = {
-        playlistName: playlist.name,
-        songs: playlist.songs.map(song => ({
-          title: song.name,
-          artist: typeof song.artists === 'string' ? song.artists : 
-                  Array.isArray(song.artists) ? song.artists.map(a => a.name).join(', ') : 
-                  'Unknown Artist',
-          duration: song.duration || 0,
-        }))
-      };
-      const element = document.createElement('a');
-      element.setAttribute('href', 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2)));
-      element.setAttribute('download', `${playlist.name}.json`);
-      element.style.display = 'none';
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-      toast({ title: 'Success', description: 'Playlist downloaded successfully' });
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to download playlist', variant: 'destructive' });
-    }
-  };
 
   const handlePlaylistActionComingSoon = () => {
     toast({ 
@@ -2372,7 +2347,7 @@ const PlaylistDetail = () => {
                         } catch (reloadError) {
                           // Fallback to local update if reload fails
                           console.warn('Failed to reload playlist after update:', reloadError);
-                          setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, visibility: editedVisibility });
+                        setPlaylist({ ...playlist, title: editedTitle.trim() || playlist.title, description: editedDescription, cover: editedCoverUrl || playlist.cover, visibility: editedVisibility });
                         }
                         
                         setIsEditing(false);
@@ -2501,21 +2476,21 @@ const PlaylistDetail = () => {
               if (!ownerName) return null;
 
               return (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger className="text-left">
-                      <span className="font-medium truncate">{ownerName}</span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-sm font-medium">{ownerName}</p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="text-left">
+                            <span className="font-medium truncate">{ownerName}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-sm font-medium">{ownerName}</p>
                       {playlist?.ownerId && (
                         <p className="text-xs text-muted-foreground">
                           User ID: {playlist.ownerId}
                         </p>
                       )}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
               );
             })()}
                   </>
@@ -2760,9 +2735,6 @@ const PlaylistDetail = () => {
             </Button>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handleDownloadPlaylist} disabled={!playlist?.songs.length}>
-              <Download className="w-5 h-5" />
-            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -2791,6 +2763,9 @@ const PlaylistDetail = () => {
               }}
             >
               <Share2 className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+              <Download className="w-5 h-5" />
             </Button>
             <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
               <MoreHorizontal className="w-5 h-5" />

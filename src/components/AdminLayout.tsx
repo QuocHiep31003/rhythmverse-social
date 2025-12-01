@@ -64,6 +64,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
         { label: "Moods", path: "/admin/moods" },
         { label: "Albums", path: "/admin/albums" },
         { label: "Playlists", path: "/admin/playlists" },
+        { label: "System Playlists", path: "/admin/system-playlists" },
         { label: "Banners", path: "/admin/banners" },
       ]
     },
