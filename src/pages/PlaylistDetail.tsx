@@ -1812,6 +1812,19 @@ const PlaylistDetail = () => {
     }
   };
 
+  const shufflePlaylistSongs = async () => {
+    if (!playlist || !playlist.songs.length) return;
+    // Shuffle songs array
+    const shuffledSongs = [...playlist.songs].sort(() => Math.random() - 0.5);
+    if (isPlaying) {
+      togglePlay();
+    } else {
+      // Play first song from shuffled list
+      const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+      await playSongWithStreamUrl(shuffledSongs[0], playSong, setQueue);
+    }
+  };
+
   const handlePlaySong = async (song: Song) => {
     if (!playlist) return;
     // Dùng helper để phát nhạc với /play-now
@@ -1843,6 +1856,40 @@ const PlaylistDetail = () => {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleDownloadPlaylist = () => {
+    if (!playlist || !playlist.songs.length) return;
+    try {
+      const data = {
+        playlistName: playlist.name,
+        songs: playlist.songs.map(song => ({
+          title: song.name,
+          artist: typeof song.artists === 'string' ? song.artists : 
+                  Array.isArray(song.artists) ? song.artists.map(a => a.name).join(', ') : 
+                  'Unknown Artist',
+          duration: song.duration || 0,
+        }))
+      };
+      const element = document.createElement('a');
+      element.setAttribute('href', 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2)));
+      element.setAttribute('download', `${playlist.name}.json`);
+      element.style.display = 'none';
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      toast({ title: 'Success', description: 'Playlist downloaded successfully' });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to download playlist', variant: 'destructive' });
+    }
+  };
+
+  const handlePlaylistActionComingSoon = () => {
+    toast({ 
+      title: 'Coming Soon', 
+      description: 'This feature will be available soon',
+      duration: 3000 
+    });
   };
 
   if (loading) {
