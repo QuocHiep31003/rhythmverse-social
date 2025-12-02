@@ -177,7 +177,7 @@ const AdminBanners = () => {
             </div>
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">Banner Management</h1>
-              <p className="text-sm md:text-base text-muted-foreground mt-1">Hiển thị nhãn Active và cho phép bật/tắt</p>
+              <p className="text-sm md:text-base text-muted-foreground mt-1">Display Active label and allow toggle</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">

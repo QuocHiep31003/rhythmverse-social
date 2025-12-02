@@ -40,19 +40,19 @@ export const bannersApi = {
     if (params?.status && params.status !== "all") {
       query.append("active", params.status === "active" ? "true" : "false");
     }
-    const res = await fetch(`${API_BASE_URL}/promotions?${query.toString()}`);
+    const res = await fetch(`${API_BASE_URL}/banners?${query.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch banners");
     return res.json();
   },
 
   getActive: async (): Promise<BannerDTO[]> => {
-    const res = await fetch(`${API_BASE_URL}/promotions/active`);
+    const res = await fetch(`${API_BASE_URL}/banners/active`);
     if (!res.ok) throw new Error("Failed to fetch active banners");
     return res.json();
   },
 
   create: async (data: BannerDTO): Promise<BannerDTO> => {
-    const res = await fetch(`${API_BASE_URL}/promotions`, {
+    const res = await fetch(`${API_BASE_URL}/banners`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -62,7 +62,7 @@ export const bannersApi = {
   },
 
   update: async (id: number, data: BannerDTO): Promise<BannerDTO> => {
-    const res = await fetch(`${API_BASE_URL}/promotions/${id}`, {
+    const res = await fetch(`${API_BASE_URL}/banners/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -72,13 +72,13 @@ export const bannersApi = {
   },
 
   delete: async (id: number): Promise<void> => {
-    const res = await fetch(`${API_BASE_URL}/promotions/${id}`, { method: "DELETE" });
+    const res = await fetch(`${API_BASE_URL}/banners/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed to delete banner");
   },
 
   // Bulk delete banners
   deleteMany: async (ids: number[]): Promise<void> => {
-    const res = await fetch(`${API_BASE_URL}/promotions`, {
+    const res = await fetch(`${API_BASE_URL}/banners`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(ids),
@@ -87,7 +87,7 @@ export const bannersApi = {
   },
 
   setActive: async (id: number, active: boolean): Promise<BannerDTO> => {
-    const res = await fetch(`${API_BASE_URL}/promotions/${id}/active`, {
+    const res = await fetch(`${API_BASE_URL}/banners/${id}/active`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active }),
@@ -100,7 +100,7 @@ export const bannersApi = {
   import: async (file: File): Promise<string> => {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(`${API_BASE_URL}/promotions/import`, {
+    const res = await fetch(`${API_BASE_URL}/banners/import`, {
       method: "POST",
       body: fd,
     });
@@ -118,6 +118,7 @@ export const bannersApi = {
 };
 
 export type { BannerDTO as Banner };
+
 
 
 

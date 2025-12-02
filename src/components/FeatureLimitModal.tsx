@@ -29,7 +29,6 @@ const featureDescriptions: Record<FeatureName, string> = {
   [FeatureName.OFFLINE_DOWNLOAD]: "Download your favorite songs and listen offline anywhere",
   [FeatureName.AI_SEARCH]: "Search for songs using AI-powered melody and lyrics recognition",
   [FeatureName.ADVANCED_ANALYTICS]: "Get detailed insights into your listening habits and preferences",
-  [FeatureName.CUSTOM_THEME]: "Customize your profile with unique themes and personalized designs",
 };
 
 const featureBenefits: Record<FeatureName, string[]> = {
@@ -52,11 +51,6 @@ const featureBenefits: Record<FeatureName, string[]> = {
     "Listening habit insights",
     "Detailed statistics",
     "Personalized recommendations",
-  ],
-  [FeatureName.CUSTOM_THEME]: [
-    "Custom themes",
-    "Personalized profiles",
-    "Unique designs",
   ],
 };
 
