@@ -5,7 +5,6 @@ export enum FeatureName {
   OFFLINE_DOWNLOAD = "OFFLINE_DOWNLOAD",
   AI_SEARCH = "AI_SEARCH",
   ADVANCED_ANALYTICS = "ADVANCED_ANALYTICS",
-  CUSTOM_THEME = "CUSTOM_THEME",
 }
 
 export enum FeatureLimitType {

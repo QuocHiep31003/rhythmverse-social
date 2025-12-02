@@ -24,7 +24,6 @@ const FEATURE_OPTIONS: { value: FeatureName; label: string }[] = [
   { value: FeatureName.OFFLINE_DOWNLOAD, label: "Offline Download" },
   { value: FeatureName.AI_SEARCH, label: "AI Search" },
   { value: FeatureName.ADVANCED_ANALYTICS, label: "Advanced Analytics" },
-  { value: FeatureName.CUSTOM_THEME, label: "Custom Theme" },
 ];
 
 const DEFAULT_PLAN_CODES: string[] = ["FREE", "PREMIUM"];

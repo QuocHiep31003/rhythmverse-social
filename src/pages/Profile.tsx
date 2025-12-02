@@ -460,7 +460,7 @@ const Profile = () => {
 
   const selectedOrderFeatures = useMemo(() => {
     const features = parsePlanFeatureSnapshot(selectedOrder?.planFeatureSnapshot).filter(
-      (feature) => feature.featureName?.toUpperCase() !== 'CUSTOM_THEME'
+      (feature) => feature.featureName?.toUpperCase() !== "CUSTOM_THEME"
     );
     return features.slice().sort((a, b) => {
       const isADisabled = a.isEnabled === false || a.limitType?.toUpperCase() === 'DISABLED';

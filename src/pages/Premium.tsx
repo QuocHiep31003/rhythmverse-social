@@ -25,7 +25,6 @@ import {
   Heart,
   MessageCircle,
   Trophy,
-  Sparkles,
   Loader2,
   Infinity
 } from "lucide-react";
@@ -68,7 +67,6 @@ const Premium = () => {
       OFFLINE_DOWNLOAD: Download,
       AI_SEARCH: Zap,
       ADVANCED_ANALYTICS: BarChart3,
-      CUSTOM_THEME: Sparkles,
     };
     return iconMap[featureName] || Music;
   };
@@ -79,7 +77,6 @@ const Premium = () => {
       OFFLINE_DOWNLOAD: "Offline downloads",
       AI_SEARCH: "AI search",
       ADVANCED_ANALYTICS: "Advanced analytics",
-      CUSTOM_THEME: "Custom themes",
     };
     return textMap[featureName] || featureName;
   };
@@ -87,9 +84,12 @@ const Premium = () => {
   // Convert plan features to display format
   const getPlanFeatures = (plan: SubscriptionPlanDTO | null) => {
     if (!plan || !plan.features) return [];
-    
+
     // Sắp xếp theo thứ tự: unlimited trước, limited > 0, limited = 0 sau
-    const sortedFeatures = [...plan.features].sort((a, b) => {
+    const sortedFeatures = plan.features
+      // Ẩn hoàn toàn Custom Theme nếu còn dữ liệu cũ trong DB
+      .filter((f) => f.featureName?.toUpperCase() !== "CUSTOM_THEME")
+      .sort((a, b) => {
       const aLimit = a.limitValue;
       const bLimit = b.limitValue;
       
@@ -251,7 +251,7 @@ const Premium = () => {
               </span>
               {options?.highlight && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-primary via-pink-500 to-orange-400/90 px-2.5 py-0.5 text-[10px] font-semibold text-white shadow-[0_15px_35px_-20px_rgba(244,114,182,0.95)]">
-                  <Sparkles className="w-3 h-3" />
+                  <Crown className="w-3 h-3" />
                   Best for power listeners
                 </span>
               )}
