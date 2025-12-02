@@ -61,10 +61,7 @@ const cleanPlanLabel = (label?: string | null) =>
 
 const resolvePlanLabel = (planName?: string | null, planCode?: string | null) => {
   const cleaned = cleanPlanLabel(planName);
-  const codeUpper = planCode?.toUpperCase();
-  if (codeUpper?.startsWith("PREMIUM") || cleaned?.toUpperCase().includes("PREMIUM")) {
-    return "Premium";
-  }
+  // Show the actual plan name if available; fall back to plan code, then generic label
   return cleaned || planCode || "Premium";
 };
 

@@ -12,8 +12,6 @@ Hệ thống này cho phép giới hạn số lần sử dụng các tính năng
 - **OFFLINE_DOWNLOAD**: Free users không được dùng (0 lần - chỉ Premium)
 - **AI_SEARCH**: Free users không được dùng (0 lần - chỉ Premium)
 - **ADVANCED_ANALYTICS**: Free users không được dùng (0 lần - chỉ Premium)
-- **CUSTOM_THEME**: Free users không được dùng (0 lần - chỉ Premium)
-
 ## Cách sử dụng trong Frontend
 
 ### 1. Sử dụng Hook `useFeatureLimit`

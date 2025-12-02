@@ -398,10 +398,6 @@ const Profile = () => {
       name: 'Advanced Analytics',
       description: 'Detailed listening statistics and insights'
     },
-    CUSTOM_THEME: {
-      name: 'Custom Theme',
-      description: 'Personalize your app appearance'
-    },
   };
 
   const formatFeatureName = (value?: string | null) => {
@@ -463,7 +459,9 @@ const Profile = () => {
   };
 
   const selectedOrderFeatures = useMemo(() => {
-    const features = parsePlanFeatureSnapshot(selectedOrder?.planFeatureSnapshot);
+    const features = parsePlanFeatureSnapshot(selectedOrder?.planFeatureSnapshot).filter(
+      (feature) => feature.featureName?.toUpperCase() !== 'CUSTOM_THEME'
+    );
     return features.slice().sort((a, b) => {
       const isADisabled = a.isEnabled === false || a.limitType?.toUpperCase() === 'DISABLED';
       const isBDisabled = b.isEnabled === false || b.limitType?.toUpperCase() === 'DISABLED';
