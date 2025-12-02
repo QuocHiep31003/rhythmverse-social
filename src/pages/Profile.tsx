@@ -168,6 +168,17 @@ const Profile = () => {
         ?.replace(/Premium\s*tháng/gi, "Premium Monthly")
         ?.replace(/Premium\s*năm/gi, "Premium Yearly")
         || (isPremiumUser ? "Premium" : "Free");
+
+      // Enforce expiry on FE: if premiumEndDate is in the past, treat user as Free
+      let finalPremium = isPremiumUser;
+      let finalPlanLabel = planLabel;
+      if (premiumEndDate) {
+        const end = new Date(premiumEndDate);
+        if (!Number.isNaN(end.getTime()) && end.getTime() < Date.now()) {
+          finalPremium = false;
+          finalPlanLabel = "Free";
+        }
+      }
       setProfileData({
         name: user.name || "",
         username: user.email ? `@${user.email.split('@')[0]}` : "",
@@ -176,10 +187,10 @@ const Profile = () => {
         phone: user.phone || "",
         address: user.address || "",
         avatar: user.avatar || "",
-        premium: isPremiumUser,
+        premium: finalPremium,
         premiumStart: premiumStartDate || "",
         premiumEnd: premiumEndDate || "",
-        planLabel
+        planLabel: finalPlanLabel
       });
       setAvatarPreview(user.avatar || "");
       setAvatarFile(null);
@@ -623,6 +634,17 @@ const Profile = () => {
     streakDays: 47
   };
 
+  const isPremiumExpired = useMemo(() => {
+    if (!profileData.premiumEnd) return false;
+    try {
+      const end = new Date(profileData.premiumEnd);
+      if (Number.isNaN(end.getTime())) return false;
+      return end.getTime() < Date.now();
+    } catch {
+      return false;
+    }
+  }, [profileData.premiumEnd]);
+
   const topGenres = [
     { name: "Electronic", percentage: 35 },
     { name: "Indie Rock", percentage: 28 },
@@ -859,8 +881,16 @@ const Profile = () => {
                           )}
                           {profileData.premiumEnd && (
                             <span>
-                              Expires:{" "}
-                              <span className={`font-medium ${profileData.premium ? "text-green-400" : "text-red-400"}`}>
+                              {isPremiumExpired ? "Expired at:" : "Expires:"}{" "}
+                              <span
+                                className={`font-medium ${
+                                  profileData.premium
+                                    ? "text-green-400"
+                                    : isPremiumExpired
+                                    ? "text-red-400"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
                                 {formatMembershipDate(profileData.premiumEnd)}
                               </span>
                             </span>
