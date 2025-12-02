@@ -94,20 +94,13 @@ export const PlaylistCard = ({
     }
   }, [playlistNumericId, isPublicVisibility]);
 
-  // Helper function để lấy ảnh cover: ưu tiên cover, sau đó ảnh bài hát đầu tiên, cuối cùng là placeholder
+  // Helper function để lấy ảnh cover: ưu tiên cover của playlist, cuối cùng là placeholder
   const getPlaylistCover = () => {
     // 1. Ưu tiên cover của playlist
     if (playlist.cover) {
       return playlist.cover;
     }
-    // 2. Nếu không có, lấy ảnh album của bài hát đầu tiên
-    if (Array.isArray(playlist.songs) && playlist.songs.length > 0) {
-      const firstSong = playlist.songs[0] as any;
-      if (firstSong?.urlImageAlbum || firstSong?.albumCoverImg || firstSong?.cover) {
-        return firstSong.urlImageAlbum || firstSong.albumCoverImg || firstSong.cover;
-      }
-    }
-    // 3. Cuối cùng là null (sẽ hiển thị placeholder)
+    // 2. Cuối cùng là null (sẽ hiển thị placeholder)
     return null;
   };
 
@@ -123,7 +116,6 @@ export const PlaylistCard = ({
               src={coverImage}
               alt={playlist.title}
               className="w-full h-full object-cover rounded-t-lg"
-              style={{ objectFit: 'cover', objectPosition: 'center' }}
               onError={(e) => {
                 // Nếu ảnh load lỗi, hiển thị placeholder
                 e.currentTarget.style.display = 'none';
@@ -136,8 +128,8 @@ export const PlaylistCard = ({
             />
           ) : null}
           <div className={`w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg music-placeholder ${showPlaceholder ? '' : 'hidden'}`}>
-            <Music className="w-16 h-16 text-white/80" />
-          </div>
+              <Music className="w-16 h-16 text-white/80" />
+            </div>
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <Button
               size="icon"
@@ -155,7 +147,7 @@ export const PlaylistCard = ({
               </Badge>
             )}
             {/* Playlist Type Badges - Chỉ hiển thị "By EchoVerse" cho SYSTEM_GLOBAL và EDITORIAL */}
-            {((playlist as any).type === "EDITORIAL" || (playlist as any).type === "SYSTEM_GLOBAL") && (
+            {((playlist.type === "EDITORIAL" || playlist.type === "SYSTEM_GLOBAL") as boolean) && (
               <Badge variant="default" className="bg-indigo-500/20 text-indigo-200 border-indigo-400/30 font-semibold">
                 By EchoVerse
               </Badge>
@@ -234,20 +226,20 @@ export const PlaylistCard = ({
             </p>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-            <div className="flex items-center gap-1">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3 flex-nowrap overflow-hidden">
+          <div className="flex items-center gap-1 flex-shrink-0">
               <Music className="w-4 h-4" />
               {computedSongCount} {songLabel}
             </div>
             <span className="text-muted-foreground/50">•</span>
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
               <Clock className="w-4 h-4" />
               {durationLabel}
             </div>
             {isPublicVisibility && likeCount !== null && (
               <>
                 <span className="text-muted-foreground/50">•</span>
-                <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-shrink-0">
                   <Heart className="w-4 h-4" />
                   {formatNumber ? formatNumber(likeCount) : likeCount.toLocaleString()}
                 </div>
@@ -255,35 +247,41 @@ export const PlaylistCard = ({
             )}
           </div>
 
-          <div className="flex items-center justify-between mt-auto">
+          <div className="flex items-center justify-between mt-auto gap-2 min-w-0 flex-nowrap">
             {updatedDate ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground truncate min-w-0 flex-1 overflow-hidden text-ellipsis">
                 Updated {updatedDate.toLocaleDateString()}
               </p>
-            ) : null}
+            ) : (
+              <div className="flex-1 min-w-0" />
+            )}
             
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap ml-auto">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onLike}
                 disabled={likePending}
-                className={`h-8 w-8 ${isLiked ? 'text-red-500' : ''}`}
+                className={`h-8 w-8 flex-shrink-0 ${isLiked ? 'text-red-500' : ''}`}
               >
                 <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
               </Button>
-              <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`} isPrivate={isPrivateVisibility} />
+              <div className="flex-shrink-0">
+                <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`} isPrivate={isPrivateVisibility} />
+              </div>
               {playlist.isOwner && onDelete && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem className="text-destructive" onClick={onDelete}>Delete</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex-shrink-0">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
+                        <MoreHorizontal className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem className="text-destructive" onClick={onDelete}>Delete</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               )}
             </div>
           </div>

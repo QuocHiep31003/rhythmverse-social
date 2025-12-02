@@ -981,9 +981,9 @@ const AdminSystemPlaylists = () => {
                             // Nếu là placeholder.svg hoặc không có ảnh hợp lệ, hiển thị icon nốt nhạc
                             if (!coverImage || coverImage === "/placeholder.svg" || coverImage === DEFAULT_PLAYLIST_COVER) {
                               return (
-                                <div className="w-10 h-10 rounded bg-purple-500/20 flex items-center justify-center">
-                                  <Music className="w-5 h-5 text-purple-400" />
-                                </div>
+                            <div className="w-10 h-10 rounded bg-purple-500/20 flex items-center justify-center">
+                              <Music className="w-5 h-5 text-purple-400" />
+                            </div>
                               );
                             }
                             return (
@@ -1097,29 +1097,29 @@ const AdminSystemPlaylists = () => {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
               <div className="flex flex-wrap gap-3">
-                <Button
-                  onClick={handleInitializeGlobal}
-                  disabled={isSubmitting}
-                  variant="outline"
-                >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Khởi tạo Global Playlists
-                </Button>
-                <Button
-                  onClick={handleUpdateGlobal}
-                  disabled={isSubmitting}
-                >
-                  <RefreshCw className={`w-4 h-4 mr-2 ${isSubmitting ? 'animate-spin' : ''}`} />
-                  Cập nhật Global Playlists
-                </Button>
-                <Button
-                  onClick={handleInitializeGenreMood}
-                  disabled={isSubmitting}
-                  variant="outline"
-                >
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Khởi tạo Genre/Mood Playlists
-                </Button>
+              <Button
+                onClick={handleInitializeGlobal}
+                disabled={isSubmitting}
+                variant="outline"
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Khởi tạo Global Playlists
+              </Button>
+              <Button
+                onClick={handleUpdateGlobal}
+                disabled={isSubmitting}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isSubmitting ? 'animate-spin' : ''}`} />
+                Cập nhật Global Playlists
+              </Button>
+              <Button
+                onClick={handleInitializeGenreMood}
+                disabled={isSubmitting}
+                variant="outline"
+              >
+                <Wand2 className="w-4 h-4 mr-2" />
+                Khởi tạo Genre/Mood Playlists
+              </Button>
               </div>
             </CardContent>
           </Card>
@@ -1212,7 +1212,7 @@ const AdminSystemPlaylists = () => {
                                 return (
                                   <div className="w-10 h-10 rounded bg-purple-500/20 flex items-center justify-center">
                                     <Music className="w-5 h-5 text-purple-400" />
-                                  </div>
+                              </div>
                                 );
                               }
                               return (
