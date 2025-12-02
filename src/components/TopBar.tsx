@@ -297,11 +297,27 @@ const TopBar = () => {
                 "";
               const normalizedStatus = status.toUpperCase();
 
-              const active =
+              const endDateString =
+                subscription.expiresAt ||
+                subscription.endDate ||
+                subscription.currentPeriodEnd ||
+                null;
+
+              let isExpired = false;
+              if (endDateString) {
+                const end = new Date(endDateString);
+                if (!Number.isNaN(end.getTime())) {
+                  isExpired = end.getTime() < Date.now();
+                }
+              }
+
+              const activeByStatus =
                 normalizedStatus === "ACTIVE" ||
                 normalizedStatus === "TRIALING" ||
                 subscription?.isActive ||
                 subscription?.active;
+
+              const active = activeByStatus && !isExpired;
 
               if (active) {
                 setProfileIsPremium(true);
@@ -310,6 +326,10 @@ const TopBar = () => {
                   subscription.planCode
                 );
                 setProfilePlanLabel(planLabel);
+              } else if (isExpired) {
+                // Force downgrade on FE when subscription is expired by time
+                setProfileIsPremium(false);
+                setProfilePlanLabel("");
               }
             }
           } catch (e) {
