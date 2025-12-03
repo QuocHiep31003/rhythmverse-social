@@ -177,7 +177,6 @@ const App = () => (
             <FriendRequestWatcher />
             <ChatMessageWatcher />
             <PresenceManager />
-            <StreakNotificationCenter />
           </BrowserRouter>
         </TooltipProvider>
       </StreakProvider>

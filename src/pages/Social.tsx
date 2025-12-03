@@ -53,7 +53,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { STREAK_STORAGE_EVENT } from "@/constants/streak";
+import { STREAK_STORAGE_EVENT, StreakStorageEventDetail } from "@/constants/streak";
+import { chatStreakApi } from "@/services/api/chatStreakApi";
+import { mapDtoToStreakState } from "@/hooks/useStreakManager";
+import { clearStreakCache } from "@/utils/streakCache";
 
 
 // Realtime notification DTO from /user/queue/notifications
@@ -2339,101 +2342,77 @@ const Social = () => {
 
 
   const handleSendMessage = async () => {
-
     const rawInput = newMessage.trim();
     if (!rawInput || !selectedChat || !meId) return;
 
-    const receiverId = Number(selectedChat);
+    const friend = friends.find((f) => f.id === selectedChat);
+    const receiverSource = friend?.friendUserId ?? selectedChat;
+    const receiverId = Number(receiverSource);
+    if (!Number.isFinite(receiverId)) {
+      console.warn("[Social] Cannot resolve receiver id for chat:", selectedChat);
+      return;
+    }
 
+    const friendKeyForStreak = String(receiverId);
     const decodedContent = decodeUnicodeEscapes(rawInput);
     const messageContent = decodedContent || rawInput;
 
-    
-
     // Optimistic update so the UI feels instant
-
     const now = Date.now();
-    const optimisticMsg: Message = { 
-
-      id: `temp-${now}`, 
-      sender: 'You', 
-
-      content: messageContent, 
-
-      timestamp: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 
+    const optimisticMsg: Message = {
+      id: `temp-${now}`,
+      sender: "You",
+      content: messageContent,
+      timestamp: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       sentAt: now,
-      type: 'text' 
-
+      type: "text",
     };
 
-    setChatByFriend(prev => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), optimisticMsg] }));
-
-    setNewMessage('');
-
-    
+    setChatByFriend((prev) => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), optimisticMsg] }));
+    setNewMessage("");
 
     try {
-
       const result = await chatApi.sendMessage(meId, receiverId, messageContent);
-
-      console.log('[Social] Message sent result:', result);
-
-      
-
-      // Replace optimistic message with real one if needed
+      console.log("[Social] Message sent result:", result);
 
       if (result && typeof result === "object" && "id" in result) {
-
         const normalizedResult = {
-
           ...result,
-
-          contentPlain:
-
-            result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined),
-
+          contentPlain: result.contentPlain ?? (typeof result.content === "string" ? result.content : undefined),
         };
 
         const parsed = parseIncomingContent(normalizedResult as ChatMessageDTO, friends);
 
-        setChatByFriend(prev => ({
-
+        setChatByFriend((prev) => ({
           ...prev,
-
-          [selectedChat]: prev[selectedChat]?.map(m => 
-
-            m.id === optimisticMsg.id 
-
-              ? { ...parsed, id: String(normalizedResult.id) }
-
-              : m
-
-          ) || []
-
+          [selectedChat]:
+            prev[selectedChat]?.map((m) => (m.id === optimisticMsg.id ? { ...parsed, id: String(normalizedResult.id) } : m)) ||
+            [],
         }));
-
       }
 
+      try {
+        const updatedStreak = await chatStreakApi.increment(receiverId);
+        if (updatedStreak && typeof window !== "undefined") {
+          const detail: StreakStorageEventDetail = {
+            friendId: friendKeyForStreak,
+            type: "updated",
+            payload: mapDtoToStreakState(updatedStreak),
+          };
+          window.dispatchEvent(new CustomEvent(STREAK_STORAGE_EVENT, { detail }));
+        }
+      } catch (incrementError) {
+        console.warn("[Social] Failed to increment streak:", incrementError);
+      }
     } catch (e) {
-
-      console.error('[Social] Failed to send message:', e);
-
-      // Remove optimistic message on error
-
-      setChatByFriend(prev => ({
-
+      console.error("[Social] Failed to send message:", e);
+      setChatByFriend((prev) => ({
         ...prev,
-
-        [selectedChat]: prev[selectedChat]?.filter(m => m.id !== optimisticMsg.id) || []
-
+        [selectedChat]: prev[selectedChat]?.filter((m) => m.id !== optimisticMsg.id) || [],
       }));
-
-      pushBubble(e instanceof Error ? e.message : 'Failed to send message', 'error');
-
-      setNewMessage(messageContent); // Restore message for retry
-
+      pushBubble(e instanceof Error ? e.message : "Failed to send message", "error");
+      setNewMessage(messageContent);
     }
-
   };
 
   const isSelectedFriendTyping = selectedChat ? !!typingByFriend[selectedChat] : false;
@@ -3020,10 +2999,7 @@ const Social = () => {
   };
 
   const clearStreakCacheForFriend = useCallback((friend?: Friend) => {
-    if (!friend) {
-      return;
-    }
-
+    if (!friend) return;
     const candidateIds = new Set<string>();
     const registerKey = (value?: string | number | null) => {
       if (value === undefined || value === null) return;
@@ -3031,24 +3007,14 @@ const Social = () => {
       if (!normalized) return;
       candidateIds.add(normalized);
     };
-
     registerKey(friend.id);
     registerKey(friend.friendUserId);
 
     candidateIds.forEach((id) => {
-      const storageKey = `streak:${id}`;
-      try {
-        localStorage.removeItem(storageKey);
-      } catch (error) {
-        console.warn('[Social] Failed to remove streak cache key:', storageKey, error);
-      }
-
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent(STREAK_STORAGE_EVENT, {
-            detail: { friendId: id, data: null },
-          }),
-        );
+      clearStreakCache(id);
+      if (typeof window !== "undefined") {
+        const detail: StreakStorageEventDetail = { friendId: id, type: "invalidate" };
+        window.dispatchEvent(new CustomEvent(STREAK_STORAGE_EVENT, { detail }));
       }
     });
   }, []);

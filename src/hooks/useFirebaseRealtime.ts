@@ -1,6 +1,15 @@
-import { useEffect, useRef } from 'react';
-import { setUserOnline, setUserOffline, pingPresence, watchUserPresence, watchMultipleUsersPresence } from '@/services/firebase/presence';
-import { watchNotifications, NotificationDTO } from '@/services/firebase/notifications';
+import { useEffect, useRef } from "react";
+import {
+  setUserOnline,
+  setUserOffline,
+  pingPresence,
+  watchUserPresence,
+  watchMultipleUsersPresence,
+} from "@/services/firebase/presence";
+import { watchNotifications, NotificationDTO } from "@/services/firebase/notifications";
+import { watchStreakUpdates, FirebaseStreakPayload } from "@/services/firebase/streaks";
+import { STREAK_STORAGE_EVENT, StreakStorageEventDetail } from "@/constants/streak";
+import type { StreakState } from "@/hooks/useStreakManager";
 
 // Để tránh spam presence ping, FE không được ping quá dày.
 // Backend thường có heartbeat window ~30s, nên đặt tối thiểu 10s.
@@ -25,6 +34,7 @@ export default function useFirebaseRealtime(
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const unsubscribePresenceRef = useRef<(() => void)[]>([]);
   const unsubscribeNotifRef = useRef<(() => void) | null>(null);
+  const unsubscribeStreakRef = useRef<(() => void) | null>(null);
   const shownNotificationsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef<boolean>(true);
   const lastPingTimeRef = useRef<number>(0);
@@ -38,7 +48,21 @@ export default function useFirebaseRealtime(
 
   useEffect(() => {
     if (!userId) {
-      console.log('[Firebase Realtime] No userId, skipping setup');
+      console.log("[Firebase Realtime] No userId, skipping setup");
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+        pingIntervalRef.current = null;
+      }
+      unsubscribePresenceRef.current.forEach((unsub) => unsub());
+      unsubscribePresenceRef.current = [];
+      if (unsubscribeNotifRef.current) {
+        unsubscribeNotifRef.current();
+        unsubscribeNotifRef.current = null;
+      }
+      if (unsubscribeStreakRef.current) {
+        unsubscribeStreakRef.current();
+        unsubscribeStreakRef.current = null;
+      }
       return;
     }
 
@@ -198,6 +222,28 @@ export default function useFirebaseRealtime(
     unsubscribePresenceRef.current.forEach(unsub => unsub());
     unsubscribePresenceRef.current = [];
 
+    if (unsubscribeStreakRef.current) {
+      unsubscribeStreakRef.current();
+      unsubscribeStreakRef.current = null;
+    }
+
+    unsubscribeStreakRef.current = watchStreakUpdates(userId, (friendId, payload) => {
+      const mappedPayload: StreakState | null = payload
+        ? {
+            streak: payload.streak ?? 0,
+            expireAt: payload.expireAt ?? null,
+            lastInteraction: payload.lastInteraction ?? null,
+            isActive: payload.event !== "ended",
+          }
+        : null;
+      const detail: StreakStorageEventDetail = mappedPayload
+        ? { friendId: String(friendId), type: "updated", payload: mappedPayload }
+        : { friendId: String(friendId), type: "invalidate" };
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(STREAK_STORAGE_EVENT, { detail }));
+      }
+    });
+
     // KHÔNG xử lý pagehide/beforeunload ở đây vì PresenceManager đang quản lý online status toàn cục
     // useFirebaseRealtime chỉ quản lý notifications và presence watching cho friends
 
@@ -209,11 +255,15 @@ export default function useFirebaseRealtime(
       }
       // KHÔNG gọi setUserOffline khi cleanup vì PresenceManager đang quản lý online status toàn cục
       // Chỉ set offline khi thực sự đóng app/tab (đã xử lý trong PresenceManager)
-      unsubscribePresenceRef.current.forEach(unsub => unsub());
+      unsubscribePresenceRef.current.forEach((unsub) => unsub());
       unsubscribePresenceRef.current = [];
       if (unsubscribeNotifRef.current) {
         unsubscribeNotifRef.current();
         unsubscribeNotifRef.current = null;
+      }
+      if (unsubscribeStreakRef.current) {
+        unsubscribeStreakRef.current();
+        unsubscribeStreakRef.current = null;
       }
     };
   }, [userId]); // Chỉ phụ thuộc vào userId, các options được lưu trong refs để tránh re-render

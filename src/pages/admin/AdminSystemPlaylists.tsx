@@ -46,7 +46,6 @@ type PlaylistType = "USER_CREATED" | "SYSTEM_GLOBAL";
 interface SystemPlaylist extends PlaylistDTO {
   type?: PlaylistType;
   isSystemGenerated?: boolean;
-  editorialTeam?: string | null;
   autoUpdateSchedule?: string | null;
   lastAutoUpdate?: string | null;
 }
