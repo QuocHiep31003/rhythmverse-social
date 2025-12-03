@@ -49,6 +49,7 @@ export interface FavoriteListParams {
   page?: number;
   size?: number;
   sort?: string;
+  search?: string;
 }
 
 type Resource = "songs" | "playlists" | "albums";
@@ -59,6 +60,7 @@ const buildQuery = (params?: FavoriteListParams) => {
   if (params.page !== undefined) qp.append("page", String(params.page));
   if (params.size !== undefined) qp.append("size", String(params.size));
   if (params.sort) qp.append("sort", params.sort);
+  if (params.search) qp.append("search", params.search);
   const qs = qp.toString();
   return qs ? `?${qs}` : "";
 };

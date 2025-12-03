@@ -123,8 +123,18 @@ export const playlistsApi = {
 
   // Lấy tất cả playlists của user (owned + collaborated)
   // GET /api/playlists/library
-  library: async () => {
-    const res = await fetch(`${API_BASE_URL}/playlists/library`, {
+  // ĐÃ MỞ RỘNG: hỗ trợ search/visibility (khi backend implement)
+  library: async (params?: { search?: string; visibility?: string }) => {
+    const qp = new URLSearchParams();
+    if (params?.search) qp.append("search", params.search);
+    if (params?.visibility) qp.append("visibility", params.visibility);
+
+    const qs = qp.toString();
+    const url = qs
+      ? `${API_BASE_URL}/playlists/library?${qs}`
+      : `${API_BASE_URL}/playlists/library`;
+
+    const res = await fetch(url, {
       method: "GET",
       headers: buildJsonHeaders(),
     });

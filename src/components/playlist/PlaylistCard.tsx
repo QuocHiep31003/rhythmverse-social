@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Play, Heart, MoreHorizontal, Music, Clock, Users } from "lucide-react";
+import { Play, Heart, MoreHorizontal, Music, Share2 } from "lucide-react";
 import ShareButton from "@/components/ShareButton";
 import type { PlaylistItem } from "@/types/playlistLibrary";
 import { PlaylistVisibility } from "@/types/playlist";
@@ -43,9 +43,12 @@ export const PlaylistCard = ({
   formatNumber,
 }: PlaylistCardProps) => {
   const computedSongCount =
-    typeof playlistMeta?.songCount === 'number' && Number.isFinite(playlistMeta.songCount) && playlistMeta.songCount >= 0
+    typeof playlistMeta?.songCount === "number" &&
+    Number.isFinite(playlistMeta.songCount) &&
+    playlistMeta.songCount >= 0
       ? playlistMeta.songCount
-      : typeof playlist.songCount === 'number' && Number.isFinite(playlist.songCount)
+      : typeof playlist.songCount === "number" &&
+        Number.isFinite(playlist.songCount)
       ? playlist.songCount
       : 0;
   const songLabel = computedSongCount === 1 ? 'song' : 'songs';
@@ -85,207 +88,168 @@ export const PlaylistCard = ({
   }, [playlist.id]);
   
   const [likeCount, setLikeCount] = useState<number | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   
   useEffect(() => {
     if (playlistNumericId && isPublicVisibility) {
-      favoritesApi.getPlaylistLikeCount(playlistNumericId)
-        .then(res => setLikeCount(res.count))
+      favoritesApi
+        .getPlaylistLikeCount(playlistNumericId)
+        .then((res) => setLikeCount(res.count))
         .catch(() => setLikeCount(null));
     }
   }, [playlistNumericId, isPublicVisibility]);
 
-  // Helper function để lấy ảnh cover: ưu tiên cover của playlist, cuối cùng là placeholder
-  const getPlaylistCover = () => {
-    // 1. Ưu tiên cover của playlist
-    if (playlist.cover) {
-      return playlist.cover;
-    }
-    // 2. Cuối cùng là null (sẽ hiển thị placeholder)
-    return null;
-  };
+  // Chọn gradient background kiểu Apple Music dựa theo id playlist (dùng khi không có cover)
+  const gradientIndex = ((playlistNumericId ?? 0) % 6) as 0 | 1 | 2 | 3 | 4 | 5;
+  const gradientClass = [
+    "from-[#4b5563] via-[#6b7280] to-[#111827]",
+    "from-[#38bdf8] via-[#0ea5e9] to-[#0369a1]",
+    "from-[#fb7185] via-[#f97316] to-[#b91c1c]",
+    "from-[#a855f7] via-[#8b5cf6] to-[#4c1d95]",
+    "from-[#22c55e] via-[#16a34a] to-[#14532d]",
+    "from-[#f97316] via-[#ef4444] to-[#7c2d12]",
+  ][gradientIndex];
 
-  const coverImage = getPlaylistCover();
-  const showPlaceholder = !coverImage;
+  const coverImage = playlist.cover && playlist.cover.trim().length > 0 ? playlist.cover : null;
 
   return (
-    <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group h-full flex flex-col">
+    <Card className="bg-transparent border-none transition-all duration-300 group h-full flex flex-col hover:scale-[1.01]">
       <CardContent className="p-0 flex flex-col flex-1">
-        <div className="relative aspect-square overflow-hidden">
-          {!showPlaceholder ? (
-            <img
-              src={coverImage}
-              alt={playlist.title}
-              className="w-full h-full object-cover rounded-t-lg"
-              onError={(e) => {
-                // Nếu ảnh load lỗi, hiển thị placeholder
-                e.currentTarget.style.display = 'none';
-                const parent = e.currentTarget.parentElement;
-                if (parent) {
-                  const placeholder = parent.querySelector('.music-placeholder') as HTMLElement;
-                  if (placeholder) placeholder.style.display = 'flex';
-                }
-              }}
-            />
-          ) : null}
-          <div className={`w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg music-placeholder ${showPlaceholder ? '' : 'hidden'}`}>
-              <Music className="w-16 h-16 text-white/80" />
-            </div>
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <Button
-              size="icon"
-              className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90"
-              onClick={onPlay}
-            >
-              <Play className="w-8 h-8" />
-            </Button>
-          </div>
-          
-          <div className="absolute top-3 right-3 flex gap-2 flex-wrap">
-            {playlist.isWarned === true && !playlist.isBanned && (playlist.warningCount ?? 0) > 0 && (
-              <Badge variant="default" className="bg-yellow-500/20 text-yellow-200 border-yellow-400/30 font-semibold">
-                ⚠️ Warned ({playlist.warningCount}/3)
-              </Badge>
-            )}
-            {/* Playlist Type Badges - Chỉ hiển thị "By EchoVerse" cho SYSTEM_GLOBAL */}
-            {(playlist.type === "SYSTEM_GLOBAL") && (
-              <Badge variant="default" className="bg-indigo-500/20 text-indigo-200 border-indigo-400/30 font-semibold">
-                By EchoVerse
-              </Badge>
-            )}
-            {playlist.isOwner && (
-              <Badge variant="default" className="bg-blue-500/20 text-blue-200 border-blue-400/30 font-semibold">
-                Owner
-              </Badge>
-            )}
-            {playlist.isCollaborator && (
-              <Badge variant="secondary" className="bg-purple-500/20 text-purple-200 border-purple-400/30 font-semibold">
-                {getCollaboratorBadgeText ? getCollaboratorBadgeText(playlist.role) : "Collaborator"}
-              </Badge>
-            )}
-            {(() => {
-              if (isFriendsOnlyVisibility) {
-                return (
-                  <Badge variant="outline" className="bg-purple-500/20 text-purple-200 border-purple-400/30 font-semibold">
-                    Friends Only
-                  </Badge>
-                );
-              }
-              if (isPrivateVisibility) {
-                return (
-                  <Badge variant="secondary" className="bg-gray-500/20 text-gray-200 border-gray-400/30 font-semibold">
-                    Private
-                  </Badge>
-                );
-              }
-              if (isPublicVisibility) {
-                return (
-                  <Badge variant="default" className="bg-green-500/20 text-green-200 border-green-400/30 font-semibold">
-                    Public
-                  </Badge>
-                );
-              }
-              return null;
-            })()}
-          </div>
-        </div>
-
-        <div className="p-4 min-w-0 flex flex-col flex-1">
-          <Link to={`/playlist/${createSlug(playlist.title, playlist.id)}`} className="block min-w-0 flex-shrink-0">
-            <h3 className="font-semibold text-lg mb-2 hover:text-primary transition-colors line-clamp-1 break-words overflow-hidden min-w-0">
-              {playlist.title}
-            </h3>
-          </Link>
-          
-          {playlist.ownerName && (
-            <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
-              {playlist.ownerAvatar ? (
-                <img
-                  src={
-                    playlist.ownerAvatar.startsWith("http://") ||
-                    playlist.ownerAvatar.startsWith("https://") ||
-                    playlist.ownerAvatar.startsWith("/")
-                      ? playlist.ownerAvatar
-                      : `${API_BASE_URL}${playlist.ownerAvatar.startsWith("/") ? "" : "/"}${playlist.ownerAvatar}`
-                  }
-                  alt={playlist.ownerName}
-                  className="w-5 h-5 rounded-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                />
-              ) : (
-                <Users className="w-4 h-4" />
-              )}
-              <span className="truncate">by {playlist.ownerName}</span>
-            </div>
-          )}
-          
-          {playlist.description ? (
-            <p className="text-sm text-muted-foreground mb-2 line-clamp-1 break-words overflow-hidden min-w-0">
-              {playlist.description}
-            </p>
-          ) : null}
-
-        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3 flex-nowrap overflow-hidden">
-          <div className="flex items-center gap-1 flex-shrink-0">
-              <Music className="w-4 h-4" />
-              {computedSongCount} {songLabel}
-            </div>
-            <span className="text-muted-foreground/50">•</span>
-          <div className="flex items-center gap-1 flex-shrink-0">
-              <Clock className="w-4 h-4" />
-              {durationLabel}
-            </div>
-            {isPublicVisibility && likeCount !== null && (
-              <>
-                <span className="text-muted-foreground/50">•</span>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                  <Heart className="w-4 h-4" />
-                  {formatNumber ? formatNumber(likeCount) : likeCount.toLocaleString()}
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between mt-auto gap-2 min-w-0 flex-nowrap">
-            {updatedDate ? (
-              <p className="text-xs text-muted-foreground truncate min-w-0 flex-1 overflow-hidden text-ellipsis">
-                Updated {updatedDate.toLocaleDateString()}
-              </p>
+        <Link
+          to={`/playlist/${createSlug(playlist.title, playlist.id)}`}
+          className="block"
+        >
+          <div className="relative aspect-square rounded-2xl overflow-hidden">
+            {/* Ảnh cover nếu có, nếu không fallback gradient */}
+            {coverImage ? (
+              <img
+                src={coverImage}
+                alt={playlist.title}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
             ) : (
-              <div className="flex-1 min-w-0" />
+              <div
+                className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`}
+              />
             )}
-            
-            <div className="flex items-center gap-1 flex-shrink-0 whitespace-nowrap ml-auto">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onLike}
-                disabled={likePending}
-                className={`h-8 w-8 flex-shrink-0 ${isLiked ? 'text-red-500' : ''}`}
-              >
-                <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
-              </Button>
-              <div className="flex-shrink-0">
-                <ShareButton title={playlist.title} type="playlist" playlistId={Number(playlist.id)} url={`${window.location.origin}/playlist/${createSlug(playlist.title, playlist.id)}`} isPrivate={isPrivateVisibility} />
+            {/* Lớp overlay làm tối ảnh để text rõ hơn */}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-black/80" />
+
+            <div className="relative z-10 h-full p-4 flex flex-col justify-between">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
+                Playlist
+              </p>
+              <h3 className="text-2xl font-semibold text-white leading-tight line-clamp-3">
+                {playlist.title}
+              </h3>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] text-white/90 opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="truncate">
+                {computedSongCount} {songLabel}
+                {durationLabel !== "--" && ` • ${durationLabel}`}
+              </span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onLike();
+                  }}
+                  disabled={likePending}
+                  className={`h-7 w-7 p-0 bg-black/40 hover:bg-black/60 rounded-full ${
+                    isLiked ? "text-red-400" : "text-white"
+                  }`}
+                >
+                  <Heart
+                    className={`w-3 h-3 ${
+                      isLiked ? "fill-current" : ""
+                    }`}
+                  />
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 p-0 bg-black/40 hover:bg-black/60 rounded-full text-white"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                    >
+                      <MoreHorizontal className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShareOpen(true);
+                      }}
+                      className="flex items-center gap-2 px-2"
+                    >
+                      <Share2 className="w-3 h-3" />
+                      <span>Chia sẻ với bạn bè</span>
+                    </DropdownMenuItem>
+                    {playlist.isOwner && onDelete && (
+                      <DropdownMenuItem
+                        className="text-destructive"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDelete();
+                        }}
+                      >
+                        Delete
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-              {playlist.isOwner && onDelete && (
-                <div className="flex-shrink-0">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 opacity-60 hover:opacity-100 transition">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="text-destructive" onClick={onDelete}>Delete</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
+            </div>
+
+            {/* Nút Play ở giữa card, chỉ hiện khi hover */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="icon"
+                className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 shadow-xl"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onPlay();
+                }}
+              >
+                <Play className="w-6 h-6" />
+              </Button>
+            </div>
             </div>
           </div>
+        </Link>
+
+        <div className="px-1 pt-2 min-w-0">
+          <p className="text-xs text-muted-foreground truncate">
+            {playlist.ownerName || "Playlist"}
+          </p>
         </div>
+
+        {/* Share dialog controlled bằng state, không hiện icon riêng */}
+        <ShareButton
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          title={playlist.title}
+          type="playlist"
+          playlistId={playlistNumericId}
+          url={`${window.location.origin}/playlist/${createSlug(
+            playlist.title,
+            playlist.id
+          )}`}
+          isPrivate={isPrivateVisibility}
+        />
       </CardContent>
     </Card>
   );
