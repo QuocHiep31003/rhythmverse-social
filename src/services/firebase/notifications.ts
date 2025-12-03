@@ -3,13 +3,42 @@ import { firebaseDb } from '@/config/firebase-config';
 
 export interface NotificationDTO {
   id?: string; // Firebase key
-  type?: 'MESSAGE' | 'SHARE' | 'INVITE' | 'INVITE_ACCEPTED' | 'INVITE_REJECTED' | 'FRIEND_REQUEST' | 'FRIEND_REQUEST_ACCEPTED' | 'PLAYLIST_BANNED' | 'PLAYLIST_WARNED' | 'PLAYLIST_RESTORED' | 'SUBSCRIPTION_EXPIRING_SOON';
+  type?:
+    | 'MESSAGE'
+    | 'SHARE'
+    | 'INVITE'
+    | 'INVITE_ACCEPTED'
+    | 'INVITE_REJECTED'
+    | 'FRIEND_REQUEST'
+    | 'FRIEND_REQUEST_ACCEPTED'
+    | 'PLAYLIST_BANNED'
+    | 'PLAYLIST_WARNED'
+    | 'PLAYLIST_RESTORED'
+    | 'SUBSCRIPTION_EXPIRING_SOON'
+    | 'STREAK_WARNING'
+    | 'STREAK_BROKEN';
   title?: string;
   body?: string;
   senderId?: number;
   senderName?: string;
   senderAvatar?: string | null;
-  metadata?: { [key: string]: unknown; playlistName?: string; songName?: string; albumName?: string; type?: string; playlistId?: number; warningCount?: number; banReason?: string; warningReason?: string; planName?: string; planDetailName?: string; daysBeforeExpiry?: number };
+  metadata?: {
+    [key: string]: unknown;
+    playlistName?: string;
+    songName?: string;
+    albumName?: string;
+    type?: string;
+    playlistId?: number;
+    warningCount?: number;
+    banReason?: string;
+    warningReason?: string;
+    planName?: string;
+    planDetailName?: string;
+    daysBeforeExpiry?: number;
+    friendName?: string;
+    hoursRemaining?: number;
+    streakDays?: number;
+  };
   createdAt?: string | number;
   read?: boolean;
 }

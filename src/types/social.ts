@@ -33,7 +33,7 @@ export interface Message {
   content: string;
   timestamp: string;
   sentAt?: number;
-  type: "text" | "song" | "playlist" | "album";
+  type: "text" | "song" | "playlist" | "album" | "system";
   songData?: {
     id?: string | number;
     title: string;

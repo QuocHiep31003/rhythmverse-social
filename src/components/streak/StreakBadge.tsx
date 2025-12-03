@@ -19,28 +19,36 @@ export const StreakBadge = ({
   }
 
   const sizeClasses = {
-    sm: 'w-3 h-3 text-xs gap-0.5 px-1.5 py-0.5',
-    md: 'w-4 h-4 text-xs gap-1 px-2 py-1',
-    lg: 'w-5 h-5 text-sm gap-1.5 px-2.5 py-1.5',
+    sm: 'text-[11px] gap-0.5',
+    md: 'text-sm gap-1',
+    lg: 'text-base gap-1.5',
   };
 
   return (
     <div
       className={cn(
-        'flex items-center gap-1 bg-orange-500/10 rounded-full',
+        // Không border / background, chỉ icon + số
+        'inline-flex items-center',
         sizeClasses[size],
-        className
+        className,
       )}
       title={`${streak} day streak with this friend`}
     >
       <Flame className={cn(
-        'text-orange-500 flex-shrink-0',
-        size === 'sm' && 'w-2.5 h-2.5',
-        size === 'md' && 'w-3 h-3',
-        size === 'lg' && 'w-4 h-4',
+        'flex-shrink-0 text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.9)]',
+        'animate-pulse motion-safe:animate-pulse transition-transform duration-200',
+        size === 'sm' && 'w-3.5 h-3.5',
+        size === 'md' && 'w-5 h-5',
+        size === 'lg' && 'w-6 h-6',
       )} />
-      <span className="text-orange-500 font-semibold">{streak}</span>
-      {showLabel && <span className="text-orange-500">day{streak !== 1 ? 's' : ''}</span>}
+      <span className="ml-1 text-orange-200 font-semibold drop-shadow-[0_0_6px_rgba(0,0,0,0.6)] leading-none">
+        {streak}
+      </span>
+      {showLabel && (
+        <span className="ml-0.5 text-orange-300 text-[11px] leading-none">
+          day{streak !== 1 ? 's' : ''}
+        </span>
+      )}
     </div>
   );
 };

@@ -579,6 +579,18 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
     }
   };
 
+  // System messages: hiển thị trung tâm, không avatar/bubble trái phải
+  if (message.type === "system") {
+    const text = decodeUnicodeEscapes(message.content);
+    return (
+      <div className="flex justify-center my-3">
+        <span className="px-3 py-1.5 text-[12px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full">
+          {text}
+        </span>
+      </div>
+    );
+  }
+
   const contentNode: React.ReactNode = (() => {
     if (message.type === "song" && songPreview) {
       // Normalize artists to string[] for SharedSongCard
