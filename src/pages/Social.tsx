@@ -53,6 +53,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { STREAK_STORAGE_EVENT } from "@/constants/streak";
 
 
 // Realtime notification DTO from /user/queue/notifications
@@ -296,12 +297,82 @@ const Social = () => {
 
   }, []);
 
-  // Note: do not memoize userId; always read latest from localStorage
-  const meId = useMemo(() => {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
-    const n = raw ? Number(raw) : NaN;
-    return Number.isFinite(n) ? n : undefined;
-  }, [localStorage.getItem('userId')]);
+  // Track meId state để tự động update khi localStorage thay đổi
+  const [meId, setMeId] = useState<number | undefined>(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+      const n = raw ? Number(raw) : NaN;
+      return Number.isFinite(n) ? n : undefined;
+    } catch {
+      return undefined;
+    }
+  });
+
+  // Update meId khi localStorage thay đổi (cho OAuth login)
+  useEffect(() => {
+    const checkUserId = () => {
+      try {
+        const raw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+        const n = raw ? Number(raw) : NaN;
+        const newId = Number.isFinite(n) ? n : undefined;
+        setMeId(prev => {
+          if (prev !== newId) {
+            console.log('[Social] meId changed:', prev, '->', newId);
+            return newId;
+          }
+          return prev;
+        });
+      } catch {
+        setMeId(undefined);
+      }
+    };
+
+    // Check ngay lập tức
+    checkUserId();
+
+    // Polling để detect thay đổi trong cùng tab (cho OAuth login)
+    let pollInterval = 100; // 100ms trong 5 giây đầu
+    const checkInterval = setInterval(() => {
+      checkUserId();
+    }, pollInterval);
+
+    // Sau 5 giây, giảm tần suất về 500ms
+    const slowPollTimeout = setTimeout(() => {
+      clearInterval(checkInterval);
+      pollInterval = 500;
+      const slowInterval = setInterval(() => {
+        checkUserId();
+      }, pollInterval);
+      return () => clearInterval(slowInterval);
+    }, 5000);
+
+    // Listen for storage changes (từ tab khác)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'userId') {
+        checkUserId();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Listen for window focus (khi user quay lại tab sau OAuth)
+    const handleFocus = () => {
+      checkUserId();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Detect OAuth callback từ URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('code') || urlParams.has('token') || urlParams.has('oauth_token')) {
+      setTimeout(checkUserId, 100);
+    }
+
+    return () => {
+      clearInterval(checkInterval);
+      clearTimeout(slowPollTimeout);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
 
   const { firebaseReady, firebaseStatus, firebaseError } = useFirebaseAuth(meId);
   const realtimeUserId = firebaseReady ? meId : undefined;
@@ -778,36 +849,62 @@ const Social = () => {
 
   // Load my profile info for Friends panel (name, email, avatar)
   useEffect(() => {
-    const loadMe = async () => {
+    let lastToken: string | null = null;
+    let lastUserId: string | null = null;
+    let loadAttempts = 0;
+    
+    const loadMe = async (force = false) => {
       try {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const userId = typeof window !== 'undefined' ? (localStorage.getItem('userId') || sessionStorage.getItem('userId')) : null;
+        
+        // Nếu không có token, reset state
         if (!token) {
           setProfileName("");
           setProfileEmail("");
           setProfileAvatar(null);
+          setProfileUserId(null);
+          setProfileUsername("");
+          setShareUrl("");
+          lastToken = null;
+          lastUserId = null;
           return;
         }
+        
+        // Chỉ load lại nếu token hoặc userId thay đổi, hoặc force reload
+        if (!force && token === lastToken && userId === lastUserId) {
+          return;
+        }
+        
+        lastToken = token;
+        lastUserId = userId;
+        loadAttempts++;
+        
+        console.log('[Social] Loading profile, attempt:', loadAttempts, { token: token?.substring(0, 20) + '...', userId });
+        
         const me = await authApi.me();
         setProfileName((me?.name || me?.username || '').trim());
         setProfileEmail((me?.email || '').trim());
         setProfileAvatar(toAbsoluteUrl(me?.avatar || null));
-        if (typeof me?.id === 'number') {
-          setProfileUserId(me.id);
-        } else {
+        const resolvedUserId = typeof me?.id === 'number' ? me.id : (() => {
           const idRaw = localStorage.getItem('userId') || sessionStorage.getItem('userId');
           const idNum = idRaw ? Number(idRaw) : NaN;
-          setProfileUserId(Number.isFinite(idNum) ? idNum : null);
-        }
+          return Number.isFinite(idNum) ? idNum : null;
+        })();
+        setProfileUserId(resolvedUserId);
         const uname = (me?.username || (me?.email ? me.email.split('@')[0] : '') || '').trim();
         setProfileUsername(uname);
         try {
           const origin = typeof window !== 'undefined' ? window.location.origin : '';
           // Prefer sharing by numeric userId for robustness
-          if (origin && (typeof me?.id === 'number' || profileUserId)) {
-            const uid = typeof me?.id === 'number' ? me.id : profileUserId;
-            setShareUrl(`${origin}/social?u=${encodeURIComponent(String(uid))}`);
+          if (origin && resolvedUserId) {
+            const shareLink = `${origin}/social?u=${encodeURIComponent(String(resolvedUserId))}`;
+            setShareUrl(shareLink);
+            console.log('[Social] Profile loaded, shareUrl set:', shareLink);
           } else if (origin && uname) {
-            setShareUrl(`${origin}/social?u=${encodeURIComponent(uname)}`);
+            const shareLink = `${origin}/social?u=${encodeURIComponent(uname)}`;
+            setShareUrl(shareLink);
+            console.log('[Social] Profile loaded, shareUrl set:', shareLink);
           }
         } catch { /* noop */ }
       } catch (e) {
@@ -815,7 +912,72 @@ const Social = () => {
         try { console.warn('[Social] Failed to load profile', e); } catch { /* noop */ }
       }
     };
-    void loadMe();
+    
+    // Load ngay lập tức
+    void loadMe(true);
+    
+    // Polling để detect token thay đổi trong cùng tab (cho OAuth login)
+    // Tăng tần suất trong 5 giây đầu để catch OAuth callback nhanh hơn
+    let checkInterval: NodeJS.Timeout | null = null;
+    
+    const startPolling = (interval: number) => {
+      if (checkInterval) clearInterval(checkInterval);
+      checkInterval = setInterval(() => {
+        const currentToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        const currentUserId = typeof window !== 'undefined' ? (localStorage.getItem('userId') || sessionStorage.getItem('userId')) : null;
+        
+        if (currentToken !== lastToken || currentUserId !== lastUserId) {
+          console.log('[Social] Token/UserId changed, reloading profile');
+          void loadMe(true);
+        }
+      }, interval);
+    };
+    
+    // Bắt đầu với polling nhanh (100ms) trong 5 giây đầu
+    startPolling(100);
+    
+    // Sau 5 giây, giảm tần suất polling về 500ms
+    const fastPollTimeout = setTimeout(() => {
+      startPolling(500);
+    }, 5000);
+    
+    // Listen for storage changes (when token is set from other tabs)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'token' || e.key === 'userId') {
+        console.log('[Social] Storage changed, reloading profile');
+        void loadMe(true);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Listen for window focus (khi user quay lại tab sau OAuth)
+    const handleFocus = () => {
+      console.log('[Social] Window focused, checking for token changes');
+      void loadMe(true);
+    };
+    window.addEventListener('focus', handleFocus);
+    
+    // Also listen for custom login event if your app uses it
+    const handleLogin = () => {
+      console.log('[Social] Login event detected, reloading profile');
+      void loadMe(true);
+    };
+    window.addEventListener('app:login-success', handleLogin);
+    
+    // Detect OAuth callback từ URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('code') || urlParams.has('token') || urlParams.has('oauth_token')) {
+      console.log('[Social] OAuth callback detected in URL, reloading profile');
+      setTimeout(() => void loadMe(true), 100);
+    }
+    
+    return () => {
+      if (checkInterval) clearInterval(checkInterval);
+      clearTimeout(fastPollTimeout);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('app:login-success', handleLogin);
+    };
   }, []);
 
 
@@ -2529,41 +2691,189 @@ const Social = () => {
 
 
 
-  const handleCreateInviteLink = async () => {
+  // Helper function để decode JWT và lấy userId
+  const getUserIdFromToken = (): number | null => {
     try {
       const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (!token) {
-        pushBubble('Please sign in to generate a share link', 'warning');
-        navigate('/login');
-        return;
+      if (!token) return null;
+      
+      // JWT format: header.payload.signature
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      
+      // Decode payload (base64url)
+      const payload = parts[1];
+      const decoded = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+      
+      // Lấy userId từ payload
+      if (decoded.userId && typeof decoded.userId === 'number') {
+        return decoded.userId;
       }
+      return null;
+    } catch (e) {
+      console.warn('Failed to decode token:', e);
+      return null;
+    }
+  };
+
+  const copyShareLink = async (linkUrl: string): Promise<boolean> => {
+    if (!linkUrl) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(linkUrl);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Clipboard API failed, trying fallback:', err);
+    }
+
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = linkUrl;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return successful;
+    } catch (err) {
+      console.warn('Fallback copy method failed:', err);
+      return false;
+    }
+  };
+
+  const handleCreateInviteLink = async () => {
+    console.log('[Share Profile] Button clicked');
+    try {
+      // Luôn refresh data từ API để đảm bảo có thông tin mới nhất
       let uid = profileUserId;
       let uname = profileUsername;
+      
+      console.log('[Share Profile] Initial state:', { uid, uname, profileUserId, profileUsername });
+      
+      // Ưu tiên lấy từ localStorage/sessionStorage
       if (!uid) {
         const idRaw = localStorage.getItem('userId') || sessionStorage.getItem('userId');
         const idNum = idRaw ? Number(idRaw) : NaN;
-        if (Number.isFinite(idNum)) uid = idNum; else {
-          try {
-            const me = await authApi.me();
-            if (typeof me?.id === 'number') uid = me.id;
-            uname = (me?.username || (me?.email ? me.email.split('@')[0] : '') || '').trim();
-            setProfileUsername(uname);
-            setProfileUserId(typeof me?.id === 'number' ? me.id : null);
-          } catch { /* ignore */ }
+        if (Number.isFinite(idNum)) {
+          uid = idNum;
+          console.log('[Share Profile] Got userId from storage:', uid);
         }
       }
+      
+      // Nếu vẫn không có, decode từ JWT token
+      if (!uid) {
+        const tokenUserId = getUserIdFromToken();
+        if (tokenUserId) {
+          uid = tokenUserId;
+          setProfileUserId(tokenUserId);
+          console.log('[Share Profile] Got userId from token:', uid);
+        }
+      }
+      
+      // Thử gọi API để refresh data (nhưng không block nếu fail)
+      try {
+        const me = await authApi.me();
+        if (typeof me?.id === 'number') {
+          uid = me.id;
+          setProfileUserId(me.id);
+        }
+        uname = (me?.username || (me?.email ? me.email.split('@')[0] : '') || '').trim();
+        setProfileUsername(uname);
+        setProfileName((me?.name || me?.username || '').trim());
+        setProfileEmail((me?.email || '').trim());
+        setProfileAvatar(toAbsoluteUrl(me?.avatar || null));
+        console.log('[Share Profile] Got user info from API:', { uid, uname });
+      } catch (apiError) {
+        // Nếu API fail nhưng đã có uid từ token, vẫn tiếp tục
+        console.warn('[Share Profile] API failed, using token data:', apiError);
+        if (!uid) {
+          pushBubble('Please sign in to generate a share link', 'warning');
+          navigate('/login');
+          return;
+        }
+      }
+      
+      // Nếu vẫn không có uid sau tất cả các cách, báo lỗi
+      if (!uid) {
+        console.error('[Share Profile] No userId found after all attempts');
+        pushBubble('Unable to generate invite link. Please try again.', 'error');
+        return;
+      }
+
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const linkUrl = (uid != null && origin)
-        ? `${origin}/social?u=${encodeURIComponent(String(uid))}`
-        : (uname && origin ? `${origin}/social?u=${encodeURIComponent(uname)}` : '');
+      const linkUrl =
+        origin && uid != null
+          ? `${origin}/social?u=${encodeURIComponent(String(uid))}`
+          : origin && uname
+          ? `${origin}/social?u=${encodeURIComponent(uname)}`
+          : '';
+
+      console.log('[Share Profile] Generated link:', linkUrl);
+
       if (linkUrl) {
         setShareUrl(linkUrl);
-        try { await navigator.clipboard.writeText(linkUrl); } catch { /* noop */ }
-        pushBubble(`Copied invite link: ${linkUrl}`, 'success');
+        
+        // Luôn cố gắng copy vào clipboard với fallback method
+        let copied = false;
+        
+        // Method 1: Modern Clipboard API
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(linkUrl);
+            copied = true;
+            console.log('[Share Profile] Copied via Clipboard API');
+          }
+        } catch (e) {
+          console.warn('[Share Profile] Clipboard API failed, trying fallback:', e);
+        }
+        
+        // Method 2: Fallback - tạo input element tạm để copy
+        if (!copied) {
+          try {
+            const textArea = document.createElement('textarea');
+            textArea.value = linkUrl;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            if (successful) {
+              copied = true;
+              console.log('[Share Profile] Copied via fallback method');
+            }
+          } catch (e) {
+            console.warn('[Share Profile] Fallback copy method failed:', e);
+          }
+        }
+        
+        if (copied) {
+          console.log('[Share Profile] Calling pushBubble with success message');
+          pushBubble(`Copied invite link: ${linkUrl}`, 'success');
+          // Verify clipboard content
+          try {
+            const clipboardText = await navigator.clipboard.readText();
+            console.log('[Share Profile] Clipboard content verified:', clipboardText);
+          } catch (e) {
+            console.warn('[Share Profile] Could not verify clipboard:', e);
+          }
+        } else {
+          // Nếu cả 2 method đều fail, vẫn hiển thị link và hướng dẫn user copy thủ công
+          console.log('[Share Profile] Copy failed, showing info message');
+          pushBubble(`Your invite link (click to copy): ${linkUrl}`, 'info');
+        }
       } else {
+        console.error('[Share Profile] Failed to generate link - no uid or uname');
         pushBubble('Unable to generate invite link', 'error');
       }
     } catch (e: unknown) {
+      console.error('[Share Profile] Error:', e);
       const msg = e instanceof Error ? e.message : String(e);
       pushBubble(msg || 'Failed to share invite link', 'error');
     }
@@ -2709,6 +3019,40 @@ const Social = () => {
     console.log('[Social] All watchers cleaned up for friend:', friendId);
   };
 
+  const clearStreakCacheForFriend = useCallback((friend?: Friend) => {
+    if (!friend) {
+      return;
+    }
+
+    const candidateIds = new Set<string>();
+    const registerKey = (value?: string | number | null) => {
+      if (value === undefined || value === null) return;
+      const normalized = String(value).trim();
+      if (!normalized) return;
+      candidateIds.add(normalized);
+    };
+
+    registerKey(friend.id);
+    registerKey(friend.friendUserId);
+
+    candidateIds.forEach((id) => {
+      const storageKey = `streak:${id}`;
+      try {
+        localStorage.removeItem(storageKey);
+      } catch (error) {
+        console.warn('[Social] Failed to remove streak cache key:', storageKey, error);
+      }
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent(STREAK_STORAGE_EVENT, {
+            detail: { friendId: id, data: null },
+          }),
+        );
+      }
+    });
+  }, []);
+
   const confirmUnfriend = async () => {
     if (!pendingUnfriend) return;
     const { friendId, friendName } = pendingUnfriend;
@@ -2756,6 +3100,8 @@ const Social = () => {
       await friendsApi.remove(Number(me), friendUserId, {
         relationshipId: friend.relationshipId,
       });
+
+      clearStreakCacheForFriend(friend);
       
       // Reload friends list sau khi unfriend thành công
       await loadFriends();
@@ -3016,3 +3362,4 @@ const Social = () => {
 
 
 export default Social;
+

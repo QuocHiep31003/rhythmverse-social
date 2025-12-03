@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
+import { StreakProvider } from "@/contexts/StreakContext";
 import AppLayout from "@/components/AppLayout";
 import AdminLayout from "@/components/AdminLayout";
 
@@ -33,6 +34,7 @@ import ControlMusicPlayer from "./components/ControlMusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
+import { StreakNotificationCenter } from "./components/streak/StreakNotificationCenter";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -76,10 +78,11 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="echoverse-ui-theme">
       <MusicProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+        <StreakProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/oauth2/callback" element={<OAuthCallback />} />
@@ -174,8 +177,10 @@ const App = () => (
             <FriendRequestWatcher />
             <ChatMessageWatcher />
             <PresenceManager />
+            <StreakNotificationCenter />
           </BrowserRouter>
         </TooltipProvider>
+      </StreakProvider>
       </MusicProvider>
     </ThemeProvider>
   </QueryClientProvider>

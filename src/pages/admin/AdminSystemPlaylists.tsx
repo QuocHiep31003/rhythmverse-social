@@ -1,6 +1,6 @@
 /* ======================
  *  AdminSystemPlaylists.tsx
- *  Quản lý System Playlists (Editorial, Global, Personalized)
+ *  Quản lý System Global Playlists
  *  EchoVerse – Music Universe Platform
  * ====================== */
 
@@ -41,7 +41,7 @@ import { toSeconds } from "@/utils/playlistUtils";
 
 const API_BASE_URL = "http://localhost:8080/api";
 
-type PlaylistType = "USER_CREATED" | "EDITORIAL" | "SYSTEM_GLOBAL" | "SYSTEM_PERSONALIZED";
+type PlaylistType = "USER_CREATED" | "SYSTEM_GLOBAL";
 
 interface SystemPlaylist extends PlaylistDTO {
   type?: PlaylistType;
