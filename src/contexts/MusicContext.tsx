@@ -1036,6 +1036,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       const updated = [...prev];
       const [moved] = updated.splice(safeFrom, 1);
       updated.splice(safeTo, 0, moved);
+      // Cập nhật queueRef ngay lập tức
+      queueRef.current = updated;
       return updated;
     });
   }, []);

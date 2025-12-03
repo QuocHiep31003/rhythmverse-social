@@ -87,9 +87,9 @@ const PromotionCarousel = () => {
   };
 
   return (
-    <div className="container px-6 py-4">
+    <div className="container px-6 py-2 md:py-3">
       <div 
-        className="relative overflow-hidden rounded-2xl h-32 md:h-36 group"
+        className="relative overflow-hidden rounded-2xl h-28 md:h-32 group"
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -130,7 +130,7 @@ const PromotionCarousel = () => {
                 )}
 
                 {/* Album/Artist Image with Play Icon Overlay */}
-                <div className="relative w-20 h-20 md:w-28 md:h-28 flex-shrink-0 mr-4 md:mr-6 group/image">
+                <div className="relative w-16 h-16 md:w-24 md:h-24 flex-shrink-0 mr-4 md:mr-6 group/image">
                   <div className="w-full h-full rounded-xl md:rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl group-hover:scale-105 transition-all duration-300">
                     <img 
                       src={(promo as any).image || promo.imageUrl || "/placeholder.svg"} 
@@ -146,8 +146,8 @@ const PromotionCarousel = () => {
                   
                   {/* Play Icon Overlay */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/image:opacity-100 transition-opacity duration-300">
-                    <div className="w-12 h-12 md:w-14 md:h-14 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-xl">
-                      <Play className="w-6 h-6 md:w-7 md:h-7 text-gray-900 ml-0.5" />
+                    <div className="w-10 h-10 md:w-12 md:h-12 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-xl">
+                      <Play className="w-5 h-5 md:w-6 md:h-6 text-gray-900 ml-0.5" />
                     </div>
                   </div>
                 </div>

@@ -46,35 +46,61 @@ const GenreExplorer = () => {
   const [genres, setGenres] = useState<(GenreItem & { id?: number })[]>(defaultGenres);
   const [moods, setMoods] = useState<(MoodItem & { id?: number })[]>(defaultMoods);
   const { setQueue, playSong } = useMusic();
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [hoveredGenreId, setHoveredGenreId] = useState<number | null>(null);
   const [hoveredMoodId, setHoveredMoodId] = useState<number | null>(null);
   const [loadingGenreId, setLoadingGenreId] = useState<number | null>(null);
   const [loadingMoodId, setLoadingMoodId] = useState<number | null>(null);
 
   useEffect(() => {
-    // Fetch genres from backend
-    genresApi.getAll({ page: 0, size: 6, sort: "name,asc" })
+    // Fetch top genres from backend (sorted by songCount desc to get genres with most songs)
+    genresApi.getAll({ page: 0, size: 6, sort: "songCount,desc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
           setGenres(data.content.map((genre: { id: number; name: string; iconUrl?: string }, index: number) => {
-            const preset = GENRE_ICON_OPTIONS.find((option) => option.value === genre.iconUrl);
+            // Check if iconUrl is a preset value (not a URL)
+            const isPresetValue = genre.iconUrl && !genre.iconUrl.startsWith('http') && !genre.iconUrl.startsWith('/');
+            const preset = isPresetValue ? GENRE_ICON_OPTIONS.find((option) => option.value === genre.iconUrl) : undefined;
             const fallback = defaultGenres[index % defaultGenres.length] || defaultGenres[0];
             return {
               id: genre.id,
               name: genre.name,
               icon: preset?.icon || fallback.icon,
               color: preset?.badgeClass || fallback.color,
-              iconUrl: preset ? undefined : genre.iconUrl,
+              // Nếu là preset value thì không dùng iconUrl (dùng icon component), nếu là URL thì dùng
+              iconUrl: preset ? undefined : (genre.iconUrl && genre.iconUrl.startsWith('http') ? genre.iconUrl : undefined),
               iconKey: preset?.value,
             };
           }));
         }
       })
-      .catch(err => console.log("Error fetching genres:", err));
+      .catch(err => {
+        console.log("Error fetching genres, trying fallback:", err);
+        // Fallback: try without sort if songCount sort fails
+        genresApi.getAll({ page: 0, size: 6, sort: "name,asc" })
+          .then(data => {
+            if (data?.content && data.content.length > 0) {
+              setGenres(data.content.map((genre: { id: number; name: string; iconUrl?: string }, index: number) => {
+                // Check if iconUrl is a preset value (not a URL)
+                const isPresetValue = genre.iconUrl && !genre.iconUrl.startsWith('http') && !genre.iconUrl.startsWith('/');
+                const preset = isPresetValue ? GENRE_ICON_OPTIONS.find((option) => option.value === genre.iconUrl) : undefined;
+                const fallback = defaultGenres[index % defaultGenres.length] || defaultGenres[0];
+                return {
+                  id: genre.id,
+                  name: genre.name,
+                  icon: preset?.icon || fallback.icon,
+                  color: preset?.badgeClass || fallback.color,
+                  // Nếu là preset value thì không dùng iconUrl (dùng icon component), nếu là URL thì dùng
+                  iconUrl: preset ? undefined : (genre.iconUrl && genre.iconUrl.startsWith('http') ? genre.iconUrl : undefined),
+                  iconKey: preset?.value,
+                };
+              }));
+            }
+          })
+          .catch(err2 => console.log("Error fetching genres fallback:", err2));
+      });
 
-    // Fetch moods from backend
-    moodsApi.getAll({ page: 0, size: 4, sort: "name,asc" })
+    // Fetch all moods from backend (moods are few, so load all)
+    moodsApi.getAll({ page: 0, size: 100, sort: "name,asc" })
       .then(data => {
         if (data?.content && data.content.length > 0) {
           setMoods(data.content.map((mood: { id: number; name: string; iconUrl?: string; gradient?: string }, index: number) => {
@@ -97,88 +123,74 @@ const GenreExplorer = () => {
 
   const handleGenreHover = (genreId: number | undefined) => {
     if (!genreId) return;
-    
-    // Clear previous timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-
     setHoveredGenreId(genreId);
-    
-    // Delay để tránh gọi API quá nhiều khi hover nhanh
-    hoverTimeoutRef.current = setTimeout(async () => {
-      try {
-        setLoadingGenreId(genreId);
-        const songs = await songsApi.recommendByGenre(genreId, 50);
-        if (songs && songs.length > 0) {
-          // Shuffle và lấy random 1 bài để phát
-          const shuffled = [...songs].sort(() => Math.random() - 0.5);
-          const randomSong = shuffled[0];
-          const playerSong = mapToPlayerSong(randomSong);
-          
-          // Set queue với 50 bài và phát ngẫu nhiên
-          const playerSongs = shuffled.map(mapToPlayerSong);
-          setQueue(playerSongs);
-          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-          await playSongWithStreamUrl(playerSong, playSong);
-        }
-      } catch (error) {
-        console.error("Error loading genre preview:", error);
-      } finally {
-        setLoadingGenreId(null);
-      }
-    }, 500); // Delay 500ms
   };
 
   const handleGenreLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
     setHoveredGenreId(null);
     setLoadingGenreId(null);
   };
 
+  const handleGenreClick = async (genreId: number | undefined, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!genreId) return;
+    
+    try {
+      setLoadingGenreId(genreId);
+      const songs = await songsApi.recommendByGenre(genreId, 50);
+      if (songs && songs.length > 0) {
+        // Shuffle và lấy random 1 bài để phát
+        const shuffled = [...songs].sort(() => Math.random() - 0.5);
+        const randomSong = shuffled[0];
+        const playerSong = mapToPlayerSong(randomSong);
+        
+        // Set queue với 50 bài và phát ngẫu nhiên
+        const playerSongs = shuffled.map(mapToPlayerSong);
+        setQueue(playerSongs);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(playerSong, playSong);
+      }
+    } catch (error) {
+      console.error("Error loading genre preview:", error);
+    } finally {
+      setLoadingGenreId(null);
+    }
+  };
+
   const handleMoodHover = (moodId: number | undefined) => {
     if (!moodId) return;
-    
-    // Clear previous timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
-
     setHoveredMoodId(moodId);
-    
-    // Delay để tránh gọi API quá nhiều khi hover nhanh
-    hoverTimeoutRef.current = setTimeout(async () => {
-      try {
-        setLoadingMoodId(moodId);
-        const songs = await songsApi.recommendByMood(moodId, 50);
-        if (songs && songs.length > 0) {
-          // Shuffle và lấy random 1 bài để phát
-          const shuffled = [...songs].sort(() => Math.random() - 0.5);
-          const randomSong = shuffled[0];
-          const playerSong = mapToPlayerSong(randomSong);
-          
-          // Set queue với 50 bài và phát ngẫu nhiên
-          const playerSongs = shuffled.map(mapToPlayerSong);
-          setQueue(playerSongs);
-          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-          await playSongWithStreamUrl(playerSong, playSong);
-        }
-      } catch (error) {
-        console.error("Error loading mood preview:", error);
-      } finally {
-        setLoadingMoodId(null);
-      }
-    }, 500); // Delay 500ms
   };
 
   const handleMoodLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-    }
     setHoveredMoodId(null);
     setLoadingMoodId(null);
+  };
+
+  const handleMoodClick = async (moodId: number | undefined, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!moodId) return;
+    
+    try {
+      setLoadingMoodId(moodId);
+      const songs = await songsApi.recommendByMood(moodId, 50);
+      if (songs && songs.length > 0) {
+        // Shuffle và lấy random 1 bài để phát
+        const shuffled = [...songs].sort(() => Math.random() - 0.5);
+        const randomSong = shuffled[0];
+        const playerSong = mapToPlayerSong(randomSong);
+        
+        // Set queue với 50 bài và phát ngẫu nhiên
+        const playerSongs = shuffled.map(mapToPlayerSong);
+        setQueue(playerSongs);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(playerSong, playSong);
+      }
+    } catch (error) {
+      console.error("Error loading mood preview:", error);
+    } finally {
+      setLoadingMoodId(null);
+    }
   };
 
   return (
@@ -220,13 +232,17 @@ const GenreExplorer = () => {
                       )}
                       {/* Icon play ngẫu nhiên khi hover */}
                       {isHovered && (
-                        <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                        <button
+                          onClick={(e) => handleGenreClick(genre.id, e)}
+                          className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70 transition-colors z-10"
+                          disabled={isLoading}
+                        >
                           {isLoading ? (
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           ) : (
                             <Play className="h-5 w-5 text-white fill-white" />
                           )}
-                        </div>
+                        </button>
                       )}
                     </div>
                     <h4 className="font-semibold text-foreground mb-1">{genre.name}</h4>
@@ -260,13 +276,17 @@ const GenreExplorer = () => {
                           <img src={mood.iconUrl} alt={mood.name} className="w-full h-full object-cover" />
                           {/* Icon play ngẫu nhiên khi hover */}
                           {isHovered && (
-                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                            <button
+                              onClick={(e) => handleMoodClick(mood.id, e)}
+                              className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70 transition-colors z-10"
+                              disabled={isLoading}
+                            >
                               {isLoading ? (
                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               ) : (
                                 <Play className="h-5 w-5 text-white fill-white" />
                               )}
-                            </div>
+                            </button>
                           )}
                         </div>
                       ) : (
@@ -274,13 +294,17 @@ const GenreExplorer = () => {
                           <Icon className="h-12 w-12 text-primary" />
                           {/* Icon play ngẫu nhiên khi hover */}
                           {isHovered && (
-                            <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                            <button
+                              onClick={(e) => handleMoodClick(mood.id, e)}
+                              className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70 transition-colors z-10"
+                              disabled={isLoading}
+                            >
                               {isLoading ? (
                                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                               ) : (
                                 <Play className="h-5 w-5 text-white fill-white" />
                               )}
-                            </div>
+                            </button>
                           )}
                         </div>
                       )}

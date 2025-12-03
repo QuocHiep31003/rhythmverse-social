@@ -1,14 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Footer from "@/components/Footer";
 import { 
-  Search, 
-  Filter, 
   TrendingUp, 
   Clock, 
   Music, 
@@ -16,12 +13,8 @@ import {
   Zap,
   Sparkles,
   Brain,
-  Mic,
-  FileText,
-  Crown,
   Star,
   Headphones,
-  Lock,
   Users,
   Loader2,
 } from "lucide-react";
@@ -37,14 +30,13 @@ const Discover = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [userType, setUserType] = useState<"guest" | "free" | "premium">("guest");
   const [hotToday, setHotToday] = useState<TrendingSong[]>([]);
   const [rankHistoryData, setRankHistoryData] = useState([]);
   const { setQueue, playSong } = useMusic();
   const { toast } = useToast();
 
   const [availableMoods, setAvailableMoods] = useState<Array<{ id: number; name: string; tone: "positive" | "negative" | "neutral" }>>([]);
-  const [availableGenres, setAvailableGenres] = useState<Array<{ id: number; name: string }>>([]);
+  const [availableGenres, setAvailableGenres] = useState<Array<{ id: number; name: string; iconUrl?: string }>>([]);
   const [selectedMoodIds, setSelectedMoodIds] = useState<number[]>([]);
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
   const [isLoadingMoodRecs, setIsLoadingMoodRecs] = useState(false);
@@ -53,7 +45,7 @@ const Discover = () => {
     getTrendingComparison(10).then(setHotToday).catch(() => {});
   }, []);
 
-  // Load moods for AI mood-based recommendations
+  // Load moods for AI mood-based recommendations (only get ACTIVE)
   useEffect(() => {
     const loadMoods = async () => {
       try {
@@ -77,7 +69,7 @@ const Discover = () => {
     loadMoods();
   }, []);
 
-  // Load genres for selection
+  // Load genres for selection with logos (only get ACTIVE, ~50 genres)
   useEffect(() => {
     const loadGenres = async () => {
       try {
@@ -85,6 +77,7 @@ const Discover = () => {
         const items = (data?.content ?? []).map((g: any) => ({
           id: g.id as number,
           name: g.name || "",
+          iconUrl: g.iconUrl || undefined,
         }));
         setAvailableGenres(items);
       } catch (error) {
@@ -94,16 +87,16 @@ const Discover = () => {
     loadGenres();
   }, []);
 
-  // FE mock dữ liệu 8 điểm rank (fake dev, BE cần bổ sung API lấy chuỗi điểm history thật)
+  // FE mock 8 rank points (fake dev, BE needs to add API to get real history points)
   useEffect(() => {
     if (hotToday.length < 3) return;
-    // Giả sử 8 mốc giờ
+    // Assume 8 time points
     const mockTimes = [
       "9h", "10h", "11h", "12h", "13h", "14h", "15h", "16h"
     ];
-    // Top 3 bài, mỗi bài mảng 8 điểm rank (1 là top nhất)
+    // Top 3 songs, each with 8 rank points (1 is top)
     const mockRanks = [
-      [3,2,3,2,1,1,1,1], // top 1: lên xuống
+      [3,2,3,2,1,1,1,1], // top 1: fluctuating
       [2,1,1,1,2,3,2,2], // top 2
       [1,3,2,3,3,2,3,3], // top 3
     ];
@@ -140,15 +133,15 @@ const Discover = () => {
       if (mood.tone === "positive" || mood.tone === "negative") {
         if (toneConflicts(currentTones, mood.tone)) {
           toast({
-            title: "Mood trái ngược nhau",
-            description: "Hạn chế chọn cùng lúc mood quá vui và quá buồn để gợi ý chính xác hơn.",
+            title: "Conflicting Moods",
+            description: "Avoid selecting both very happy and very sad moods at the same time for more accurate recommendations.",
             variant: "warning",
           });
           return prev;
         }
       }
 
-      // Khi chọn mood mới, tự loại các mood trái dấu (nếu có)
+      // When selecting new mood, automatically remove conflicting moods (if any)
       const filtered = prev.filter((id) => {
         const t = availableMoods.find((m) => m.id === id)?.tone;
         if (!t) return true;
@@ -171,12 +164,12 @@ const Discover = () => {
     });
   }, []);
 
-  // Handle submit để tạo danh sách phát
+  // Handle submit to create playlist
   const handleSubmitDiscovery = useCallback(async () => {
     if (selectedMoodIds.length === 0 && selectedGenreIds.length === 0) {
       toast({
-        title: "Vui lòng chọn ít nhất một mood hoặc genre",
-        description: "Chọn mood hoặc genre để khám phá nhạc mới.",
+        title: "Please select at least one mood or genre",
+        description: "Select a mood or genre to discover new music.",
         variant: "destructive",
       });
       return;
@@ -186,7 +179,7 @@ const Discover = () => {
       setIsLoadingMoodRecs(true);
       let mapped: any[] = [];
 
-      // Nếu có moods, ưu tiên dùng API recommendations theo moods
+      // If moods exist, prioritize using mood-based recommendations API
       if (selectedMoodIds.length > 0) {
         try {
           const apiSongs = await songsApiClient.getRecommendationsByMoods(selectedMoodIds, 50);
@@ -196,10 +189,10 @@ const Discover = () => {
         }
       }
 
-      // Nếu có genres, filter hoặc lấy thêm bài hát theo genres
+      // If genres exist, filter or get more songs by genres
       if (selectedGenreIds.length > 0) {
         try {
-          // Lấy bài hát theo genre đầu tiên (hoặc merge với kết quả mood nếu có)
+          // Get songs by first genre (or merge with mood results if available)
           const genreSongs = await songsApiClient.getAll({
             genreId: selectedGenreIds[0],
             size: 50,
@@ -211,9 +204,9 @@ const Discover = () => {
             : [];
           const genreMapped = content.map((s: any) => mapToPlayerSong(s));
 
-          // Nếu đã có kết quả từ mood, merge và filter theo genres đã chọn
+          // If mood results exist, merge and filter by selected genres
           if (mapped.length > 0) {
-            // Merge và loại bỏ duplicate
+            // Merge and remove duplicates
             const merged = [...mapped, ...genreMapped];
             const unique = merged.filter((song, index, self) =>
               index === self.findIndex((s) => s.songId === song.songId)
@@ -227,7 +220,7 @@ const Discover = () => {
         }
       }
 
-      // Fallback: nếu vẫn trống và có mood, thử search theo moodId đầu tiên
+      // Fallback: if still empty and has mood, try search by first moodId
       if (mapped.length === 0 && selectedMoodIds.length > 0) {
         try {
           const firstMoodId = selectedMoodIds[0];
@@ -250,24 +243,24 @@ const Discover = () => {
         setQueue(mapped);
         const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
         await playSongWithStreamUrl(mapped[0], playSong);
-        const moodText = selectedMoodIds.length > 0 ? `${selectedMoodIds.length} mood` : "";
-        const genreText = selectedGenreIds.length > 0 ? `${selectedGenreIds.length} genre` : "";
-        const filterText = [moodText, genreText].filter(Boolean).join(" và ");
+        const moodText = selectedMoodIds.length > 0 ? `${selectedMoodIds.length} mood${selectedMoodIds.length > 1 ? 's' : ''}` : "";
+        const genreText = selectedGenreIds.length > 0 ? `${selectedGenreIds.length} genre${selectedGenreIds.length > 1 ? 's' : ''}` : "";
+        const filterText = [moodText, genreText].filter(Boolean).join(" and ");
         toast({
-          title: "Đã tạo danh sách phát",
-          description: `Đang phát: ${mapped[0].songName} (theo ${filterText})`,
+          title: "Playlist Created",
+          description: `Now playing: ${mapped[0].songName} (by ${filterText})`,
         });
       } else {
         toast({
-          title: "Không tìm thấy bài hát phù hợp",
-          description: "Thử chọn mood/genre khác hoặc kiểm tra lại dữ liệu trong hệ thống.",
+          title: "No matching songs found",
+          description: "Try selecting different moods/genres or check the system data.",
         });
       }
     } catch (error) {
       console.error("Failed to load recommendations:", error);
       toast({
-        title: "Lỗi khi tạo danh sách phát",
-        description: "Vui lòng thử lại sau.",
+        title: "Error creating playlist",
+        description: "Please try again later.",
         variant: "destructive",
       });
     } finally {
@@ -275,99 +268,33 @@ const Discover = () => {
     }
   }, [selectedMoodIds, selectedGenreIds, playSong, setQueue, toast]);
 
-  // AI Features for different user types
-  const aiFeatures = {
-    guest: [
-      {
-        icon: Mic,
-        title: "Melody Search Demo",
-        description: "Try our AI melody recognition - hum a tune and find the song",
-        status: "demo",
-        action: "Try Demo"
-      },
-      {
-        icon: FileText,
-        title: "Lyrics Search Demo",
-        description: "Search songs by typing partial lyrics you remember",
-        status: "demo",
-        action: "Try Demo"
-      },
-      {
-        icon: Brain,
-        title: "Genre Explorer",
-        description: "Discover music by mood and activity with AI suggestions",
-        status: "available",
-        action: "Explore"
-      }
-    ],
-    free: [
-      {
-        icon: Mic,
-        title: "Basic Melody Search",
-        description: "Use AI to find songs by humming melodies (5 searches/day)",
-        status: "limited",
-        action: "Search Now"
-      },
-      {
-        icon: FileText,
-        title: "Advanced Lyrics Search",
-        description: "Full access to our AI-powered lyrics search engine",
-        status: "available",
-        action: "Search Lyrics"
-      },
-      {
-        icon: Brain,
-        title: "AI Recommendations",
-        description: "Get personalized song suggestions based on your listening history",
-        status: "available",
-        action: "Get Recommendations"
-      },
-      {
-        icon: TrendingUp,
-        title: "Trend Analysis",
-        description: "See what's trending in your favorite genres",
-        status: "available",
-        action: "View Trends"
-      }
-    ],
-    premium: [
-      {
-        icon: Mic,
-        title: "Unlimited Melody Search",
-        description: "Unlimited AI melody recognition with advanced algorithms",
-        status: "premium",
-        action: "Search Melody"
-      },
-      {
-        icon: FileText,
-        title: "Premium Lyrics Search",
-        description: "Advanced lyrics search with context and meaning analysis",
-        status: "premium",
-        action: "Advanced Search"
-      },
-      {
-        icon: Brain,
-        title: "Advanced AI Recommendations",
-        description: "Deep learning recommendations with mood and context analysis",
-        status: "premium",
-        action: "Discover Music"
-      },
-      {
-        icon: Sparkles,
-        title: "Collaborative Playlists",
-        description: "AI-powered collaborative playlist creation and editing",
-        status: "premium",
-        action: "Create Playlist"
-      },
-      {
-        icon: Star,
-        title: "Exclusive AI Events",
-        description: "Join AI-curated listening parties and exclusive events",
-        status: "premium",
-        action: "Join Events"
-      }
-    ]
-  };
+  // AI Features for discovery
+  const aiFeatures = [
+    {
+      icon: Brain,
+      title: "Smart Recommendations",
+      description: "AI system analyzes your music preferences and suggests the most suitable songs",
+      gradient: "from-blue-500/20 via-purple-500/20 to-pink-500/20",
+      iconGradient: "from-blue-500 to-purple-500",
+      borderColor: "border-blue-500/30"
+    },
+    {
+      icon: Sparkles,
+      title: "Mood-Based Search",
+      description: "Select your mood and current activity, AI will find music that matches your emotions",
+      gradient: "from-emerald-500/20 via-teal-500/20 to-cyan-500/20",
+      iconGradient: "from-emerald-500 to-teal-500",
+      borderColor: "border-emerald-500/30"
+    },
+    {
+      icon: Star,
+      title: "Advanced Personalization",
+      description: "Based on your listening history and behavior to create unique playlists",
+      gradient: "from-amber-500/20 via-orange-500/20 to-red-500/20",
+      iconGradient: "from-amber-500 to-orange-500",
+      borderColor: "border-amber-500/30"
+    }
+  ];
 
   const genres = [
     "Pop", "Rock", "Hip Hop", "Electronic", "Jazz", "Classical", 
@@ -413,105 +340,42 @@ const Discover = () => {
               Discover music like never before with our advanced AI features
             </p>
             
-            {/* User Type Selector (for demo purposes) */}
-            <div className="flex justify-center mt-6 gap-2">
-              <Button 
-                variant={userType === "guest" ? "default" : "outline"}
-                onClick={() => setUserType("guest")}
-                size="sm"
-              >
-                Guest Mode
-              </Button>
-              <Button 
-                variant={userType === "free" ? "default" : "outline"}
-                onClick={() => setUserType("free")}
-                size="sm"
-              >
-                Free User
-              </Button>
-              <Button 
-                variant={userType === "premium" ? "default" : "outline"}
-                onClick={() => setUserType("premium")}
-                size="sm"
-                className="gap-1"
-              >
-                <Crown className="w-3 h-3" />
-                Premium
-              </Button>
-            </div>
           </div>
 
           {/* AI Features Section */}
           <section className="mb-12">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-4">AI Features Available to You</h2>
+              <h2 className="text-3xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
+                Discover with AI
+              </h2>
               <p className="text-muted-foreground">
-                {userType === "guest" && "Try our AI-powered features in demo mode"}
-                {userType === "free" && "Access AI features with your free account"}
-                {userType === "premium" && "Unlimited access to all AI-powered features"}
+                Advanced AI technology helps you discover new music that matches your musical taste
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-              {aiFeatures[userType].map((feature, index) => (
-                <Card 
-                  key={index} 
-                  className={`bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300 ${
-                    feature.status === "premium" ? "border-primary/40" : ""
-                  }`}
-                >
-                  <CardHeader className="text-center">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                      feature.status === "premium" ? "bg-gradient-primary" :
-                      feature.status === "available" ? "bg-gradient-secondary" :
-                      feature.status === "limited" ? "bg-gradient-accent" :
-                      "bg-muted/20"
-                    }`}>
-                      <feature.icon className="w-8 h-8 text-white" />
-                    </div>
-                    <CardTitle className="flex items-center justify-center gap-2">
-                      {feature.title}
-                      {feature.status === "premium" && <Crown className="w-4 h-4 text-primary" />}
-                      {feature.status === "demo" && <Badge variant="secondary">Demo</Badge>}
-                      {feature.status === "limited" && <Badge variant="outline">Limited</Badge>}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-center">
-                    <p className="text-muted-foreground text-sm mb-4">{feature.description}</p>
-                    <Button 
-                      variant={feature.status === "premium" ? "hero" : "outline"}
-                      className="w-full gap-2"
-                      disabled={feature.status === "demo"}
-                      onClick={() => {
-                        if (feature.status !== "demo") {
-                          console.log('Feature clicked:', feature.title);
-                        }
-                      }}
-                    >
-                      <Zap className="w-4 h-4" />
-                      {feature.action}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
+              {aiFeatures.map((feature, index) => {
+                const Icon = feature.icon;
+                return (
+                  <Card 
+                    key={index} 
+                    className={`bg-gradient-to-br ${feature.gradient} backdrop-blur-sm ${feature.borderColor} border-2 hover:shadow-glow transition-all duration-300 group hover:scale-105`}
+                  >
+                    <CardHeader className="text-center">
+                      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.iconGradient} flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
+                        <Icon className="w-8 h-8 text-white" />
+                      </div>
+                      <CardTitle className="flex items-center justify-center gap-2 text-foreground group-hover:text-primary transition-colors">
+                        {feature.title}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-center">
+                      <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
-
-            {/* Upgrade CTA for non-premium users */}
-            {userType !== "premium" && (
-              <Card className="bg-gradient-primary/10 border-primary/20 p-6 text-center">
-                <CardContent className="space-y-4">
-                  <Crown className="w-12 h-12 text-primary mx-auto" />
-                  <h3 className="text-xl font-bold">Unlock Full AI Power</h3>
-                  <p className="text-muted-foreground">
-                    Get unlimited access to melody search, advanced lyrics analysis, and AI-powered recommendations
-                  </p>
-                  <Button variant="hero" size="lg" className="gap-2" onClick={() => navigate('/premium')}>
-                    <Sparkles className="w-4 h-4" />
-                    Upgrade to Premium
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
           </section>
 
           {/* AI Pick For You - Mood & Genre based */}
@@ -522,16 +386,16 @@ const Discover = () => {
                 AI Pick For You
               </h2>
               <p className="text-sm text-muted-foreground">
-                Chọn mood và/hoặc genre của bạn, sau đó nhấn Submit để tạo danh sách phát phù hợp.
+                Select your mood and/or genre, then click Submit to create a matching playlist.
               </p>
             </div>
 
             {/* Genre Selection */}
             <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3 text-center">Thể loại (Genre)</h3>
-              <div className="flex flex-wrap justify-center gap-2 mb-2">
+              <h3 className="text-lg font-semibold mb-3 text-center">Genre</h3>
+              <div className="flex flex-wrap justify-center gap-3 mb-2">
                 {availableGenres.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Đang tải genres...</p>
+                  <p className="text-xs text-muted-foreground">Loading genres...</p>
                 ) : (
                   availableGenres.map((genre) => {
                     const isSelected = selectedGenreIds.includes(genre.id);
@@ -539,12 +403,19 @@ const Discover = () => {
                       <Button
                         key={genre.id}
                         type="button"
-                        size="sm"
+                        size="lg"
                         variant={isSelected ? "default" : "outline"}
-                        className="rounded-full text-xs px-3 py-1"
+                        className="rounded-full px-4 py-2 h-auto gap-2"
                         onClick={() => handleToggleGenre(genre.id)}
                       >
-                        {genre.name}
+                        {genre.iconUrl && (
+                          <img 
+                            src={genre.iconUrl} 
+                            alt={genre.name} 
+                            className="w-6 h-6 object-cover rounded-full"
+                          />
+                        )}
+                        <span className="text-sm font-medium">{genre.name}</span>
                       </Button>
                     );
                   })
@@ -552,17 +423,17 @@ const Discover = () => {
               </div>
               {selectedGenreIds.length > 0 && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Đã chọn {selectedGenreIds.length} genre
+                  {selectedGenreIds.length} genre{selectedGenreIds.length > 1 ? 's' : ''} selected
                 </p>
               )}
             </div>
 
             {/* Mood Selection */}
             <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-3 text-center">Tâm trạng (Mood)</h3>
+              <h3 className="text-lg font-semibold mb-3 text-center">Mood</h3>
               <div className="flex flex-wrap justify-center gap-2 mb-2">
                 {availableMoods.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Đang tải moods...</p>
+                  <p className="text-xs text-muted-foreground">Loading moods...</p>
                 ) : (
                   availableMoods.map((mood) => {
                     const isSelected = selectedMoodIds.includes(mood.id);
@@ -587,10 +458,10 @@ const Discover = () => {
                             }`}
                           >
                             {mood.tone === "positive"
-                              ? "Tích cực"
+                              ? "Positive"
                               : mood.tone === "negative"
-                              ? "Trầm buồn"
-                              : "Nhẹ nhàng"}
+                              ? "Melancholic"
+                              : "Neutral"}
                           </span>
                         </span>
                       </Button>
@@ -600,7 +471,7 @@ const Discover = () => {
               </div>
               {selectedMoodIds.length > 0 && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Đã chọn {selectedMoodIds.length} mood
+                  {selectedMoodIds.length} mood{selectedMoodIds.length > 1 ? 's' : ''} selected
                 </p>
               )}
             </div>
@@ -617,294 +488,103 @@ const Discover = () => {
                 {isLoadingMoodRecs ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Đang tạo danh sách phát...
+                    Creating playlist...
                   </>
                 ) : (
                   <>
                     <Zap className="w-4 h-4" />
-                    Tạo danh sách phát
+                    Create Playlist
                   </>
                 )}
               </Button>
               <p className="text-xs text-muted-foreground text-center max-w-md">
                 {selectedMoodIds.length === 0 && selectedGenreIds.length === 0
-                  ? "Chọn ít nhất một mood hoặc genre để bắt đầu"
-                  : "Nhấn nút trên để tạo danh sách phát theo lựa chọn của bạn. Gợi ý sẽ xuất hiện trong trình phát ở cuối màn hình."}
+                  ? "Select at least one mood or genre to get started"
+                  : "Click the button above to create a playlist based on your selection. Recommendations will appear in the player at the bottom of the screen."}
               </p>
             </div>
           </section>
 
-          {/* Advanced Search Section */}
-          <section className="mb-12">
-            <h2 className="text-2xl font-bold mb-6">Advanced Music Search</h2>
-            
-            <div className="grid lg:grid-cols-2 gap-6 mb-8">
-              {/* Melody Search */}
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Mic className="w-5 h-5" />
-                    AI Melody Search
-                    {userType === "guest" && <Lock className="w-4 h-4 text-muted-foreground" />}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground text-sm mb-4">
-                    Hum, whistle, or sing a melody to find any song
-                  </p>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      className="flex-1 gap-2"
-                      disabled={userType === "guest"}
-                    >
-                      <Mic className="w-4 h-4" />
-                      Start Humming
-                    </Button>
-                    <Button variant="ghost" size="icon">
-                      <Play className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {userType === "free" && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      3/5 daily searches remaining
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+          {/* Traditional Discovery removed below AI section as requested */}
+        </div>
+      </div>
 
-              {/* Lyrics Search */}
-              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="w-5 h-5" />
-                    AI Lyrics Search
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground text-sm mb-4">
-                    Type any lyrics you remember, even partial ones
-                  </p>
-                  <div className="space-y-2">
-                    <Input 
-                      placeholder="e.g., 'something about love under stars...'"
-                      className="bg-muted/50 border-border/40"
-                    />
-                    <Button variant="outline" className="w-full gap-2">
-                      <Search className="w-4 h-4" />
-                      Search Lyrics
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
+      {/* Cosmic Hot Today + Rank Changes Section */}
+      <section className="relative py-12 overflow-hidden">
+        {/* Spacey background, different tone from Music Recognition */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-sky-950/80 via-slate-950/90 to-indigo-900/80" />
+          <div className="absolute -top-32 -left-10 w-80 h-80 bg-cyan-500/15 rounded-full blur-3xl" />
+          <div className="absolute -bottom-40 right-0 w-96 h-96 bg-fuchsia-500/10 rounded-full blur-3xl" />
+        </div>
 
-          {/* Traditional Discovery */}
-          <Tabs defaultValue="trending" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
-              <TabsTrigger value="trending" className="gap-2">
-                <TrendingUp className="w-4 h-4" />
-                Trending
-              </TabsTrigger>
-              <TabsTrigger value="new" className="gap-2">
-                <Clock className="w-4 h-4" />
-                New Releases  
-              </TabsTrigger>
-              <TabsTrigger value="ai-recommended" className="gap-2">
-                <Brain className="w-4 h-4" />
-                AI Recommended
-              </TabsTrigger>
-              <TabsTrigger value="social" className="gap-2">
-                <Users className="w-4 h-4" />
-                Social Discovery
-              </TabsTrigger>
-            </TabsList>
-
-          <TabsContent value="trending" className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Trending Now</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {trendingSongs.map((song) => (
-                  <Card 
-                    key={song.id} 
-                    className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
-                    onClick={() => navigate(`/song/${song.id}`)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="aspect-square bg-gradient-primary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
-                        <Music className="w-8 h-8 text-white" />
-                      </div>
-                      <h3 className="font-medium truncate">{song.title}</h3>
-                      <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                      <div className="flex justify-between items-center mt-2">
-                        <Badge variant="secondary" className="text-xs">{song.genre}</Badge>
-                        <span className="text-xs text-muted-foreground">{song.plays} plays</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="new" className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-4">Fresh Releases</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {newReleases.map((song) => (
-                  <Card 
-                    key={song.id} 
-                    className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
-                    onClick={() => navigate(`/song/${song.id}`)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="aspect-square bg-gradient-secondary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
-                        <Music className="w-8 h-8 text-white" />
-                      </div>
-                      <h3 className="font-medium truncate">{song.title}</h3>
-                      <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                      <div className="flex justify-between items-center mt-2">
-                        <Badge variant="secondary" className="text-xs">{song.genre}</Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(song.releaseDate).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
-
-            <TabsContent value="ai-recommended" className="space-y-6">
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="flex items-center justify-between mb-6 gap-4">
+            <div className="flex items-center gap-3">
+              <TrendingUp className="w-7 h-7 text-cyan-300 drop-shadow-[0_0_12px_rgba(34,211,238,0.6)]" />
               <div>
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                  <Brain className="w-6 h-6 text-primary" />
-                  AI-Powered Recommendations
+                <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
+                  Hot Today
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {recommendations.map((song) => (
-                    <Card 
-                      key={song.id} 
-                      className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
-                      onClick={() => navigate(`/song/${song.id}`)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="aspect-square bg-gradient-primary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 relative">
-                          <Brain className="w-8 h-8 text-white" />
-                          <Badge className="absolute top-1 right-1 bg-gradient-primary text-white text-xs gap-1">
-                            <Zap className="w-2 h-2" />
-                            AI
-                          </Badge>
-                        </div>
-                        <h3 className="font-medium truncate">{song.title}</h3>
-                        <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                        <p className="text-xs text-primary mt-1 truncate">{song.reason}</p>
-                        <div className="flex justify-between items-center mt-2">
-                          <Badge variant="secondary" className="text-xs">{song.genre}</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                <p className="text-xs md:text-sm text-cyan-100/80">
+                  Real-time trending songs across the EchoVerse universe
+                </p>
               </div>
-            </TabsContent>
+            </div>
+          </div>
 
-            <TabsContent value="social" className="space-y-6">
-              <div>
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                  <Users className="w-6 h-6 text-primary" />
-                  Social Discovery
-                </h2>
-                <div className="grid md:grid-cols-2 gap-6">
-                  <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Headphones className="w-5 h-5" />
-                        Friends are Listening
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {trendingSongs.slice(0, 2).map((song, index) => (
-                        <div key={index} className="flex items-center gap-3 p-2 rounded-lg bg-muted/10">
-                          <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
-                            <Music className="w-5 h-5 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{song.title}</p>
-                            <p className="text-xs text-muted-foreground">{song.artist}</p>
-                          </div>
-                          <Badge variant="secondary" className="text-xs">
-                            3 friends
-                          </Badge>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5" />
-                        Community Trending
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {newReleases.slice(0, 2).map((song, index) => (
-                        <div key={index} className="flex items-center gap-3 p-2 rounded-lg bg-muted/10">
-                          <div className="w-10 h-10 bg-gradient-secondary rounded-full flex items-center justify-center">
-                            <Music className="w-5 h-5 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{song.title}</p>
-                            <p className="text-xs text-muted-foreground">{song.artist}</p>
-                          </div>
-                          <Badge variant="secondary" className="text-xs">
-                            Rising
-                          </Badge>
-                        </div>
-                      ))}
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          {/* --- Block Hot Today + Biểu đồ biến động bên phải --- */}
-          <div className="mb-10 grid md:grid-cols-3 gap-6 items-start">
-            {/* Hot Today Left */}
-            <div className="md:col-span-2">
-              <h2 className="text-3xl font-bold mb-4 flex items-center gap-2">
-                <TrendingUp className="w-6 h-6 text-primary" />
-                Hot Today
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-3 gap-6 items-start">
+            {/* Left: Hot Today list */}
+            <div className="md:col-span-2 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {hotToday.length === 0 ? (
-                  <span className="text-muted-foreground">No trending songs available.</span>
+                  <span className="text-sm text-cyan-100/80">
+                    No trending songs available.
+                  </span>
                 ) : (
                   hotToday.map((song, i) => (
-                    <Card 
+                    <Card
                       key={song.songId}
-                      className="group hover:shadow-glow transition-all duration-300 cursor-pointer bg-gradient-glass backdrop-blur-sm border-white/10"
+                      className="group cursor-pointer bg-white/5 hover:bg-white/10 border border-cyan-400/30 backdrop-blur-md transition-all duration-300 hover:shadow-[0_0_30px_rgba(34,211,238,0.3)]"
                       onClick={() => navigate(`/song/${song.songId}`)}
                     >
-                      <CardContent className="p-4">
-                        <div className="aspect-square bg-gradient-primary rounded-lg mb-3 flex items-center justify-center group-hover:scale-105 transition-transform duration-300">
-                          {song.albumImageUrl
-                            ? <img src={song.albumImageUrl} alt={song.songName} className="w-12 h-12 object-cover rounded" />
-                            : <Music className="w-8 h-8 text-white" />}
+                      <CardContent className="p-4 flex gap-3">
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500 to-sky-400 flex items-center justify-center overflow-hidden shadow-lg shadow-cyan-500/40 group-hover:scale-105 transition-transform">
+                            {song.albumImageUrl ? (
+                              <img
+                                src={song.albumImageUrl}
+                                alt={song.songName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <Music className="w-7 h-7 text-white" />
+                            )}
+                          </div>
+                          <span className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-cyan-500 text-[10px] font-bold flex items-center justify-center text-white shadow-md shadow-cyan-500/60">
+                            {i + 1}
+                          </span>
                         </div>
-                        <h3 className="font-medium truncate">
-                          {i + 1}. {song.songName}
-                        </h3>
-                        <p className="text-sm text-muted-foreground truncate">
-                          {song.artists?.map(a => a.name).join(", ")}
-                        </p>
-                        <div className="flex justify-between items-center mt-2">
-                          <Badge variant="secondary" className="text-xs">Hot Today</Badge>
-                          <span className="text-xs text-muted-foreground">{song.score?.toFixed(2) ?? ""}</span>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm text-white truncate">
+                            {song.songName}
+                          </h3>
+                          <p className="text-xs text-cyan-100/80 truncate">
+                            {song.artists?.map(a => a.name).join(", ")}
+                          </p>
+                          <div className="flex items-center justify-between mt-2 text-[11px] text-cyan-100/80">
+                            <Badge
+                              variant="outline"
+                              className="border-cyan-400/60 bg-cyan-500/10 text-[10px] px-2 py-0.5 uppercase tracking-wide"
+                            >
+                              Hot Today
+                            </Badge>
+                            {song.score !== undefined && (
+                              <span className="opacity-80">
+                                Score: {song.score.toFixed(2)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -912,26 +592,66 @@ const Discover = () => {
                 )}
               </div>
             </div>
-            {/* Right: Chart Top 3 trend biến động */}
-            <div className="bg-gradient-glass rounded-xl p-4">
-              <h3 className="font-semibold mb-2 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" /> Top 3 Rank Changes
+
+            {/* Right: Top 3 Rank Fluctuation Chart */}
+            <div className="rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-slate-900/80 via-slate-950/90 to-indigo-950/90 p-4 md:p-5 shadow-lg shadow-cyan-500/20">
+              <h3 className="font-semibold mb-3 flex items-center gap-2 text-cyan-50">
+                <TrendingUp className="w-5 h-5 text-cyan-300" />
+                Top 3 Rank Changes
               </h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={rankHistoryData}>
-                  <XAxis dataKey="time" />
-                  <YAxis reversed allowDecimals={false} domain={[1, 'auto']} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="song1" stroke="#8884d8" name={hotToday[0]?.songName || "#1"}/>
-                  <Line type="monotone" dataKey="song2" stroke="#82ca9d" name={hotToday[1]?.songName || "#2"}/>
-                  <Line type="monotone" dataKey="song3" stroke="#ffc658" name={hotToday[2]?.songName || "#3"}/>
-                </LineChart>
-              </ResponsiveContainer>
+              <p className="text-[11px] text-cyan-100/70 mb-3">
+                Rank movement of today&apos;s top 3 songs over the last hours
+              </p>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={rankHistoryData}>
+                    <XAxis dataKey="time" stroke="#bae6fd" />
+                    <YAxis
+                      reversed
+                      allowDecimals={false}
+                      domain={[1, "auto"]}
+                      stroke="#bae6fd"
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(15,23,42,0.95)",
+                        borderRadius: 8,
+                        border: "1px solid rgba(34,211,238,0.6)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11, color: "#e0f2fe" }} />
+                    <Line
+                      type="monotone"
+                      dataKey="song1"
+                      stroke="#22d3ee"
+                      name={hotToday[0]?.songName || "#1"}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="song2"
+                      stroke="#a855f7"
+                      name={hotToday[1]?.songName || "#2"}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="song3"
+                      stroke="#f97316"
+                      name={hotToday[2]?.songName || "#3"}
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
       <Footer />
     </div>
   );

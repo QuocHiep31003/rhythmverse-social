@@ -16,8 +16,6 @@ import PlaylistDetail from "./pages/PlaylistDetail";
 import FavoriteSongs from "./pages/FavoriteSongs";
 import CreatePlaylist from "./pages/CreatePlaylist";
 import PlaylistLibrary from "./pages/PlaylistLibrary";
-import Quiz from "./pages/Quiz";
-import CreateQuiz from "./pages/CreateQuiz";
 import SearchResults from "./pages/SearchResults";
 import Login from "./pages/Login";
 import OAuthCallback from "./pages/OAuthCallback";
@@ -121,8 +119,7 @@ const App = () => (
                     <Route path="/favorites/songs" element={<FavoriteSongs />} />
                     <Route path="/trending" element={<Top100 />} />
                     <Route path="/top100" element={<Top100 />} />
-                    <Route path="/quiz" element={<Quiz />} />
-                    <Route path="/quiz/create" element={<CreateQuiz />} />
+              
                     <Route path="/search" element={<SearchResults />} />
                     <Route path="/premium" element={<Premium />} />
                     <Route path="/profile" element={<Profile />} />

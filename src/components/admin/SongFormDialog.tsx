@@ -45,7 +45,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, debounce } from "@/lib/utils";
 import { genresApi, artistsApi, moodsApi, songGenreApi, songMoodApi } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -59,30 +59,6 @@ const contributorFieldConfigs = [
 
 type ContributorField = typeof contributorFieldConfigs[number]["field"];
 
-// Utility function to get audio duration from file or URL
-const getAudioDuration = async (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const audio = new Audio();
-    const url = URL.createObjectURL(file);
-    
-    audio.addEventListener('loadedmetadata', () => {
-      const duration = audio.duration;
-      const minutes = Math.floor(duration / 60);
-      const seconds = Math.floor(duration % 60);
-      const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      URL.revokeObjectURL(url);
-      resolve(formatted);
-    });
-    
-    audio.addEventListener('error', () => {
-      URL.revokeObjectURL(url);
-      resolve("0:00");
-    });
-    
-    audio.src = url;
-  });
-};
-
 const songFormSchema = z.object({
   name: z.string().min(1, "Song name cannot be empty").max(200),
   releaseAt: z.string().min(1, "Release date cannot be empty"),
@@ -94,7 +70,6 @@ const songFormSchema = z.object({
   producerIds: z.array(z.number()).optional(),
   artistIds: z.array(z.number()).optional(),
   moodIds: z.array(z.number()).min(1, "Please select at least 1 mood"), // Required
-  duration: z.string().optional(),
 });
 
 type SongFormValues = z.infer<typeof songFormSchema>;
@@ -134,6 +109,12 @@ export const SongFormDialog = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store selected file for update
   const [fileError, setFileError] = useState<string | null>(null);
   const [activeContributorPopover, setActiveContributorPopover] = useState<ContributorField | null>(null);
+  
+  // Artists pagination state
+  const [artistsPage, setArtistsPage] = useState(0);
+  const [artistsLoading, setArtistsLoading] = useState(false);
+  const [artistsHasMore, setArtistsHasMore] = useState(true);
+  const [selectedArtistIds, setSelectedArtistIds] = useState<Set<number>>(new Set());
 
   // Ngăn đóng dialog khi click ra ngoài - chỉ cho phép đóng bằng nút X hoặc Hủy
   // Sử dụng ref để track xem đóng từ nút X/Hủy hay click outside
@@ -187,17 +168,109 @@ export const SongFormDialog = ({
       producerIds: [],
       artistIds: [],
       moodIds: [],
-      duration: "",
       ...defaultValues,
     },
   });
 
-  // Filter local data thay vì call API
-  const filteredArtists = artistSearchQuery.trim()
-    ? allArtists.filter((artist) =>
-        artist.name.toLowerCase().includes(artistSearchQuery.toLowerCase())
-      )
-    : allArtists;
+  // Load artists với search và pagination
+  const loadArtists = async (search: string = "", page: number = 0, append: boolean = false) => {
+    if (artistsLoading) return;
+    
+    setArtistsLoading(true);
+    try {
+      const response = await artistsApi.getAll({
+        page,
+        size: 20,
+        sort: "name,asc",
+        search: search.trim() || undefined,
+      });
+      
+      const newArtists = Array.isArray(response) ? response : response.content || [];
+      
+      if (append) {
+        setAllArtists((prev) => {
+          const existingIds = new Set(prev.map(a => a.id));
+          const uniqueNewArtists = newArtists.filter(a => !existingIds.has(a.id));
+          return [...prev, ...uniqueNewArtists];
+        });
+      } else {
+        setAllArtists(newArtists);
+      }
+      
+      setArtistsHasMore(!response.last && newArtists.length > 0);
+      setArtistsPage(page);
+    } catch (error) {
+      console.error("Error loading artists:", error);
+      setArtistsHasMore(false);
+    } finally {
+      setArtistsLoading(false);
+    }
+  };
+
+  // Debounced search function
+  const debouncedSearchArtists = useRef(
+    debounce((search: string) => {
+      setArtistsPage(0);
+      loadArtists(search, 0, false);
+    }, 300)
+  ).current;
+
+  // Load artists khi search query thay đổi
+  useEffect(() => {
+    if (activeContributorPopover) {
+      debouncedSearchArtists(artistSearchQuery);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artistSearchQuery, activeContributorPopover]);
+
+  // Load initial artists khi mở popover và load selected artists nếu chưa có
+  useEffect(() => {
+    if (activeContributorPopover) {
+      if (allArtists.length === 0) {
+        loadArtists("", 0, false);
+      }
+      
+      // Load selected artists nếu chưa có trong danh sách
+      const formValues = form.getValues();
+      const allSelectedIds = new Set<number>();
+      (formValues.performerIds || []).forEach((id: number) => allSelectedIds.add(id));
+      (formValues.featIds || []).forEach((id: number) => allSelectedIds.add(id));
+      (formValues.composerIds || []).forEach((id: number) => allSelectedIds.add(id));
+      (formValues.lyricistIds || []).forEach((id: number) => allSelectedIds.add(id));
+      (formValues.producerIds || []).forEach((id: number) => allSelectedIds.add(id));
+      
+      const missingIds = Array.from(allSelectedIds).filter(id => !allArtists.some(a => a.id === id));
+      if (missingIds.length > 0) {
+        Promise.all(missingIds.map(id => artistsApi.getById(id)))
+          .then(artists => {
+            const validArtists = artists.filter(a => a !== null) as {id: number, name: string, avatar?: string, country?: string}[];
+            if (validArtists.length > 0) {
+              setAllArtists(prev => {
+                const existingIds = new Set(prev.map(a => a.id));
+                const newArtists = validArtists.filter(a => !existingIds.has(a.id));
+                return [...prev, ...newArtists];
+              });
+            }
+          })
+          .catch(err => console.error("Error loading selected artists:", err));
+      }
+    }
+  }, [activeContributorPopover]);
+
+  // Track selected artist IDs để hiển thị trong badge
+  useEffect(() => {
+    const formValues = form.getValues();
+    const allSelectedIds = new Set<number>();
+    (formValues.performerIds || []).forEach((id: number) => allSelectedIds.add(id));
+    (formValues.featIds || []).forEach((id: number) => allSelectedIds.add(id));
+    (formValues.composerIds || []).forEach((id: number) => allSelectedIds.add(id));
+    (formValues.lyricistIds || []).forEach((id: number) => allSelectedIds.add(id));
+    (formValues.producerIds || []).forEach((id: number) => allSelectedIds.add(id));
+    setSelectedArtistIds(allSelectedIds);
+  }, [form.watch("performerIds"), form.watch("featIds"), form.watch("composerIds"), form.watch("lyricistIds"), form.watch("producerIds")]);
+
+  // Filter artists - chỉ filter local nếu không có search query
+  const filteredArtists = allArtists;
 
   const filteredGenres = genreSearchQuery.trim()
     ? allGenres.filter((genre) =>
@@ -211,17 +284,15 @@ export const SongFormDialog = ({
       )
     : allMoods;
 
-  // Load toàn bộ artists, genres và moods khi component mount
+  // Load genres và moods khi component mount (artists sẽ load khi mở popover)
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [artistsData, genresData, moodsData] = await Promise.all([
-          artistsApi.getAll({ page: 0, size: 1000, sort: "name,asc" }),
+        const [genresData, moodsData] = await Promise.all([
           genresApi.getAll({ page: 0, size: 1000, sort: "name,asc" }),
           moodsApi.getAll({ page: 0, size: 1000, sort: "name,asc" })
         ]);
         
-        setAllArtists(Array.isArray(artistsData) ? artistsData : artistsData.content || []);
         setAllGenres(Array.isArray(genresData) ? genresData : genresData.content || []);
         setAllMoods(Array.isArray(moodsData) ? moodsData : moodsData.content || []);
       } catch (error) {
@@ -248,7 +319,6 @@ export const SongFormDialog = ({
         composerIds?: number[];
         lyricistIds?: number[];
         producerIds?: number[];
-        duration?: string;
       };
 
       const resolvedPerformerIds = apiData.performerIds
@@ -291,7 +361,6 @@ export const SongFormDialog = ({
         artistIds: unionArtistIds,
         genreIds: apiData.genres?.map((g: {id: number}) => g.id) || defaultValues.genreIds || [],
         moodIds: apiData.moods?.map((m: {id: number}) => m.id) || defaultValues.moodIds || [],
-        duration: apiData.duration || defaultValues.duration || "",
       };
       // Lưu giá trị gốc để so sánh khi submit
       setSelectedFile(null); // Reset file when dialog opens with existing data
@@ -306,7 +375,6 @@ export const SongFormDialog = ({
         genreIds: [],
         artistIds: [],
         moodIds: [],
-        duration: "",
       });
     }
     
@@ -326,10 +394,6 @@ export const SongFormDialog = ({
     setUploadProgress(0);
     
     try {
-      // Get duration from file
-      const duration = await getAudioDuration(file);
-      form.setValue("duration", duration);
-      
       // Store file - will be uploaded to S3 via backend API when form is submitted
       setSelectedFile(file);
       setFileError(null);
@@ -390,18 +454,16 @@ export const SongFormDialog = ({
       }
     });
     
-    // For update mode: include file if selected, exclude duration
+    // For update mode: include file if selected
     if (mode === "edit") {
-      const { duration, file: _unusedFile, ...restData } = normalizedData;
+      const { file: _unusedFile, ...restData } = normalizedData;
       const submitData: SongFormValues & { file?: File } = {
         ...restData,
         file: selectedFile || undefined, // Include file if selected
-        // Don't send duration - backend will reject it
       };
       onSubmit(submitData);
     } else {
       // Create mode: send as normal (may include file for create too)
-      // Note: duration can be included in create mode if needed
       onSubmit(normalizedData, genreScoresMap, moodScoresMap);
     }
   };
@@ -517,24 +579,6 @@ export const SongFormDialog = ({
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="duration"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Thời lượng (mm:ss)</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="3:45"
-                              {...field}
-                              disabled
-                              className="admin-input transition-all duration-200"
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                     <div className="md:col-span-2">
                       <FormItem>
                         <FormLabel className="flex items-center gap-2 mb-3">
@@ -620,7 +664,12 @@ export const SongFormDialog = ({
                               open={isOpen}
                               onOpenChange={(open) => {
                                 setActiveContributorPopover(open ? field : null);
-                                if (!open) setArtistSearchQuery("");
+                                if (!open) {
+                                  setArtistSearchQuery("");
+                                  setAllArtists([]);
+                                  setArtistsPage(0);
+                                  setArtistsHasMore(true);
+                                }
                               }}
                             >
                               <PopoverTrigger asChild>
@@ -656,7 +705,9 @@ export const SongFormDialog = ({
                                     <CommandInput
                                       placeholder="Search artists..."
                                       value={artistSearchQuery}
-                                      onValueChange={setArtistSearchQuery}
+                                      onValueChange={(newValue) => {
+                                        setArtistSearchQuery(newValue);
+                                      }}
                                       className="border-0 focus:ring-0"
                                     />
                                   </div>
@@ -665,10 +716,19 @@ export const SongFormDialog = ({
                                       <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
                                         <span className="text-xs">🎤</span>
                                       </div>
-                                      <span>No artist found</span>
+                                      <span>{artistsLoading ? "Loading..." : "No artist found"}</span>
                                     </div>
                                   </CommandEmpty>
-                                  <CommandGroup className="max-h-[300px] overflow-y-auto scrollbar-admin">
+                                  <CommandGroup 
+                                    className="max-h-[300px] overflow-y-auto scrollbar-admin"
+                                    onScroll={(e) => {
+                                      const target = e.currentTarget;
+                                      const isNearBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 50;
+                                      if (isNearBottom && artistsHasMore && !artistsLoading) {
+                                        loadArtists(artistSearchQuery, artistsPage + 1, true);
+                                      }
+                                    }}
+                                  >
                                     {filteredArtists.map((artist) => {
                                       const isSelected = value.includes(artist.id);
                                       return (
@@ -719,6 +779,17 @@ export const SongFormDialog = ({
                                         </CommandItem>
                                       );
                                     })}
+                                    {artistsLoading && (
+                                      <div className="flex items-center justify-center py-4">
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+                                      </div>
+                                    )}
+                                    {!artistsHasMore && filteredArtists.length > 0 && (
+                                      <div className="text-center py-2 text-xs text-muted-foreground">
+                                        No more artists
+                                      </div>
+                                    )}
                                   </CommandGroup>
                                 </Command>
                               </PopoverContent>
@@ -768,7 +839,7 @@ export const SongFormDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-sm font-medium flex items-center gap-2">
-                          Genre *
+                          Genre <span className="text-destructive">*</span>
                           {field.value?.length > 0 && (
                             <span className="text-xs bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] px-2 py-0.5 rounded-full">
                               {field.value.length} selected

@@ -3,7 +3,6 @@ import {
   Home, 
   Compass, 
   ListMusic, 
-  Brain, 
   Users, 
   Music,
   ChevronLeft,
@@ -30,11 +29,9 @@ import { Button } from "@/components/ui/button";
 const menuItems = [
   { title: "Home", url: "/", icon: Home },
   { title: "Discover", url: "/discover", icon: Compass },
+  { title: "Music Recognition", url: "/music-recognition", icon: Mic },
   { title: "My Library", url: "/playlists", icon: Library },
   { title: "Trending", url: "/top100", icon: Trophy },
-  { title: "Playlist", url: "/playlist", icon: ListMusic },
-  { title: "Music Recognition", url: "/music-recognition", icon: Mic },
-  { title: "Quiz", url: "/quiz", icon: Brain },
   { title: "Social", url: "/social", icon: Users },
 ];
 
@@ -42,9 +39,16 @@ export function AppSidebar() {
   const { openMobile, setOpenMobile, isMobile } = useSidebar();
   const location = useLocation();
   const currentPath = location.pathname;
-  const isActive = (path: string) => currentPath === path;
+  const isActive = (path: string) => {
+    if (path === "/") {
+      return currentPath === "/";
+    }
+    return currentPath.startsWith(path);
+  };
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
-    isActive ? "bg-muted text-primary font-medium" : "hover:bg-muted/50";
+    isActive 
+      ? "bg-gradient-to-r from-primary/20 via-primary/15 to-transparent text-primary font-bold border-l-4 border-primary shadow-lg shadow-primary/20" 
+      : "hover:bg-muted/50 border-l-4 border-transparent";
 
   // No per-item notifications in sidebar; Social panel handles requests
   const getNotificationCount = (_url: string) => 0;
@@ -97,10 +101,12 @@ export function AppSidebar() {
                     >
                       <NavLink 
                         to={item.url} 
-                        end 
+                        end={item.url === "/"}
                         className={({ isActive }) => `
-                          flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 relative
+                          flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300 relative
                           ${getNavCls({ isActive })}
+                          ${isActive ? "scale-[1.03] translate-x-1" : ""}
+                          ${isActive ? "ring-2 ring-primary/30" : ""}
                         `}
                         onClick={() => {
                           // Close mobile sidebar when navigating
@@ -109,10 +115,14 @@ export function AppSidebar() {
                           }
                         }}
                       >
-                        <item.icon className="h-5 w-5 flex-shrink-0" />
-                        <span className="font-medium">
+                        <item.icon className={`h-5 w-5 flex-shrink-0 transition-all duration-300 ${itemIsActive ? "scale-125 text-primary drop-shadow-lg" : ""}`} />
+                        <span className={`font-medium transition-all duration-300 ${itemIsActive ? "drop-shadow-sm" : ""}`}>
                           {item.title}
                         </span>
+                        {/* Active indicator - gradient border */}
+                        {itemIsActive && (
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-primary via-primary to-primary/50 rounded-r-full" />
+                        )}
                         
                         {/* Notification badge */}
                         {notificationCount > 0 && (

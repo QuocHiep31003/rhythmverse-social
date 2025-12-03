@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Play, Pause, Volume2, VolumeX, MoreHorizontal, SkipForward, SkipBack, Repeat, Repeat1, Shuffle } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, MoreHorizontal, SkipForward, SkipBack, Repeat, Repeat1, Shuffle, GripVertical, X, List, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMusic, type Song } from "@/contexts/MusicContext";
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getSongDisplay } from "@/lib/songDisplay";
 
 // QueueItem component
 const QueueItem = memo(({ 
@@ -18,22 +19,53 @@ const QueueItem = memo(({
   index, 
   isCurrent, 
   onPlay, 
-  onRemove 
+  onRemove,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isDragging,
+  dragOverIndex
 }: { 
   song: { id: string | number; title?: string; name?: string; songName?: string; artist?: string; cover?: string }; 
   index: number; 
   isCurrent: boolean; 
   onPlay: () => void; 
   onRemove: () => void;
+  onDragStart: (e: React.DragEvent, index: number) => void;
+  onDragOver: (e: React.DragEvent, index: number) => void;
+  onDrop: (e: React.DragEvent, index: number) => void;
+  onDragEnd: () => void;
+  isDragging: boolean;
+  dragOverIndex: number | null;
 }) => {
   return (
     <div
+      draggable={!isCurrent}
+      onDragStart={(e) => onDragStart(e, index)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOver(e, index);
+      }}
+      onDrop={(e) => onDrop(e, index)}
+      onDragEnd={onDragEnd}
       className={cn(
         "group flex items-center gap-3 px-4 py-2 hover:bg-accent cursor-pointer transition-colors",
-        isCurrent && "bg-accent/50"
+        isCurrent && "bg-accent/50",
+        isDragging && "opacity-50",
+        dragOverIndex === index && !isCurrent && "border-t-2 border-primary"
       )}
       onClick={onPlay}
     >
+      {/* Drag Handle - chỉ hiển thị khi không phải bài đang phát */}
+      {!isCurrent ? (
+        <div className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground transition-colors">
+          <GripVertical className="w-4 h-4" />
+        </div>
+      ) : (
+        <div className="w-4 h-4" />
+      )}
+
       <div className={cn(
         "text-xs font-medium w-6 text-center",
         isCurrent ? "text-primary" : "text-muted-foreground"
@@ -41,10 +73,10 @@ const QueueItem = memo(({
         {index + 1}
       </div>
 
-      {song.cover && (
+      {getSongDisplay(song as any).cover && (
         <img
-          src={song.cover}
-          alt={song.title || song.name || "Song"}
+          src={getSongDisplay(song as any).cover!}
+          alt={getSongDisplay(song as any).title}
           className="w-10 h-10 rounded object-cover"
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/placeholder-music.png';
@@ -53,15 +85,24 @@ const QueueItem = memo(({
       )}
 
       <div className="flex-1 min-w-0">
-        <div className={cn(
-          "font-medium truncate text-sm",
-          isCurrent && "text-primary"
-        )}>
-          {song.title || song.name || song.songName || 'Unknown Song'}
-        </div>
-        <div className="text-xs text-muted-foreground truncate">
-          {song.artist || 'Unknown Artist'}
-        </div>
+        {(() => {
+          const { title, artist } = getSongDisplay(song as any);
+          return (
+            <>
+              <div
+                className={cn(
+                  "font-medium truncate text-sm",
+                  isCurrent && "text-primary"
+                )}
+              >
+                {title}
+              </div>
+              <div className="text-xs text-muted-foreground truncate">
+                {artist}
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {isCurrent ? (
@@ -70,17 +111,36 @@ const QueueItem = memo(({
           <span className="text-xs text-primary font-medium">Đang phát</span>
         </div>
       ) : (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 opacity-0 group-hover:opacity-100"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 opacity-0 group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                // TODO: Thêm vào danh sách yêu thích theo logic của bạn
+              }}
+            >
+              Thêm vào danh sách yêu thích
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+            >
+              Xóa khỏi danh sách chờ
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );
@@ -90,12 +150,13 @@ QueueItem.displayName = 'QueueItem';
 
 // SongInfo component
 const SongInfo = memo(({ song }: { song: { title?: string; name?: string; songName?: string; artist?: string; cover?: string } }) => {
+  const { title, artist, cover } = getSongDisplay(song as any);
   return (
     <div className="flex items-center gap-3 min-w-0 flex-1">
-      {song.cover && (
+      {cover && (
         <img
-          src={song.cover}
-          alt={song.title || song.name || "Song"}
+          src={cover}
+          alt={title}
           className="w-14 h-14 rounded object-cover flex-shrink-0"
           onError={(e) => {
             (e.target as HTMLImageElement).src = '/placeholder-music.png';
@@ -104,10 +165,10 @@ const SongInfo = memo(({ song }: { song: { title?: string; name?: string; songNa
       )}
       <div className="min-w-0 flex-1">
         <div className="font-medium truncate text-sm">
-          {song.title || song.name || song.songName || "Unknown Song"}
+          {title}
         </div>
         <div className="text-xs text-muted-foreground truncate">
-          {song.artist || "Unknown Artist"}
+          {artist}
         </div>
       </div>
     </div>
@@ -318,6 +379,7 @@ const QueueMenu = memo(({
   onOpenChange,
   onPlaySong,
   onRemoveFromQueue,
+  moveQueueItem,
 }: {
   queue: Array<{ id: string | number; title?: string; name?: string; songName?: string; artist?: string; cover?: string }>;
   currentSongId: string | number | null;
@@ -325,24 +387,54 @@ const QueueMenu = memo(({
   onOpenChange: (open: boolean) => void;
   onPlaySong: (songId: string | number) => void;
   onRemoveFromQueue: (songId: string | number) => void;
+  moveQueueItem: (fromIndex: number, toIndex: number) => void;
 }) => {
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== dropIndex) {
+      moveQueueItem(draggedIndex, dropIndex);
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <DropdownMenu open={showQueue} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          className="h-9 w-9 relative"
+          className="h-9 w-9"
+          title="Danh sách chờ"
         >
-          <MoreHorizontal className="w-5 h-5" />
-          {queue.length > 0 && (
-            <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
-              {queue.length}
-            </span>
-          )}
+          <List className="w-5 h-5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96 max-h-[500px] overflow-hidden flex flex-col">
+      <DropdownMenuContent
+        align="end"
+        className="w-[30rem] max-w-[calc(100vw-2rem)] max-h-[700px] overflow-hidden flex flex-col z-[9999]"
+      >
         <div className="px-4 py-3 border-b">
           <div className="text-sm font-semibold">Danh sách chờ</div>
           <div className="text-xs text-muted-foreground mt-1">
@@ -370,6 +462,12 @@ const QueueMenu = memo(({
                   onRemove={() => {
                     onRemoveFromQueue(song.id);
                   }}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop}
+                  onDragEnd={handleDragEnd}
+                  isDragging={draggedIndex === index}
+                  dragOverIndex={dragOverIndex}
                 />
               ))}
             </div>
@@ -413,6 +511,7 @@ const ControlMusicPlayer = () => {
   });
 
   const [showQueue, setShowQueue] = useState(false);
+  const [showLyrics, setShowLyrics] = useState(false);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const [isMainTab, setIsMainTab] = useState(false);
   const [hasReceivedStateFromOtherTab, setHasReceivedStateFromOtherTab] = useState(false);
@@ -1046,7 +1145,31 @@ const ControlMusicPlayer = () => {
   }, [sendCommand]);
 
   const handleRemoveFromQueue = useCallback((songId: string | number) => {
+    // Optimistic update: xóa khỏi localState ngay lập tức
+    setLocalState(prev => ({
+      ...prev,
+      queue: prev.queue?.filter(q => String(q.id) !== String(songId)) || []
+    }));
     sendCommand("removeFromQueue", { songId });
+  }, [sendCommand]);
+
+  const handleMoveQueueItem = useCallback((fromIndex: number, toIndex: number) => {
+    // Optimistic update: cập nhật localState ngay lập tức
+    setLocalState(prev => {
+      if (!prev.queue || prev.queue.length === 0) return prev;
+      const safeFrom = Math.max(0, Math.min(prev.queue.length - 1, fromIndex));
+      const safeTo = Math.max(0, Math.min(prev.queue.length - 1, toIndex));
+      if (safeFrom === safeTo) return prev;
+      const updated = [...prev.queue];
+      const [moved] = updated.splice(safeFrom, 1);
+      updated.splice(safeTo, 0, moved);
+      return {
+        ...prev,
+        queue: updated
+      };
+    });
+    // Gửi command qua BroadcastChannel để tab chính cũng cập nhật
+    sendCommand("moveQueueItem", { fromIndex, toIndex });
   }, [sendCommand]);
 
   // Tính toán canGoPrevious
@@ -1121,7 +1244,7 @@ const ControlMusicPlayer = () => {
             />
           </div>
 
-          {/* Volume và Queue - Bên phải */}
+          {/* Volume, Lyrics và Queue - Bên phải */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <VolumeControl
               volume={localState.volume || 1}
@@ -1130,6 +1253,37 @@ const ControlMusicPlayer = () => {
               onToggleMute={handleToggleMute}
             />
 
+            {/* Lyrics Button */}
+            {currentSong && (
+              <DropdownMenu open={showLyrics} onOpenChange={setShowLyrics}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    title="Lời bài hát"
+                  >
+                    <Mic className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[420px] max-h-[500px] overflow-y-auto">
+                  <div className="px-4 py-4 text-sm space-y-2">
+                    {"lyrics" in currentSong && typeof currentSong.lyrics === "string" ? (
+                      currentSong.lyrics.split("\n").map((line: string, idx: number) => (
+                        <p key={idx} className="text-foreground/90 leading-relaxed">
+                          {line}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground text-center py-6">
+                        Chưa có lời bài hát cho bài này.
+                      </p>
+                    )}
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
             <QueueMenu
               queue={localState.queue || []}
               currentSongId={localState.songId}
@@ -1137,6 +1291,7 @@ const ControlMusicPlayer = () => {
               onOpenChange={setShowQueue}
               onPlaySong={handlePlaySong}
               onRemoveFromQueue={handleRemoveFromQueue}
+              moveQueueItem={handleMoveQueueItem}
             />
           </div>
         </div>

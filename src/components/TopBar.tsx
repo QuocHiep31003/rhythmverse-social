@@ -28,6 +28,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { stopTokenRefreshInterval, clearTokens, getAuthToken } from "@/services/api/config";
 
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +83,8 @@ const TopBar = () => {
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState("");
+  const [showRecordingDialog, setShowRecordingDialog] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
 
   const [inviteCount, setInviteCount] = useState<number>(0);
   const [unreadMsgCount, setUnreadMsgCount] = useState<number>(0);
@@ -125,6 +134,7 @@ const TopBar = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // ✅ Check nếu đang ở social/chat page - không tăng unread count
   const isOnSocialPage = location.pathname === '/social' || location.pathname.startsWith('/social');
@@ -149,6 +159,8 @@ const TopBar = () => {
 
   const startRecording = async () => {
     try {
+      setShowRecordingDialog(true);
+      setRecordingTime(0);
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -158,7 +170,7 @@ const TopBar = () => {
         chunksRef.current.push(event.data);
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
         setAudioBlob(blob);
@@ -166,12 +178,23 @@ const TopBar = () => {
         setError("");
 
         stream.getTracks().forEach((track) => track.stop());
+        
+        // Auto recognize after stopping
+        if (blob) {
+          await handleRecognizeFromDialog(blob, url);
+        }
       };
 
       mediaRecorder.start();
       setIsRecording(true);
+      
+      // Start timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
     } catch (err) {
       setError("Failed to access microphone. Please check permissions.");
+      setShowRecordingDialog(false);
     }
   };
 
@@ -179,6 +202,48 @@ const TopBar = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleRecognizeFromDialog = async (blob: Blob, url: string) => {
+    if (!canUse) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    setIsRecognizing(true);
+    setError("");
+
+    try {
+      const result = await arcApi.recognizeMusic(blob);
+      await checkUsage();
+      navigate("/music-recognition-result", {
+        state: {
+          result,
+          audioUrl: url,
+        },
+      });
+      setShowRecordingDialog(false);
+      setAudioBlob(null);
+      setAudioUrl("");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 403 || err?.message?.toLowerCase?.().includes("limit")) {
+        setShowLimitModal(true);
+        await checkUsage();
+      } else {
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Failed to recognize music. Please try again.";
+        setError(errorMessage);
+      }
+    } finally {
+      setIsRecognizing(false);
     }
   };
 
@@ -250,9 +315,21 @@ const TopBar = () => {
     setAudioUrl("");
     setIsPlaying(false);
     setError("");
+    setShowRecordingDialog(false);
+    setRecordingTime(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
   /** ================= LOAD USER PROFILE + PREMIUM ================= **/
@@ -348,6 +425,15 @@ const TopBar = () => {
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('tokenUpdated', handleTokenUpdate);
+    };
+  }, []);
+
+  // Cleanup recording timer on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
     };
   }, []);
 
@@ -558,154 +644,24 @@ const TopBar = () => {
                 onChange={(e) => setSearchText(e.target.value)}
                 placeholder="Search songs, artists..."
                 className="pl-10"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSearch(e as any);
+                  }
+                }}
               />
             </div>
 
-            <Button type="submit" className="px-4">
-              <Search className="h-4 w-4" />
+            {/* Voice Record Button */}
+            <Button
+              type="button"
+              variant="hero"
+              className="px-4"
+              onClick={startRecording}
+              disabled={isRecognizing}
+            >
+              <Mic className="h-4 w-4" />
             </Button>
-
-            {/* Music Recognition */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <Music className="h-4 w-4 mr-2" />
-                  Music Recognition
-                  <ChevronDown className="h-3 w-3 ml-1" />
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent className="w-80" align="end">
-                <div className="p-3 space-y-3">
-                  {/* Upload */}
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Upload className="h-4 w-4" />
-                      <span className="text-sm font-medium">
-                        Upload Audio File
-                      </span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Choose File
-                    </Button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="audio/*"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                  </div>
-
-                  {/* Record */}
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Mic className="h-4 w-4" />
-                      <span className="text-sm font-medium">Record Audio</span>
-                    </div>
-                    <Button
-                      variant={isRecording ? "destructive" : "outline"}
-                      className="w-full justify-start"
-                      onClick={isRecording ? stopRecording : startRecording}
-                    >
-                      {isRecording ? (
-                        <>
-                          <Square className="h-4 w-4 mr-2" /> Stop Recording
-                        </>
-                      ) : (
-                        <>
-                          <Mic className="h-4 w-4 mr-2" /> Start Recording
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  {/* Preview */}
-                  {audioBlob && (
-                    <div className="space-y-2 pt-2 border-t">
-                      <div className="flex gap-2">
-                        <Music className="h-4 w-4" />
-                        <span className="text-sm font-medium">
-                          Audio Preview
-                        </span>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {!isPlaying ? (
-                          <Button
-                            onClick={playAudio}
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Play className="h-3 w-3" />
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={pauseAudio}
-                            variant="outline"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                          >
-                            <Pause className="h-3 w-3" />
-                          </Button>
-                        )}
-
-                        <span className="text-xs flex-1 text-muted-foreground">
-                          Audio ready
-                        </span>
-
-                        <Button
-                          onClick={clearAudio}
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                        >
-                          ×
-                        </Button>
-                      </div>
-
-                      <Button
-                        onClick={handleRecognize}
-                        disabled={isRecognizing || isCheckingLimit}
-                        className="w-full"
-                      >
-                        {isRecognizing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            Recognizing...
-                          </>
-                        ) : isCheckingLimit ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            Checking...
-                          </>
-                        ) : (
-                          <>
-                            <Search className="h-4 w-4 mr-2" />
-                            Recognize Music
-                            {!canUse && (
-                              <span className="ml-2 text-xs opacity-75">
-                                (Limit reached)
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </Button>
-
-                      {error && (
-                        <p className="text-xs text-red-500">{error}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </form>
         </div>
 
@@ -841,6 +797,112 @@ const TopBar = () => {
         canUse={canUse}
         onRefresh={checkUsage}
       />
+
+      {/* Recording Dialog */}
+      <Dialog open={showRecordingDialog} onOpenChange={(open) => {
+        if (!open) {
+          if (isRecording) {
+            stopRecording();
+          }
+          if (!isRecognizing) {
+            clearAudio();
+          }
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Voice Search</DialogTitle>
+            <DialogDescription>
+              Record audio to search for music
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-col items-center justify-center py-8 space-y-6">
+            {/* Recording Animation */}
+            {isRecording && (
+              <div className="relative">
+                <div className="w-32 h-32 rounded-full bg-primary/20 flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full bg-primary/30 animate-ping" />
+                  <div className="absolute inset-4 rounded-full bg-primary/40 animate-pulse" />
+                  <Mic className="w-12 h-12 text-primary relative z-10" />
+                </div>
+              </div>
+            )}
+
+            {/* Recording Time */}
+            {isRecording && (
+              <div className="text-2xl font-mono font-bold text-primary">
+                {formatTime(recordingTime)}
+              </div>
+            )}
+
+            {/* Status Text */}
+            <div className="text-center">
+              {isRecording ? (
+                <p className="text-lg font-semibold text-primary">Recording...</p>
+              ) : isRecognizing ? (
+                <div className="space-y-2">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+                  <p className="text-lg font-semibold">Recognizing music...</p>
+                </div>
+              ) : audioBlob ? (
+                <div className="space-y-4 w-full">
+                  <p className="text-sm text-muted-foreground">Recording complete</p>
+                  
+                  {/* Playback Controls */}
+                  <div className="flex items-center justify-center gap-4">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={isPlaying ? pauseAudio : playAudio}
+                      className="w-12 h-12"
+                    >
+                      {isPlaying ? (
+                        <Pause className="w-6 h-6" />
+                      ) : (
+                        <Play className="w-6 h-6" />
+                      )}
+                    </Button>
+                    <span className="text-sm text-muted-foreground">Preview</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Ready to record</p>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="text-sm text-red-500 text-center">{error}</div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-3 w-full">
+              {isRecording ? (
+                <Button
+                  onClick={stopRecording}
+                  variant="destructive"
+                  className="flex-1"
+                  size="lg"
+                >
+                  <Square className="w-4 h-4 mr-2" />
+                  Stop Recording
+                </Button>
+              ) : audioBlob && !isRecognizing ? (
+                <>
+                  <Button
+                    onClick={clearAudio}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Record Again
+                  </Button>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 };

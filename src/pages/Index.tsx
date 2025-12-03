@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import PromotionCarousel from "@/components/PromotionCarousel";
-import FeaturedMusic from "@/components/FeaturedMusic";
+import HomeIntro from "@/components/HomeIntro";
 import GenreExplorer from "@/components/GenreExplorer";
 import Footer from "@/components/Footer";
 import { MobileNotifications } from "@/components/MobileNotifications";
@@ -14,8 +14,16 @@ import {
 } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import type { Song as PlayerSong } from "@/contexts/MusicContext";
-import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Thêm component mới
+import NewReleases from "@/components/ui/NewReleases"; // ✅ Component hiển thị bài hát mới
+import NewAlbums from "@/components/ui/NewAlbums"; // ✅ Component hiển thị album mới
 import AIPicksSection from "@/components/ui/AIPicksSection"; // ✅ AI Picks component
+import TrendingSongsSection from "@/components/ui/TrendingSongsSection"; // ✅ Trending songs cho guest
+import PopularSongsSection from "@/components/ui/PopularSongsSection"; // ✅ Popular songs cho guest
+import ArtistFanSection from "@/components/ui/ArtistFanSection"; // ✅ Artist fan recommendations
+import RecentListeningSection from "@/components/ui/RecentListeningSection"; // ✅ Nghe gần đây
+import TopArtistSection from "@/components/ui/TopArtistSection"; // ✅ Ca sĩ nổi bật
+import TopGenreMoodSection from "@/components/ui/TopGenreMoodSection"; // ✅ Genre/Mood nổi bật
+import { getAuthToken } from "@/services/api/config";
 import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import { formatPlayCount, mapToPlayerSong } from "@/lib/utils";
@@ -106,18 +114,41 @@ const Index = () => {
     <div className="min-h-screen bg-gradient-dark">
       <PromotionCarousel />
       
-      {/* Find songs by melody only - Right below banner */}
-      <FeaturedMusic />
+      {/* Home Introduction - Giới thiệu về web */}
+      <HomeIntro />
       
       <main className="pt-4">
         {/* Quick Features */}
         <section className="py-8">
           <div className="container px-6">
-            {/* AI Picks For You - Smart Recommendations */}
+            {/* AI Picks For You - Smart Recommendations (chỉ hiển thị khi đã đăng nhập) */}
             <AIPicksSection />
 
-            {/* Editor's Choice / New Albums */}
+            {/* Nghe gần đây - Các bài hát đã nghe từ playlist, albums, ... */}
+            <RecentListeningSection />
+
+            {/* Ca sĩ nổi bật - Nghệ sĩ nghe nhiều nhất và bài hát của họ */}
+            <TopArtistSection />
+
+            {/* Genre/Mood nổi bật - Thể loại/tâm trạng nghe nhiều nhất */}
+            <TopGenreMoodSection />
+
+            {/* Artist Fan Sections - Gợi ý bài hát theo artist hay nghe */}
+            <ArtistFanSection />
+
+            {/* New Releases - Bài hát mới ra mắt */}
+            <NewReleases />
+
+            {/* New Albums - Album mới */}
             <NewAlbums />
+
+            {/* Guest sections - Hiển thị nhiều gợi ý hơn cho guest */}
+            {!getAuthToken() && (
+              <>
+                <TrendingSongsSection />
+                <PopularSongsSection />
+              </>
+            )}
           </div>
         </section>
 

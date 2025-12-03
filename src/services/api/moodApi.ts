@@ -20,6 +20,38 @@ export const moodsApi = {
         }
     },
 
+    /**
+     * Lấy moods cho user (chỉ lấy ACTIVE)
+     * GET /api/moods/public?page=X&size=Y&sort=name,asc
+     */
+    getPublic: async ({ page = 0, size = 10, sort = "name,asc", search }: PaginationParams = {}): Promise<any> => {
+        try {
+            const queryParams = new URLSearchParams({
+                page: page.toString(),
+                size: size.toString(),
+                sort,
+                ...(search && { search }),
+            });
+            const response = await fetch(`${API_BASE_URL}/moods/public?${queryParams}`);
+            if (!response.ok) {
+                throw new Error("Failed to fetch public moods");
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("Error fetching public moods:", error);
+            return {
+                content: [],
+                totalElements: 0,
+                totalPages: 0,
+                size,
+                number: page,
+                first: true,
+                last: true,
+                empty: true
+            };
+        }
+    },
+
     getById: async (id: number) => {
         try {
             const response = await fetch(`${API_BASE_URL}/moods/${id}`);

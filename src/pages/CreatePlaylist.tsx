@@ -359,7 +359,7 @@ const CreatePlaylist = () => {
         description: `"${data.name}" has been added to your library`,
       });
 
-      navigate(`/playlist/${createSlug(data.name || "playlist", data.id)}`);
+      navigate("/playlist");
     } catch (err: any) {
       // Kiểm tra các trường hợp lỗi về limit
       const errorMessage = err?.message || "";

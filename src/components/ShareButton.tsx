@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 interface ShareButtonProps {
   title: string;
-  type: "song" | "album" | "playlist" | "quiz";
+  type: "song" | "album" | "playlist";
   url?: string;
   playlistId?: number; // when type === 'playlist'
   albumId?: number; // when type === 'album'
