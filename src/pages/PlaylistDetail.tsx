@@ -38,7 +38,7 @@ import { PlaylistVisibility, CollaboratorRole } from "@/types/playlist";
 import { getPlaylistPermissions, checkIfFriends } from "@/utils/playlistPermissions";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { SearchSongResult, ExtendedPlaylistDTO, PendingInvite, PlaylistState } from "@/types/playlistDetail";
+import type { SearchSongResult, ExtendedPlaylistDTO, PlaylistState } from "@/types/playlistDetail";
 import { toSeconds, msToMMSS, isValidImageValue, resolveSongCover, mapSongsFromResponse, formatDateDisplay, parseSlug, createSlug } from "@/utils/playlistUtils";
 import { parseCollaboratorRole, normalizeCollaborators } from "@/utils/collaboratorUtils";
 import { PlaylistSongItem } from "@/components/playlist/PlaylistSongItem";
@@ -133,7 +133,7 @@ const PlaylistDetail = () => {
   const [loadingFriends, setLoadingFriends] = useState(false);
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([]);
   const [sendingInvites, setSendingInvites] = useState(false);
-  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([]);
+  // Removed pendingInvites - no longer using invite system
   const [collabSearch, setCollabSearch] = useState("");
   const [collaborators, setCollaborators] = useState<Array<{ userId: number; name: string; email?: string; role?: CollaboratorRole | string }>>([]);
   const [collaboratorAvatars, setCollaboratorAvatars] = useState<Record<number, string | null>>({});
@@ -143,7 +143,7 @@ const PlaylistDetail = () => {
   const [editedDescription, setEditedDescription] = useState("");
   const [editedCoverUrl, setEditedCoverUrl] = useState("");
   const [editedVisibility, setEditedVisibility] = useState<PlaylistVisibility>(PlaylistVisibility.PUBLIC);
-  const [inviteRole, setInviteRole] = useState<CollaboratorRole>(CollaboratorRole.EDITOR);
+  // Removed inviteRole - no longer using invite system
   const [isFriend, setIsFriend] = useState<boolean>(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [removingCollaboratorId, setRemovingCollaboratorId] = useState<number | null>(null);
@@ -222,7 +222,7 @@ const PlaylistDetail = () => {
   const fetchedSongCoverIdsRef = useRef<Set<string>>(new Set());
   const friendsLoadedRef = useRef(false);
   const lastCollaboratorsRef = useRef<string>("");
-  const lastPendingInvitesRef = useRef<string>("");
+  // Removed lastPendingInvitesRef - no longer using invite system
 
   const displayTitle = playlist?.title || "Playlist";
   const displayTitleFontClass = useMemo(
@@ -452,38 +452,83 @@ const PlaylistDetail = () => {
       return;
     }
     
-    // N?u playlist kh�ng c� b�i h�t, v?n load recommend t? popular songs
+    // Always get current playlist songs to filter recommended (use current state)
+    const currentPlaylistSongIds = new Set(playlist.songs.map(s => String(s.id)));
+    
+    // Nếu playlist không có bài hát, sử dụng API recommendByGenre/recommendByMood nếu có
     if (playlist.songs.length === 0) {
       setLoadingRecommended(true);
       try {
-        const data = await songsApi.getAll({ size: 4, page: 0 });
-        // Convert Song[] to SearchSongResult[] - ensure id is number
-        const songs = (data.content || []).slice(0, 4);
-        const converted: SearchSongResult[] = songs.map((song): SearchSongResult => {
-          const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
-          // Handle artists - can be array or string
-          let artists: Array<{ id?: number; name: string }> = [];
-          if (Array.isArray(song.artists)) {
-            artists = song.artists.map((a: any) => {
-              if (typeof a === 'string') return { name: a };
-              if (a && typeof a === 'object' && 'name' in a) {
-                const result: { id?: number; name: string } = { name: a.name };
-                if (a.id !== undefined) result.id = a.id;
-                return result;
+        const recommended: SearchSongResult[] = [];
+        
+        // Thử dùng AI picks API nếu có (dựa trên thông tin detect trước đó)
+        try {
+          const aiPicks = await songsApi.getAiPicksForYou(10);
+          if (aiPicks && aiPicks.length > 0) {
+            const converted = aiPicks.slice(0, 5).map((song: any): SearchSongResult => {
+              const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
+              let artists: Array<{ id?: number; name: string }> = [];
+              if (Array.isArray(song.artists)) {
+                artists = song.artists.map((a: any) => {
+                  if (typeof a === 'string') return { name: a };
+                  if (a && typeof a === 'object' && 'name' in a) {
+                    const result: { id?: number; name: string } = { name: a.name };
+                    if (a.id !== undefined) result.id = a.id;
+                    return result;
+                  }
+                  return null;
+                }).filter((a): a is { id?: number; name: string } => a !== null);
               }
-              return null;
-            }).filter((a): a is { id?: number; name: string } => a !== null);
+              return {
+                id: songId,
+                name: song.name || song.songName || song.title || '',
+                artists,
+                album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
+                urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
+                duration: song.duration || 0,
+              };
+            }).filter((s) => s.id > 0);
+            recommended.push(...converted);
           }
-          return {
-            id: songId,
-            name: song.name || song.songName || song.title || '',
-            artists,
-            album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
-            urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
-            duration: song.duration || 0,
-          };
-        }).filter((s) => s.id > 0);
-        setRecommendedSongs(converted);
+        } catch (e) {
+          console.warn('Failed to load AI picks, trying fallback:', e);
+        }
+        
+        // Fallback: Nếu không có AI picks hoặc không đủ, dùng popular songs
+        if (recommended.length < 5) {
+          try {
+            const data = await songsApi.getAll({ size: 5, page: 0 });
+            const songs = (data.content || []).slice(0, 5 - recommended.length);
+            const converted: SearchSongResult[] = songs.map((song): SearchSongResult => {
+              const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
+              let artists: Array<{ id?: number; name: string }> = [];
+              if (Array.isArray(song.artists)) {
+                artists = song.artists.map((a: any) => {
+                  if (typeof a === 'string') return { name: a };
+                  if (a && typeof a === 'object' && 'name' in a) {
+                    const result: { id?: number; name: string } = { name: a.name };
+                    if (a.id !== undefined) result.id = a.id;
+                    return result;
+                  }
+                  return null;
+                }).filter((a): a is { id?: number; name: string } => a !== null);
+              }
+              return {
+                id: songId,
+                name: song.name || song.songName || song.title || '',
+                artists,
+                album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
+                urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
+                duration: song.duration || 0,
+              };
+            }).filter((s) => s.id > 0);
+            recommended.push(...converted);
+          } catch (e) {
+            console.warn('Failed to load popular songs:', e);
+          }
+        }
+        
+        setRecommendedSongs(recommended.slice(0, 5));
       } catch (error: any) {
         // Silently handle access denied or other errors
         if (error?.message !== 'Access Denied') {
@@ -493,12 +538,13 @@ const PlaylistDetail = () => {
       } finally {
         setLoadingRecommended(false);
       }
-        return;
-      }
-      
+      return;
+    }
+    
       setLoadingRecommended(true);
       try {
-        const playlistSongIds = new Set(playlist.songs.map(s => String(s.id)));
+        // Use current playlist songs (already computed above)
+        const playlistSongIds = currentPlaylistSongIds;
         const recommended: SearchSongResult[] = [];
         
         // Thu th?p genres, moods, v� artists t? c�c b�i h�t trong playlist
@@ -528,7 +574,7 @@ const PlaylistDetail = () => {
           try {
             const songId = Number(song.id);
             if (isNaN(songId)) return null;
-            const moods = await songMoodApi.getBySongId(songId).catch(() => null);
+            const moods = await songMoodApi.getBySong(songId).catch(() => null);
             return moods;
           } catch {
             return null;
@@ -567,37 +613,79 @@ const PlaylistDetail = () => {
         // CCancel song song c�c API calls d? tang t?c
         const recommendationPromises: Promise<SearchSongResult[]>[] = [];
         
-        // Uu ti�n 1: T�m b�i h�t theo Mood
+        // Ưu tiên 1: Tìm bài hát theo Mood (dùng recommendByMood API)
         if (moodIds.size > 0) {
           const moodIdArray = Array.from(moodIds).slice(0, 2);
           moodIdArray.forEach((moodId) => {
             recommendationPromises.push(
-              songsApi.getWithoutAlbum({ moodId, size: 8 })
-                .then(res => {
-                  const content = res.content || [];
-                  return content.filter(
-                    (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                  ) as SearchSongResult[];
+              songsApi.recommendByMood(moodId, 8)
+                .then(songs => {
+                  return songs.filter(
+                    (s: any) => !playlistSongIds.has(String(s.id))
+                  ).map((song: any): SearchSongResult => {
+                    const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
+                    let artists: Array<{ id?: number; name: string }> = [];
+                    if (Array.isArray(song.artists)) {
+                      artists = song.artists.map((a: any) => {
+                        if (typeof a === 'string') return { name: a };
+                        if (a && typeof a === 'object' && 'name' in a) {
+                          const result: { id?: number; name: string } = { name: a.name };
+                          if (a.id !== undefined) result.id = a.id;
+                          return result;
+                        }
+                        return null;
+                      }).filter((a): a is { id?: number; name: string } => a !== null);
+                    }
+                    return {
+                      id: songId,
+                      name: song.name || song.songName || song.title || '',
+                      artists,
+                      album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
+                      urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
+                      duration: song.duration || 0,
+                    };
+                  }).filter((s) => s.id > 0) as SearchSongResult[];
                 })
                 .catch(() => [] as SearchSongResult[])
             );
           });
         }
         
-        // Uu ti�n 2: T�m b�i h�t theo Genre
+        // Ưu tiên 2: Tìm bài hát theo Genre (dùng recommendByGenre API)
         if (genreIds.size > 0) {
           const genreIdArray = Array.from(genreIds).slice(0, 2);
           genreIdArray.forEach((genreId) => {
-          recommendationPromises.push(
-              songsApi.getWithoutAlbum({ genreId, size: 8 })
-              .then(res => {
-                const content = res.content || [];
-                return content.filter(
-                  (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
-                ) as SearchSongResult[];
-              })
-              .catch(() => [] as SearchSongResult[])
-          );
+            recommendationPromises.push(
+              songsApi.recommendByGenre(genreId, 8)
+                .then(songs => {
+                  return songs.filter(
+                    (s: any) => !playlistSongIds.has(String(s.id))
+                  ).map((song: any): SearchSongResult => {
+                    const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
+                    let artists: Array<{ id?: number; name: string }> = [];
+                    if (Array.isArray(song.artists)) {
+                      artists = song.artists.map((a: any) => {
+                        if (typeof a === 'string') return { name: a };
+                        if (a && typeof a === 'object' && 'name' in a) {
+                          const result: { id?: number; name: string } = { name: a.name };
+                          if (a.id !== undefined) result.id = a.id;
+                          return result;
+                        }
+                        return null;
+                      }).filter((a): a is { id?: number; name: string } => a !== null);
+                    }
+                    return {
+                      id: songId,
+                      name: song.name || song.songName || song.title || '',
+                      artists,
+                      album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
+                      urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
+                      duration: song.duration || 0,
+                    };
+                  }).filter((s) => s.id > 0) as SearchSongResult[];
+                })
+                .catch(() => [] as SearchSongResult[])
+            );
           });
         }
         
@@ -651,14 +739,13 @@ const PlaylistDetail = () => {
           if (allSongs.length >= 8) break;
         }
         
-        // Filter l?i d? lo?i b? nh?ng b�i d� c� trong playlist (c?p nh?t l?i)
-        // �?m b?o kh�ng recommend b�i h�t d� c� trong playlist
+        // Filter out songs already in playlist (always use current playlist state)
         const finalSongs = allSongs.filter(
           (s: SearchSongResult) => !playlistSongIds.has(String(s.id))
         );
         
         // N?u kh�ng d? 4 b�i, l?y th�m t? fallback (v?n filter b�i d� c�)
-        if (finalSongs.length < 4) {
+        if (finalSongs.length < 5) {
           try {
             const fallbackData = await songsApi.getAll({ size: 50, page: 0 });
             const fallbackSongs = (fallbackData.content || []).filter(
@@ -666,7 +753,7 @@ const PlaylistDetail = () => {
                 !playlistSongIds.has(String(s.id)) && 
                 !finalSongs.some(existing => String(existing.id) === String(s.id))
             );
-            finalSongs.push(...fallbackSongs.slice(0, 4 - finalSongs.length));
+            finalSongs.push(...fallbackSongs.slice(0, 5 - finalSongs.length));
           } catch (e: any) {
             // Silently handle access denied or other errors
             if (e?.message !== 'Access Denied') {
@@ -677,7 +764,7 @@ const PlaylistDetail = () => {
         
         // Ch? set recommend n?u c� b�i h�t (kh�ng set empty array)
         if (finalSongs.length > 0) {
-          setRecommendedSongs(finalSongs.slice(0, 4));
+          setRecommendedSongs(finalSongs.slice(0, 5));
         } else {
           setRecommendedSongs([]);
         }
@@ -688,6 +775,129 @@ const PlaylistDetail = () => {
         setLoadingRecommended(false);
       }
   }, [playlist]);
+
+  // Function to load additional recommended songs when needed (without reloading all)
+  const loadMoreRecommended = useCallback(async (excludeSongId: number, currentRecommended: SearchSongResult[]) => {
+    if (!playlist) return;
+    
+    try {
+      const currentPlaylistSongIds = new Set(playlist.songs.map(s => String(s.id)));
+      const recommended: SearchSongResult[] = [];
+      
+      // Try to get a few more songs from various sources
+      const recommendationPromises: Promise<SearchSongResult[]>[] = [];
+      
+      // Get popular songs as fallback
+      recommendationPromises.push(
+        songsApi.getAll({ size: 10, page: 0 })
+          .then(res => {
+            const content = res.content || [];
+            return content.filter(
+              (s: SearchSongResult) => 
+                !currentPlaylistSongIds.has(String(s.id)) && 
+                String(s.id) !== String(excludeSongId) &&
+                !currentRecommended.some(existing => String(existing.id) === String(s.id))
+            ) as SearchSongResult[];
+          })
+          .catch(() => [] as SearchSongResult[])
+      );
+      
+      // If playlist has songs, try to get recommendations based on them
+      if (playlist.songs.length > 0) {
+        const songsToCheck = playlist.songs.slice(0, 2);
+        const songDetailPromises = songsToCheck.map(async (song) => {
+          try {
+            const songId = Number(song.id);
+            if (isNaN(songId)) return null;
+            const songDetail = await songsApi.getById(String(songId)).catch(() => null);
+            return songDetail;
+          } catch {
+            return null;
+          }
+        });
+        
+        const songDetails = (await Promise.all(songDetailPromises)).filter(Boolean);
+        const moodIds = new Set<number>();
+        
+        // Get moods
+        const moodPromises = songsToCheck.map(async (song) => {
+          try {
+            const songId = Number(song.id);
+            if (isNaN(songId)) return null;
+            const moods = await songMoodApi.getBySong(songId).catch(() => null);
+            return moods;
+          } catch {
+            return null;
+          }
+        });
+        const moodResults = (await Promise.all(moodPromises)).filter(Boolean);
+        
+        moodResults.forEach((moods: any) => {
+          if (!moods || !Array.isArray(moods)) return;
+          moods.slice(0, 1).forEach((m: { id?: number; moodId?: number }) => {
+            const moodId = m.id ?? m.moodId;
+            if (moodId && typeof moodId === 'number') moodIds.add(moodId);
+          });
+        });
+        
+        // Try mood recommendations
+        if (moodIds.size > 0) {
+          const moodId = Array.from(moodIds)[0];
+          recommendationPromises.push(
+            songsApi.recommendByMood(moodId, 5)
+              .then(songs => {
+                return songs.filter(
+                  (s: any) => 
+                    !currentPlaylistSongIds.has(String(s.id)) && 
+                    String(s.id) !== String(excludeSongId) &&
+                    !currentRecommended.some(existing => String(existing.id) === String(s.id))
+                ).map((song: any): SearchSongResult => {
+                  const songId = typeof song.id === 'number' ? song.id : Number(song.id) || 0;
+                  let artists: Array<{ id?: number; name: string }> = [];
+                  if (Array.isArray(song.artists)) {
+                    artists = song.artists.map((a: any) => {
+                      if (typeof a === 'string') return { name: a };
+                      if (a && typeof a === 'object' && 'name' in a) {
+                        const result: { id?: number; name: string } = { name: a.name };
+                        if (a.id !== undefined) result.id = a.id;
+                        return result;
+                      }
+                      return null;
+                    }).filter((a): a is { id?: number; name: string } => a !== null);
+                  }
+                  return {
+                    id: songId,
+                    name: song.name || song.songName || song.title || '',
+                    artists,
+                    album: typeof song.album === 'string' ? { name: song.album } : song.album || { name: '' },
+                    urlImageAlbum: song.urlImageAlbum || song.albumCoverImg || song.albumImageUrl || song.cover || '',
+                    duration: song.duration || 0,
+                  };
+                }).filter((s) => s.id > 0) as SearchSongResult[];
+              })
+              .catch(() => [] as SearchSongResult[])
+          );
+        }
+      }
+      
+      const results = await Promise.all(recommendationPromises);
+      const allSongs: SearchSongResult[] = [];
+      for (const result of results) {
+        for (const song of result) {
+          if (!allSongs.some(s => String(s.id) === String(song.id))) {
+            allSongs.push(song);
+            if (allSongs.length >= 5) break;
+          }
+        }
+        if (allSongs.length >= 5) break;
+      }
+      
+      return allSongs;
+    } catch (error) {
+      console.warn('Failed to load more recommended songs:', error);
+      return [];
+    }
+  }, [playlist]);
     
   // Load recommend khi playlist thay d?i (ch? cho owner/editor)
   useEffect(() => {
@@ -697,7 +907,7 @@ const PlaylistDetail = () => {
       // N?u kh�ng c� quy?n edit, clear recommendations
       setRecommendedSongs([]);
     }
-  }, [playlist, permissions.canEdit, permissions.isOwner, loadRecommended]);
+  }, [playlist?.id, permissions.canEdit, permissions.isOwner]); // Chỉ load khi playlist ID thay đổi, không load khi songs thay đổi
   
   const reloadPlaylist = useCallback(async () => {
     if (!slug || isCreateMode) return;
@@ -771,8 +981,8 @@ const PlaylistDetail = () => {
       if (banNotification) {
         // Tự động redirect về library
         toast({
-          title: "Playlist đã bị xóa",
-          description: `Playlist "${playlist.title}" đã bị xóa khỏi hệ thống do vi phạm quy tắc.`,
+          title: "Playlist has been deleted",
+          description: `Playlist "${playlist.title}" has been removed from the system due to policy violation.`,
           variant: "destructive",
         });
         navigate("/playlists");
@@ -1064,64 +1274,7 @@ const PlaylistDetail = () => {
     setPermissions(perms);
   }, [playlist, collaborators, meId, isFriend]);
 
-  // Listen for collab invite accepted event to refresh collaborators
-  useEffect(() => {
-    const handleCollabAccepted = async (event: CustomEvent) => {
-      const eventPlaylistId = event.detail?.playlistId;
-      const currentPlaylistId = playlist?.id;
-      
-      // Ch? reload n?u event playlistId kh?p v?i playlist hi?n t?i, ho?c kh�ng c� playlistId trong event
-      if (eventPlaylistId && currentPlaylistId && Number(eventPlaylistId) !== Number(currentPlaylistId)) {
-        return; // Kh�ng ph?i playlist n�y
-      }
-      
-      // Reset fetch ID d? force reload
-      collaboratorsFetchIdRef.current = null;
-      
-      // Force reload collaborators ngay l?p t?c
-      if (currentPlaylistId) {
-        try {
-          const list = await playlistCollaboratorsApi.list(Number(currentPlaylistId));
-          updateCollaboratorsFromRaw(list);
-          collaboratorsFetchIdRef.current = Number(currentPlaylistId);
-          
-          // Fetch avatars cho t?t c? collaborators kh�ng c� avatar (bao g?m c? meId n?u l� collaborator)
-          const missingAvatars = list.filter((c: any) => {
-            const idNum = c.userId;
-            if (!idNum || typeof idNum !== "number") return false;
-            const hasAvatar = (c as { avatar?: string | null }).avatar ?? null;
-            const hasInFriends = friends.find(f => f.id === idNum)?.avatar;
-            const hasInCache = collaboratorAvatars[idNum] !== undefined;
-            return !hasAvatar && !hasInFriends && !hasInCache;
-          });
-          
-          // Fetch avatars t? user API cho nh?ng collaborators kh�ng c� avatar
-          missingAvatars.forEach(async (c: any) => {
-            const idNum = c.userId;
-            if (!idNum || typeof idNum !== "number") return;
-            try {
-              const user = await userApi.getById(idNum);
-              if (user?.avatar) {
-                setCollaboratorAvatars(prev => ({ ...prev, [idNum]: user.avatar || null }));
-              } else {
-                setCollaboratorAvatars(prev => ({ ...prev, [idNum]: null }));
-              }
-            } catch (e) {
-              // N?u kh�ng fetch du?c, d�nh d?u l� null d? kh�ng fetch l?i
-              setCollaboratorAvatars(prev => ({ ...prev, [idNum]: null }));
-            }
-          });
-        } catch (e) {
-          console.warn('[PlaylistDetail] Failed to reload collaborators after accept:', e);
-        }
-      }
-    };
-    
-    window.addEventListener('app:collab-invite-accepted', handleCollabAccepted as EventListener);
-    return () => {
-      window.removeEventListener('app:collab-invite-accepted', handleCollabAccepted as EventListener);
-    };
-  }, [playlist?.id, updateCollaboratorsFromRaw, meId]);
+  // Removed invite accepted event listener - no longer using invite system
 
   useEffect(() => {
     if (!playlist?.id) return;
@@ -1234,24 +1387,7 @@ const PlaylistDetail = () => {
     }
   }, [slug, collabOpen, permissions.isOwner, permissions.userRole, updateCollaboratorsFromRaw, isCurrentCollaborator]);
 
-  useEffect(() => {
-    const loadPendingInvites = async () => {
-      if (!collabOpen || !playlist) return;
-      try {
-        const pending = await playlistCollabInvitesApi.pending();
-        const playlistPendingInvites = Array.isArray(pending)
-          ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
-          : [];
-        setPendingInvites(playlistPendingInvites);
-      } catch (e) {
-        console.warn('Failed to load pending invites:', e);
-        setPendingInvites([]);
-      }
-    };
-    if (collabOpen && playlist) {
-      loadPendingInvites();
-    }
-  }, [collabOpen, playlist]);
+  // Removed pending invites loading - no longer using invite system
 
   // Load friends s?m d? c� avatar cho collaborators
   useEffect(() => {
@@ -1291,14 +1427,12 @@ const PlaylistDetail = () => {
         return;
       }
 
-      // Ki?m tra xem d� load chua v� collaborators/pendingInvites c� thay d?i kh�ng
+      // Kiểm tra xem đã load chưa và collaborators có thay đổi không
       const collaboratorsKey = JSON.stringify(collaborators.map(c => c.userId).sort());
-      const pendingInvitesKey = JSON.stringify(pendingInvites.map(inv => inv.receiverId).sort());
       
-      // N?u d� load v� kh�ng c� thay d?i v? collaborators/pendingInvites, kh�ng load l?i
+      // Nếu đã load và không có thay đổi về collaborators, không load lại
       if (friendsLoadedRef.current && 
-          lastCollaboratorsRef.current === collaboratorsKey && 
-          lastPendingInvitesRef.current === pendingInvitesKey) {
+          lastCollaboratorsRef.current === collaboratorsKey) {
         return;
       }
 
@@ -1333,21 +1467,18 @@ const PlaylistDetail = () => {
           : [];
 
         const existingCollaboratorIds = new Set(collaborators.map(c => c.userId));
-        const pendingInviteIds = new Set(pendingInvites.map(inv => inv.receiverId));
         const ownerId = playlist?.ownerId;
 
         const filtered = mapped.filter((x) => {
           if (typeof x.id !== 'number' || x.id <= 0) return false;
           if (ownerId && x.id === ownerId) return false;
           if (existingCollaboratorIds.has(x.id)) return false;
-          if (pendingInviteIds.has(x.id)) return false;
           return true;
         });
 
         setFriends(filtered);
         friendsLoadedRef.current = true;
         lastCollaboratorsRef.current = collaboratorsKey;
-        lastPendingInvitesRef.current = pendingInvitesKey;
       } catch { 
         setFriends([]); 
         friendsLoadedRef.current = true;
@@ -1356,7 +1487,7 @@ const PlaylistDetail = () => {
       }
     };
     fetchFriendsForDialog();
-  }, [collabOpen, playlist?.ownerId, collaborators, pendingInvites]);
+  }, [collabOpen, playlist?.ownerId, collaborators]);
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -1396,8 +1527,8 @@ const PlaylistDetail = () => {
     // Ki?m tra xem b�i h�t d� c� trong playlist chua
     if (playlist.songs.some((existing) => existing.id === String(songId))) {
       toast({ 
-        title: 'B�i h�t d� c� trong playlist', 
-        description: 'B�i h�t n�y d� du?c th�m v�o playlist r?i.',
+        title: 'Song already in playlist', 
+        description: 'This song has already been added to the playlist.',
         variant: 'destructive'
       });
       return;
@@ -1430,57 +1561,19 @@ const PlaylistDetail = () => {
       songDuration = toSeconds(song.duration);
     }
     
-    // X? l� artist tuong t? nhu trong mapSongsFromResponse
+    // Use mapToPlayerSong to get artist name correctly (same as other places)
     let artistName = 'Unknown';
-    if (songDetail) {
-      // Uu ti�n l?y t? songDetail
-      if (Array.isArray(songDetail.artists) && songDetail.artists.length > 0) {
-        const names = songDetail.artists.map((a: any) => {
-          if (typeof a === 'string') return a;
-          if (a && typeof a === 'object' && 'name' in a) return a.name;
-          return null;
-        }).filter((name): name is string => Boolean(name));
-        if (names.length > 0) {
-          artistName = names.join(', ');
-        }
-      }
-      if (artistName === 'Unknown' && songDetail.artistNames && Array.isArray(songDetail.artistNames)) {
-        artistName = songDetail.artistNames.join(', ');
-      }
-    }
-    
-    // Fallback v? song n?u chua c�
-    if (artistName === 'Unknown') {
-      if (Array.isArray(song.artists) && song.artists.length > 0) {
-        const names = song.artists.map((a) => {
-          if (typeof a === 'string') return a;
-          if (a && typeof a === 'object' && 'name' in a) return a.name;
-          return null;
-        }).filter((name): name is string => Boolean(name));
-        if (names.length > 0) {
-          artistName = names.join(', ');
-        }
-      }
-      if (artistName === 'Unknown') {
-        artistName = (song as { artist?: string }).artist ?? 
-                     (song as { artistName?: string }).artistName ??
-                     (song as { artistsName?: string }).artistsName ??
-                     'Unknown';
-      }
-    }
-    
-    // L?y cover gi?ng nhu MusicCard (d�ng mapToPlayerSong logic)
     let coverUrl = '';
+    
     if (songDetail) {
       const mapped = mapToPlayerSong(songDetail as any);
+      artistName = mapped.artist;
       coverUrl = mapped.cover;
     } else {
-      // Fallback: d�ng logic t? mapToPlayerSong
-      coverUrl = (song as any).albumCoverImg ?? 
-                 (song as any).urlImageAlbum ?? 
-                 (song as any).albumImageUrl ?? 
-                 resolveSongCover(song as SearchSongResult & { songId?: number }) ?? 
-                 '';
+      // Fallback: use mapToPlayerSong on song object
+      const mapped = mapToPlayerSong(song as any);
+      artistName = mapped.artist;
+      coverUrl = mapped.cover || resolveSongCover(song as SearchSongResult & { songId?: number }) || '';
     }
     
     const optimisticSong: Song & { addedBy?: string; addedAt?: string; addedById?: number; addedByAvatar?: string | null } = {
@@ -1514,11 +1607,29 @@ const PlaylistDetail = () => {
       await playlistsApi.addSong(playlist.id, songId);
       toast({ title: 'Added', description: 'Song added to playlist' });
       
-      // Kh�ng reload l?i playlist t? API - ch? d�ng optimistic update
-      // Ch? reload recommend d? c?p nh?t danh s�ch (lo?i b? b�i v?a add)
-      setTimeout(() => {
-        loadRecommended();
-      }, 500);
+      // Remove the added song from recommended list immediately
+      setRecommendedSongs((prev) => {
+        const filtered = prev.filter((s) => String(s.id) !== String(songId));
+        
+        // If we have less than 5 songs, load more to fill up to 5
+        if (filtered.length < 5) {
+          loadMoreRecommended(songId, filtered).then((newSongs) => {
+            if (newSongs.length > 0) {
+              const combined = [...filtered, ...newSongs];
+              // Remove duplicates and limit to 5
+              const unique = combined.filter((song, index, self) => 
+                index === self.findIndex((s) => String(s.id) === String(song.id))
+              );
+              setRecommendedSongs(unique.slice(0, 5));
+            } else {
+              setRecommendedSongs(filtered);
+            }
+          });
+          return filtered; // Return filtered list immediately
+        }
+        
+        return filtered;
+      });
     } catch (e) {
       if (previousSnapshot) {
         setPlaylist(previousSnapshot);
@@ -1551,8 +1662,8 @@ const PlaylistDetail = () => {
     try {
       await playlistCollaboratorsApi.remove(playlist.id, collaboratorId);
       toast({
-        title: "�� g? c?ng t�c vi�n",
-        description: `${collaboratorName || "C?ng t�c vi�n"} s? kh�ng c�n quy?n truy c?p.`,
+        title: "Removed collaborator",
+        description: `${collaboratorName || "Collaborator"} will no longer have access.`,
       });
       setCollaborators((prev) => prev.filter((c) => c.userId !== collaboratorId));
     } catch (e) {
@@ -1563,7 +1674,7 @@ const PlaylistDetail = () => {
             ? e.message
             : "Failed to remove collaborator";
       toast({
-        title: "Kh�ng th? g? c?ng t�c vi�n",
+        title: "Cannot remove collaborator",
         description: message,
         variant: "destructive",
       });
@@ -1585,8 +1696,8 @@ const PlaylistDetail = () => {
     try {
       await playlistCollaboratorsApi.leave(playlist.id);
       toast({
-        title: "�� Leave playlist",
-        description: "B?n kh�ng c�n l� c?ng t�c vi�n c?a playlist n�y.",
+        title: "Left playlist",
+        description: "You are no longer a collaborator of this playlist.",
       });
       setCollaborators((prev) => prev.filter((c) => c.userId !== meId));
     } catch (e) {
@@ -1595,9 +1706,9 @@ const PlaylistDetail = () => {
           ? e.message
           : e instanceof Error
             ? e.message
-            : "Kh�ng th? Leave playlist. Vui l�ng th? l?i.";
+            : "Cannot leave playlist. Please try again.";
       toast({
-        title: "Leave playlist th?t b?i",
+        title: "Failed to leave playlist",
         description: message,
         variant: "destructive",
       });
@@ -1615,7 +1726,8 @@ const PlaylistDetail = () => {
 
       for (const fid of selectedFriendIds) {
         try {
-          await playlistCollabInvitesApi.send(playlist.id, fid, inviteRole);
+          // Directly add collaborator instead of sending invite
+          await playlistCollabInvitesApi.send(playlist.id, fid, CollaboratorRole.EDITOR);
           successIds.push(fid);
         } catch (e) {
           failedIds.push(fid);
@@ -1623,7 +1735,7 @@ const PlaylistDetail = () => {
           const errorMessage = e instanceof Error ? e.message : String(e);
 
           if (e instanceof PlaylistPermissionError) {
-            console.error(`Permission denied sending invite to ${friendName}:`, e.message);
+            console.error(`Permission denied adding collaborator ${friendName}:`, e.message);
           } else {
             const errorStatus = (e as Error & { status?: number })?.status;
 
@@ -1632,27 +1744,25 @@ const PlaylistDetail = () => {
             } else if (errorStatus === 400) {
               let reason = 'Invalid request';
               if (errorMessage.includes('Playlist not found')) {
-                reason = `Playlist kh�ng t?n t?i`;
-              } else if (errorMessage.includes('Receiver not found')) {
-                reason = `${friendName} kh�ng t?n t?i trong h? th?ng`;
-              } else if (errorMessage.includes('Sender not found')) {
-                reason = 'T�i kho?n c?a b?n kh�ng h?p l?';
-              } else if (errorMessage.includes('Only playlist owner can send invites')) {
-                reason = 'Ch? ch? s? h?u playlist m?i c� th? m?i';
-              } else if (errorMessage.includes('You cannot invite yourself') || errorMessage.includes('invite yourself')) {
-                reason = `Kh�ng th? m?i ch�nh m�nh`;
-              } else if (errorMessage.includes('Invite already sent')) {
-                reason = `�� g?i l?i m?i cho ${friendName} r?i`;
-              } else if (errorMessage.includes('already accepted')) {
-                reason = `${friendName} d� ch?p nh?n l?i m?i r?i`;
+                reason = `Playlist does not exist`;
+              } else if (errorMessage.includes('Friend not found') || errorMessage.includes('Receiver not found')) {
+                reason = `${friendName} does not exist in the system`;
+              } else if (errorMessage.includes('Owner not found') || errorMessage.includes('Sender not found')) {
+                reason = 'Your account is invalid';
+              } else if (errorMessage.includes('Only playlist owner can add collaborators') || errorMessage.includes('Only playlist owner can send invites')) {
+                reason = 'Only playlist owner can add collaborators';
+              } else if (errorMessage.includes('You cannot add yourself') || errorMessage.includes('invite yourself')) {
+                reason = `Cannot add yourself`;
               } else if (errorMessage.includes('already a collaborator')) {
-                reason = `${friendName} d� l� collaborator r?i`;
+                reason = `${friendName} is already a collaborator`;
+              } else if (errorMessage.includes('You can only add collaborators from your friend list') || errorMessage.includes('You can only invite your friends')) {
+                reason = `Can only add friends as collaborators`;
               } else if (errorMessage.includes('already') || errorMessage.includes('exists')) {
-                reason = `�� g?i l?i m?i ho?c ${friendName} d� l� collaborator`;
+                reason = `${friendName} is already a collaborator`;
               }
-              console.warn(`? Invalid invite request for ${friendName}: ${reason}`, e);
+              console.warn(`⚠ Invalid add collaborator request for ${friendName}: ${reason}`, e);
             } else {
-              console.error(`? Failed to send invite to ${friendName}:`, e);
+              console.error(`❌ Failed to add collaborator ${friendName}:`, e);
             }
           }
         }
@@ -1660,22 +1770,13 @@ const PlaylistDetail = () => {
 
       if (successIds.length > 0) {
         const successMsg = failedIds.length > 0
-          ? `${successIds.length} friend${successIds.length > 1 ? 's' : ''} invited, ${failedIds.length} failed`
-          : `${successIds.length} friend${successIds.length > 1 ? 's' : ''} invited`;
+          ? `${successIds.length} friend${successIds.length > 1 ? 's' : ''} added, ${failedIds.length} failed`
+          : `${successIds.length} friend${successIds.length > 1 ? 's' : ''} added as collaborator${successIds.length > 1 ? 's' : ''}`;
         toast({
-          title: '? Invites sent',
+          title: '✅ Collaborators added',
           description: successMsg,
           duration: 3000,
         });
-        try {
-          const pending = await playlistCollabInvitesApi.pending();
-          const playlistPendingInvites = Array.isArray(pending)
-            ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
-            : [];
-          setPendingInvites(playlistPendingInvites);
-        } catch (e) {
-          console.warn('Failed to refresh pending invites:', e);
-        }
         try {
           const list = await playlistCollaboratorsApi.list(playlist.id);
           updateCollaboratorsFromRaw(
@@ -1699,21 +1800,16 @@ const PlaylistDetail = () => {
         let errorMsg = '';
 
         errorMsg = failedIds.length === 1
-          ? `Kh�ng th? g?i l?i m?i cho ${firstFriendName}. C� th? d� du?c m?i, d� l� collaborator, ho?c kh�ng h?p l?.`
-          : `Kh�ng th? g?i l?i m?i cho ${failedIds.length} b?n b� (${failedDetails.slice(0, 2).join(', ')}${failedIds.length > 2 ? '...' : ''}).`;
+          ? `Cannot add ${firstFriendName} as collaborator. May already be a collaborator or invalid.`
+          : `Cannot add ${failedIds.length} friends as collaborators (${failedDetails.slice(0, 2).join(', ')}${failedIds.length > 2 ? '...' : ''}).`;
 
         toast({
-          title: '? Error',
+          title: '❌ Error',
           description: errorMsg,
           variant: 'destructive',
           duration: 6000,
         });
         try {
-          const pending = await playlistCollabInvitesApi.pending();
-          const playlistPendingInvites = Array.isArray(pending)
-            ? pending.filter((inv: PendingInvite) => inv.playlistId === playlist.id)
-            : [];
-          setPendingInvites(playlistPendingInvites);
           const list = await playlistCollaboratorsApi.list(playlist.id);
           updateCollaboratorsFromRaw(
             list,
@@ -1728,24 +1824,24 @@ const PlaylistDetail = () => {
       if (e instanceof PlaylistPermissionError) {
         if (e.status === 401) {
           toast({
-            title: '? Unauthorized',
-            description: 'Phi�n dang nh?p d� h?t h?n. Vui l�ng dang nh?p l?i.',
+            title: '❌ Unauthorized',
+            description: 'Your session has expired. Please login again.',
             variant: 'destructive',
             duration: 5000,
           });
         } else {
           toast({
-            title: '? Permission Denied',
+            title: '❌ Permission Denied',
             description: e.message,
             variant: 'destructive',
             duration: 5000,
           });
         }
       } else {
-        const msg = e instanceof Error ? e.message : 'Failed to send invites';
+        const msg = e instanceof Error ? e.message : 'Failed to add collaborators';
         toast({
-          title: '? Error',
-          description: `C� l?i x?y ra khi g?i l?i m?i: ${msg}`,
+          title: '❌ Error',
+          description: `An error occurred while adding collaborator: ${msg}`,
           variant: 'destructive',
           duration: 5000,
         });
@@ -1801,36 +1897,61 @@ const PlaylistDetail = () => {
       togglePlay();
     } else {
       // N?u dang c� b�i h�t trong playlist dang ph�t, resume b�i d�
-      if (currentSong && playlist.songs.find((s) => s.id === currentSong.id)) {
-        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-        await playSongWithStreamUrl(currentSong, playSong, setQueue);
+      const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+      const { mapToPlayerSong } = await import('@/lib/utils');
+      
+      // Map toàn bộ playlist songs thành format phù hợp cho queue
+      const playlistQueue = playlist.songs.map(song => mapToPlayerSong(song));
+      
+      // Nếu đang có bài hát trong playlist đang phát, resume bài đó
+      if (currentSong && playlist.songs.find((s) => String(s.id) === String(currentSong.id))) {
+        await playSongWithStreamUrl(currentSong, playSong, setQueue, playlistQueue, currentSong);
       } else {
-        // Nếu không, play bài đầu tiên
-        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-        await playSongWithStreamUrl(playlist.songs[0], playSong, setQueue);
+        // Nếu không, play bài đầu tiên với queue là toàn bộ playlist
+        await playSongWithStreamUrl(playlist.songs[0], playSong, setQueue, playlistQueue, currentSong);
       }
     }
   };
 
   const shufflePlaylistSongs = async () => {
-  if (!playlist || !playlist.songs.length) return;
+    if (!playlist || !playlist.songs.length) return;
     // Shuffle songs array
     const shuffledSongs = [...playlist.songs].sort(() => Math.random() - 0.5);
     if (isPlaying) {
       togglePlay();
     } else {
-      // Play first song from shuffled list
       const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-      await playSongWithStreamUrl(shuffledSongs[0], playSong, setQueue);
+      const { mapToPlayerSong } = await import('@/lib/utils');
+      
+      // Map shuffled songs thành format phù hợp cho queue
+      const shuffledQueue = shuffledSongs.map(song => mapToPlayerSong(song));
+      
+      // Play first song from shuffled list với queue là shuffled playlist
+      await playSongWithStreamUrl(shuffledSongs[0], playSong, setQueue, shuffledQueue, currentSong);
     }
   };
 
   const handlePlaySong = async (song: Song) => {
-  if (!playlist) return;
+    if (!playlist) return;
     // Dùng helper để phát nhạc với /play-now
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-    await playSongWithStreamUrl(song, playSong, setQueue);
-};
+    const { mapToPlayerSong } = await import('@/lib/utils');
+    
+    // Tìm index của bài hát trong playlist
+    const songIndex = playlist.songs.findIndex(s => String(s.id) === String(song.id));
+    
+    // Tạo queue từ bài hát hiện tại đến cuối playlist
+    let playlistQueue: any[] = [];
+    if (songIndex >= 0) {
+      // Bắt đầu từ bài hát được chọn
+      playlistQueue = playlist.songs.slice(songIndex).map(s => mapToPlayerSong(s));
+    } else {
+      // Nếu không tìm thấy, tạo queue với chỉ bài hát này + các bài còn lại
+      playlistQueue = [mapToPlayerSong(song), ...playlist.songs.map(s => mapToPlayerSong(s))];
+    }
+    
+    await playSongWithStreamUrl(song, playSong, setQueue, playlistQueue, currentSong);
+  };
 
   const confirmRemoveSong = (songId: string) => {
     setPendingDeleteSongId(songId);
@@ -1850,8 +1971,8 @@ const PlaylistDetail = () => {
       if (e instanceof PlaylistPermissionError) {
         toast({ title: 'Access Denied', description: e.message, variant: 'destructive' });
       } else {
-        const message = err instanceof Error ? err.message : "No matching songs found.";
-        toast({ title: 'L?i', description: message, variant: 'destructive' });
+        const message = e instanceof Error ? e.message : "Failed to remove song from playlist.";
+        toast({ title: 'Error', description: message, variant: 'destructive' });
       }
     } finally {
       setDeleting(false);
@@ -1891,8 +2012,8 @@ const PlaylistDetail = () => {
                   if (!permissions.canEdit) {
                     if (open) {
                       toast({
-                        title: "Kh�ng th? ThÃªm bÃ i hÃ¡t",
-                        description: "B?n kh�ng c� quy?n ch?nh s?a playlist n�y.",
+                        title: "Cannot add song",
+                        description: "You do not have permission to edit this playlist.",
                         variant: "destructive",
                       });
                     }
@@ -1976,8 +2097,8 @@ const PlaylistDetail = () => {
                 onClick={() => {
                   if (!permissions.isOwner) {
                     toast({
-                      title: "Kh�ng th? ch?nh s?a playlist",
-                      description: "Ch? ch? s? h?u m?i c� quy?n ch?nh s?a playlist n�y.",
+                      title: "Cannot edit playlist",
+                      description: "Only the owner can edit this playlist.",
                       variant: "destructive",
                     });
                     return;
@@ -2590,7 +2711,7 @@ const PlaylistDetail = () => {
                                 onClick={() => handleRemoveCollaborator(member.userId, member.name)}
                                 disabled={removingCollaboratorId === member.userId}
                               >
-                                {removingCollaboratorId === member.userId ? "�ang x�a..." : "G? kh?i playlist"}
+                                {removingCollaboratorId === member.userId ? "Removing..." : "Remove from playlist"}
                               </Button>
                             )}
                           </PopoverContent>
@@ -2861,7 +2982,18 @@ const PlaylistDetail = () => {
                   recommendedSongs.map((song) => {
                     // S? d?ng mapToPlayerSong d? l?y artist name ch�nh x�c
                     const mapped = mapToPlayerSong(song);
-                    const artistNames = mapped.artist !== "Unknown" ? mapped.artist : "Unknown Artist";
+                    let artistNames = mapped.artist;
+                    
+                    // Fallback: check artistNames field directly if mapped.artist is "Unknown"
+                    if (artistNames === "Unknown" || artistNames === "Unknown Artist") {
+                      if (Array.isArray((song as any).artistNames) && (song as any).artistNames.length > 0) {
+                        artistNames = (song as any).artistNames.filter(Boolean).join(", ");
+                      } else if (typeof (song as any).artistNames === "string" && (song as any).artistNames.trim().length > 0) {
+                        artistNames = (song as any).artistNames.trim();
+                      } else if (mapped.artist === "Unknown") {
+                        artistNames = "Unknown Artist";
+                      }
+                    }
                     const albumName = song.album?.name || (song as { albumName?: string }).albumName || song.name || "";
                     
                     return (
@@ -2880,7 +3012,7 @@ const PlaylistDetail = () => {
                           } catch (error) {
                             console.error("Failed to play song:", error);
                             toast({
-                              title: "L?i",
+                              title: "Error",
                               description: "Kh�ng th? ph�t b�i h�t n�y",
                               variant: "destructive",
                             });
@@ -2935,20 +3067,20 @@ const PlaylistDetail = () => {
         onOpenChange={(o) => { if (!deleting) setDeleteOpen(o); if (!o) setPendingDeleteSongId(null); }}
         onConfirm={handleConfirmDelete}
         isLoading={deleting}
-        title="X�a b�i h�t kh?i playlist?"
+        title="Remove song from playlist?"
         description={(() => {
           const t = playlist?.songs.find(s => String(s.id) === String(pendingDeleteSongId))?.title;
-          return t ? `B?n c� ch?c mu?n x�a "${t}" kh?i playlist n�y?` : 'B?n c� ch?c mu?n x�a b�i h�t n�y kh?i playlist?';
+          return t ? `Are you sure you want to remove "${t}" from this playlist?` : 'Are you sure you want to remove this song from the playlist?';
         })()}
       />
 
-      {/* Dialog Confirm g? collaborator */}
+      {/* Dialog Confirm remove collaborator */}
       <AlertDialog open={removeCollabDialogOpen} onOpenChange={setRemoveCollabDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>G? c?ng t�c vi�n</AlertDialogTitle>
+            <AlertDialogTitle>Remove collaborator</AlertDialogTitle>
             <AlertDialogDescription>
-              B?n c� ch?c mu?n g? {pendingRemoveCollab?.name || "c?ng t�c vi�n n�y"} kh?i playlist? H? s? kh�ng c�n quy?n truy c?p v�o playlist n�y.
+              Are you sure you want to remove {pendingRemoveCollab?.name || "this collaborator"} from the playlist? They will no longer have access to this playlist.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2958,7 +3090,7 @@ const PlaylistDetail = () => {
               disabled={removingCollaboratorId !== null}
               className="bg-destructive hover:bg-destructive/90"
             >
-              {removingCollaboratorId !== null ? "�ang x�a..." : "Confirm"}
+              {removingCollaboratorId !== null ? "Removing..." : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2970,7 +3102,7 @@ const PlaylistDetail = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Leave playlist</AlertDialogTitle>
             <AlertDialogDescription>
-              B?n c� ch?c mu?n Leave playlist n�y? B?n s? kh�ng c�n l� c?ng t�c vi�n v� kh�ng th? truy c?p playlist n�y n?a.
+              Are you sure you want to leave this playlist? You will no longer be a collaborator and will not be able to access this playlist anymore.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3006,8 +3138,6 @@ const PlaylistDetail = () => {
         onSendInvites={sendInvites}
         sendingInvites={sendingInvites}
         removingCollaboratorId={removingCollaboratorId}
-        inviteRole={inviteRole}
-        onRoleChange={setInviteRole}
         searchQuery={collabSearch}
         onSearchChange={setCollabSearch}
       />
