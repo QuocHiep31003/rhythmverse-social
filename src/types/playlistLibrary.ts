@@ -22,7 +22,7 @@ export interface PlaylistItem {
   isBanned?: boolean;
   warningCount?: number;
   warningReason?: string | null;
-  type?: "EDITORIAL" | "SYSTEM_GLOBAL" | "USER_CREATED" | string;
+  type?: "SYSTEM_GLOBAL" | "USER_CREATED" | string;
 }
 
 export interface UserResponse {

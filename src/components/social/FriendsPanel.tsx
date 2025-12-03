@@ -106,7 +106,23 @@ export const FriendsPanel = ({
                 </div>
               </div>
               <div className="text-right">
-                <Button variant="hero" size="sm" className="mb-2" onClick={onCreateInviteLink}>
+                <Button 
+                  variant="hero" 
+                  size="sm" 
+                  className="mb-2" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[FriendsPanel] Share Profile button clicked');
+                    if (onCreateInviteLink) {
+                      onCreateInviteLink().catch((err) => {
+                        console.error('[FriendsPanel] Error in onCreateInviteLink:', err);
+                      });
+                    } else {
+                      console.error('[FriendsPanel] onCreateInviteLink is not defined');
+                    }
+                  }}
+                >
                   <Share2 className="w-4 h-4 mr-2" />
                   Share Profile
                 </Button>

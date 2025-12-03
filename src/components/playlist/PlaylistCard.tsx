@@ -146,8 +146,8 @@ export const PlaylistCard = ({
                 ⚠️ Warned ({playlist.warningCount}/3)
               </Badge>
             )}
-            {/* Playlist Type Badges - Chỉ hiển thị "By EchoVerse" cho SYSTEM_GLOBAL và EDITORIAL */}
-            {((playlist.type === "EDITORIAL" || playlist.type === "SYSTEM_GLOBAL") as boolean) && (
+            {/* Playlist Type Badges - Chỉ hiển thị "By EchoVerse" cho SYSTEM_GLOBAL */}
+            {(playlist.type === "SYSTEM_GLOBAL") && (
               <Badge variant="default" className="bg-indigo-500/20 text-indigo-200 border-indigo-400/30 font-semibold">
                 By EchoVerse
               </Badge>

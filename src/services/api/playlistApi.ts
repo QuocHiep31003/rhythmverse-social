@@ -15,7 +15,7 @@ export class PlaylistPermissionError extends Error {
   }
 }
 
-export type PlaylistType = "USER_CREATED" | "EDITORIAL" | "SYSTEM_GLOBAL" | "SYSTEM_PERSONALIZED";
+export type PlaylistType = "USER_CREATED" | "SYSTEM_GLOBAL";
 
 export interface PlaylistDTO {
   id: number;
