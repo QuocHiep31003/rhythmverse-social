@@ -272,6 +272,38 @@ export const paymentApi = {
   },
 
   /**
+   * Đánh dấu đơn hàng là FAILED khi người dùng cancel trên PayOS
+   */
+  cancelOrder: async (orderCode: number, reason?: string): Promise<void> => {
+    const response = await fetchWithAuth(
+      `${API_BASE_URL}/payments/orders/${orderCode}/cancel`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          reason: reason || 'Payment cancelled by user at PayOS',
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = 'Unable to cancel order';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.desc || errorData.message || errorMessage;
+      } catch {
+        errorMessage = errorText || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+
+    // Không cần trả về gì thêm, backend đã mark FAILED
+  },
+
+  /**
    * Xác thực chữ ký PayOS webhook (utility function)
    * 
    * ⚠️ LƯU Ý: Thông thường Frontend không cần verify signature vì:

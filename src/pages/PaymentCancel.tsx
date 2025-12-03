@@ -1,10 +1,53 @@
-import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { XCircle, Home, ArrowLeft } from 'lucide-react';
+import { paymentApi } from '@/services/api/paymentApi';
 
 export default function PaymentCancelPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Khi PayOS redirect về /payment/cancel?code=00&cancel=true&status=CANCELLED&orderCode=...
+  // → gọi API backend để mark đơn hàng là FAILED/CANCELLED
+  useEffect(() => {
+    let orderCodeParam = searchParams.get('orderCode');
+    const cancelFlag = searchParams.get('cancel');
+    const status = searchParams.get('status');
+    const code = searchParams.get('code');
+
+    // Fallback: nếu query không có orderCode, lấy từ sessionStorage
+    if (!orderCodeParam && typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('payos_order_code');
+      if (stored) {
+        orderCodeParam = stored;
+      }
+    }
+
+    const shouldCancel =
+      !!orderCodeParam &&
+      (cancelFlag === 'true' || status === 'CANCELLED' || status === 'CANCELED');
+
+    if (!shouldCancel) {
+      return;
+    }
+
+    const orderCode = Number(orderCodeParam);
+    if (!Number.isFinite(orderCode)) {
+      return;
+    }
+
+    // Fire-and-forget: không chặn UI nếu lỗi
+    void paymentApi
+      .cancelOrder(
+        orderCode,
+        `User cancelled payment at PayOS (code=${code || 'N/A'}, status=${status || 'N/A'})`
+      )
+      .catch((err) => {
+        console.warn('[PaymentCancel] Failed to cancel order on backend:', err);
+      });
+  }, [searchParams]);
 
   // Xóa orderCode khỏi sessionStorage khi vào trang này
   if (typeof window !== 'undefined') {
