@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown, ChevronDown, ChevronRight, FolderTree, BarChart3 } from "lucide-react";
+import { Music, Home, Users, ListMusic, Settings, LogOut, Menu, Disc3, Heart, Tag, TrendingUp, Package, Crown, ChevronDown, FolderTree, BarChart3 } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { stopTokenRefreshInterval, clearTokens } from "@/services/api/config";
@@ -18,6 +18,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false);
 
   useEffect(() => {
+    // Clear token user nếu có (không cho phép 2 token cùng lúc)
+    const userToken = localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (userToken && location.pathname !== "/admin/login") {
+      localStorage.removeItem("token");
+      sessionStorage.removeItem("token");
+    }
+
     const isAuthenticated = localStorage.getItem("adminAuth");
     if (!isAuthenticated && location.pathname !== "/admin/login") {
       navigate("/admin/login");
@@ -37,9 +44,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     navigate("/admin/login");
   };
 
-  if (location.pathname === "/admin/login") {
-    return <>{children}</>;
-  }
 
   const menuItems = [
     { 
@@ -84,6 +88,10 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
   // Check if current path is in any submenu and open the parent menu
   useEffect(() => {
+    // Chỉ chạy khi không phải trang login
+    if (location.pathname === "/admin/login") {
+      return;
+    }
     const isPremiumPath = location.pathname === "/admin/premium-dashboard" || 
                           location.pathname === "/admin/subscription-plans";
     if (isPremiumPath) {
@@ -108,7 +116,13 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     }
   }, [location.pathname]);
 
+  // Early return sau khi tất cả hooks đã được gọi
+  if (location.pathname === "/admin/login") {
+    return <>{children}</>;
+  }
+
   const Sidebar = () => (
+
 
 
 
@@ -135,7 +149,6 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
           
           // Menu có children (dropdown)
           if (item.children) {
-            const hasActiveChild = item.children.some(child => location.pathname === child.path);
             const isOpen = item.menuKey === "premium" ? premiumMenuOpen :
                           item.menuKey === "content" ? contentMenuOpen :
                           item.menuKey === "dashboard" ? dashboardMenuOpen : false;
@@ -152,41 +165,31 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
 
             return (
               <div key={item.label} className="space-y-1">
-                <Button
-                  variant="ghost"
+                <div
                   onClick={toggleMenu}
-                  className={`w-full justify-between transition-all duration-200 ${
-                    hasActiveChild
-                      ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold"
-                      : "hover:bg-[hsl(var(--admin-hover))]"
-                  }`}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-md cursor-pointer hover:bg-[hsl(var(--admin-hover))]"
                 >
                   <div className="flex items-center">
                     <Icon className="w-4 h-4 mr-3" />
                     {item.label}
                   </div>
-                  {isOpen ? (
-                    <ChevronDown className="w-4 h-4" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4" />
-                  )}
-                </Button>
+                  <ChevronDown className={`w-4 h-4 ${isOpen ? "" : "rotate-[-90deg]"}`} />
+                </div>
                 {isOpen && (
                   <div className="ml-4 space-y-1">
                     {item.children.map((child) => {
                       const isActive = location.pathname === child.path;
                       return (
                         <Link key={child.path} to={child.path}>
-                          <Button
-                            variant="ghost"
-                            className={`w-full justify-start transition-all duration-200 text-sm ${
+                          <div
+                            className={`w-full px-3 py-2 rounded-md text-sm cursor-pointer ${
                               isActive
                                 ? "bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] font-semibold"
                                 : "hover:bg-[hsl(var(--admin-hover))]"
                             }`}
                           >
                             {child.label}
-                          </Button>
+                          </div>
                         </Link>
                       );
                     })}

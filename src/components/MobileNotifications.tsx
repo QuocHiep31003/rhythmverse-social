@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import { MessageCircle, UserPlus, Heart, Music } from "lucide-react";
 
@@ -51,6 +52,8 @@ const getNotificationIcon = (type: string) => {
 };
 
 export const MobileNotifications = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -63,10 +66,24 @@ export const MobileNotifications = () => {
               icon: getNotificationIcon(notification.type),
               duration: 5000,
               action: {
-                label: "View",
+                label: "Xem",
                 onClick: () => {
-                  // Handle notification click
-                  console.log("Notification clicked:", notification.id);
+                  // Navigate to social tab based on notification type
+                  if (location.pathname === '/') {
+                    // Nếu đang ở trang home, chuyển đến tab social
+                    const currentParams = new URLSearchParams(location.search);
+                    currentParams.set('tab', 'social');
+                    navigate(`/?${currentParams.toString()}`);
+                  } else {
+                    // Nếu đang ở trang khác, chuyển đến trang social
+                    if (notification.type === 'friend_request') {
+                      navigate('/social?tab=friends');
+                    } else if (notification.type === 'song_recommendation' || notification.type === 'message') {
+                      navigate('/social');
+                    } else {
+                      navigate('/social');
+                    }
+                  }
                 }
               }
             });

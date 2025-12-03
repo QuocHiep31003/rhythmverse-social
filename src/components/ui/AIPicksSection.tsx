@@ -2,12 +2,20 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Music, Play, Sparkles, TrendingUp, Flame, Zap } from "lucide-react";
+import { Music, Play, Sparkles, MoreHorizontal, ListPlus, Info } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import { songsApi } from "@/services/api";
 import type { Song } from "@/services/api/songApi";
-import { callHotTodayTrending } from "@/services/api/trendingApi";
+import { getAuthToken } from "@/services/api/config";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
+import { createSlug } from "@/utils/playlistUtils";
 
 interface AIPickSong {
   id: number | string;
@@ -16,9 +24,9 @@ interface AIPickSong {
   albumImageUrl?: string;
   audioUrl?: string;
   uuid?: string;
-  reason: "Hot Today" | "Trending" | "Rising" | "New Release" | "Popular";
-  badgeColor: string;
-  badgeIcon: React.ReactNode;
+  reason?: string;
+  badgeColor?: string;
+  badgeIcon?: React.ReactNode;
 }
 
 interface TopSongSummary {
@@ -66,129 +74,58 @@ const resolveArtists = (rawArtists?: string, fullSong?: Song | null): string => 
 
 const AIPicksSection = () => {
   const navigate = useNavigate();
-  const { playSong, setQueue } = useMusic();
+  const { playSong, setQueue, addToQueue } = useMusic();
   const [aiPicks, setAiPicks] = useState<AIPickSong[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
+  const [selectedSongId, setSelectedSongId] = useState<string | number | null>(null);
+  const [selectedSongTitle, setSelectedSongTitle] = useState<string>("");
+  const [selectedSongCover, setSelectedSongCover] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const fetchAIPicks = async () => {
+      // Chỉ gọi API khi có token (user đã đăng nhập)
+      // Guest không cần AI picks, có thể ẩn section này hoặc hiển thị message
+      const token = getAuthToken();
+      if (!token) {
+        setLoading(false);
+        setAiPicks([]);
+        return;
+      }
+
       try {
         setLoading(true);
-        
-        // Strategy: Sử dụng hot-today và top-5 từ backend
-        // Backend có: /trending/hot-today?top=X và /trending/top-5
-        const [hotTodayResult, top5Result] = await Promise.allSettled([
-          callHotTodayTrending(15), // Lấy top 15 từ hot-today
-          songsApi.getTop5Trending(), // Top 5 trending
-        ]);
 
-        const picks: AIPickSong[] = [];
-        const usedIds = new Set<number | string>();
+        // Gọi API AI picks for you từ backend (đã dùng user embedding + artist seed)
+        const songs = await songsApi.getAiPicksForYou(20);
 
-        // Interface cho ResultDetailDTO từ backend
-        interface ResultDetailDTO {
-          songId: number;
-          songName: string;
-          albumImageUrl?: string;
-          artists?: string;
-          rank?: number;
-          totalPoints?: number;
-          oldRank?: number;
-        }
+        const picks: AIPickSong[] = songs.map((fullSong, index) => {
+          const displayArtists =
+            typeof fullSong.artists === "string"
+              ? fullSong.artists
+              : resolveArtists(undefined, fullSong);
 
-        // 1. Xử lý Hot Today (từ hot-today endpoint)
-        if (hotTodayResult.status === 'fulfilled' && Array.isArray(hotTodayResult.value) && hotTodayResult.value.length > 0) {
-          const hotTodaySongs = hotTodayResult.value.slice(0, 10) as ResultDetailDTO[];
-          
-          // Fetch full song info cho tất cả songs cùng lúc
-          const fullSongPromises = hotTodaySongs
-            .filter(song => song.songId && !usedIds.has(song.songId))
-            .map(song =>
-              songsApi
-                .getById(String(song.songId))
-                .then(fullSong => ({ song, fullSong }))
-                .catch(() => ({ song, fullSong: null }))
-            );
-          
-          const fullSongResults = await Promise.all(fullSongPromises);
-          
-          fullSongResults.forEach(({ song, fullSong }) => {
-            if (song.songId && !usedIds.has(song.songId) && picks.length < 10) {
-              // Xác định reason dựa trên rank
-              let reason: AIPickSong['reason'] = "Hot Today";
-              let badgeColor = "bg-red-500/20 text-red-300 border-red-400/40";
-              let badgeIcon = <Flame className="w-3 h-3" />;
+          // Tạo badge nhẹ nhàng, không quá "trending"
+          const badgeColor = "bg-primary/15 text-primary border-primary/40";
 
-              if (song.rank && song.rank <= 3) {
-                reason = "Hot Today";
-                badgeColor = "bg-orange-500/20 text-orange-300 border-orange-400/40";
-                badgeIcon = <Flame className="w-3 h-3" />;
-              } else if (song.oldRank && song.rank && song.rank < song.oldRank) {
-                reason = "Rising";
-                badgeColor = "bg-green-500/20 text-green-300 border-green-400/40";
-                badgeIcon = <TrendingUp className="w-3 h-3" />;
-              } else {
-                reason = "Trending";
-                badgeColor = "bg-purple-500/20 text-purple-300 border-purple-400/40";
-                badgeIcon = <TrendingUp className="w-3 h-3" />;
-              }
+          return {
+            id: fullSong.id,
+            songName: fullSong.songName || fullSong.name || "Unknown Song",
+            artists: displayArtists,
+            albumImageUrl:
+              fullSong.albumImageUrl ||
+              fullSong.albumCoverImg ||
+              fullSong.urlImageAlbum ||
+              fullSong.cover,
+            audioUrl: fullSong.audioUrl || fullSong.url || fullSong.audio,
+            uuid: fullSong.uuid,
+            reason: "Just for you",
+            badgeColor,
+            badgeIcon: <Sparkles className="w-3 h-3" />,
+          };
+        });
 
-              picks.push({
-                id: song.songId,
-                songName: song.songName || fullSong?.name || "Unknown Song",
-                artists: resolveArtists(song.artists, fullSong),
-                albumImageUrl: song.albumImageUrl || fullSong?.albumImageUrl || fullSong?.urlImageAlbum || fullSong?.cover,
-                audioUrl: fullSong?.audioUrl || fullSong?.url || fullSong?.audio,
-                uuid: fullSong?.uuid,
-                reason,
-                badgeColor,
-                badgeIcon,
-              });
-              usedIds.add(song.songId);
-            }
-          });
-        }
-
-        // 2. Thêm Top 5 nếu chưa đủ (từ top-5 endpoint)
-        if (top5Result.status === 'fulfilled' && Array.isArray(top5Result.value) && top5Result.value.length > 0 && picks.length < 10) {
-          const top5Songs = (top5Result.value as TopSongSummary[]).filter((song) => {
-            const songId = song.songId ?? song.id;
-            return songId && !usedIds.has(songId) && picks.length < 10;
-          });
-
-          // Fetch full song info cho top 5
-          const top5Promises = top5Songs.map((song) => {
-            const songId = song.songId ?? song.id;
-            return songsApi
-              .getById(String(songId))
-              .then(fullSong => ({ song, fullSong }))
-              .catch(() => ({ song, fullSong: null }));
-          });
-          
-          const top5Results = await Promise.all(top5Promises);
-          
-          top5Results.forEach(({ song, fullSong }) => {
-            const songId = song.songId ?? song.id;
-            if (songId && !usedIds.has(songId) && picks.length < 10) {
-              picks.push({
-                id: songId,
-                songName: song.songName || song.name || fullSong?.name || "Unknown Song",
-                artists: resolveArtists(song.artists, fullSong),
-                albumImageUrl: song.albumImageUrl || fullSong?.albumImageUrl || fullSong?.urlImageAlbum || fullSong?.cover,
-                audioUrl: fullSong?.audioUrl || fullSong?.url || fullSong?.audio,
-                uuid: fullSong?.uuid,
-                reason: "Popular",
-                badgeColor: "bg-yellow-500/20 text-yellow-300 border-yellow-400/40",
-                badgeIcon: <Sparkles className="w-3 h-3" />,
-              });
-              usedIds.add(songId);
-            }
-          });
-        }
-
-        // Shuffle để đa dạng hơn
-        const shuffled = picks.sort(() => Math.random() - 0.5);
-        setAiPicks(shuffled.slice(0, 10)); // Lấy tối đa 10 bài
+        setAiPicks(picks.slice(0, 10));
       } catch (error) {
         console.error("Error fetching AI picks:", error);
         setAiPicks([]);
@@ -223,20 +160,40 @@ const AIPicksSection = () => {
       uuid: s.uuid,
     }));
 
-    setQueue(allPlayerSongs);
+    await setQueue(allPlayerSongs);
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
     await playSongWithStreamUrl(playerSong, playSong);
   };
 
+  // Ẩn section này nếu không có token (guest)
+  const token = getAuthToken();
+  if (!token) {
+    return null;
+  }
+
   return (
     <section className="mb-12">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-6">
-        <Sparkles className="w-6 h-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">AI Picks For You</h2>
-        <Badge variant="secondary" className="ml-2">
-          Smart
-        </Badge>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-6 h-6 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">AI Picks For You</h2>
+            <p className="text-xs text-muted-foreground">
+              Based on your favorite artists and listening preferences
+            </p>
+          </div>
+        </div>
+        {aiPicks.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs rounded-full"
+            onClick={() => navigate("/discover")}
+          >
+            See More Recommendations
+          </Button>
+        )}
       </div>
 
       {/* Horizontal scrolling container */}
@@ -263,7 +220,7 @@ const AIPicksSection = () => {
                   onClick={() => handlePlaySong(song)}
                 >
                   {/* Cover Art với Badge */}
-                  <div className="relative aspect-square rounded-lg overflow-hidden bg-gradient-subtle mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105">
+                  <div className="relative aspect-square rounded-2xl overflow-hidden bg-gradient-subtle mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105 border border-border/40">
                     {song.albumImageUrl ? (
                       <img
                         src={song.albumImageUrl}
@@ -277,15 +234,17 @@ const AIPicksSection = () => {
                     )}
                     
                     {/* Badge reason */}
-                    <div className="absolute top-2 left-2">
-                      <Badge 
-                        variant="outline" 
-                        className={`${song.badgeColor} border text-[10px] px-1.5 py-0.5 flex items-center gap-1`}
-                      >
-                        {song.badgeIcon}
-                        {song.reason}
-                      </Badge>
-                    </div>
+                    {song.reason && (
+                      <div className="absolute top-2 left-2">
+                        <Badge
+                          variant="outline"
+                          className={`${song.badgeColor ?? "bg-primary/15 text-primary border-primary/40"} text-[10px] px-1.5 py-0.5 flex items-center gap-1 backdrop-blur`}
+                        >
+                          {song.badgeIcon ?? <Sparkles className="w-3 h-3" />}
+                          {song.reason}
+                        </Badge>
+                      </div>
+                    )}
 
                     {/* Play button overlay on hover */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
@@ -299,6 +258,63 @@ const AIPicksSection = () => {
                       >
                         <Play className="w-6 h-6 ml-1 text-white" fill="white" />
                       </Button>
+                      
+                    </div>
+                    {/* Menu 3 chấm */}
+                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="glass"
+                            size="icon"
+                            className="rounded-full w-9 h-9 bg-black/55 hover:bg-black/70 border border-white/20"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-5 w-5 text-white" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSongId(song.id);
+                              setSelectedSongTitle(song.songName);
+                              setSelectedSongCover(song.albumImageUrl);
+                              setAddToPlaylistOpen(true);
+                            }}
+                          >
+                            <ListPlus className="mr-2 h-4 w-4" />
+                            Add to Playlist
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const playerSong = mapToPlayerSong({
+                                id: song.id,
+                                name: song.songName,
+                                songName: song.songName,
+                                artists: song.artists,
+                                url: song.audioUrl,
+                                urlImageAlbum: song.albumImageUrl,
+                                uuid: song.uuid,
+                              });
+                              await addToQueue(playerSong);
+                            }}
+                          >
+                            <Music className="mr-2 h-4 w-4" />
+                            Add to Queue
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/song/${createSlug(song.songName, song.id)}`);
+                            }}
+                          >
+                            <Info className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
 
@@ -307,7 +323,7 @@ const AIPicksSection = () => {
                     <h3 className="font-semibold text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
                       {song.songName}
                     </h3>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
+                    <p className="text-xs text-muted-foreground line-clamp-1">
                       {song.artists}
                     </p>
                   </div>
@@ -322,6 +338,17 @@ const AIPicksSection = () => {
       <p className="text-xs text-muted-foreground mt-4">
         Smart recommendations based on hot trends, trending songs, and popular content right now
       </p>
+      
+      {/* Add to Playlist Dialog */}
+      {selectedSongId && (
+        <AddToPlaylistDialog
+          open={addToPlaylistOpen}
+          onOpenChange={setAddToPlaylistOpen}
+          songId={selectedSongId}
+          songTitle={selectedSongTitle}
+          songCover={selectedSongCover}
+        />
+      )}
     </section>
   );
 };

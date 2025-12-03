@@ -191,6 +191,40 @@ export const genresApi = {
     }
   },
 
+  /**
+   * Lấy genres cho user (chỉ lấy ACTIVE)
+   * GET /api/genres/public?page=X&size=Y&sort=name,asc
+   */
+  getPublic: async (params?: PaginationParams): Promise<PaginatedResponse<GenreDTO>> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      else queryParams.append('sort', 'name,asc'); // Default sort
+      if (params?.search) queryParams.append('search', params.search);
+
+      const response = await fetch(`${API_BASE_URL}/genres/public?${queryParams.toString()}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch public genres");
+      }
+      const data: PaginatedResponse<GenreDTO> = await response.json();
+      return data;
+    } catch (error) {
+      console.error("Error fetching public genres:", error);
+      return {
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
+        first: true,
+        last: true,
+        empty: true
+      } as PaginatedResponse<GenreDTO>;
+    }
+  },
+
   getById: async (id: number) => {
     try {
       const response = await fetch(`${API_BASE_URL}/genres/${id}`);
@@ -502,195 +536,6 @@ export const arcApi = {
     } catch (error) {
       console.error('[YouTube] batch search error:', error);
       return {} as Record<string, string>;
-    }
-  },
-};
-
-// Quiz Attempts API - Based on new API structure
-export const quizAttemptsApi = {
-  // Start a new quiz attempt
-  startQuiz: async (userId: number, quizId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/start`, {
-        method: 'POST',
-        headers: buildJsonHeaders(),
-        body: JSON.stringify({ userId, quizId }),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to start quiz');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error starting quiz:", error);
-      throw error;
-    }
-  },
-
-  // Submit an answer for a question
-  submitAnswer: async (attemptId: number, questionId: number, selectedAnswerId: number, timeSpentSeconds: number = 0) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/${attemptId}/answers`, {
-        method: 'POST',
-        headers: buildJsonHeaders(),
-        body: JSON.stringify({
-          questionId,
-          selectedAnswerId,
-          timeSpentSeconds,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to submit answer');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error submitting answer:", error);
-      throw error;
-    }
-  },
-
-  // Submit the entire quiz
-  submitQuiz: async (attemptId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/${attemptId}/submit`, {
-        method: 'POST',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to submit quiz');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error submitting quiz:", error);
-      throw error;
-    }
-  },
-
-  // Get attempt details
-  getAttemptDetails: async (attemptId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/${attemptId}`, {
-        method: 'GET',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to get attempt details');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error getting attempt details:", error);
-      throw error;
-    }
-  },
-
-  // Get user's quiz history
-  getUserQuizHistory: async (userId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/user/${userId}`, {
-        method: 'GET',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to get user quiz history');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error getting user quiz history:", error);
-      throw error;
-    }
-  },
-
-  // Get quiz results for a specific quiz
-  getQuizResults: async (quizId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/quiz/${quizId}/results`, {
-        method: 'GET',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to get quiz results');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error getting quiz results:", error);
-      throw error;
-    }
-  },
-
-  // Get user's quiz results
-  getUserQuizResults: async (userId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/user/${userId}/results`, {
-        method: 'GET',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to get user quiz results');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error getting user quiz results:", error);
-      throw error;
-    }
-  },
-
-  // Get user's best score for a quiz
-  getUserBestScore: async (userId: number, quizId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/user/${userId}/quiz/${quizId}/best`, {
-        method: 'GET',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to get user best score');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error getting user best score:", error);
-      throw error;
-    }
-  },
-
-  // Get quiz leaderboard
-  getQuizLeaderboard: async (quizId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/quiz-attempts/quiz/${quizId}/leaderboard`, {
-        method: 'GET',
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const error = await parseErrorResponse(response);
-        throw new Error(error || 'Failed to get quiz leaderboard');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error getting quiz leaderboard:", error);
-      throw error;
     }
   },
 };

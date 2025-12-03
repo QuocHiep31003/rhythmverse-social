@@ -9,12 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import Footer from "@/components/Footer";
 import PlanFeaturesDialog from "@/components/PlanFeaturesDialog";
-import { 
-  Edit, 
-  Music, 
-  Heart, 
-  Users, 
-  Calendar, 
+import {
+  Edit,
+  Music,
+  Heart,
+  Users,
+  Calendar,
   Mail,
   Crown,
   Play,
@@ -49,7 +49,13 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
-  
+
+  // Pagination state cho listening history
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [historyTotalElements, setHistoryTotalElements] = useState(0);
+  const historyPageSize = 10;
+
   // Payment history state
   const [paymentOrders, setPaymentOrders] = useState<OrderHistoryItem[]>([]);
   const [allPaymentOrders, setAllPaymentOrders] = useState<OrderHistoryItem[]>([]);
@@ -64,11 +70,16 @@ const Profile = () => {
   const [pendingTick, setPendingTick] = useState(0);
   const [profilePlanCode, setProfilePlanCode] = useState<string | null>(null);
   const [isPlanFeaturesDialogOpen, setIsPlanFeaturesDialogOpen] = useState(false);
-  
+
   useEffect(() => {
     fetchProfile();
-    fetchListeningHistory();
   }, []);
+
+  useEffect(() => {
+    if (userId) {
+      fetchListeningHistory(userId, historyPage);
+    }
+  }, [userId, historyPage]);
 
   useEffect(() => {
     fetchPaymentHistory();
@@ -162,7 +173,7 @@ const Profile = () => {
         (user as any)?.plan ||
         (user as any)?.membership ||
         (isPremiumUser ? "Premium" : "Free");
-      
+
       // Convert Vietnamese plan names to English
       const planLabel = rawPlanLabel
         ?.replace(/Premium\s*1\s*tháng/gi, "Premium Monthly")
@@ -215,54 +226,64 @@ const Profile = () => {
     }
   };
 
-  const fetchListeningHistory = async (currentUserId?: number) => {
-    const idToUse = currentUserId || userId;
-    if (!idToUse) return;
-    
+  const fetchListeningHistory = async (currentUserId: number, page: number = 0) => {
+    if (!currentUserId) return;
+
     try {
       setLoading(true);
-      const data = await listeningHistoryApi.getByUser(idToUse);
-      
-      // Sort by listenedAt date (newest first)
-      const sortedData = data.sort((a, b) => {
-        const dateA = new Date(a.listenedAt || 0).getTime();
-        const dateB = new Date(b.listenedAt || 0).getTime();
-        return dateB - dateA; // Newest first
-      });
+
+      // Gọi overview trước để update thống kê tổng quan (chỉ gọi 1 lần khi page = 0)
+      if (page === 0) {
+        try {
+          const overview = await listeningHistoryApi.getOverview(currentUserId);
+          setListeningOverview(overview);
+        } catch (e) {
+          console.error("Failed to fetch listening overview:", e);
+          // Set fallback nếu API fail
+          setListeningOverview({
+            totalListeningSeconds: 0,
+            songsPlayed: 0,
+            playlistsCreated: 0,
+            genres: [],
+            moods: [],
+          });
+        }
+      }
+
+      const pageResponse = await listeningHistoryApi.getByUser(currentUserId, page, historyPageSize);
+
+      // Update pagination state
+      setHistoryTotalPages(pageResponse.totalPages);
+      setHistoryTotalElements(pageResponse.totalElements);
+
       // Enrich EVERY entry with canonical song details to avoid stale/incorrect names from backend DTO
       const enriched = await Promise.all(
-        sortedData.map(async (item) => {
+        pageResponse.content.map(async (item) => {
           try {
             const songDetail = await songsApi.getById(String(item.songId));
             if (songDetail) {
-              return { ...item, song: {
-                id: Number((songDetail as any).id ?? item.songId),
-                name: (songDetail as any).name || (songDetail as any).songName,
-                songName: (songDetail as any).songName || (songDetail as any).name,
-                duration: typeof (songDetail as any).duration === 'number' ? (songDetail as any).duration : undefined,
-                cover: (songDetail as any).cover,
-                audioUrl: (songDetail as any).audioUrl,
-                audio: (songDetail as any).audio,
-                playCount: (songDetail as any).playCount,
-                artistNames: (songDetail as any).artistNames,
-                artists: (songDetail as any).artists,
-                album: typeof (songDetail as any).album === 'string' ? { name: (songDetail as any).album } : (songDetail as any).album,
-              } } as any;
+              return {
+                ...item, song: {
+                  id: Number((songDetail as any).id ?? item.songId),
+                  name: (songDetail as any).name || (songDetail as any).songName,
+                  songName: (songDetail as any).songName || (songDetail as any).name,
+                  duration: typeof (songDetail as any).duration === 'number' ? (songDetail as any).duration : undefined,
+                  cover: (songDetail as any).cover,
+                  audioUrl: (songDetail as any).audioUrl,
+                  audio: (songDetail as any).audio,
+                  playCount: (songDetail as any).playCount,
+                  artistNames: (songDetail as any).artistNames,
+                  artists: (songDetail as any).artists,
+                  album: typeof (songDetail as any).album === 'string' ? { name: (songDetail as any).album } : (songDetail as any).album,
+                }
+              } as any;
             }
-          } catch {}
+          } catch { }
           return item;
         })
       );
 
       setListeningHistory(enriched);
-      // Debug: show song IDs from history to verify with player logs
-      try {
-        // eslint-disable-next-line no-console
-        console.log(
-          "🧾 History songIds:",
-          enriched.map((i) => (i as any).songId ?? (i as any).song?.id)
-        );
-      } catch {}
     } catch (error: any) {
       console.error("Failed to fetch listening history:", error);
       toast({
@@ -279,7 +300,14 @@ const Profile = () => {
     try {
       await listeningHistoryApi.delete(id);
       setListeningHistory((prev) => prev.filter((h) => h.id !== id));
+      setHistoryTotalElements((prev) => Math.max(0, prev - 1));
       toast({ title: "Deleted", description: "Removed from listening history" });
+      // Refresh current page nếu page hiện tại trống
+      if (listeningHistory.length === 1 && historyPage > 0) {
+        setHistoryPage((p) => Math.max(0, p - 1));
+      } else if (userId) {
+        fetchListeningHistory(userId, historyPage);
+      }
     } catch (error) {
       toast({ title: "Error", description: "Failed to delete item", variant: "destructive" });
     }
@@ -292,7 +320,7 @@ const Profile = () => {
       for (const item of listeningHistory) {
         if (item.id) {
           // best-effort; ignore single failures
-          try { await listeningHistoryApi.delete(item.id); } catch {}
+          try { await listeningHistoryApi.delete(item.id); } catch { }
         }
       }
       setListeningHistory([]);
@@ -579,7 +607,7 @@ const Profile = () => {
     try {
       setPaymentLoading(true);
       const result = await paymentApi.getHistory(paymentPage, 10);
-      
+
       setAllPaymentOrders(result.content);
 
       let filteredOrders = result.content;
@@ -591,7 +619,7 @@ const Profile = () => {
             : displayState === 'failed';
         });
       }
-      
+
       setPaymentOrders(filteredOrders);
       setPaymentTotalPages(result.totalPages);
       setPaymentTotalElements(result.totalElements);
@@ -611,7 +639,7 @@ const Profile = () => {
     setSelectedOrder(order);
     setIsInvoiceDialogOpen(true);
   };
-  
+
   const [profileData, setProfileData] = useState({
     name: "Alex Johnson",
     username: "@alexjohnson",
@@ -629,13 +657,23 @@ const Profile = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
 
+  const [listeningOverview, setListeningOverview] = useState<{
+    totalListeningSeconds: number;
+    songsPlayed: number;
+    playlistsCreated: number;
+    genres: { id: number; name: string; percentage: number }[];
+    moods: { id: number; name: string; percentage: number }[];
+  } | null>(null);
+
   const stats = {
-    totalListeningTime: "1,247 hours",
-    songsPlayed: listeningHistory.length.toString(),
-    playlistsCreated: 24,
+    totalListeningTime: listeningOverview
+      ? `${Math.floor(listeningOverview.totalListeningSeconds / 3600).toLocaleString()} hours`
+      : "0 hours",
+    songsPlayed: listeningOverview ? listeningOverview.songsPlayed.toString() : "0",
+    playlistsCreated: listeningOverview ? listeningOverview.playlistsCreated : 0,
     followersCount: 156,
     followingCount: 89,
-    streakDays: 47
+    streakDays: listeningOverview && listeningOverview.totalListeningSeconds > 0 ? Math.floor(listeningOverview.totalListeningSeconds / 86400) : 0,
   };
 
   const isPremiumExpired = useMemo(() => {
@@ -648,14 +686,12 @@ const Profile = () => {
       return false;
     }
   }, [profileData.premiumEnd]);
-
-  const topGenres = [
-    { name: "Electronic", percentage: 35 },
-    { name: "Indie Rock", percentage: 28 },
-    { name: "Chill", percentage: 20 },
-    { name: "Pop", percentage: 12 },
-    { name: "Jazz", percentage: 5 }
-  ];
+  const topGenres = listeningOverview
+    ? listeningOverview.genres.map((g) => ({
+      name: g.name,
+      percentage: g.percentage,
+    }))
+    : [];
 
   const monthlyStats = [
     { month: "Oct", hours: 45 },
@@ -686,24 +722,24 @@ const Profile = () => {
       try {
         // Upload to backend - backend will handle Cloudinary upload and update avatar
         const updatedUser = await userApi.uploadAvatar(file);
-        
+
         // Update local state with new avatar URL
         setProfileData({ ...profileData, avatar: updatedUser.avatar || "" });
         setAvatarPreview(updatedUser.avatar || "");
-        
+
         toast({ title: "Thành công", description: "Đã cập nhật ảnh đại diện thành công!" });
       } catch (err: any) {
         console.error("Failed to upload avatar:", err);
-        toast({ 
-          title: "Lỗi", 
-          description: err.message || "Không thể upload ảnh đại diện", 
-          variant: "destructive" 
+        toast({
+          title: "Lỗi",
+          description: err.message || "Không thể upload ảnh đại diện",
+          variant: "destructive"
         });
         // Reset preview on error
         setAvatarPreview(profileData.avatar || "");
         setAvatarFile(null);
-      const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
-      setProfilePlanCode(resolvedPlanCode);
+        const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
+        setProfilePlanCode(resolvedPlanCode);
       } finally {
         setUploadingAvatar(false);
       }
@@ -787,7 +823,7 @@ const Profile = () => {
                       accept="image/*"
                       className="hidden"
                       onChange={handleAvatarChange}
-                      tabIndex={-1}/>
+                      tabIndex={-1} />
                   )}
                   {/* Button edit chỉ hiện khi chưa bấm edit */}
                   {!isEditing && (
@@ -810,7 +846,7 @@ const Profile = () => {
                         <Input
                           id="edit-name"
                           value={profileData.name}
-                          onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                          onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
                           className="text-xl font-bold"
                         />
                       </div>
@@ -820,7 +856,7 @@ const Profile = () => {
                           id="edit-email"
                           type="email"
                           value={profileData.email}
-                                disabled
+                          disabled
                         />
                         <p className="text-xs text-muted-foreground mt-1">Email cannot be changed.</p>
                       </div>
@@ -830,7 +866,7 @@ const Profile = () => {
                           id="edit-phone"
                           type="tel"
                           value={profileData.phone}
-                          onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                          onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
                           placeholder="Phone number"
                         />
                       </div>
@@ -839,21 +875,21 @@ const Profile = () => {
                         <Textarea
                           id="edit-address"
                           value={profileData.address}
-                          onChange={(e) => setProfileData({...profileData, address: e.target.value})}
+                          onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
                           rows={2}
                           placeholder="Address"
                         />
                       </div>
                       <div className="flex gap-2">
-                        <Button 
-                          variant="hero" 
+                        <Button
+                          variant="hero"
                           onClick={handleSaveProfile}
                           disabled={saving}
                         >
                           {saving ? "Saving..." : "Save"}
                         </Button>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           onClick={() => setIsEditing(false)}
                           disabled={saving}
                         >
@@ -903,13 +939,12 @@ const Profile = () => {
                             <span>
                               {isPremiumExpired ? "Expired at:" : "Expires:"}{" "}
                               <span
-                                className={`font-medium ${
-                                  profileData.premium
-                                    ? "text-green-400"
-                                    : isPremiumExpired
+                                className={`font-medium ${profileData.premium
+                                  ? "text-green-400"
+                                  : isPremiumExpired
                                     ? "text-red-400"
                                     : "text-muted-foreground"
-                                }`}
+                                  }`}
                               >
                                 {formatMembershipDate(profileData.premiumEnd)}
                               </span>
@@ -919,7 +954,7 @@ const Profile = () => {
                       )}
                       <p className="text-muted-foreground mb-1">{profileData.username}</p>
                       <p className="text-sm mb-4 max-w-md">{profileData.bio}</p>
-                      
+
                       <div className="flex flex-wrap gap-4 text-sm text-muted-foreground justify-center md:justify-start">
                         <span className="flex items-center gap-1">
                           <Phone className="w-4 h-4" />
@@ -1000,28 +1035,67 @@ const Profile = () => {
                   <CardTitle>Your Top Genres</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {topGenres.map((genre, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <div className="w-8 text-center text-sm font-medium">#{index + 1}</div>
-                      <div className="flex-1">
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">{genre.name}</span>
-                          <span className="text-sm text-muted-foreground">{genre.percentage}%</span>
-                        </div>
-                        <div className="w-full bg-muted/20 rounded-full h-2">
-                          <div 
-                            className="bg-gradient-primary h-2 rounded-full transition-all duration-500"
-                            style={{ width: `${genre.percentage}%` }}
-                          />
+                  {topGenres.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Music className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-sm">No genre data yet</p>
+                      <p className="text-xs">Start listening to see your favorite genres</p>
+                    </div>
+                  ) : (
+                    topGenres.map((genre, index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <div className="w-8 text-center text-sm font-medium">#{index + 1}</div>
+                        <div className="flex-1">
+                          <div className="flex justify-between mb-1">
+                            <span className="font-medium">{genre.name}</span>
+                            <span className="text-sm text-muted-foreground">{genre.percentage}%</span>
+                          </div>
+                          <div className="w-full bg-muted/20 rounded-full h-2">
+                            <div
+                              className="bg-gradient-primary h-2 rounded-full transition-all duration-500"
+                              style={{ width: `${genre.percentage}%` }}
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="activity" className="space-y-6">
+              {/* Activity Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardContent className="p-4 text-center">
+                    <Play className="w-6 h-6 text-primary mx-auto mb-2" />
+                    <div className="text-xl font-bold">{historyTotalElements}</div>
+                    <div className="text-xs text-muted-foreground">Total Plays</div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardContent className="p-4 text-center">
+                    <Music className="w-6 h-6 text-primary mx-auto mb-2" />
+                    <div className="text-xl font-bold">
+                      {listeningOverview ? listeningOverview.songsPlayed : 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Unique Songs</div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                  <CardContent className="p-4 text-center">
+                    <Clock className="w-6 h-6 text-primary mx-auto mb-2" />
+                    <div className="text-xl font-bold">
+                      {listeningOverview
+                        ? `${Math.floor(listeningOverview.totalListeningSeconds / 3600)}h`
+                        : "0h"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Listening Time</div>
+                  </CardContent>
+                </Card>
+              </div>
+
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
@@ -1029,20 +1103,16 @@ const Profile = () => {
                       <Clock className="w-5 h-5" />
                       Listening History
                     </CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowHistoryDialog(true)}
-                      disabled={!listeningHistory.length}
-                    >
-                      Show all
-                    </Button>
+                    <div className="text-sm text-muted-foreground">
+                      Page {historyPage + 1} / {Math.max(1, historyTotalPages)} ({historyTotalElements} total)
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4 max-h-96 overflow-y-auto">
                     {loading ? (
                       <div className="text-center py-8 text-muted-foreground">
+                        <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
                         Loading listening history...
                       </div>
                     ) : listeningHistory.length === 0 ? (
@@ -1052,56 +1122,87 @@ const Profile = () => {
                         <p className="text-sm">Start playing songs to see your history here</p>
                       </div>
                     ) : (
-                      listeningHistory.map((item) => (
-                        <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
-                          <Music className="w-10 h-10 text-primary" />
-                          <div className="flex-1">
-                            <p
-                              className="font-medium"
-                              title={`songId: ${(item as any).songId ?? (item as any).song?.id ?? 'unknown'}`}
-                            >
-                              {item.song?.name || (item.song as any)?.songName || (item as any).songName || "Unknown Song"}
-                            </p>
-                            {(() => {
-                              const artistsField = (item.song as any)?.artists;
-                              const artistSource =
-                                (Array.isArray(item.song?.artistNames) && item.song?.artistNames) ||
-                                (Array.isArray(artistsField)
-                                  ? (artistsField as Array<{ name?: string }>)
+                      <>
+                        {listeningHistory.map((item) => (
+                          <div key={item.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-white/5 transition-colors">
+                            <Music className="w-10 h-10 text-primary" />
+                            <div className="flex-1">
+                              <p
+                                className="font-medium"
+                                title={`songId: ${(item as any).songId ?? (item as any).song?.id ?? 'unknown'}`}
+                              >
+                                {item.song?.name || (item.song as any)?.songName || (item as any).songName || "Unknown Song"}
+                              </p>
+                              {(() => {
+                                const artistsField = (item.song as any)?.artists;
+                                const artistSource =
+                                  (Array.isArray(item.song?.artistNames) && item.song?.artistNames) ||
+                                  (Array.isArray(artistsField)
+                                    ? (artistsField as Array<{ name?: string }>)
                                       .map((a) => a?.name)
                                       .filter(Boolean)
-                                  : typeof artistsField === "string"
-                                    ? artistsField.split(",").map((str) => str.trim())
-                                    : undefined) ||
-                                (Array.isArray(item.artistNames) ? item.artistNames : undefined);
+                                    : typeof artistsField === "string"
+                                      ? artistsField.split(",").map((str) => str.trim())
+                                      : undefined) ||
+                                  (Array.isArray(item.artistNames) ? item.artistNames : undefined);
 
-                              const artistDisplay =
-                                artistSource && artistSource.length
-                                  ? artistSource.join(", ")
-                                  : "Unknown Artist";
+                                const artistDisplay =
+                                  artistSource && artistSource.length
+                                    ? artistSource.join(", ")
+                                    : "Unknown Artist";
 
-                              return (
-                                <p className="text-sm text-muted-foreground">
-                                  {artistDisplay}
-                                </p>
-                              );
-                            })()}
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <p className="text-sm text-muted-foreground">{formatDate(item.listenedAt)}</p>
-                              <p className="text-xs text-muted-foreground">played</p>
+                                return (
+                                  <p className="text-sm text-muted-foreground">
+                                    {artistDisplay}
+                                  </p>
+                                );
+                              })()}
                             </div>
-                            {item.id && (
-                              <Button variant="outline" size="icon" onClick={() => handleDeleteHistory(item.id!)} aria-label="Delete entry">
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            )}
+                            <div className="flex items-center gap-3">
+                              <div className="text-right">
+                                <p className="text-sm text-muted-foreground">{formatDate(item.listenedAt)}</p>
+                                <p className="text-xs text-muted-foreground">played</p>
+                              </div>
+                              {item.id && (
+                                <Button variant="outline" size="icon" onClick={() => handleDeleteHistory(item.id!)} aria-label="Delete entry">
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))
+                        ))}
+                      </>
                     )}
                   </div>
+
+                  {/* Pagination */}
+                  {historyTotalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {listeningHistory.length} of {historyTotalElements} entries
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHistoryPage((p) => Math.max(0, p - 1))}
+                          disabled={historyPage === 0 || loading}
+                        >
+                          <ChevronLeft className="w-4 h-4 mr-1" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setHistoryPage((p) => Math.min(historyTotalPages - 1, p + 1))}
+                          disabled={historyPage >= historyTotalPages - 1 || loading}
+                        >
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1201,11 +1302,11 @@ const Profile = () => {
                                   {getPaymentStatusBadge(order)}
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-sm">
-                                  {order.paidAt 
+                                  {order.paidAt
                                     ? formatPaymentDate(order.paidAt)
                                     : order.failedAt
-                                    ? formatPaymentDate(order.failedAt)
-                                    : formatPaymentDate(order.createdAt)}
+                                      ? formatPaymentDate(order.failedAt)
+                                      : formatPaymentDate(order.createdAt)}
                                 </TableCell>
                                 <TableCell className="text-right">
                                   <Button
@@ -1270,7 +1371,7 @@ const Profile = () => {
                       <div className="flex items-end gap-2 h-32">
                         {monthlyStats.map((stat, index) => (
                           <div key={index} className="flex-1 flex flex-col items-center">
-                            <div 
+                            <div
                               className="w-full bg-gradient-primary rounded-t"
                               style={{ height: `${(stat.hours / 120) * 100}%` }}
                             />
@@ -1305,7 +1406,7 @@ const Profile = () => {
       >
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto scrollbar-invoice bg-gradient-to-br from-background via-background/95 to-background/90 border-white/10 shadow-2xl">
           <DialogHeader className="space-y-1 pb-3 border-b border-white/10">
-          <DialogTitle className="text-xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent flex items-center gap-2">
+            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent flex items-center gap-2">
               <ReceiptText className="w-5 h-5 text-primary" />
               Invoice {selectedOrder ? `#${selectedOrder.orderCode}` : ""}
             </DialogTitle>
@@ -1430,37 +1531,35 @@ const Profile = () => {
                       {selectedOrderFeatures.map((feature, index) => {
                         const isUnlimited = feature.limitType?.toUpperCase() === 'UNLIMITED';
                         const isDisabled = feature.isEnabled === false || feature.limitType?.toUpperCase() === 'DISABLED';
-                        
+
                         return (
                           <div
                             key={`${feature.featureName}-${index}`}
-                            className={`group flex items-center justify-between gap-3 rounded-lg p-3 transition-all duration-200 ${
-                              isDisabled
-                                ? 'bg-white/5 border border-white/10'
-                                : isUnlimited
+                            className={`group flex items-center justify-between gap-3 rounded-lg p-3 transition-all duration-200 ${isDisabled
+                              ? 'bg-white/5 border border-white/10'
+                              : isUnlimited
                                 ? 'bg-gradient-to-r from-purple-500/20 via-purple-500/10 to-transparent border border-purple-500/30 hover:border-purple-500/50'
                                 : 'bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20'
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                              <div className={`p-1.5 rounded-lg flex-shrink-0 ${
-                                isDisabled
-                                  ? 'bg-muted/50'
-                                  : isUnlimited
+                              <div className={`p-1.5 rounded-lg flex-shrink-0 ${isDisabled
+                                ? 'bg-muted/50'
+                                : isUnlimited
                                   ? 'bg-purple-500/20'
                                   : 'bg-primary/20'
-                              }`}>
+                                }`}>
                                 {feature.featureName?.includes('ANALYTICS') && <TrendingUp className="w-3.5 h-3.5 text-purple-500" />}
                                 {feature.featureName?.includes('SEARCH') && <Music className="w-3.5 h-3.5 text-purple-500" />}
                                 {feature.featureName?.includes('THEME') && <Palette className="w-3.5 h-3.5 text-purple-500" />}
                                 {feature.featureName?.includes('DOWNLOAD') && <Play className="w-3.5 h-3.5 text-purple-500" />}
                                 {feature.featureName?.includes('PLAYLIST') && <Music className="w-3.5 h-3.5 text-purple-500" />}
-                                {!feature.featureName?.includes('ANALYTICS') && 
-                                 !feature.featureName?.includes('SEARCH') && 
-                                 !feature.featureName?.includes('THEME') && 
-                                 !feature.featureName?.includes('DOWNLOAD') &&
-                                 !feature.featureName?.includes('PLAYLIST') && 
-                                 <Music className="w-3.5 h-3.5 text-purple-500" />}
+                                {!feature.featureName?.includes('ANALYTICS') &&
+                                  !feature.featureName?.includes('SEARCH') &&
+                                  !feature.featureName?.includes('THEME') &&
+                                  !feature.featureName?.includes('DOWNLOAD') &&
+                                  !feature.featureName?.includes('PLAYLIST') &&
+                                  <Music className="w-3.5 h-3.5 text-purple-500" />}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="font-semibold text-sm text-foreground mb-0.5">
@@ -1509,7 +1608,7 @@ const Profile = () => {
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       <span className="font-semibold text-foreground">Note:</span> The information above is stored as a snapshot in the database (
                       <code className="px-1 py-0.5 rounded bg-white/5 text-primary font-mono text-[10px]">payment_orders</code> and{' '}
-                      <code className="px-1 py-0.5 rounded bg-white/5 text-primary font-mono text-[10px]">premium_subscription_features</code>) 
+                      <code className="px-1 py-0.5 rounded bg-white/5 text-primary font-mono text-[10px]">premium_subscription_features</code>)
                       so you always keep the exact benefits you paid for, even if admins change plans later.
                     </p>
                   </div>

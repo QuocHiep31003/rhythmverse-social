@@ -1,0 +1,119 @@
+<mxfile host="app.diagrams.net" modified="2025-12-03T10:18:00.000Z" agent="5.0 (Windows)" etag="conceptual-v2" version="22.1.0">
+  <diagram id="conceptual" name="Conceptual Diagram">
+    <mxGraphModel dx="1424" dy="826" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="user" value="User" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf" vertex="1" parent="1">
+          <mxGeometry x="90" y="340" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="playlist" value="Playlist" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#d5e8d4;strokeColor=#82b366" vertex="1" parent="1">
+          <mxGeometry x="90" y="200" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="song" value="Song" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#ffe6cc;strokeColor=#d79b00" vertex="1" parent="1">
+          <mxGeometry x="320" y="200" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="artist" value="Artist" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#e1d5e7;strokeColor=#9673a6" vertex="1" parent="1">
+          <mxGeometry x="530" y="110" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="album" value="Album" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#fff2cc;strokeColor=#d6b656" vertex="1" parent="1">
+          <mxGeometry x="530" y="230" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="genreMood" value="Genre / Mood" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#f8cecc;strokeColor=#b85450" vertex="1" parent="1">
+          <mxGeometry x="530" y="350" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="listeningHistory" value="Listening History" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#f5f5f5;strokeColor=#666666" vertex="1" parent="1">
+          <mxGeometry x="320" y="340" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="interaction" value="Social Interactions" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#f5f5f5;strokeColor=#666666" vertex="1" parent="1">
+          <mxGeometry x="320" y="450" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="recommendation" value="Recommendation Engine" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#e6f7ff;strokeColor=#3c78d8" vertex="1" parent="1">
+          <mxGeometry x="720" y="260" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="artistVector" value="Artist Feature Vector" style="shape=process;rounded=1;whiteSpace=wrap;html=1;fontSize=13;fillColor=#f2e6ff;strokeColor=#9673a6" vertex="1" parent="1">
+          <mxGeometry x="720" y="110" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="genreVector" value="Genre Vector" style="shape=process;rounded=1;whiteSpace=wrap;html=1;fontSize=13;fillColor=#fde9d9;strokeColor=#b85450" vertex="1" parent="1">
+          <mxGeometry x="950" y="200" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="moodVector" value="Mood Vector" style="shape=process;rounded=1;whiteSpace=wrap;html=1;fontSize=13;fillColor=#fde9d9;strokeColor=#b85450" vertex="1" parent="1">
+          <mxGeometry x="950" y="280" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="notification" value="Notification Service" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#f1f1f1;strokeColor=#999999" vertex="1" parent="1">
+          <mxGeometry x="720" y="380" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="recognition" value="Music Recognition" style="rounded=1;whiteSpace=wrap;html=1;fontSize=14;fillColor=#e1f0d9;strokeColor=#76a5af" vertex="1" parent="1">
+          <mxGeometry x="90" y="80" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeUserPlaylist" style="endArrow=classic;html=1;strokeColor=#82b366" edge="1" parent="1" source="user" target="playlist">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeUserSong" style="endArrow=classic;html=1;strokeColor=#d79b00" edge="1" parent="1" source="user" target="song">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeUserInteraction" style="endArrow=classic;html=1;strokeColor=#666666" edge="1" parent="1" source="user" target="interaction">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeUserHistory" style="endArrow=classic;html=1;strokeColor=#666666" edge="1" parent="1" source="user" target="listeningHistory">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgePlaylistSong" style="endArrow=classic;html=1;strokeColor=#82b366" edge="1" parent="1" source="playlist" target="song">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeSongArtist" style="endArrow=classic;html=1;strokeColor=#9673a6" edge="1" parent="1" source="song" target="artist">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeSongAlbum" style="endArrow=classic;html=1;strokeColor=#d6b656" edge="1" parent="1" source="song" target="album">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeSongGenre" style="endArrow=classic;html=1;strokeColor=#b85450" edge="1" parent="1" source="song" target="genreMood">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeHistoryRecommendation" style="endArrow=classic;html=1;strokeColor=#3c78d8" edge="1" parent="1" source="listeningHistory" target="recommendation">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeInteractionRecommendation" style="endArrow=classic;html=1;strokeColor=#3c78d8" edge="1" parent="1" source="interaction" target="recommendation">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeRecommendationSong" style="endArrow=classic;html=1;strokeColor=#3c78d8" edge="1" parent="1" source="recommendation" target="song">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeRecommendationUser" style="endArrow=classic;html=1;strokeColor=#3c78d8" edge="1" parent="1" source="recommendation" target="user">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeNotificationUser" style="endArrow=classic;html=1;strokeColor=#999999" edge="1" parent="1" source="notification" target="user">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeRecommendationNotification" style="endArrow=classic;html=1;strokeColor=#999999" edge="1" parent="1" source="recommendation" target="notification">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeRecognitionUser" style="endArrow=classic;html=1;strokeColor=#76a5af" edge="1" parent="1" source="recognition" target="user">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeRecognitionSong" style="endArrow=classic;html=1;strokeColor=#76a5af" edge="1" parent="1" source="recognition" target="song">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeArtistArtistVector" style="endArrow=classic;html=1;strokeColor=#9673a6;dashed=1" edge="1" parent="1" source="artist" target="artistVector">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeArtistVectorRecommendation" style="endArrow=classic;html=1;strokeColor=#9673a6;dashed=1" edge="1" parent="1" source="artistVector" target="recommendation">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeGenreMoodGenreVector" style="endArrow=classic;html=1;strokeColor=#b85450;dashed=1" edge="1" parent="1" source="genreMood" target="genreVector">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeGenreMoodMoodVector" style="endArrow=classic;html=1;strokeColor=#b85450;dashed=1" edge="1" parent="1" source="genreMood" target="moodVector">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeVectorRecommendation" style="endArrow=classic;html=1;strokeColor=#b85450;dashed=1" edge="1" parent="1" source="genreVector" target="recommendation">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="edgeMoodVectorRecommendation" style="endArrow=classic;html=1;strokeColor=#b85450;dashed=1" edge="1" parent="1" source="moodVector" target="recommendation">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+

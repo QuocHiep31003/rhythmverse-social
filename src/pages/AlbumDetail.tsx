@@ -359,10 +359,12 @@ const AlbumDetail = () => {
     if (!songs.length) return;
     if (isPlaying) togglePlay();
     else {
+      // Đẩy toàn bộ bài hát trong album vào queue trước, giống Trending
+      setQueue(songs);
       const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
       if (currentSong && songs.find((s) => s.id === currentSong.id))
-        await playSongWithStreamUrl(currentSong, playSong, setQueue); // resume đúng bài
-      else await playSongWithStreamUrl(songs[0], playSong, setQueue); // play bài đầu
+        await playSongWithStreamUrl(currentSong, playSong); // resume đúng bài
+      else await playSongWithStreamUrl(songs[0], playSong); // play bài đầu
     }
   };
 
@@ -566,8 +568,10 @@ const AlbumDetail = () => {
                       if (active && isPlaying) {
                         togglePlay();
                       } else {
+                        // Đẩy queue = toàn bộ bài hát trong album, rồi phát bài được chọn
+                        setQueue(songs);
                         const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-                        await playSongWithStreamUrl(song, playSong, setQueue);
+                        await playSongWithStreamUrl(song, playSong);
                       }
                     }}
                     releaseDate={album?.releaseDate}

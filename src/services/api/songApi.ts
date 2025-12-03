@@ -133,6 +133,62 @@ export const songsApi = {
     }
   },
 
+  /**
+   * Lấy songs public (không cần auth, chỉ lấy ACTIVE)
+   * GET /api/songs/public?page=X&size=Y&sort=createdAt,desc&status=ACTIVE
+   */
+  getPublic: async (params?: PaginationParams & { artistId?: number; genreId?: number; moodId?: number; status?: string }): Promise<PaginatedResponse<Song>> => {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params?.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params?.size !== undefined) queryParams.append('size', params.size.toString());
+      if (params?.sort) queryParams.append('sort', params.sort);
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.artistId !== undefined) queryParams.append('artistId', String(params.artistId));
+      if (params?.genreId !== undefined) queryParams.append('genreId', String(params.genreId));
+      if (params?.moodId !== undefined) queryParams.append('moodId', String(params.moodId));
+      if (params?.status) queryParams.append('status', params.status);
+      else queryParams.append('status', 'ACTIVE'); // Default chỉ lấy ACTIVE
+
+      const url = `/songs/public?${queryParams.toString()}`;
+      console.log("🌐 Public API Call:", url);
+      console.log("📋 Params:", params);
+
+      const response = await apiClient.get(url);
+      console.log("✅ Public API Response:", response.data);
+      return response.data;
+    } catch (error) {
+      console.error("❌ Error fetching public songs:", error);
+      // Fallback: thử gọi getAll nếu public không có (có thể backend chưa có endpoint này)
+      try {
+        console.log("⚠️ Trying fallback to getAll with ACTIVE filter...");
+        return await songsApi.getAll({ ...params, status: params?.status || 'ACTIVE' });
+      } catch (fallbackError) {
+        console.error("❌ Fallback also failed:", fallbackError);
+        return {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+          size: params?.size ?? 0,
+          number: params?.page ?? 0,
+          first: true,
+          last: true,
+          empty: true,
+          pageable: {
+            pageNumber: params?.page ?? 0,
+            pageSize: params?.size ?? 0,
+            sort: { empty: true, sorted: false, unsorted: true },
+            offset: 0,
+            paged: true,
+            unpaged: false
+          },
+          sort: { empty: true, sorted: false, unsorted: true },
+          numberOfElements: 0
+        } as PaginatedResponse<Song>;
+      }
+    }
+  },
+
   // Lấy songs theo artist
   getByArtist: async (artistId: number): Promise<Song[]> => {
     try {
@@ -677,6 +733,22 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching monthly top 100:", error);
+      return [];
+    }
+  },
+
+  /**
+   * AI picks for you - gợi ý bài hát cá nhân hóa cho user hiện tại
+   * GET /api/songs/recommendations/ai-picks?limit=X
+   */
+  getAiPicksForYou: async (limit: number = 20): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get('/songs/recommendations/ai-picks', {
+        params: { limit },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error fetching AI picks for you:", error);
       return [];
     }
   },

@@ -2,8 +2,15 @@ import axios from 'axios';
 
 // Base URL cho API
 export const API_BASE_URL = "http://localhost:8080/api";
-// Auth server base (remove trailing /api to hit OAuth endpoints)
-export const AUTH_SERVER_URL = API_BASE_URL.replace(/\/api\/?$/, "");
+
+// Base URL cho các endpoint auth (OAuth2, login external, ...) – dùng origin của API
+export const AUTH_SERVER_URL = (() => {
+  try {
+    return new URL(API_BASE_URL).origin;
+  } catch {
+    return "http://localhost:8080";
+  }
+})();
 
 // JWT token utilities
 interface DecodedToken {
@@ -72,62 +79,62 @@ export const getTimeUntilExpiration = (token: string | null): number => {
   return Math.max(0, timeUntilExpiration);
 };
 
-// Auth helpers for API requests - DÙNG localStorage để chia sẻ giữa các tab
+// Auth helpers for API requests - CHỈ DÙNG sessionStorage
 export const getAuthToken = (): string | null => {
   try {
     if (typeof window !== 'undefined') {
       // Ưu tiên adminToken nếu đang ở trang admin
       const isAdminPage = window.location.pathname.startsWith('/admin');
       if (isAdminPage) {
-        return localStorage.getItem('adminToken') || localStorage.getItem('token');
+        return sessionStorage.getItem('adminToken') || sessionStorage.getItem('token');
       }
-      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+      return sessionStorage.getItem('token') || sessionStorage.getItem('adminToken');
     }
     return null;
   } catch {
     try {
       const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
       if (isAdminPage) {
-        return localStorage.getItem('adminToken') || localStorage.getItem('token');
+        return sessionStorage.getItem('adminToken') || sessionStorage.getItem('token');
       }
-      return localStorage.getItem('token') || localStorage.getItem('adminToken');
+      return sessionStorage.getItem('token') || sessionStorage.getItem('adminToken');
     } catch {
       return null;
     }
   }
 };
 
-// Helper để lấy admin token (ưu tiên adminToken) - DÙNG localStorage để chia sẻ giữa các tab
+// Helper để lấy admin token (ưu tiên adminToken) - CHỈ DÙNG sessionStorage
 export const getAdminToken = (): string | null => {
   try {
     return typeof window !== 'undefined'
-      ? (localStorage.getItem('adminToken') || localStorage.getItem('token'))
+      ? (sessionStorage.getItem('adminToken') || sessionStorage.getItem('token'))
       : null;
   } catch {
     try {
-      return localStorage.getItem('adminToken') || localStorage.getItem('token');
+      return sessionStorage.getItem('adminToken') || sessionStorage.getItem('token');
     } catch {
       return null;
     }
   }
 };
 
-// Get refresh token from storage - DÙNG localStorage để chia sẻ giữa các tab
+// Get refresh token from storage - CHỈ DÙNG sessionStorage
 export const getRefreshToken = (): string | null => {
   try {
     return typeof window !== 'undefined'
-      ? (localStorage.getItem('refreshToken') || localStorage.getItem('adminRefreshToken'))
+      ? (sessionStorage.getItem('refreshToken') || sessionStorage.getItem('adminRefreshToken'))
       : null;
   } catch {
     try {
-      return localStorage.getItem('refreshToken') || localStorage.getItem('adminRefreshToken');
+      return sessionStorage.getItem('refreshToken') || sessionStorage.getItem('adminRefreshToken');
     } catch {
       return null;
     }
   }
 };
 
-// Set tokens in storage - DÙNG localStorage để chia sẻ giữa các tab
+// Set tokens in storage - CHỈ DÙNG sessionStorage
 export const setTokens = (token: string, refreshToken?: string) => {
   try {
     if (typeof window === 'undefined') return;
@@ -137,31 +144,26 @@ export const setTokens = (token: string, refreshToken?: string) => {
 
     if (isAdminPage) {
       // Lưu vào adminToken và adminRefreshToken nếu đang ở admin page
-      localStorage.setItem('adminToken', token);
+      sessionStorage.setItem('adminToken', token);
       if (refreshToken) {
-        localStorage.setItem('adminRefreshToken', refreshToken);
+        sessionStorage.setItem('adminRefreshToken', refreshToken);
       }
     } else {
       // Lưu vào token và refreshToken cho user thường
-      localStorage.setItem('token', token);
+      sessionStorage.setItem('token', token);
       if (refreshToken) {
-        localStorage.setItem('refreshToken', refreshToken);
+        sessionStorage.setItem('refreshToken', refreshToken);
       }
     }
     
-    console.log('[setTokens] Tokens saved to localStorage:', { 
+    console.log('[setTokens] Tokens saved to sessionStorage:', { 
       isAdminPage, 
       hasToken: !!token, 
       hasRefreshToken: !!refreshToken 
     });
     
-    // Dispatch custom event để các component trong cùng tab có thể listen
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('tokenUpdated'));
-    }
-    
-    // localStorage tự động share giữa các tab, không cần BroadcastChannel
-    // Nhưng vẫn broadcast để các tab biết và check auth lại ngay lập tức
+    // Gửi broadcast message đến các tab khác để chúng check auth lại
+    // QUAN TRỌNG: sessionStorage không share giữa các tab, nên cần broadcast
     if (typeof window !== 'undefined' && window.BroadcastChannel) {
       try {
         const authChannel = new BroadcastChannel('auth_channel');
@@ -169,29 +171,34 @@ export const setTokens = (token: string, refreshToken?: string) => {
           type: 'TOKEN_UPDATED',
           timestamp: Date.now()
         });
-        setTimeout(() => authChannel.close(), 100);
+        authChannel.close();
         console.log('[setTokens] Broadcasted TOKEN_UPDATED to other tabs');
       } catch (error) {
         console.warn('[setTokens] Failed to broadcast token update:', error);
       }
+    }
+    
+    // Dispatch custom event để các component trong cùng tab có thể listen
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tokenUpdated'));
     }
   } catch (error) {
     console.error('[setTokens] Failed to save tokens:', error);
   }
 };
 
-// Clear tokens from storage - DÙNG localStorage để chia sẻ giữa các tab
+// Clear tokens from storage - CHỈ DÙNG sessionStorage
 export const clearTokens = () => {
   try {
     if (typeof window === 'undefined') return;
     
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('adminRefreshToken');
-    localStorage.removeItem('userId'); // Clear userId khi logout
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('refreshToken');
+    sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminRefreshToken');
+    sessionStorage.removeItem('userId'); // Clear userId khi logout
     
-    console.log('[clearTokens] All tokens and userId cleared from localStorage');
+    console.log('[clearTokens] All tokens and userId cleared from sessionStorage');
   } catch (error) {
     console.error('[clearTokens] Failed to clear tokens:', error);
   }
