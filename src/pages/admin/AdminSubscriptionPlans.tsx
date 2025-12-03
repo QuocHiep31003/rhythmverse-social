@@ -18,10 +18,17 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const FEATURE_OPTIONS: { value: FeatureName; label: string }[] = [
   { value: FeatureName.PLAYLIST_CREATE, label: "Create Playlist" },
-  { value: FeatureName.OFFLINE_DOWNLOAD, label: "Offline Download" },
+  { value: FeatureName.FRIEND_LIMIT, label: "Friend Limit" },
   { value: FeatureName.AI_SEARCH, label: "AI Search" },
   { value: FeatureName.ADVANCED_ANALYTICS, label: "Advanced Analytics" },
 ];
@@ -156,7 +163,7 @@ const AdminSubscriptionPlans = () => {
   const handleOpenDialog = (plan?: SubscriptionPlanDTO) => {
     if (plan) {
       setEditingPlan(plan);
-      // Đảm bảo có đủ 5 tính năng, nếu thiếu thì thêm các tính năng mặc định
+      // Đảm bảo có đủ 4 tính năng, nếu thiếu thì thêm các tính năng mặc định
       const existingFeatures = plan.features || [];
       const allFeatures = FEATURE_OPTIONS.map(opt => {
         const existing = existingFeatures.find(f => f.featureName === opt.value);
@@ -165,13 +172,19 @@ const AdminSubscriptionPlans = () => {
             ...existing,
             isEnabled: existing.isEnabled ?? true,
             limitValue: existing.limitValue ?? null,
+            limitCycle: existing.limitCycle,
           };
         }
-        // Nếu chưa có, tạo mặc định (unlimited)
+        // Nếu chưa có, tạo mặc định
+        // FREE plan: Friend Limit = 20, các tính năng khác = unlimited
+        // Các plan khác: tất cả = unlimited
+        const isFreePlan = plan.planCode?.toUpperCase() === "FREE";
+        const isFriendLimit = opt.value === FeatureName.FRIEND_LIMIT;
         return {
           featureName: opt.value,
-          limitValue: null, // null = unlimited
+          limitValue: isFreePlan && isFriendLimit ? 20 : null, // FREE plan: 20 friends, others: unlimited
           isEnabled: true,
+          limitCycle: isFreePlan && isFriendLimit ? "NONE" : undefined, // Friend limit không có cycle
         };
       });
       setFormData({
@@ -185,7 +198,7 @@ const AdminSubscriptionPlans = () => {
       });
     } else {
       setEditingPlan(null);
-      // Tạo mặc định 5 tính năng với unlimited
+      // Tạo mặc định 4 tính năng với unlimited
       const defaultFeatures = FEATURE_OPTIONS.map(opt => ({
         featureName: opt.value,
         limitValue: null, // null = unlimited
@@ -209,7 +222,7 @@ const AdminSubscriptionPlans = () => {
     setEditingPlan(null);
   };
 
-  // Không cần handleAddFeature và handleRemoveFeature nữa vì luôn có đủ 5 tính năng
+  // Không cần handleAddFeature và handleRemoveFeature nữa vì luôn có đủ 4 tính năng
 
   const handleToggleUnlimited = (index: number, isUnlimited: boolean) => {
     const newFeatures = [...(formData.features || [])];
@@ -222,21 +235,33 @@ const AdminSubscriptionPlans = () => {
 
   const handleLimitValueChange = (index: number, value: number | null) => {
     const newFeatures = [...(formData.features || [])];
+    const isFriendLimit = newFeatures[index].featureName === FeatureName.FRIEND_LIMIT;
     // Nếu nhập số > 0, tự động tắt unlimited (set limitValue)
     // Nếu nhập 0, vẫn là limited nhưng không cho dùng
     newFeatures[index] = {
       ...newFeatures[index],
       limitValue: value,
+      // Friend limit không có cycle, các tính năng khác có cycle
+      limitCycle: isFriendLimit ? undefined : (value && value > 0 ? (newFeatures[index].limitCycle || "DAILY") : undefined),
     };
     setFormData({ ...formData, features: newFeatures });
   };
 
-  // Không cần sắp xếp nữa, giữ nguyên thứ tự 5 tính năng
+  const handleLimitCycleChange = (index: number, cycle: string) => {
+    const newFeatures = [...(formData.features || [])];
+    newFeatures[index] = {
+      ...newFeatures[index],
+      limitCycle: cycle === "NONE" ? undefined : cycle,
+    };
+    setFormData({ ...formData, features: newFeatures });
+  };
+
+  // Không cần sắp xếp nữa, giữ nguyên thứ tự 4 tính năng
   const sortedFeatures = formData.features || [];
   const descriptionLength = formData.description?.length || 0;
   const descriptionCounterClass = descriptionLength > 270 ? "text-destructive" : "text-muted-foreground";
 
-  // Không cần drag and drop nữa vì luôn có đủ 5 tính năng cố định
+  // Không cần drag and drop nữa vì luôn có đủ 4 tính năng cố định
 
   // PlanDetail handlers
   const handleAddDetail = () => {
@@ -281,7 +306,7 @@ const AdminSubscriptionPlans = () => {
 
   const handleSave = async () => {
     try {
-      // Normalize features trước khi gửi - đảm bảo có đủ 5 tính năng
+      // Normalize features trước khi gửi - đảm bảo có đủ 4 tính năng
       const normalizedFeatures = (formData.features || []).map(f => {
         // Logic đơn giản:
         // - limitValue = null → UNLIMITED
@@ -292,6 +317,7 @@ const AdminSubscriptionPlans = () => {
         return {
           featureName: f.featureName || FeatureName.PLAYLIST_CREATE,
           limitValue: finalLimitValue,
+          limitCycle: finalLimitValue && finalLimitValue > 0 ? (f.limitCycle || "DAILY") : undefined,
           isEnabled: finalLimitValue === null || (finalLimitValue !== null && finalLimitValue > 0),
           // Giữ lại các field khác nếu có
           ...(f.id && { id: f.id }),
@@ -547,39 +573,45 @@ const AdminSubscriptionPlans = () => {
           </DialogHeader>
 
           <div className="space-y-5 py-4">
-            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <section className="rounded-2xl border-2 border-[hsl(var(--admin-border))] bg-gradient-to-br from-[hsl(var(--admin-card))] to-[hsl(var(--admin-card))]/80 shadow-lg p-6 space-y-5">
+              <div className="pb-3 border-b border-[hsl(var(--admin-border))]">
+                <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Plan Details</Label>
+                <p className="text-sm text-muted-foreground mt-1">Configure the basic information for this subscription plan.</p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <Label htmlFor="planCode">Plan code *</Label>
+                  <Label htmlFor="planCode" className="text-sm font-medium">Plan code *</Label>
                   <Input
                     id="planCode"
                     value={formData.planCode}
                     onChange={(e) => setFormData({ ...formData, planCode: e.target.value.toUpperCase() })}
                     placeholder="BASIC, PREMIUM, PRO"
-                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-11 focus:border-primary transition-colors"
                   />
                   {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
+                      <span>⚠</span>
                       Note: Changing default plan codes may affect system logic.
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="planName">Plan name *</Label>
+                  <Label htmlFor="planName" className="text-sm font-medium">Plan name *</Label>
                   <Input
                     id="planName"
                     value={formData.planName}
                     onChange={(e) => setFormData({ ...formData, planName: e.target.value })}
                     placeholder="Basic Plan"
-                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-11 focus:border-primary transition-colors"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="description">Description</Label>
-                  <span className={`text-xs ${descriptionCounterClass}`}>{descriptionLength}/300</span>
+                  <Label htmlFor="description" className="text-sm font-medium">Description</Label>
+                  <span className={`text-xs font-medium ${descriptionCounterClass}`}>{descriptionLength}/300</span>
                 </div>
                 <Textarea
                   id="description"
@@ -592,26 +624,27 @@ const AdminSubscriptionPlans = () => {
                   }}
                   placeholder="Briefly describe the main benefits of this plan..."
                   maxLength={300}
-                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                  rows={4}
+                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] focus:border-primary transition-colors resize-none"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <Label htmlFor="displayOrder">Display order</Label>
+                  <Label htmlFor="displayOrder" className="text-sm font-medium">Display order</Label>
                   <Input
                     id="displayOrder"
                     inputMode="numeric"
                     value={formatNumber(formData.displayOrder)}
                     onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
                     placeholder="Example: 1"
-                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-11 focus:border-primary transition-colors"
                   />
                 </div>
-                <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]/60 p-4 flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-semibold">Plan status</p>
-                    <p className="text-xs text-muted-foreground">
+                <div className="rounded-xl border-2 border-[hsl(var(--admin-border))] bg-gradient-to-r from-[hsl(var(--admin-card))]/60 to-[hsl(var(--admin-card))]/40 p-4 flex items-center justify-between gap-4 hover:border-primary/30 transition-colors">
+                  <div className="flex-1">
+                    <p className="font-semibold text-sm">Plan status</p>
+                    <p className="text-xs text-muted-foreground mt-1">
                       {formData.isActive ? "Plan is visible to users" : "Plan is hidden and cannot be purchased"}
                     </p>
                   </div>
@@ -619,19 +652,20 @@ const AdminSubscriptionPlans = () => {
                     id="isActive"
                     checked={formData.isActive}
                     onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                    className="data-[state=checked]:bg-green-600"
                   />
                 </div>
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-gradient-to-br from-[hsl(var(--admin-card))] to-[hsl(var(--admin-card))]/80 shadow-lg p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[hsl(var(--admin-border))]">
                 <div>
-                  <Label className="font-semibold">Default features</Label>
-                  <p className="text-xs text-muted-foreground">Each plan always has 5 features; you only configure limits.</p>
+                  <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Default Features</Label>
+                  <p className="text-sm text-muted-foreground mt-1">Each plan always has 4 features; you only configure limits.</p>
                 </div>
-                <Badge variant="secondary" className="text-xs">
-                  All plans share these 5 features
+                <Badge variant="secondary" className="text-xs px-3 py-1">
+                  All plans share these 4 features
                 </Badge>
               </div>
 
@@ -640,55 +674,93 @@ const AdminSubscriptionPlans = () => {
                   {sortedFeatures.map((feature, index) => {
                     const isUnlimited = feature.limitValue === null;
                     const isDisabled = feature.limitValue === 0;
-                    const featureLabel = FEATURE_OPTIONS.find(opt => opt.value === feature.featureName)?.label || feature.featureName;
+                    const featureLabel =
+                      FEATURE_OPTIONS.find((opt) => opt.value === feature.featureName)?.label ||
+                      feature.featureName;
+                    const isFriendLimit = feature.featureName === FeatureName.FRIEND_LIMIT;
+                    const showCycle = !isUnlimited && !isFriendLimit; // Friend limit không có cycle
 
                     return (
                       <div
                         key={index}
-                        className={`rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]/60 p-4 transition ${
-                          isDisabled ? "opacity-60" : ""
+                        className={`rounded-lg border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-colors ${
+                          isDisabled ? "opacity-60" : "hover:bg-[hsl(var(--admin-hover))]"
                         }`}
                       >
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                          <div className="flex-1">
-                            <p className="font-medium">{featureLabel}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {isUnlimited
-                                ? "Fully enabled for users."
-                                : "Limit how many times users can use this feature in the plan."}
+                        <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1.2fr_1fr] gap-3 md:gap-4 p-4 items-center">
+                          {/* Feature Name */}
+                          <div className="flex items-center justify-between md:justify-start">
+                            <p className="font-medium text-sm text-[hsl(var(--admin-active-foreground))]">
+                              {featureLabel}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
+
+                          {/* Toggle & status */}
+                          <div className="flex items-center gap-2">
                             <Switch
+                              id={`toggle-${index}`}
                               checked={isUnlimited}
                               onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
                             />
-                            <Badge variant={isUnlimited ? "default" : "secondary"} className={isUnlimited ? "bg-green-600" : ""}>
-                              {isUnlimited ? "Unlimited" : "Limited"}
-                            </Badge>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {isUnlimited
+                                ? "Unlimited"
+                                : isDisabled
+                                ? "Disabled"
+                                : "Limited"}
+                            </span>
                           </div>
-                          <div className="w-full md:w-56">
+
+                          {/* Limit Input */}
+                          <div className="flex items-center gap-2">
                             {isUnlimited ? (
-                              <div className="text-sm text-muted-foreground text-right md:text-left">Unlimited</div>
+                              <span className="text-xs text-muted-foreground">—</span>
                             ) : (
-                              <div className="flex items-center gap-2">
+                              <>
                                 <Input
                                   type="number"
                                   min="0"
-                                  placeholder="Number of uses"
+                                  placeholder={isFriendLimit ? "Max friends" : "Number of uses"}
                                   value={feature.limitValue || 0}
                                   onChange={(e) => {
-                                    const numValue = e.target.value === "" ? 0 : parseInt(e.target.value);
+                                    const numValue =
+                                      e.target.value === "" ? 0 : parseInt(e.target.value, 10);
                                     if (numValue >= 0) {
                                       handleLimitValueChange(index, numValue);
                                     }
                                   }}
-                                  className="flex-1 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
+                                  className="w-24 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-9 text-sm"
                                 />
                                 <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                  {feature.limitValue === 0 ? "(Disabled)" : "uses"}
+                                  {isFriendLimit
+                                    ? feature.limitValue === 0
+                                      ? "(Disabled)"
+                                      : "friends"
+                                    : feature.limitValue === 0
+                                    ? "(Disabled)"
+                                    : "uses"}
                                 </span>
-                              </div>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Cycle Select or placeholder */}
+                          <div className="flex items-center">
+                            {showCycle ? (
+                              <Select
+                                value={feature.limitCycle || "DAILY"}
+                                onValueChange={(value) => handleLimitCycleChange(index, value)}
+                              >
+                                <SelectTrigger className="w-full sm:w-[140px] md:w-[160px] bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-9 text-sm">
+                                  <SelectValue placeholder="Select cycle" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="DAILY">Daily</SelectItem>
+                                  <SelectItem value="MONTHLY">Monthly</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </div>
                         </div>
@@ -697,18 +769,20 @@ const AdminSubscriptionPlans = () => {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No features found for this plan.</p>
+                <div className="rounded-xl border border-dashed border-[hsl(var(--admin-border))] p-8 text-center">
+                  <p className="text-sm text-muted-foreground">No features found for this plan.</p>
+                </div>
               )}
             </section>
 
-            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-4 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <section className="rounded-2xl border-2 border-[hsl(var(--admin-border))] bg-gradient-to-br from-[hsl(var(--admin-card))] to-[hsl(var(--admin-card))]/80 shadow-lg p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[hsl(var(--admin-border))]">
                 <div>
-                  <Label className="font-semibold">Pricing / Duration options</Label>
-                  <p className="text-xs text-muted-foreground">Add multiple billing options to optimize conversion.</p>
+                  <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Pricing / Duration Options</Label>
+                  <p className="text-sm text-muted-foreground mt-1">Add multiple billing options to optimize conversion.</p>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddDetail}>
-                  <Plus className="h-4 w-4 mr-2" />
+                <Button type="button" variant="outline" size="sm" onClick={handleAddDetail} className="gap-2">
+                  <Plus className="h-4 w-4" />
                   Add option
                 </Button>
               </div>

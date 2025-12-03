@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { paymentApi, OrderHistoryItem } from "@/services/api/paymentApi";
 import { useToast } from "@/hooks/use-toast";
+import { userApi } from "@/services/api/userApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -131,6 +132,7 @@ const AdminPremiumDashboard = () => {
     totalElements: 0,
     totalPages: 0,
   });
+  const [triggeringReminder, setTriggeringReminder] = useState(false);
 
   const [chartMode, setChartMode] = useState<ChartMode>("MONTH");
   const [selectedDay, setSelectedDay] = useState(() => getISODateString(new Date()));
@@ -202,6 +204,25 @@ const AdminPremiumDashboard = () => {
   useEffect(() => {
     fetchPayments();
   }, [fetchPayments]);
+
+  const handleTriggerReminders = async () => {
+    try {
+      setTriggeringReminder(true);
+      const message = await userApi.triggerSubscriptionReminders();
+      toast({
+        title: "Reminder triggered",
+        description: message || "Checked users expiring soon and sent notifications/emails.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to trigger subscription expiry reminders.",
+        variant: "destructive",
+      });
+    } finally {
+      setTriggeringReminder(false);
+    }
+  };
 
 
   useEffect(() => {
@@ -495,6 +516,27 @@ const AdminPremiumDashboard = () => {
           ))}
         </div>
 
+        {/* Manual reminder trigger */}
+        <Card className="border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold text-foreground">
+                Premium expiry reminders
+              </CardTitle>
+              <CardDescription>
+                Check all premium users who will expire in 1 day and send notification + email once.
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleTriggerReminders}
+              disabled={triggeringReminder}
+              className="mt-2 sm:mt-0"
+            >
+              {triggeringReminder ? "Checking & sending..." : "Check & send reminders now"}
+            </Button>
+          </CardHeader>
+        </Card>
 
         <Card className="border-none shadow-lg bg-[hsl(var(--admin-card))]">
           <CardHeader className="border-b border-[hsl(var(--admin-border))]/70">

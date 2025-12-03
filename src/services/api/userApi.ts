@@ -59,6 +59,21 @@ export const userApi = {
     },
 
     /**
+     * Admin: Trigger subscription expiry reminders (check & send email/notification ngay lập tức)
+     */
+    triggerSubscriptionReminders: async (): Promise<string> => {
+        const response = await fetch(`${API_BASE_URL}/user/trigger-subscription-reminders`, {
+            method: "POST",
+            headers: buildJsonHeaders(),
+        });
+        const text = await response.text();
+        if (!response.ok) {
+            throw new Error(text || "Failed to trigger subscription reminders");
+        }
+        return text;
+    },
+
+    /**
      * Get current user's profile from token
      */
     getCurrentProfile: async (): Promise<UserDTO> => {

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import Footer from "@/components/Footer";
+import PlanFeaturesDialog from "@/components/PlanFeaturesDialog";
 import { 
   Edit, 
   Music, 
@@ -61,6 +62,8 @@ const Profile = () => {
   const [selectedOrder, setSelectedOrder] = useState<OrderHistoryItem | null>(null);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [pendingTick, setPendingTick] = useState(0);
+  const [profilePlanCode, setProfilePlanCode] = useState<string | null>(null);
+  const [isPlanFeaturesDialogOpen, setIsPlanFeaturesDialogOpen] = useState(false);
   
   useEffect(() => {
     fetchProfile();
@@ -194,6 +197,8 @@ const Profile = () => {
       });
       setAvatarPreview(user.avatar || "");
       setAvatarFile(null);
+      const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
+      setProfilePlanCode(resolvedPlanCode);
       // Update listening history with correct userId
       if (user.id) {
         await fetchListeningHistory(user.id);
@@ -343,13 +348,12 @@ const Profile = () => {
       if (Number.isNaN(date.getTime())) {
         return dateString;
       }
-      return new Intl.DateTimeFormat('en-US', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }).format(date);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const year = date.getFullYear();
+      const hours = String(date.getHours()).padStart(2, "0");
+      const minutes = String(date.getMinutes()).padStart(2, "0");
+      return `${day}/${month}/${year}, ${hours}:${minutes} ${date.getHours() >= 12 ? 'PM' : 'AM'}`;
     } catch {
       return dateString || null;
     }
@@ -397,9 +401,9 @@ const Profile = () => {
       name: 'Playlist Creation',
       description: 'Create and manage custom playlists'
     },
-    OFFLINE_DOWNLOAD: {
-      name: 'Offline Download',
-      description: 'Download songs for offline listening'
+    FRIEND_LIMIT: {
+      name: 'Friend Limit',
+      description: 'Maximum number of friends you can have'
     },
     AI_SEARCH: {
       name: 'AI-Powered Search',
@@ -698,6 +702,8 @@ const Profile = () => {
         // Reset preview on error
         setAvatarPreview(profileData.avatar || "");
         setAvatarFile(null);
+      const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
+      setProfilePlanCode(resolvedPlanCode);
       } finally {
         setUploadingAvatar(false);
       }
@@ -719,6 +725,8 @@ const Profile = () => {
       await userApi.updateProfile(updatePayload);
       await fetchProfile();
       setAvatarFile(null);
+      const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
+      setProfilePlanCode(resolvedPlanCode);
       setIsEditing(false);
       toast({ title: "Success", description: "Profile updated successfully" });
     } catch (error) {
@@ -855,19 +863,31 @@ const Profile = () => {
                     </div>
                   ) : (
                     <>
-                      <div className="flex flex-col md:flex-row md:items-center md:gap-3 mb-3 text-center md:text-left">
+                      <div className="flex flex-col md:flex-row md:items-center md:gap-4 mb-3 text-center md:text-left">
                         <h1 className="text-3xl font-bold">{profileData.name}</h1>
-                        <Badge
-                          variant={profileData.premium ? "default" : "outline"}
-                          className={
-                            profileData.premium
-                              ? "gap-1 w-fit md:w-auto mx-auto md:mx-0 bg-primary/10 text-primary border-primary/40"
-                              : "gap-1 w-fit md:w-auto mx-auto md:mx-0 text-muted-foreground border-muted-foreground/40"
-                          }
-                        >
-                          {profileData.premium && <Crown className="w-3 h-3" />}
-                          {profileData.planLabel || (profileData.premium ? "Premium" : "Free")}
-                        </Badge>
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 mx-auto md:mx-0">
+                          <Badge
+                            variant={profileData.premium ? "default" : "outline"}
+                            className={
+                              profileData.premium
+                                ? "gap-1 w-fit mx-auto md:mx-0 bg-primary/10 text-primary border-primary/40"
+                                : "gap-1 w-fit mx-auto md:mx-0 text-muted-foreground border-muted-foreground/40"
+                            }
+                          >
+                            {profileData.premium && <Crown className="w-3 h-3" />}
+                            {profileData.planLabel || (profileData.premium ? "Premium" : "Free")}
+                          </Badge>
+                          {(profilePlanCode || profileData.premium) && (
+                            <Button
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-primary underline-offset-4"
+                              onClick={() => setIsPlanFeaturesDialogOpen(true)}
+                            >
+                              View plan benefits
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       {(profileData.premiumStart || profileData.premiumEnd) && (
                         <div className="flex flex-col gap-2 text-xs text-muted-foreground justify-start mb-2">
@@ -1268,6 +1288,12 @@ const Profile = () => {
           </Tabs>
         </div>
       </div>
+      <PlanFeaturesDialog
+        open={isPlanFeaturesDialogOpen}
+        onOpenChange={setIsPlanFeaturesDialogOpen}
+        planCode={profilePlanCode || premiumSubscription?.planCode}
+        planName={profileData.planLabel}
+      />
       <Dialog
         open={isInvoiceDialogOpen}
         onOpenChange={(open) => {
@@ -1279,7 +1305,7 @@ const Profile = () => {
       >
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto scrollbar-invoice bg-gradient-to-br from-background via-background/95 to-background/90 border-white/10 shadow-2xl">
           <DialogHeader className="space-y-1 pb-3 border-b border-white/10">
-            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent flex items-center gap-2">
+          <DialogTitle className="text-xl font-bold bg-gradient-to-r from-primary to-primary-glow bg-clip-text text-transparent flex items-center gap-2">
               <ReceiptText className="w-5 h-5 text-primary" />
               Invoice {selectedOrder ? `#${selectedOrder.orderCode}` : ""}
             </DialogTitle>
@@ -1499,3 +1525,17 @@ const Profile = () => {
 };
 
 export default Profile;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
