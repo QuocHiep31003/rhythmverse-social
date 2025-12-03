@@ -6,6 +6,10 @@ export interface PlanFeatureDTO {
   featureName: string;
   featureDisplayName?: string;
   limitValue?: number | null; // null = unlimited
+  limitType?: string; // UNLIMITED, LIMITED, DISABLED
+  limitPeriod?: string; // NONE, DAY, WEEK, MONTH, YEAR
+  limitCycle?: string; // DAILY, MONTHLY (mới thêm)
+  periodValue?: number;
   isEnabled?: boolean;
   createdAt?: string;
   updatedAt?: string;

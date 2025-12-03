@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { paymentApi } from "@/services/api/paymentApi";
 import { userApi } from "@/services/api/userApi";
+import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 import { subscriptionPlanApi, SubscriptionPlanDTO, PlanDetailDTO } from "@/services/api/subscriptionPlanApi";
 import { FeatureName } from "@/services/api/featureUsageApi";
 import { useToast } from "@/hooks/use-toast";
@@ -54,6 +55,7 @@ const Premium = () => {
   const navigate = useNavigate();
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [userId, setUserId] = useState<number | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<PremiumSubscriptionDTO | null>(null);
   const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlanDTO[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlanDTO | null>(null);
@@ -64,7 +66,7 @@ const Premium = () => {
   const getFeatureIcon = (featureName: string) => {
     const iconMap: Record<string, any> = {
       PLAYLIST_CREATE: Heart,
-      OFFLINE_DOWNLOAD: Download,
+      FRIEND_LIMIT: Users,
       AI_SEARCH: Zap,
       ADVANCED_ANALYTICS: BarChart3,
     };
@@ -74,7 +76,7 @@ const Premium = () => {
   const getFeatureText = (featureName: string) => {
     const textMap: Record<string, string> = {
       PLAYLIST_CREATE: "Create playlists",
-      OFFLINE_DOWNLOAD: "Offline downloads",
+      FRIEND_LIMIT: "Friend limit",
       AI_SEARCH: "AI search",
       ADVANCED_ANALYTICS: "Advanced analytics",
     };
@@ -108,6 +110,7 @@ const Premium = () => {
     
     return sortedFeatures.map(f => {
       const limitValue = f.limitValue;
+      const limitCycle = f.limitCycle; // DAILY, MONTHLY
       let status: "unlimited" | "limited" | "disabled";
       let displayText: string;
       
@@ -119,7 +122,14 @@ const Premium = () => {
         displayText = "Not available";
       } else {
         status = "limited";
-        displayText = `${limitValue} uses`;
+        // Hiển thị với cycle: "3 lần/ngày" hoặc "3 lần/tháng"
+        if (limitCycle === "DAILY") {
+          displayText = `${limitValue} lần/ngày`;
+        } else if (limitCycle === "MONTHLY") {
+          displayText = `${limitValue} lần/tháng`;
+        } else {
+          displayText = `${limitValue} lần`;
+        }
       }
       
       return {
@@ -127,9 +137,39 @@ const Premium = () => {
         text: f.featureDisplayName || getFeatureText(f.featureName),
         status,
         limitValue,
+        limitCycle,
         displayText
       };
     });
+  };
+
+  const isSubscriptionActive = (subscription: PremiumSubscriptionDTO | null): boolean => {
+    if (!subscription) return false;
+    const status =
+      subscription.status ||
+      subscription.subscriptionStatus ||
+      subscription.state ||
+      "";
+    const normalizedStatus = status.toUpperCase();
+    const activeByStatus =
+      normalizedStatus === "ACTIVE" ||
+      normalizedStatus === "TRIALING" ||
+      subscription.isActive ||
+      subscription.active;
+
+    const endDateString =
+      subscription.expiresAt ||
+      subscription.endDate ||
+      subscription.currentPeriodEnd ||
+      null;
+    if (!endDateString) {
+      return Boolean(activeByStatus);
+    }
+    const end = new Date(endDateString);
+    if (Number.isNaN(end.getTime())) {
+      return Boolean(activeByStatus);
+    }
+    return activeByStatus && end.getTime() > Date.now();
   };
 
   // Tìm FREE và PREMIUM plan
@@ -221,11 +261,20 @@ const Premium = () => {
     const planFeatures = getPlanFeatures(plan);
     const planDisplayName = getPlanDisplayName(plan);
     const isFreePlan = plan.planCode?.toUpperCase() === "FREE";
+    const activeSubscriptionPlanCode = currentSubscription?.planCode?.toUpperCase() || null;
+    const planCodeUpper = plan.planCode?.toUpperCase() || null;
+    const hasActiveSamePlan =
+      !!planCodeUpper &&
+      !!activeSubscriptionPlanCode &&
+      planCodeUpper === activeSubscriptionPlanCode &&
+      isSubscriptionActive(currentSubscription);
     const hasDetails = plan.details && plan.details.length > 0 && plan.details.some(d => d.isActive !== false);
-    const isButtonDisabled = options?.lockButton || isFreePlan || isUpgrading || !hasDetails;
+    const isButtonDisabled = options?.lockButton || isFreePlan || isUpgrading || !hasDetails || hasActiveSamePlan;
     const displayBadge = options?.badge;
     const buttonText =
-      isButtonDisabled && isFreePlan
+      hasActiveSamePlan
+        ? "Current Plan"
+        : isButtonDisabled && isFreePlan
         ? "Current Plan"
         : isUpgrading
         ? "Processing..."
@@ -346,6 +395,12 @@ const Premium = () => {
         try {
           const user = await userApi.getCurrentProfile();
           setUserId(user.id || null);
+          try {
+            const subscription = await premiumSubscriptionApi.getMySubscription(user.id);
+            setCurrentSubscription(subscription);
+          } catch (subscriptionError) {
+            console.warn("Failed to fetch premium subscription in Premium page:", subscriptionError);
+          }
         } catch (userError) {
           console.warn('Failed to fetch user profile:', userError);
         }
@@ -601,6 +656,48 @@ const Premium = () => {
             </DialogDescription>
           </DialogHeader>
           
+          {/* Hiển thị features của plan */}
+          {selectedPlan && getPlanFeatures(selectedPlan).length > 0 && (
+            <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
+              <h3 className="text-lg font-semibold text-white mb-3">Features included:</h3>
+              <div className="space-y-2">
+                {getPlanFeatures(selectedPlan).map((feature, idx) => (
+                  <div
+                    key={`feature-${idx}`}
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${
+                      feature.status === "disabled"
+                        ? "border-white/5 bg-white/0 text-white/50"
+                        : "border-white/5 bg-white/5 text-white/90"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {feature.status === "disabled" ? (
+                        <X className="w-4 h-4 text-rose-400 shrink-0" />
+                      ) : feature.status === "unlimited" ? (
+                        <Infinity className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Check className="w-4 h-4 text-blue-400 shrink-0" />
+                      )}
+                      <feature.icon className="w-4 h-4 shrink-0 text-white/70" />
+                      <span>{feature.text}</span>
+                    </div>
+                    <span
+                      className={`text-xs font-medium ${
+                        feature.status === "unlimited"
+                          ? "text-emerald-400"
+                          : feature.status === "limited"
+                          ? "text-blue-400"
+                          : "text-rose-400/70"
+                      }`}
+                    >
+                      {feature.displayText}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3 py-4">
             {selectedPlan?.details
               ?.filter(d => d.isActive !== false)
