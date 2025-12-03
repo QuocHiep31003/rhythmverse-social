@@ -37,8 +37,6 @@ interface CollaboratorDialogProps {
   onSendInvites: () => void;
   sendingInvites: boolean;
   removingCollaboratorId?: number | null;
-  inviteRole: CollaboratorRole;
-  onRoleChange: (role: CollaboratorRole) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
 }
@@ -80,8 +78,6 @@ export const CollaboratorDialog = ({
   onSendInvites,
   sendingInvites,
   removingCollaboratorId,
-  inviteRole,
-  onRoleChange,
   searchQuery,
   onSearchChange,
 }: CollaboratorDialogProps) => {
@@ -104,7 +100,7 @@ export const CollaboratorDialog = ({
         <DialogHeader>
           <DialogTitle id="collab-dialog-title">Add Collaborators</DialogTitle>
           <DialogDescription id="collab-dialog-description">
-            Select friends to collaborate on this playlist. Choose their role.
+            Select friends to add as collaborators to this playlist.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-5">
@@ -161,7 +157,7 @@ export const CollaboratorDialog = ({
           </div> */}
           <div className="space-y-2">
             <Label htmlFor="collab-search" className="text-xs uppercase tracking-wider text-muted-foreground">
-              Invite friends
+              Add friends as collaborators
             </Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -203,7 +199,7 @@ export const CollaboratorDialog = ({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold truncate">{friend.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {selected ? "Selected to invite" : "Tap to invite"}
+                          {selected ? "Selected to add" : "Tap to add"}
                         </p>
                       </div>
                       {selected ? (
@@ -234,7 +230,7 @@ export const CollaboratorDialog = ({
                 Cancel
               </Button>
               <Button onClick={onSendInvites} disabled={sendingInvites || selectedFriendIds.length === 0}>
-                {sendingInvites ? "Sending..." : `Send invites (${selectedFriendIds.length})`}
+                {sendingInvites ? "Adding..." : `Add collaborators (${selectedFriendIds.length})`}
               </Button>
             </div>
           </div>

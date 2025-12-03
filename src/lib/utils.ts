@@ -109,12 +109,16 @@ export function mapToPlayerSong(song: ApiSong): PlayerSong {
   // Song name: ưu tiên songName, sau đó name, title, cuối cùng "Unknown"
   const songName = song.songName ?? song.name ?? song.title ?? "Unknown";
 
-  // Artist: từ artists array hoặc artist string
+  // Artist: từ artists array, artistNames array, artist string, hoặc artistName string
   let artist = "Unknown";
   if (song.artists && Array.isArray(song.artists) && song.artists.length > 0) {
-    artist = song.artists.map((a) => a.name).filter(Boolean).join(", ");
+    artist = song.artists.map((a) => (typeof a === 'string' ? a : a.name)).filter(Boolean).join(", ");
+  } else if (song.artistNames && Array.isArray(song.artistNames) && song.artistNames.length > 0) {
+    artist = song.artistNames.filter(Boolean).join(", ");
   } else if (typeof song.artists === "string" && song.artists.trim().length > 0) {
     artist = song.artists.trim();
+  } else if (typeof song.artistNames === "string" && song.artistNames.trim().length > 0) {
+    artist = song.artistNames.trim();
   } else if (song.artist && typeof song.artist === "string") {
     artist = song.artist;
   }
