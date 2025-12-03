@@ -1496,15 +1496,7 @@ const Profile = () => {
                           </span>
                         </div>
                       )}
-                      {selectedOrder.failureReason && (
-                        <div className="mt-1.5 p-2 rounded bg-destructive/10 border border-destructive/20">
-                          <div className="flex items-center gap-1.5 text-xs text-destructive">
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span className="font-medium">Failure reason:</span>
-                          </div>
-                          <p className="text-xs text-destructive/80 mt-0.5">{selectedOrder.failureReason}</p>
-                        </div>
-                      )}
+                      {/* Ẩn chi tiết failureReason để UI gọn hơn */}
                     </div>
                   </CardContent>
                 </Card>
