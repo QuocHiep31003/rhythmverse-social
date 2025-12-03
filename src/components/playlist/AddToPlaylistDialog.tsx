@@ -348,6 +348,9 @@ export const AddToPlaylistDialog = ({
                           src={playlist.coverUrl}
                           alt={playlist.name}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = "/placeholder.svg";
+                          }}
                         />
                       ) : (
                         <Music className="w-7 h-7 text-primary" />

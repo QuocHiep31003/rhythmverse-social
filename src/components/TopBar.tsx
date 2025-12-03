@@ -55,16 +55,14 @@ import NotificationsDropdown from "@/components/notifications/NotificationsDropd
 import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
+import PremiumExpiringModal from "@/components/PremiumExpiringModal";
 
 const cleanPlanLabel = (label?: string | null) =>
   label ? label.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim() : "";
 
 const resolvePlanLabel = (planName?: string | null, planCode?: string | null) => {
   const cleaned = cleanPlanLabel(planName);
-  const codeUpper = planCode?.toUpperCase();
-  if (codeUpper?.startsWith("PREMIUM") || cleaned?.toUpperCase().includes("PREMIUM")) {
-    return "Premium";
-  }
+  // Show the actual plan name if available; fall back to plan code, then generic label
   return cleaned || planCode || "Premium";
 };
 
@@ -90,9 +88,11 @@ const TopBar = () => {
 
   const [profileIsPremium, setProfileIsPremium] = useState<boolean>(false);
   const [profilePlanLabel, setProfilePlanLabel] = useState<string>("");
+  const [currentSubscription, setCurrentSubscription] = useState<PremiumSubscriptionDTO | null>(null);
 
   const [notifOpen, setNotifOpen] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [showPremiumExpiringModal, setShowPremiumExpiringModal] = useState(false);
 
   // Feature limit hook for AI Search
   const {
@@ -257,7 +257,7 @@ const TopBar = () => {
 
   /** ================= LOAD USER PROFILE + PREMIUM ================= **/
   useEffect(() => {
-    const loadMe = async () => {
+    const loadMe = async (isNewLogin: boolean = false) => {
       const token = getAuthToken();
       if (!token) {
         setIsAuthenticated(false);
@@ -293,6 +293,8 @@ const TopBar = () => {
                 ? await premiumSubscriptionApi.getMySubscription(me.id)
                 : null;
 
+            setCurrentSubscription(subscription);
+
             if (subscription) {
               const status =
                 subscription.status ||
@@ -300,11 +302,27 @@ const TopBar = () => {
                 "";
               const normalizedStatus = status.toUpperCase();
 
-              const active =
+              const endDateString =
+                subscription.expiresAt ||
+                subscription.endDate ||
+                subscription.currentPeriodEnd ||
+                null;
+
+              let isExpired = false;
+              if (endDateString) {
+                const end = new Date(endDateString);
+                if (!Number.isNaN(end.getTime())) {
+                  isExpired = end.getTime() < Date.now();
+                }
+              }
+
+              const activeByStatus =
                 normalizedStatus === "ACTIVE" ||
                 normalizedStatus === "TRIALING" ||
                 subscription?.isActive ||
                 subscription?.active;
+
+              const active = activeByStatus && !isExpired;
 
               if (active) {
                 setProfileIsPremium(true);
@@ -313,6 +331,31 @@ const TopBar = () => {
                   subscription.planCode
                 );
                 setProfilePlanLabel(planLabel);
+
+                // Check if premium expires within 1 day
+                if (endDateString) {
+                  const expirationDate = new Date(endDateString);
+                  const now = new Date();
+                  const diffTime = expirationDate.getTime() - now.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  
+                  // Show modal if expires within 1 day (0 or 1 day remaining)
+                  if (diffDays >= 0 && diffDays <= 1) {
+                    const sessionKey = `premiumExpiringModal_shown_${me.id}`;
+                    const alreadyShownInSession = sessionStorage.getItem(sessionKey);
+                    
+                    // If new login → always show modal
+                    // If reload → only show once per session
+                    if (isNewLogin || !alreadyShownInSession) {
+                      setShowPremiumExpiringModal(true);
+                      sessionStorage.setItem(sessionKey, "true");
+                    }
+                  }
+                }
+              } else if (isExpired) {
+                // Force downgrade on FE when subscription is expired by time
+                setProfileIsPremium(false);
+                setProfilePlanLabel("");
               }
             }
           } catch (e) {
@@ -326,20 +369,24 @@ const TopBar = () => {
       }
     };
     
-    loadMe();
+    // Initial load (reload) - not a new login
+    loadMe(false);
     
     // Listen for storage changes (when user logs in/out in another tab or same tab)
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'token' || e.key === 'adminToken' || e.key === 'refreshToken' || e.key === 'adminRefreshToken') {
         console.log('[TopBar] Token storage changed, reloading profile...');
-        loadMe();
+        // If token was added (new value exists, old value was null) → it's a login
+        const isNewLogin = e.newValue !== null && (e.oldValue === null || e.oldValue === '');
+        loadMe(isNewLogin);
       }
     };
     
     // Also listen for custom event (when login happens in same tab)
     const handleTokenUpdate = () => {
       console.log('[TopBar] Token updated event received, reloading profile...');
-      loadMe();
+      // tokenUpdated event means new login
+      loadMe(true);
     };
     
     window.addEventListener('storage', handleStorageChange);
@@ -532,6 +579,11 @@ const TopBar = () => {
     // Stop token refresh interval
     stopTokenRefreshInterval();
     clearTokens();
+    
+    // Clear sessionStorage for premium expiring modal
+    if (currentUserId) {
+      sessionStorage.removeItem(`premiumExpiringModal_shown_${currentUserId}`);
+    }
     
     localStorage.clear();
     sessionStorage.clear();
@@ -840,6 +892,19 @@ const TopBar = () => {
         isPremium={limitType === FeatureLimitType.UNLIMITED}
         canUse={canUse}
         onRefresh={checkUsage}
+      />
+
+      <PremiumExpiringModal
+        open={showPremiumExpiringModal}
+        onOpenChange={setShowPremiumExpiringModal}
+        planName={profilePlanLabel || currentSubscription?.planName || "Premium"}
+        planCode={currentSubscription?.planCode || undefined}
+        expirationDate={
+          currentSubscription?.expiresAt ||
+          currentSubscription?.endDate ||
+          currentSubscription?.currentPeriodEnd ||
+          undefined
+        }
       />
     </header>
   );

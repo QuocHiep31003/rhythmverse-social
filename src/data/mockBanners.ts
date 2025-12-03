@@ -1,13 +1,13 @@
-// Mock Promotion Data để xem trước
-// Nếu đẹp thì sẽ thêm vào DataLoader.java
+// Mock banner data for preview purposes
+// Add to DataLoader.java later if it looks good
 
-export const mockPromotions = [
+export const mockBanners = [
   {
     id: 1,
-    title: "Tìm bài hát chỉ bằng giai điệu",
-    subtitle: "Hum, hát hoặc tải file audio - Chúng tôi sẽ tìm ra bài hát bạn đang tìm kiếm",
+    title: "Find any song just from a melody",
+    subtitle: "Hum, sing, or upload audio—we'll locate the song you're looking for",
     imageUrl: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop",
-    ctaText: "Thử ngay",
+    ctaText: "Try now",
     ctaUrl: "/music-recognition",
     gradient: "from-purple-500/90 via-violet-500/90 to-fuchsia-500/90",
     badge: "NEW",
@@ -16,27 +16,31 @@ export const mockPromotions = [
   },
   {
     id: 2,
-    title: "Nâng cấp Premium ngay hôm nay",
-    subtitle: "Trải nghiệm không giới hạn với AI recommendations, melody search và nhiều tính năng độc quyền",
+    title: "Upgrade to Premium today",
+    subtitle: "Enjoy limitless AI recommendations, melody search, and exclusive features",
     imageUrl: "https://images.unsplash.com/photo-1511379938547-c1f69419868d?w=400&h=400&fit=crop",
-    ctaText: "Nâng cấp",
+    ctaText: "Upgrade",
     ctaUrl: "/premium",
     gradient: "from-amber-500/90 via-orange-500/90 to-red-500/90",
-    badge: "PREMIUM",
+    badge: "Premium",
     active: true,
     sortOrder: 2,
   },
   {
     id: 3,
-    title: "Khám phá xu hướng âm nhạc mới nhất",
-    subtitle: "Cập nhật hàng ngày với top trending songs, hot releases và AI-curated playlists",
+    title: "Explore the latest music trends",
+    subtitle: "Daily updates with top trending songs, hot releases, and AI-curated playlists",
     imageUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&h=400&fit=crop",
-    ctaText: "Khám phá",
+    ctaText: "Discover",
     ctaUrl: "/discover",
     gradient: "from-blue-500/90 via-cyan-500/90 to-teal-500/90",
-    badge: "TRENDING",
+    badge: "Trending",
     active: true,
     sortOrder: 3,
   },
 ];
+
+
+
+
 

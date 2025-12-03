@@ -26,10 +26,9 @@ interface FeatureLimitModalProps {
 
 const featureDescriptions: Record<FeatureName, string> = {
   [FeatureName.PLAYLIST_CREATE]: "Create unlimited playlists and organize your music collection",
-  [FeatureName.OFFLINE_DOWNLOAD]: "Download your favorite songs and listen offline anywhere",
+  [FeatureName.FRIEND_LIMIT]: "Connect with unlimited friends and build your music community",
   [FeatureName.AI_SEARCH]: "Search for songs using AI-powered melody and lyrics recognition",
   [FeatureName.ADVANCED_ANALYTICS]: "Get detailed insights into your listening habits and preferences",
-  [FeatureName.CUSTOM_THEME]: "Customize your profile with unique themes and personalized designs",
 };
 
 const featureBenefits: Record<FeatureName, string[]> = {
@@ -38,10 +37,10 @@ const featureBenefits: Record<FeatureName, string[]> = {
     "Organize your music collection",
     "Share playlists with friends",
   ],
-  [FeatureName.OFFLINE_DOWNLOAD]: [
-    "Unlimited offline downloads",
-    "Listen without internet",
-    "Save data and battery",
+  [FeatureName.FRIEND_LIMIT]: [
+    "Unlimited friends",
+    "Connect with music lovers",
+    "Share and discover together",
   ],
   [FeatureName.AI_SEARCH]: [
     "AI-powered search",
@@ -52,11 +51,6 @@ const featureBenefits: Record<FeatureName, string[]> = {
     "Listening habit insights",
     "Detailed statistics",
     "Personalized recommendations",
-  ],
-  [FeatureName.CUSTOM_THEME]: [
-    "Custom themes",
-    "Personalized profiles",
-    "Unique designs",
   ],
 };
 

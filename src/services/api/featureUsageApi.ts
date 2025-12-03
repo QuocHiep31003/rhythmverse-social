@@ -2,10 +2,9 @@ import { API_BASE_URL, fetchWithAuth, parseErrorResponse } from "./config";
 
 export enum FeatureName {
   PLAYLIST_CREATE = "PLAYLIST_CREATE",
-  OFFLINE_DOWNLOAD = "OFFLINE_DOWNLOAD",
+  FRIEND_LIMIT = "FRIEND_LIMIT",
   AI_SEARCH = "AI_SEARCH",
   ADVANCED_ANALYTICS = "ADVANCED_ANALYTICS",
-  CUSTOM_THEME = "CUSTOM_THEME",
 }
 
 export enum FeatureLimitType {

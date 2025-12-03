@@ -333,12 +333,12 @@ const AdminSongs = () => {
               <h1 className="text-3xl font-bold text-[hsl(var(--admin-active-foreground))]">
                 Song Management
               </h1>
-              <p className="text-muted-foreground flex items-center gap-2 mt-1">
+              <div className="text-muted-foreground flex items-center gap-2 mt-1">
                 <Badge variant="secondary" className="font-normal">
                   {totalElements} songs
                 </Badge>
                 {loading && <span className="text-xs">Loading...</span>}
-              </p>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { MusicProvider } from "@/contexts/MusicContext";
+import { StreakProvider } from "@/contexts/StreakContext";
 import AppLayout from "@/components/AppLayout";
 import AdminLayout from "@/components/AdminLayout";
 
@@ -33,6 +34,7 @@ import ControlMusicPlayer from "./components/ControlMusicPlayer";
 import ChatBubble from "./components/ChatBubble";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
+import { StreakNotificationCenter } from "./components/streak/StreakNotificationCenter";
 
 // Admin pages
 import AdminLogin from "./pages/admin/AdminLogin";
@@ -40,13 +42,14 @@ import AdminHome from "./pages/admin/AdminHome";
 import AdminSongs from "./pages/admin/AdminSongs";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminPlaylists from "./pages/admin/AdminPlaylists";
+import AdminSystemPlaylists from "./pages/admin/AdminSystemPlaylists";
 import AdminAlbums from "./pages/admin/AdminAlbums";
 import AdminArtists from "./pages/admin/AdminArtists";
 import AdminGenres from "./pages/admin/AdminGenres";
 import AdminMoods from "./pages/admin/AdminMoods";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminTrending from "./pages/admin/AdminTrending";
-import AdminPromotions from "./pages/admin/AdminPromotions";
+import AdminBanners from "./pages/admin/AdminBanners";
 import AdminSnapshots from "./pages/admin/AdminSnapshots";
 import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
 import TermsOfService from "./pages/TermsOfService";
@@ -75,10 +78,11 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="echoverse-ui-theme">
       <MusicProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
+        <StreakProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/oauth2/callback" element={<OAuthCallback />} />
@@ -98,7 +102,8 @@ const App = () => (
                     <Route path="moods" element={<AdminMoods />} />
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="playlists" element={<AdminPlaylists />} />
-                    <Route path="banners" element={<AdminPromotions />} />
+                    <Route path="system-playlists" element={<AdminSystemPlaylists />} />
+                    <Route path="banners" element={<AdminBanners />} />
                     <Route path="trending" element={<AdminTrending />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
@@ -172,8 +177,10 @@ const App = () => (
             <FriendRequestWatcher />
             <ChatMessageWatcher />
             <PresenceManager />
+            <StreakNotificationCenter />
           </BrowserRouter>
         </TooltipProvider>
+      </StreakProvider>
       </MusicProvider>
     </ThemeProvider>
   </QueryClientProvider>

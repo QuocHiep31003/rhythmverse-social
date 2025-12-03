@@ -85,5 +85,9 @@ export interface PlaylistState {
     addedById?: number;
     addedByAvatar?: string | null;
   })[];
+  isWarned?: boolean;
+  isBanned?: boolean;
+  warningCount?: number;
+  warningReason?: string | null;
 }
 

@@ -54,8 +54,13 @@ const ListeningHistory = () => {
       console.log('📊 First item:', data[0]);
       console.log('📊 Song data:', data[0]?.song);
       
+      // Remove duplicates based on id (keep first occurrence)
+      const uniqueData = data.filter((item, index, self) => 
+        index === self.findIndex((t) => t.id === item.id)
+      );
+      
       // Sort by listenedAt date (newest first) - backend đã sort nhưng đảm bảo
-      const sortedData = data.sort((a, b) => {
+      const sortedData = uniqueData.sort((a, b) => {
         const dateA = new Date(a.listenedAt || 0).getTime();
         const dateB = new Date(b.listenedAt || 0).getTime();
         return dateB - dateA; // Newest first
@@ -159,7 +164,7 @@ const ListeningHistory = () => {
                 <div className="space-y-2">
                   {history.map((item, index) => (
                     <div
-                      key={item.id}
+                      key={`${item.id}-${item.listenedAt}-${index}`}
                       className="
                         flex items-center gap-3 p-3 rounded-lg 
                         group cursor-pointer transition-all duration-300

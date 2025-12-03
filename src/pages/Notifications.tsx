@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
 import { subscribeTempNotification } from "@/utils/notificationBus";
-import { BellRing, CheckCircle2, Share2, UserPlus, Users } from "lucide-react";
+import { BellRing, CheckCircle2, Share2, UserPlus, Users, AlertTriangle, Ban, Crown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const typeMeta: Record<
@@ -22,43 +22,67 @@ const typeMeta: Record<
   }
 > = {
   INVITE: {
-    label: "Lời mời cộng tác",
+    label: "Collaboration invite",
     icon: Users,
     badge: "border-emerald-500/30 bg-emerald-500/12 text-emerald-700 dark:text-emerald-100",
     tone: "from-emerald-500/10 via-transparent to-transparent",
   },
   INVITE_ACCEPTED: {
-    label: "Chấp nhận cộng tác",
+    label: "Collaboration accepted",
     icon: CheckCircle2,
     badge: "border-green-500/30 bg-green-500/12 text-green-700 dark:text-green-100",
     tone: "from-green-500/10 via-transparent to-transparent",
   },
   INVITE_REJECTED: {
-    label: "Từ chối cộng tác",
+    label: "Collaboration declined",
     icon: Users,
     badge: "border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-100",
     tone: "from-red-500/10 via-transparent to-transparent",
   },
   SHARE: {
-    label: "Chia sẻ",
+    label: "Share",
     icon: Share2,
     badge: "border-violet-500/25 bg-violet-500/12 text-violet-700 dark:text-violet-100",
     tone: "from-violet-500/10 via-transparent to-transparent",
   },
   FRIEND_REQUEST: {
-    label: "Lời mời kết bạn",
+    label: "Friend request",
     icon: UserPlus,
     badge: "border-amber-500/30 bg-amber-500/12 text-amber-700 dark:text-amber-100",
     tone: "from-amber-500/10 via-transparent to-transparent",
   },
   FRIEND_REQUEST_ACCEPTED: {
-    label: "Bạn bè",
+    label: "Friends",
     icon: CheckCircle2,
     badge: "border-lime-500/30 bg-lime-500/12 text-lime-700 dark:text-lime-100",
     tone: "from-lime-500/10 via-transparent to-transparent",
   },
+  PLAYLIST_WARNED: {
+    label: "Playlist warning",
+    icon: AlertTriangle,
+    badge: "border-yellow-500/30 bg-yellow-500/12 text-yellow-700 dark:text-yellow-100",
+    tone: "from-yellow-500/10 via-transparent to-transparent",
+  },
+  PLAYLIST_BANNED: {
+    label: "Playlist removed",
+    icon: Ban,
+    badge: "border-red-500/30 bg-red-500/12 text-red-700 dark:text-red-100",
+    tone: "from-red-500/10 via-transparent to-transparent",
+  },
+  PLAYLIST_RESTORED: {
+    label: "Playlist restored",
+    icon: CheckCircle2,
+    badge: "border-green-500/30 bg-green-500/12 text-green-700 dark:text-green-100",
+    tone: "from-green-500/10 via-transparent to-transparent",
+  },
+  SUBSCRIPTION_EXPIRING_SOON: {
+    label: "Plan expiring soon",
+    icon: Crown,
+    badge: "border-purple-500/30 bg-purple-500/12 text-purple-700 dark:text-purple-100",
+    tone: "from-purple-500/10 via-transparent to-transparent",
+  },
   DEFAULT: {
-    label: "Thông báo",
+    label: "Notification",
     icon: BellRing,
     badge: "border-muted/40 bg-muted/20 text-muted-foreground",
     tone: "from-primary/5 via-transparent to-transparent",
@@ -82,19 +106,19 @@ const parseTimestamp = (value?: string | number): number | null => {
 
 const formatRelativeTime = (value?: string | number) => {
   const timestamp = parseTimestamp(value);
-  if (!timestamp) return "Vừa xong";
+  if (!timestamp) return "Just now";
   const diff = Date.now() - timestamp;
-  if (diff < 60000) return "Vừa xong";
+  if (diff < 60000) return "Just now";
   if (diff < 3600000) {
     const minutes = Math.floor(diff / 60000);
-    return `${minutes} phút trước`;
+    return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
   }
   if (diff < 86400000) {
     const hours = Math.floor(diff / 3600000);
-    return `${hours} giờ trước`;
+    return `${hours} hour${hours > 1 ? "s" : ""} ago`;
   }
   const days = Math.floor(diff / 86400000);
-  if (days < 7) return `${days} ngày trước`;
+  if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`;
   const date = new Date(timestamp);
   return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
@@ -107,24 +131,27 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
     playlistId?: number;
     songId?: number;
     albumId?: number;
+    planName?: string;
+    planDetailName?: string;
+    daysBeforeExpiry?: number;
   } | undefined;
 
   switch (notification.type) {
     case "FRIEND_REQUEST":
-      return "đã gửi lời mời kết bạn";
+      return "sent you a friend request";
     case "FRIEND_REQUEST_ACCEPTED":
-      return "đã chấp nhận lời mời kết bạn";
+      return "accepted your friend request";
     case "INVITE": {
-      const playlistName = meta?.playlistName || "một playlist";
-      return `mời bạn cộng tác trên "${playlistName}"`;
+      const playlistName = meta?.playlistName || "a playlist";
+      return `invited you to collaborate on "${playlistName}"`;
     }
     case "INVITE_ACCEPTED": {
-      const playlistName = meta?.playlistName || "một playlist";
-      return `đã chấp nhận lời mời cộng tác trên "${playlistName}"`;
+      const playlistName = meta?.playlistName || "a playlist";
+      return `accepted your collaboration invite on "${playlistName}"`;
     }
     case "INVITE_REJECTED": {
-      const playlistName = meta?.playlistName || "một playlist";
-      return `đã từ chối lời mời cộng tác trên "${playlistName}"`;
+      const playlistName = meta?.playlistName || "a playlist";
+      return `declined your collaboration invite on "${playlistName}"`;
     }
     case "SHARE": {
       const title =
@@ -132,12 +159,44 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
         meta?.songName ||
         meta?.albumName ||
         notification.title ||
-        "một nội dung";
-      return `đã chia sẻ: “${title}”`;
+        "some content";
+      return `shared: "${title}"`;
+    }
+    case "PLAYLIST_WARNED": {
+      const playlistName = meta?.playlistName || "a playlist";
+      const warningCount = (meta as any)?.warningCount || 0;
+      const warningReason = (meta as any)?.warningReason || "";
+      if (warningReason) {
+        return `Playlist "${playlistName}" received a warning (${warningCount}/3): ${warningReason}`;
+      }
+      return `Playlist "${playlistName}" received a warning (${warningCount}/3)`;
+    }
+    case "PLAYLIST_BANNED": {
+      const playlistName = meta?.playlistName || "a playlist";
+      const banReason = (meta as any)?.banReason || "";
+      if (banReason) {
+        return `Playlist "${playlistName}" was removed from the system. Reason: ${banReason}`;
+      }
+      return `Playlist "${playlistName}" was removed from the system`;
+    }
+    case "PLAYLIST_RESTORED": {
+      const playlistName = meta?.playlistName || "a playlist";
+      return `Playlist "${playlistName}" has been restored`;
+    }
+    case "SUBSCRIPTION_EXPIRING_SOON": {
+      const planName =
+        meta?.planName ||
+        meta?.planDetailName ||
+        (notification.title || "your Premium plan");
+      const days = (meta?.daysBeforeExpiry as number | undefined) ?? 1;
+      if (days === 1) {
+        return `${planName} will expire in 1 day`;
+      }
+      return `${planName} will expire in ${days} days`;
     }
     default: {
       const fallback = String(notification.body || notification.title || "").trim();
-      return fallback || "đã gửi một thông báo";
+      return fallback || "sent you a notification";
     }
   }
 };
@@ -248,13 +307,20 @@ const Notifications = () => {
         navigate("/social?tab=friends");
       } else if (type === 'FRIEND_REQUEST' || type === 'FRIEND_REQUEST_ACCEPTED') {
         // Navigate đến social với tab friends để xem friend requests
-      navigate("/social?tab=friends");
+        navigate("/social?tab=friends");
       } else if (type === 'SHARE') {
         // Navigate đến social để xem chat/share
         if (meta?.roomId) {
           navigate(`/social?chat=${meta.roomId}`);
         } else {
           navigate("/social");
+        }
+      } else if (type === 'PLAYLIST_BANNED' || type === 'PLAYLIST_WARNED' || type === 'PLAYLIST_RESTORED') {
+        // Navigate đến playlist detail nếu có playlistId
+        if (meta?.playlistId) {
+          navigate(`/playlists/${meta.playlistId}`);
+        } else {
+          navigate("/playlists");
         }
       } else {
         // Default: navigate đến social
@@ -404,6 +470,57 @@ const Notifications = () => {
             Xem nội dung
           </Button>
         );
+      case "PLAYLIST_WARNED": {
+        const meta = notification.metadata as { playlistId?: number } | undefined;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+            onClick={withStop(() => {
+              if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              }
+            })}
+          >
+            Xem Playlist
+          </Button>
+        );
+      }
+      case "PLAYLIST_BANNED": {
+        const meta = notification.metadata as { playlistId?: number } | undefined;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+            onClick={withStop(() => {
+              if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              }
+            })}
+          >
+            Xem Playlist
+          </Button>
+        );
+      }
+      case "PLAYLIST_RESTORED": {
+        const meta = notification.metadata as { playlistId?: number } | undefined;
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15"
+            onClick={withStop(() => {
+              if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              }
+            })}
+          >
+            Xem Playlist
+          </Button>
+        );
+      }
       default:
         return null;
     }

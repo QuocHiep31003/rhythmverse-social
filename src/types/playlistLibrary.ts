@@ -18,6 +18,11 @@ export interface PlaylistItem {
   isOwner?: boolean;
   isCollaborator?: boolean;
   role?: CollaboratorRole;
+  isWarned?: boolean;
+  isBanned?: boolean;
+  warningCount?: number;
+  warningReason?: string | null;
+  type?: "SYSTEM_GLOBAL" | "USER_CREATED" | string;
 }
 
 export interface UserResponse {

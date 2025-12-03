@@ -15,12 +15,19 @@ export class PlaylistPermissionError extends Error {
   }
 }
 
+export type PlaylistType = "USER_CREATED" | "SYSTEM_GLOBAL";
+
 export interface PlaylistDTO {
   id: number;
   name: string;
   description?: string | null;
   coverUrl?: string | null;
   visibility?: PlaylistVisibility | "PUBLIC" | "PRIVATE" | "FRIENDS_ONLY";
+  type?: PlaylistType;
+  isSystemGenerated?: boolean;
+  editorialTeam?: string | null;
+  autoUpdateSchedule?: string | null;
+  lastAutoUpdate?: string | null;
   songLimit?: number;
   dateUpdate?: string | null; // YYYY-MM-DD
   songIds?: number[];
@@ -38,6 +45,10 @@ export interface PlaylistDTO {
   ownerName?: string; // Owner name (from backend DTO)
   ownerAvatar?: string | null; // Owner avatar (from backend DTO)
   collaborators?: PlaylistCollaborator[]; // List of collaborators
+  isBanned?: boolean;
+  isWarned?: boolean;
+  warningCount?: number;
+  warningReason?: string | null;
 }
 
 // Response từ GET /api/playlists/library
@@ -60,6 +71,10 @@ export interface PlaylistLibraryItemDTO {
   createdAt?: string;
   updatedAt?: string;
   dateUpdate?: string | null;
+  isBanned?: boolean;
+  isWarned?: boolean;
+  warningCount?: number;
+  warningReason?: string | null;
 }
 
 export interface PageResponse<T> {
@@ -220,6 +235,36 @@ export const playlistsApi = {
       );
     }
 
+    if (res.status === 403) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "You don't have permission to add songs to this playlist",
+        403,
+        errorText
+      );
+    }
+
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    try { return await res.json(); } catch { return { success: true } as const; }
+  },
+
+  // Add multiple songs to a playlist (bulk)
+  addSongs: async (playlistId: number | string, songIds: (number | string)[]) => {
+    const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}/songs`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify({ songIds }),
+    });
+    
+    if (res.status === 401) {
+      const errorText = await parseErrorResponse(res);
+      throw new PlaylistPermissionError(
+        "Unauthorized: Please login first",
+        401,
+        errorText
+      );
+    }
+    
     if (res.status === 403) {
       const errorText = await parseErrorResponse(res);
       throw new PlaylistPermissionError(
