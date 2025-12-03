@@ -96,7 +96,7 @@ export function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Mess
     if (backendId != null) return String(backendId);
     return String(Date.now());
   })();
-  let type: "text" | "song" | "playlist" | "album" = "text";
+  let type: Message["type"] = "text";
   let songData: { id?: string | number; title: string; artist: string } | undefined = undefined;
   let playlistData: { id: number; name: string; coverUrl?: string | null; songCount?: number; owner?: string } | undefined = undefined;
   let albumData: { id: number; name: string; coverUrl?: string | null; artist?: string; releaseYear?: number } | undefined = undefined;
@@ -315,6 +315,12 @@ export function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Mess
     return Date.now();
   })();
   const timestamp = new Date(sentAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  // System messages từ backend: sharedContentType = TEXT và senderId = 0 hoặc content được đánh dấu đặc biệt
+  // Ta map sang type = "system" để render khác trong UI.
+  if (m.sharedContentType === "TEXT" && (m.senderId === 0 || m.senderId == null)) {
+    type = "system";
+  }
 
   return {
     id: resolvedId,

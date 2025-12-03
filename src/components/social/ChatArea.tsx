@@ -2,7 +2,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MessageCircle, Search, Send, Music, Edit, Info, Smile } from "lucide-react";
+import { MessageCircle, Search, Send, Music, Edit, Info, Smile, RefreshCw } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 import type { Friend, Message } from "@/types/social";
@@ -12,8 +12,6 @@ import { cn } from "@/lib/utils";
 import { StreakBadge } from "@/components/streak/StreakBadge";
 import { useStreakManager } from "@/hooks/useStreakManager";
 import { useStreaksByFriends } from "@/hooks/useStreaksByFriends";
-import { useStreakNotifications } from "@/contexts/StreakContext";
-
 const getMessageUniqueKey = (message: Message): string => {
   if (typeof message.backendId === "number" && Number.isFinite(message.backendId)) {
     return `backend:${message.backendId}`;
@@ -42,6 +40,38 @@ interface ChatAreaProps {
   onDelete?: (message: Message) => Promise<boolean | void> | boolean | void;
 }
 
+const formatStreakTimestamp = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const now = new Date();
+
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+  const todayStart = startOfDay(now);
+  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+  const tsDayStart = startOfDay(date);
+
+  let dayLabel = "";
+  if (tsDayStart === todayStart) {
+    dayLabel = "Hôm nay";
+  } else if (tsDayStart === yesterdayStart) {
+    dayLabel = "Hôm qua";
+  } else {
+    dayLabel = date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }
+
+  const timeLabel = date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return `${dayLabel} ${timeLabel}`;
+};
+
 export const ChatArea = ({
   selectedChat,
   friends,
@@ -67,74 +97,43 @@ export const ChatArea = ({
   const selectedFriend = friends.find((f) => f.id === selectedChat);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [optimisticHiddenMessages, setOptimisticHiddenMessages] = useState<Record<string, Record<string, boolean>>>({});
-  const streakSyncHistoryRef = useRef<Record<string, string>>({});
-  const { addNotification } = useStreakNotifications();
-
-  // Initialize streak manager for selected friend
-  const handleStreakWarning = useCallback((friendName: string, hoursRemaining: number) => {
-    if (!selectedChat) return;
-    addNotification({
-      type: "warning",
-      friendId: selectedChat,
-      friendName,
-      hoursRemaining,
+  const friendUserIdMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    friends.forEach((friend) => {
+      if (!friend?.id) return;
+      const resolved = friend.friendUserId ?? friend.id;
+      map[friend.id] = String(resolved);
     });
-  }, [addNotification, selectedChat]);
-
-  const handleStreakExpired = useCallback((friendName: string) => {
-    if (!selectedChat) return;
-    addNotification({
-      type: "expired",
-      friendId: selectedChat,
-      friendName,
-    });
-    delete streakSyncHistoryRef.current[selectedChat];
-  }, [addNotification, selectedChat]);
-
-  const handleStreakStarted = useCallback((friendName: string, currentStreak: number) => {
-    if (!selectedChat) return;
-    addNotification({
-      type: "started",
-      friendId: selectedChat,
-      friendName,
-      currentStreak,
-    });
-  }, [addNotification, selectedChat]);
+    return map;
+  }, [friends]);
+  const selectedFriendUserKey = useMemo(() => {
+    if (selectedFriend?.id) {
+      return friendUserIdMap[selectedFriend.id] ?? selectedChat;
+    }
+    return selectedChat;
+  }, [friendUserIdMap, selectedChat, selectedFriend]);
 
   const {
-    streakData,
-    increaseStreak,
-  } = useStreakManager(selectedChat, {
+    streak,
+    isExpired,
+    isExpiringSoon,
+    hoursRemaining,
+    isLoading: streakLoading,
+    refreshFromServer,
+    forceRefresh,
+  } = useStreakManager(selectedFriendUserKey ?? null, {
     friendName: selectedFriend?.name,
-    onStreakWarning: handleStreakWarning,
-    onStreakExpired: handleStreakExpired,
-    onStreakStarted: handleStreakStarted,
   });
-  const resolveMessageDate = (message: Message): Date | null => {
-    if (typeof message.sentAt === "number" && Number.isFinite(message.sentAt)) {
-      return new Date(message.sentAt);
-    }
-    if (typeof message.timestamp === "string") {
-      const parsed = Date.parse(message.timestamp);
-      if (!Number.isNaN(parsed)) {
-        return new Date(parsed);
-      }
-    }
-    const numericId = Number(message.id);
-    if (Number.isFinite(numericId)) {
-      return new Date(numericId);
-    }
-    return null;
-  };
+  const handleForceRefresh = useCallback(() => {
+    void forceRefresh();
+  }, [forceRefresh]);
+  const friendUserIdList = useMemo(() => Array.from(new Set(Object.values(friendUserIdMap))), [friendUserIdMap]);
+  const streaksByFriend = useStreaksByFriends(friendUserIdList);
 
-  const isUserMessage = (message: Message) => {
-    const sender = message.sender?.toLowerCase();
-    return sender === "you" || sender === "bạn";
-  };
-
-  // Load streaks for all friends in the left panel
-  const allFriendIds = useMemo(() => friends.map((f) => f.id), [friends]);
-  const streaksByFriend = useStreaksByFriends(allFriendIds);
+  useEffect(() => {
+    if (!selectedFriendUserKey) return;
+    void refreshFromServer();
+  }, [refreshFromServer, selectedFriendUserKey]);
 
   const visibleMessagesByFriend = useMemo(() => {
     const result: Record<string, Message[]> = {};
@@ -148,48 +147,6 @@ export const ChatArea = ({
     });
     return result;
   }, [messages, optimisticHiddenMessages]);
-
-  useEffect(() => {
-    if (!selectedChat) return;
-
-    const todayIso = new Date().toISOString().split("T")[0];
-    const currentMessages =
-      visibleMessagesByFriend[selectedChat] ??
-      messages[selectedChat] ??
-      [];
-    if (!currentMessages.length) {
-      return;
-    }
-
-    let hasUserMessageToday = false;
-    let hasFriendMessageToday = false;
-
-    for (const message of currentMessages) {
-      const date = resolveMessageDate(message);
-      if (!date) continue;
-      const messageDay = date.toISOString().split("T")[0];
-      if (messageDay !== todayIso) continue;
-      if (isUserMessage(message)) {
-        hasUserMessageToday = true;
-      } else {
-        hasFriendMessageToday = true;
-      }
-      if (hasUserMessageToday && hasFriendMessageToday) {
-        break;
-      }
-    }
-
-    if (!hasUserMessageToday || !hasFriendMessageToday) {
-      return;
-    }
-
-    const trackerKey = `${selectedChat}:${todayIso}`;
-    if (streakSyncHistoryRef.current[selectedChat] === trackerKey) {
-      return;
-    }
-    streakSyncHistoryRef.current[selectedChat] = trackerKey;
-    increaseStreak();
-  }, [increaseStreak, messages, selectedChat, visibleMessagesByFriend]);
 
   useEffect(() => {
     setOptimisticHiddenMessages((prev) => {
@@ -372,6 +329,8 @@ export const ChatArea = ({
     return (
       <div className="space-y-0.5">
         {sortedFriends.map((friend) => {
+          const friendUserKey = friendUserIdMap[friend.id];
+          const friendStreak = friendUserKey ? streaksByFriend[friendUserKey] : undefined;
           const friendMessages = getVisibleMessagesForFriend(friend.id) || [];
           const lastMessage = friendMessages.length > 0 ? friendMessages[friendMessages.length - 1] : null;
           const lastMessageTime = lastMessage?.timestamp || '';
@@ -400,8 +359,8 @@ export const ChatArea = ({
                 <div className="flex items-center justify-between gap-2 mb-0.5">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <p className="font-semibold text-sm truncate text-foreground">{friend.name}</p>
-                    {streaksByFriend[friend.id] && streaksByFriend[friend.id].streak > 0 && (
-                      <StreakBadge streak={streaksByFriend[friend.id].streak} size="sm" />
+                    {friendStreak && friendStreak.streak > 0 && (
+                      <StreakBadge streak={friendStreak.streak} size="sm" />
                     )}
                   </div>
                   {lastMessageTime && (
@@ -513,33 +472,35 @@ export const ChatArea = ({
             {/* Header - Messenger style */}
             <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-background">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <Avatar className="w-10 h-10 flex-shrink-0">
-                  <AvatarImage 
-                    src={selectedFriend?.avatar}
-                    alt={selectedFriend?.name || 'Friend'}
-                  />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                    {selectedFriend?.name
-                      ?.split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative flex-shrink-0">
+                  <Avatar className="w-10 h-10">
+                    <AvatarImage 
+                      src={selectedFriend?.avatar}
+                      alt={selectedFriend?.name || 'Friend'}
+                    />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                      {selectedFriend?.name
+                        ?.split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  {selectedFriend?.isOnline && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
+                  )}
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-[15px] font-semibold text-foreground truncate">
                       {selectedFriend?.name}
                     </h3>
-                    {streakData && streakData.streak > 0 && (
-                      <StreakBadge streak={streakData.streak} size="sm" />
-                    )}
-                    {selectedFriend?.isOnline && (
-                      <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-                    )}
+                    {streak > 0 && <StreakBadge streak={streak} size="sm" />}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedFriend?.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">
+                      {selectedFriend?.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
+                    </p>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -554,7 +515,7 @@ export const ChatArea = ({
               ref={chatContentRef}
               className="flex-1 min-h-0 overflow-y-auto scrollbar-hide bg-background/40 dark:bg-background/20 relative"
             >
-              <div className="flex flex-col min-h-full px-2.5 sm:px-3 py-3 pb-4">
+              <div className="flex flex-col min-h-full px-2.5 sm:px-3 py-3 pb-4 gap-2">
                 {renderMessages()}
               </div>
             </div>

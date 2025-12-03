@@ -25,7 +25,6 @@ export interface PlaylistDTO {
   visibility?: PlaylistVisibility | "PUBLIC" | "PRIVATE" | "FRIENDS_ONLY";
   type?: PlaylistType;
   isSystemGenerated?: boolean;
-  editorialTeam?: string | null;
   autoUpdateSchedule?: string | null;
   lastAutoUpdate?: string | null;
   songLimit?: number;

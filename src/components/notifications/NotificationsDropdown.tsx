@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
 import { subscribeTempNotification } from "@/utils/notificationBus";
-import { BellRing, CheckCircle2, Share2, UserPlus, Users, AlertTriangle, Ban, Crown } from "lucide-react";
+import { BellRing, CheckCircle2, Share2, UserPlus, Users, AlertTriangle, Ban, Crown, Flame, AlarmClock } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const MAX_DROPDOWN_ITEMS = 5;
@@ -86,6 +86,16 @@ const typeMeta: Record<
     icon: Crown,
     badge: "border-purple-500/30 bg-purple-500/12 text-purple-700 dark:text-purple-100",
   },
+  STREAK_WARNING: {
+    label: "Streak warning",
+    icon: AlarmClock,
+    badge: "border-orange-500/40 bg-orange-500/12 text-orange-700 dark:text-orange-100",
+  },
+  STREAK_BROKEN: {
+    label: "Streak ended",
+    icon: Flame,
+    badge: "border-rose-500/40 bg-rose-500/12 text-rose-700 dark:text-rose-100",
+  },
   DEFAULT: {
     label: "Notification",
     icon: BellRing,
@@ -138,6 +148,9 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
     planName?: string;
     planDetailName?: string;
     daysBeforeExpiry?: number;
+    friendName?: string;
+    hoursRemaining?: number;
+    streakDays?: number;
   } | undefined;
 
   switch (notification.type) {
@@ -197,6 +210,28 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
         return `${planName} will expire in 1 day`;
       }
       return `${planName} will expire in ${days} days`;
+    }
+    case "STREAK_WARNING": {
+      const friendName = meta?.friendName || notification.senderName || "your friend";
+      const hours = meta?.hoursRemaining;
+      if (typeof hours === "number" && hours > 0) {
+        return `Your streak with ${friendName} is at risk – about ${hours} hour${hours > 1 ? "s" : ""} left`;
+      }
+      return (
+        notification.body ||
+        `Your streak with ${friendName} is at risk. Send a message to keep it alive!`
+      );
+    }
+    case "STREAK_BROKEN": {
+      const friendName = meta?.friendName || notification.senderName || "your friend";
+      const streakDays = meta?.streakDays;
+      if (typeof streakDays === "number" && streakDays > 0) {
+        return `Your ${streakDays}-day streak with ${friendName} has ended`;
+      }
+      return (
+        notification.body ||
+        `Your streak with ${friendName} has ended. Start a new one today!`
+      );
     }
     default: {
       const fallback = String(notification.body || notification.title || "").trim();
@@ -362,6 +397,18 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
             Xem nội dung
           </Button>
         );
+      case "STREAK_WARNING":
+      case "STREAK_BROKEN":
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full text-muted-foreground hover:text-primary hover:bg-primary/10 dark:hover:bg-primary/15 h-7 px-3"
+            onClick={withStop(() => { onClose?.(); navigate('/social'); })}
+          >
+            Mở chat
+          </Button>
+        );
       default:
         return null;
     }
@@ -433,6 +480,10 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
                       if (meta?.playlistId) {
                         navigate(`/playlists/${meta.playlistId}`);
                       }
+                      return;
+                    }
+                    if (t === 'STREAK_WARNING' || t === 'STREAK_BROKEN') {
+                      navigate('/social');
                       return;
                     }
                     // Default: navigate đến social

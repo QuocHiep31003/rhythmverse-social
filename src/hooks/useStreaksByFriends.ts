@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { STREAK_STORAGE_EVENT } from '@/constants/streak';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { STREAK_STORAGE_EVENT, StreakStorageEventDetail } from "@/constants/streak";
+import { chatStreakApi } from "@/services/api/chatStreakApi";
+import { mapDtoToStreakState, StreakState } from "@/hooks/useStreakManager";
 
-export interface StreakData {
+interface FriendStreakSummary {
   streak: number;
-  lastActiveDay: string;
-  expireAt: number;
-  isExpiringSoon?: boolean;
-  hoursRemaining?: number;
+  expireAt: number | null;
 }
 
+const getCurrentUserId = () => {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 /**
- * Hook để đọc streak data cho multiple friends từ localStorage
- * Returns a record of friendId -> StreakData
+ * Hook đọc trạng thái streak cho danh sách friends từ backend
  */
 export const useStreaksByFriends = (friendIds: string[]) => {
   const stableFriendIds = useMemo(() => {
@@ -20,60 +28,78 @@ export const useStreaksByFriends = (friendIds: string[]) => {
     return unique;
   }, [friendIds]);
 
-  const readStreaks = useCallback(() => {
-    const result: Record<string, StreakData> = {};
+  const [streaksByFriend, setStreaksByFriend] = useState<Record<string, FriendStreakSummary>>({});
 
-    stableFriendIds.forEach((friendId) => {
-      if (!friendId) return;
-      try {
-        const stored = localStorage.getItem(`streak:${friendId}`);
-        if (stored) {
-          const data = JSON.parse(stored) as StreakData;
-          result[friendId] = data;
-        }
-      } catch (error) {
-        console.error(`[useStreaksByFriends] Failed to load streak for ${friendId}:`, error);
-      }
-    });
-
-    return result;
-  }, [stableFriendIds]);
-
-  const [streaksByFriend, setStreaksByFriend] = useState<Record<string, StreakData>>(() => readStreaks());
-
-  useEffect(() => {
-    setStreaksByFriend(readStreaks());
-  }, [readStreaks]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
+  const syncFromServer = useCallback(async () => {
+    if (!stableFriendIds.length) {
+      setStreaksByFriend({});
       return;
     }
+    try {
+      const selfId = getCurrentUserId();
+      const dtos = await chatStreakApi.getActive();
+      const next: Record<string, FriendStreakSummary> = {};
+      dtos.forEach((dto) => {
+        const otherId =
+          selfId && dto.user1Id === selfId
+            ? dto.user2Id
+            : dto.user2Id === selfId
+              ? dto.user1Id
+              : null;
+        if (!otherId) {
+          // fallback: if selfId unavailable, assume user2Id is friend
+          const fallbackId = dto.user2Id !== dto.user1Id ? dto.user2Id : dto.user1Id;
+          const key = String(fallbackId);
+          if (stableFriendIds.includes(key)) {
+            const mapped = mapDtoToStreakState(dto);
+            next[key] = { streak: mapped.streak, expireAt: mapped.expireAt };
+          }
+          return;
+        }
+        const key = String(otherId);
+        if (!stableFriendIds.includes(key)) return;
+        const mapped = mapDtoToStreakState(dto);
+        next[key] = { streak: mapped.streak, expireAt: mapped.expireAt };
+      });
+      setStreaksByFriend((prev) => {
+        // preserve entries for friends not returned by backend (set to zero)
+        const merged: Record<string, FriendStreakSummary> = {};
+        stableFriendIds.forEach((id) => {
+          merged[id] = next[id] ?? { streak: 0, expireAt: null };
+        });
+        return merged;
+      });
+    } catch (error) {
+      console.error("[useStreaksByFriends] Failed to sync streaks:", error);
+    }
+  }, [stableFriendIds]);
 
-    const handleStorage = (event: StorageEvent) => {
-      if (!event.key || !event.key.startsWith('streak:')) return;
-      const friendId = event.key.replace('streak:', '');
-      if (!stableFriendIds.includes(friendId)) return;
-      setStreaksByFriend(readStreaks());
-    };
+  useEffect(() => {
+    syncFromServer();
+  }, [syncFromServer]);
 
-    const handleCustomEvent = (event: Event) => {
-      const custom = event as CustomEvent<{ friendId?: string }>;
-      const friendId = custom.detail?.friendId;
-      if (friendId && !stableFriendIds.includes(friendId)) {
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<StreakStorageEventDetail>).detail;
+      if (!detail?.friendId || !stableFriendIds.includes(detail.friendId)) return;
+      if (detail.type === "invalidate") {
+        void syncFromServer();
         return;
       }
-      setStreaksByFriend(readStreaks());
+      if (detail.type === "updated" && detail.payload) {
+        setStreaksByFriend((prev) => ({
+          ...prev,
+          [detail.friendId!]: {
+            streak: detail.payload!.streak,
+            expireAt: detail.payload!.expireAt ?? null,
+          },
+        }));
+      }
     };
 
-    window.addEventListener('storage', handleStorage);
-    window.addEventListener(STREAK_STORAGE_EVENT, handleCustomEvent as EventListener);
-
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener(STREAK_STORAGE_EVENT, handleCustomEvent as EventListener);
-    };
-  }, [readStreaks, stableFriendIds]);
+    window.addEventListener(STREAK_STORAGE_EVENT, handler as EventListener);
+    return () => window.removeEventListener(STREAK_STORAGE_EVENT, handler as EventListener);
+  }, [stableFriendIds, syncFromServer]);
 
   return streaksByFriend;
 };
