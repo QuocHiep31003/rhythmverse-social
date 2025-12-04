@@ -28,6 +28,8 @@ interface PlaylistCardProps {
   onDelete?: () => void;
   getCollaboratorBadgeText?: (role?: import("@/types/playlist").CollaboratorRole) => string;
   formatNumber?: (num: number) => string;
+  isUnavailable?: boolean;
+  unavailableReason?: string;
 }
 
 export const PlaylistCard = ({
@@ -41,6 +43,8 @@ export const PlaylistCard = ({
   onDelete,
   getCollaboratorBadgeText,
   formatNumber,
+  isUnavailable,
+  unavailableReason,
 }: PlaylistCardProps) => {
   const computedSongCount =
     typeof playlistMeta?.songCount === "number" &&
@@ -111,125 +115,144 @@ export const PlaylistCard = ({
   ][gradientIndex];
 
   const coverImage = playlist.cover && playlist.cover.trim().length > 0 ? playlist.cover : null;
+  const playlistUrl = `/playlist/${createSlug(playlist.title, playlist.id)}`;
+  const interactionsDisabled = Boolean(isUnavailable);
+
+  const coverContent = (
+    <div className="relative aspect-square rounded-2xl overflow-hidden">
+      {coverImage ? (
+        <img
+          src={coverImage}
+          alt={playlist.title}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-black/80" />
+
+      <div className="relative z-10 h-full p-4 flex flex-col justify-between">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
+            Playlist
+          </p>
+          <h3 className="text-2xl font-semibold text-white leading-tight line-clamp-3">
+            {playlist.title}
+          </h3>
+        </div>
+
+        <div className="flex items-center justify-between text-[11px] text-white/90 opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="truncate">
+            {computedSongCount} {songLabel}
+            {durationLabel !== "--" && ` • ${durationLabel}`}
+          </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onLike();
+              }}
+              disabled={likePending}
+              className={`h-7 w-7 p-0 bg-black/40 hover:bg-black/60 rounded-full ${
+                isLiked ? "text-red-400" : "text-white"
+              }`}
+            >
+              <Heart className={`w-3 h-3 ${isLiked ? "fill-current" : ""}`} />
+            </Button>
+            {!interactionsDisabled && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 p-0 bg-black/40 hover:bg-black/60 rounded-full text-white"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                  >
+                    <MoreHorizontal className="w-3 h-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShareOpen(true);
+                    }}
+                    className="flex items-center gap-2 px-2"
+                  >
+                    <Share2 className="w-3 h-3" />
+                    <span>Chia sẻ với bạn bè</span>
+                  </DropdownMenuItem>
+                  {playlist.isOwner && onDelete && (
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDelete();
+                      }}
+                    >
+                      Delete
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            size="icon"
+            disabled={interactionsDisabled}
+            className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 shadow-xl disabled:opacity-60"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (interactionsDisabled) return;
+              onPlay();
+            }}
+          >
+            <Play className="w-6 h-6" />
+          </Button>
+        </div>
+      </div>
+
+      {interactionsDisabled && (
+        <div className="pointer-events-none absolute inset-0 bg-black/65 flex flex-col items-center justify-center gap-2 text-center px-4">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/85 bg-white/10 px-3 py-1 rounded-full">
+            Unavailable
+          </span>
+          {unavailableReason ? (
+            <p className="text-[11px] text-white/80 leading-snug">
+              {unavailableReason}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <Card className="bg-transparent border-none transition-all duration-300 group h-full flex flex-col hover:scale-[1.01]">
+    <Card
+      className={`bg-transparent border-none transition-all duration-300 group h-full flex flex-col ${
+        interactionsDisabled ? "opacity-70" : "hover:scale-[1.01]"
+      }`}
+    >
       <CardContent className="p-0 flex flex-col flex-1">
-        <Link
-          to={`/playlist/${createSlug(playlist.title, playlist.id)}`}
-          className="block"
-        >
-          <div className="relative aspect-square rounded-2xl overflow-hidden">
-            {/* Ảnh cover nếu có, nếu không fallback gradient */}
-            {coverImage ? (
-              <img
-                src={coverImage}
-                alt={playlist.title}
-                className="absolute inset-0 h-full w-full object-cover"
-              />
-            ) : (
-              <div
-                className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`}
-              />
-            )}
-            {/* Lớp overlay làm tối ảnh để text rõ hơn */}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-black/80" />
-
-            <div className="relative z-10 h-full p-4 flex flex-col justify-between">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
-                Playlist
-              </p>
-              <h3 className="text-2xl font-semibold text-white leading-tight line-clamp-3">
-                {playlist.title}
-              </h3>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] text-white/90 opacity-0 group-hover:opacity-100 transition-opacity">
-              <span className="truncate">
-                {computedSongCount} {songLabel}
-                {durationLabel !== "--" && ` • ${durationLabel}`}
-              </span>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onLike();
-                  }}
-                  disabled={likePending}
-                  className={`h-7 w-7 p-0 bg-black/40 hover:bg-black/60 rounded-full ${
-                    isLiked ? "text-red-400" : "text-white"
-                  }`}
-                >
-                  <Heart
-                    className={`w-3 h-3 ${
-                      isLiked ? "fill-current" : ""
-                    }`}
-                  />
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 p-0 bg-black/40 hover:bg-black/60 rounded-full text-white"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                    >
-                      <MoreHorizontal className="w-3 h-3" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShareOpen(true);
-                      }}
-                      className="flex items-center gap-2 px-2"
-                    >
-                      <Share2 className="w-3 h-3" />
-                      <span>Chia sẻ với bạn bè</span>
-                    </DropdownMenuItem>
-                    {playlist.isOwner && onDelete && (
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onDelete();
-                        }}
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            {/* Nút Play ở giữa card, chỉ hiện khi hover */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                size="icon"
-                className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 shadow-xl"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onPlay();
-                }}
-              >
-                <Play className="w-6 h-6" />
-              </Button>
-            </div>
-            </div>
-          </div>
-        </Link>
+        {interactionsDisabled ? (
+          <div className="block cursor-not-allowed">{coverContent}</div>
+        ) : (
+          <Link to={playlistUrl} className="block">
+            {coverContent}
+          </Link>
+        )}
 
         <div className="px-1 pt-2 min-w-0">
           <p className="text-xs text-muted-foreground truncate">
@@ -237,19 +260,20 @@ export const PlaylistCard = ({
           </p>
         </div>
 
-        {/* Share dialog controlled bằng state, không hiện icon riêng */}
-        <ShareButton
-          open={shareOpen}
-          onOpenChange={setShareOpen}
-          title={playlist.title}
-          type="playlist"
-          playlistId={playlistNumericId}
-          url={`${window.location.origin}/playlist/${createSlug(
-            playlist.title,
-            playlist.id
-          )}`}
-          isPrivate={isPrivateVisibility}
-        />
+        {!interactionsDisabled && (
+          <ShareButton
+            open={shareOpen}
+            onOpenChange={setShareOpen}
+            title={playlist.title}
+            type="playlist"
+            playlistId={playlistNumericId}
+            url={`${window.location.origin}/playlist/${createSlug(
+              playlist.title,
+              playlist.id
+            )}`}
+            isPrivate={isPrivateVisibility}
+          />
+        )}
       </CardContent>
     </Card>
   );

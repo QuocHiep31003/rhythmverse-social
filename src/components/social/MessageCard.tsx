@@ -124,9 +124,9 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
           <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Xóa tin nhắn</AlertDialogTitle>
+                <AlertDialogTitle>Thu hồi tin nhắn</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Bạn có chắc muốn xóa tin nhắn này? Hành động này không thể hoàn tác.
+                  Bạn có chắc muốn thu hồi tin nhắn này? Tin nhắn sẽ biến mất khỏi cuộc trò chuyện của cả hai bên.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -138,7 +138,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
                   }}
                   className="bg-destructive hover:bg-destructive/90"
                 >
-                  Xóa
+                  Thu hồi
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

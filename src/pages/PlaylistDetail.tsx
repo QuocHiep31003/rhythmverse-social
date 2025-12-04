@@ -1667,7 +1667,11 @@ const PlaylistDetail = () => {
     try {
       await playlistsApi.addSong(playlist.id, songId);
       toast({ title: 'Added', description: 'Song added to playlist' });
-      
+
+      // Reload playlist from backend to sync contributor info (avatar, name, etc.)
+      // This ensures the "added by" avatar/name matches what you see after a full reload.
+      await reloadPlaylist();
+
       // Remove the added song from recommended list immediately
       setRecommendedSongs((prev) => {
         const filtered = prev.filter((s) => String(s.id) !== String(songId));
