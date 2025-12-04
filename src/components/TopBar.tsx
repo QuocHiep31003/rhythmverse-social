@@ -537,8 +537,8 @@ const TopBar = () => {
             typeof f.friendId === "number"
               ? f.friendId
               : typeof f.id === "number"
-              ? f.id
-              : NaN;
+                ? f.id
+                : NaN;
           return {
             userId,
             name: f.friendName || `User ${userId || ""}`,
@@ -770,7 +770,7 @@ const TopBar = () => {
 
     // Stop token refresh interval
     stopTokenRefreshInterval();
-    
+
     // QUAN TRỌNG: Gửi logout event TRƯỚC khi clear storage để các tab khác nhận được
     // Broadcast logout event đến tất cả các tab
     if (typeof window !== 'undefined' && window.BroadcastChannel) {
@@ -793,41 +793,42 @@ const TopBar = () => {
     // Dispatch custom event để các component trong cùng tab có thể listen
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('logout'));
-    // Clear sessionStorage for premium expiring modal (clear all date-based keys)
-    if (currentUserId) {
-      // Clear all date-based keys for this user
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (key && key.startsWith(`premiumExpiringModal_shown_${currentUserId}_`)) {
-          keysToRemove.push(key);
+      // Clear sessionStorage for premium expiring modal (clear all date-based keys)
+      if (currentUserId) {
+        // Clear all date-based keys for this user
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && key.startsWith(`premiumExpiringModal_shown_${currentUserId}_`)) {
+            keysToRemove.push(key);
+          }
         }
+        keysToRemove.forEach(key => sessionStorage.removeItem(key));
       }
-      keysToRemove.forEach(key => sessionStorage.removeItem(key));
+
+      // Đợi một chút để đảm bảo event được gửi đi trước khi clear storage
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Clear tokens và storage SAU KHI đã gửi event
+      clearTokens();
+
+      // Clear toàn bộ sessionStorage và localStorage (KHÔNG LƯU LẠI GÌ CẢ)
+      if (typeof window !== 'undefined') {
+        sessionStorage.clear();
+        localStorage.clear();
+      }
+
+      // Clear local state
+      setIsAuthenticated(false);
+      setProfileName("");
+      setProfileEmail("");
+      setProfileAvatar("");
+      setProfileIsPremium(false);
+
+      // Redirect to login
+      navigate("/login");
     }
-    
-    // Đợi một chút để đảm bảo event được gửi đi trước khi clear storage
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    // Clear tokens và storage SAU KHI đã gửi event
-    clearTokens();
-
-    // Clear toàn bộ sessionStorage và localStorage (KHÔNG LƯU LẠI GÌ CẢ)
-    if (typeof window !== 'undefined') {
-      sessionStorage.clear();
-      localStorage.clear();
-    }
-
-    // Clear local state
-    setIsAuthenticated(false);
-    setProfileName("");
-    setProfileEmail("");
-    setProfileAvatar("");
-    setProfileIsPremium(false);
-
-    // Redirect to login
-    navigate("/login");
-  };
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
@@ -912,132 +913,109 @@ const TopBar = () => {
                   </Badge>
                 )}
               </Button>
-            </DropdownMenuTrigger>
-            <NotificationsDropdown
-              userId={currentUserId ?? undefined}
-              onClose={() => setNotifOpen(false)}
-            />
-          </DropdownMenu>
 
-          {/* Messages */}
-          <DropdownMenu open={msgDropdownOpen} onOpenChange={setMsgDropdownOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative"
-              >
-                <MessageCircle className="h-5 w-5" />
-                {unreadMsgCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
-                    {unreadMsgCount > 99 ? "99+" : unreadMsgCount}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[360px] p-0 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-                <div className="text-sm font-semibold">Tin nhắn</div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-primary hover:text-primary/90"
-                  onClick={() => {
-                    setMsgDropdownOpen(false);
-                    navigate("/social?tab=chat");
-                  }}
-                >
-                  Mở chat
-                </Button>
-              </div>
-
-              {Object.keys(unreadByUser).length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  Không có tin nhắn chưa đọc
-                </div>
-              ) : (
-                <ScrollArea className="max-h-[420px]">
-                  <div className="p-2 space-y-1">
-                    {Object.entries(unreadByUser)
-                      .sort((a, b) => Number(b[1]) - Number(a[1]))
-                      .map(([userIdStr, count]) => {
-                        const userId = Number(userIdStr);
-                        const friend = friends.find((f) => f.userId === userId);
-                        const displayName =
-                          friend?.name || `User ${userIdStr}`;
-                        const avatar = friend?.avatar;
-                        const initials = displayName
-                          .split(" ")
-                          .map((p) => p[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase();
-
-                        return (
-                          <button
-                            key={userIdStr}
-                            type="button"
-                            onClick={() => {
-                              setMsgDropdownOpen(false);
-                              const friendParam = String(userId);
-                              navigate(`/social?tab=chat&friend=${encodeURIComponent(friendParam)}`);
-                            }}
-                            className={cn(
-                              "w-full flex items-center gap-3 rounded-xl p-3 text-left",
-                              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                            )}
-                          >
-                            <Avatar className="h-9 w-9">
-                              {avatar ? (
-                                <AvatarImage src={avatar} alt={displayName} />
-                              ) : null}
-                              <AvatarFallback>{initials}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-medium truncate">
-                                  {displayName}
-                                </p>
-                                <Badge className="h-5 px-2 text-[11px]">
-                                  {Number(count) > 99 ? "99+" : count}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {Number(count) === 1
-                                  ? "1 tin nhắn chưa đọc"
-                                  : `${count} tin nhắn chưa đọc`}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
+              {/* Messages */}
+              <DropdownMenu open={msgDropdownOpen} onOpenChange={setMsgDropdownOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    {unreadMsgCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
+                        {unreadMsgCount > 99 ? "99+" : unreadMsgCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[360px] p-0 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+                    <div className="text-sm font-semibold">Tin nhắn</div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary hover:text-primary/90"
+                      onClick={() => {
+                        setMsgDropdownOpen(false);
+                        navigate("/social?tab=chat");
+                      }}
+                    >
+                      Mở chat
+                    </Button>
                   </div>
-                </ScrollArea>
-              )}
 
-              <Separator />
-              <div className="px-4 py-2 text-xs text-muted-foreground">
-                Tổng cộng {unreadMsgCount} tin nhắn chưa đọc
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  {Object.keys(unreadByUser).length === 0 ? (
+                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      Không có tin nhắn chưa đọc
+                    </div>
+                  ) : (
+                    <ScrollArea className="max-h-[420px]">
+                      <div className="p-2 space-y-1">
+                        {Object.entries(unreadByUser)
+                          .sort((a, b) => Number(b[1]) - Number(a[1]))
+                          .map(([userIdStr, count]) => {
+                            const userId = Number(userIdStr);
+                            const friend = friends.find((f) => f.userId === userId);
+                            const displayName =
+                              friend?.name || `User ${userIdStr}`;
+                            const avatar = friend?.avatar;
+                            const initials = displayName
+                              .split(" ")
+                              .map((p) => p[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase();
 
-          {/* Premium */}
-          {profileIsPremium ? (
-            <Badge className="gap-1 bg-primary text-white">
-              <Crown className="h-3.5 w-3.5" />
-              {profilePlanLabel || "Premium"}
-            </Badge>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-primary text-primary"
-              onClick={() => navigate("/premium")}
-            >
-              Discover Premium
-            </Button>
-          )}
+                            return (
+                              <button
+                                key={userIdStr}
+                                type="button"
+                                onClick={() => {
+                                  setMsgDropdownOpen(false);
+                                  const friendParam = String(userId);
+                                  navigate(`/social?tab=chat&friend=${encodeURIComponent(friendParam)}`);
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-3 rounded-xl p-3 text-left",
+                                  "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                )}
+                              >
+                                <Avatar className="h-9 w-9">
+                                  {avatar ? (
+                                    <AvatarImage src={avatar} alt={displayName} />
+                                  ) : null}
+                                  <AvatarFallback>{initials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="text-sm font-medium truncate">
+                                      {displayName}
+                                    </p>
+                                    <Badge className="h-5 px-2 text-[11px]">
+                                      {Number(count) > 99 ? "99+" : count}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {Number(count) === 1
+                                      ? "1 tin nhắn chưa đọc"
+                                      : `${count} tin nhắn chưa đọc`}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </ScrollArea>
+                  )}
+
+                  <Separator />
+                  <div className="px-4 py-2 text-xs text-muted-foreground">
+                    Tổng cộng {unreadMsgCount} tin nhắn chưa đọc
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Premium */}
               {profileIsPremium ? (
@@ -1083,7 +1061,7 @@ const TopBar = () => {
                     </Button>
                   </DropdownMenuTrigger>
 
-                  <DropdownMenuContent className="w-56" align="end">
+                  <DropdownMenuContent className="w-56 z-[200]" align="end">
                     <div className="flex items-center gap-2 p-2">
                       <div>
                         <p className="font-medium">{profileName}</p>

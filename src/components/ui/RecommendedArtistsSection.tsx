@@ -50,53 +50,71 @@ const RecommendedArtistsSection = () => {
       try {
         setLoading(true);
 
-        // Lấy top artists từ listening history (top 5)
-        const topArtists = await listeningHistoryApi.getTopArtists(userId, 5);
+        // Lấy top artists từ listening history (top 1 để không quá nhiều)
+        let topArtists = await listeningHistoryApi.getTopArtists(userId, 1);
         
+        // Nếu không có data từ listening history, lấy random artists làm fallback
+        if (topArtists.length === 0) {
+          console.log("⚠️ No listening history, fetching random artists as fallback...");
+          try {
+            const randomArtistsResponse = await artistsApi.getAll({
+              page: 0,
+              size: 6,
+              sort: "id,desc", // Lấy artists mới nhất
+            });
+            if (randomArtistsResponse?.content && randomArtistsResponse.content.length > 0) {
+              const randomArtists = randomArtistsResponse.content.map((artist, index) => ({
+                artistId: artist.id,
+                artistName: artist.name,
+                listenCount: 0,
+              }));
+              topArtists = randomArtists;
+            }
+          } catch (fallbackError) {
+            console.error("Error fetching fallback artists:", fallbackError);
+          }
+        }
+
+        // Nếu vẫn không có artists, return empty
         if (topArtists.length === 0) {
           setRecommendedArtists([]);
           setLoading(false);
           return;
         }
 
-        // Với mỗi top artist, lấy related artists (nghệ sĩ liên quan)
-        const recommendedSet = new Set<number>(); // Để tránh trùng lặp
+        // Chỉ lấy top artists, không lấy related artists để tránh quá nhiều
         const recommended: Artist[] = [];
 
+        // Lấy thông tin đầy đủ của top artists
         for (const topArtist of topArtists) {
           try {
-            // Lấy related artists của top artist này
-            const related = await artistsApi.getRelatedArtists(topArtist.artistId, 3);
-            
-            for (const artist of related) {
-              // Chỉ thêm nếu chưa có trong danh sách và không phải là top artist
-              if (!recommendedSet.has(artist.id) && 
-                  !topArtists.some(ta => ta.artistId === artist.id)) {
-                recommendedSet.add(artist.id);
-                recommended.push(artist);
-              }
+            const artist = await artistsApi.getById(topArtist.artistId);
+            if (artist) {
+              recommended.push(artist);
             }
           } catch (error) {
-            console.error(`Error fetching related artists for ${topArtist.artistName}:`, error);
+            console.error(`Error fetching artist ${topArtist.artistId}:`, error);
           }
         }
 
-        // Nếu không đủ recommended artists, lấy thêm từ top artists khác
+        // Nếu không đủ, lấy random artists làm fallback
         if (recommended.length < 6) {
-          // Lấy thêm artists từ top artists (bỏ qua top 1)
-          for (let i = 1; i < topArtists.length && recommended.length < 6; i++) {
-            const artistId = topArtists[i].artistId;
-            if (!recommendedSet.has(artistId)) {
-              try {
-                const artist = await artistsApi.getById(artistId);
-                if (artist) {
-                  recommendedSet.add(artist.id);
+          try {
+            const randomArtistsResponse = await artistsApi.getAll({
+              page: 0,
+              size: 6 - recommended.length,
+              sort: "id,desc",
+            });
+            if (randomArtistsResponse?.content) {
+              for (const artist of randomArtistsResponse.content) {
+                if (!recommended.some(a => a.id === artist.id)) {
                   recommended.push(artist);
+                  if (recommended.length >= 6) break;
                 }
-              } catch (error) {
-                console.error(`Error fetching artist ${artistId}:`, error);
               }
             }
+          } catch (error) {
+            console.error("Error fetching fallback random artists:", error);
           }
         }
 
@@ -140,9 +158,9 @@ const RecommendedArtistsSection = () => {
     }
   };
 
-  // Ẩn section này nếu không có token (guest) hoặc không có data
+  // Ẩn section này nếu không có token (guest)
   const token = getAuthToken();
-  if (!token || recommendedArtists.length === 0) {
+  if (!token) {
     return null;
   }
 

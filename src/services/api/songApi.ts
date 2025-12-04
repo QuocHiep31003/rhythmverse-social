@@ -681,12 +681,31 @@ export const songsApi = {
 
   /**
    * Lấy top 100 bài hát trending
-   * GET /api/trending/top-100
+   * GET /api/trending/hot-today?top=100
+   * Map ResultDetailDTO sang Song format
    */
   getTop100Trending: async (): Promise<Song[]> => {
     try {
-      const response = await apiClient.get('/trending/top-100');
-      return response.data;
+      const response = await apiClient.get('/trending/hot-today', {
+        params: { top: 100 }
+      });
+      const data = response.data || [];
+      // Map ResultDetailDTO sang Song format
+      return data.map((item: any) => ({
+        id: item.songId || item.id,
+        songId: item.songId,
+        name: item.songName || item.name,
+        songName: item.songName || item.name,
+        albumImageUrl: item.albumImageUrl,
+        urlImageAlbum: item.albumImageUrl,
+        albumCoverImg: item.albumImageUrl,
+        artists: item.artists || '',
+        duration: item.duration,
+        rank: item.rank,
+        previousRank: item.oldRank || item.previousRank,
+        playCount: item.totalPoints || item.playCount,
+        trendingScore: item.totalPoints,
+      } as Song));
     } catch (error) {
       console.error("Error fetching top 100 trending:", error);
       return [];

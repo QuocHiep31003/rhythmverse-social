@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Music, Play, Calendar, Disc } from "lucide-react";
+import { Music, Play, Disc } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { createSlug } from "@/utils/playlistUtils";
+import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
 
 interface Album {
   id: number | string;
@@ -15,7 +16,7 @@ interface Album {
   coverUrl?: string;
   cover?: string;
   releaseDate?: string;
-  songs?: any[];
+  songs?: Array<{ id: number | string; [key: string]: unknown }>;
   tracks?: number;
   songCount?: number;
   releaseYear?: number;
@@ -23,13 +24,15 @@ interface Album {
 
 const NewAlbums = () => {
   const navigate = useNavigate();
+  const { playSong, setQueue } = useMusic();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAlbums = async () => {
       try {
-        const res = await albumsApi.getAll({ page: 0, size: 6, sort: "id,desc" }); // Lấy 6 albums cho grid
+        // Lấy albums mới nhất dựa trên releaseDate (ngày phát hành)
+        const res = await albumsApi.getAll({ page: 0, size: 6, sort: "releaseDate,desc" });
         setAlbums(res?.content || []);
       } catch (error) {
         console.error("Error fetching albums:", error);
@@ -40,7 +43,24 @@ const NewAlbums = () => {
     fetchAlbums();
   }, []);
 
-  const getArtistName = (artist: any): string => {
+  const handlePlayAlbum = async (album: Album) => {
+    try {
+      // Lấy songs của album
+      const albumDetail = await albumsApi.getById(album.id);
+      if (albumDetail?.songs && albumDetail.songs.length > 0) {
+        const songs = albumDetail.songs.map((s: { id: number | string; [key: string]: unknown }) => mapToPlayerSong(s));
+        await setQueue(songs);
+        if (songs.length > 0) {
+          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+          await playSongWithStreamUrl(songs[0], playSong);
+        }
+      }
+    } catch (error) {
+      console.error("Error playing album:", error);
+    }
+  };
+
+  const getArtistName = (artist: { id?: number | string; name?: string } | string | undefined): string => {
     if (typeof artist === 'string') return artist;
     if (artist?.name) return artist.name;
     return "Unknown Artist";
@@ -63,16 +83,18 @@ const NewAlbums = () => {
         </p>
       </div>
 
-      {/* Grid Layout - Different from songs */}
+      {/* Grid Layout */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {[...Array(6)].map((_, i) => (
-            <Card key={i} className="bg-gradient-glass backdrop-blur-sm border-white/10">
-              <CardContent className="p-0">
-                <div className="aspect-[4/3] bg-muted/20 rounded-t-lg animate-pulse" />
-                <div className="p-4 space-y-2">
-                  <div className="h-5 bg-muted/20 rounded animate-pulse mb-2" />
-                  <div className="h-4 bg-muted/20 rounded w-3/4 animate-pulse" />
+            <Card key={i} className="bg-transparent border-none h-full flex flex-col">
+              <CardContent className="p-0 flex flex-col flex-1">
+                <div className="relative aspect-square rounded-2xl overflow-hidden">
+                  <div className="w-full h-full bg-[#181818] dark:bg-white/5 animate-pulse" />
+                </div>
+                <div className="px-1 pt-2 min-w-0">
+                  <div className="h-4 bg-[#181818] dark:bg-white/5 rounded animate-pulse mb-2" />
+                  <div className="h-3 bg-[#181818] dark:bg-white/5 rounded w-3/4 animate-pulse" />
                 </div>
               </CardContent>
             </Card>
@@ -81,85 +103,92 @@ const NewAlbums = () => {
       ) : albums.length === 0 ? (
         <p className="text-muted-foreground text-sm py-8 text-center">No albums available.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {albums.map((album) => {
             const artistName = getArtistName(album.artist);
             const albumName = album.name || album.title || "Unknown Album";
             const coverImage = album.coverUrl || album.cover;
-            const releaseYear = album.releaseYear || (album.releaseDate ? new Date(album.releaseDate).getFullYear() : null);
-            const trackCount = getTrackCount(album);
+            const albumNumericId = typeof album.id === "number" && Number.isFinite(album.id) 
+              ? album.id 
+              : typeof album.id === "string" 
+                ? (() => { const parsed = Number(album.id); return Number.isFinite(parsed) ? parsed : undefined; })()
+                : undefined;
+
+            // Gradient giống playlist card để đồng bộ style
+            const gradientIndex = ((albumNumericId ?? 0) % 6) as 0 | 1 | 2 | 3 | 4 | 5;
+            const gradientClass = [
+              "from-[#4b5563] via-[#6b7280] to-[#111827]",
+              "from-[#38bdf8] via-[#0ea5e9] to-[#0369a1]",
+              "from-[#fb7185] via-[#f97316] to-[#b91c1c]",
+              "from-[#a855f7] via-[#8b5cf6] to-[#4c1d95]",
+              "from-[#22c55e] via-[#16a34a] to-[#14532d]",
+              "from-[#f97316] via-[#ef4444] to-[#7c2d12]",
+            ][gradientIndex];
+
+            const albumSlug = createSlug(albumName, album.id);
+            const albumUrl = `/album/${albumSlug}`;
 
             return (
-              <Card
+              <Card 
                 key={album.id}
-                className="group bg-gradient-glass backdrop-blur-sm border-white/10 hover:border-primary/40 transition-all duration-300 hover:shadow-glow cursor-pointer overflow-hidden"
-                onClick={() => navigate(`/album/${createSlug(albumName, album.id)}`)}
+                className="bg-transparent border-none transition-all duration-300 group h-full flex flex-col hover:scale-[1.01] cursor-pointer"
+                onClick={() => navigate(albumUrl)}
               >
-                <CardContent className="p-0">
-                  {/* Cover Art - Larger aspect ratio for albums */}
-                  <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20">
+                <CardContent className="p-0 flex flex-col flex-1">
+                  <div className="relative aspect-square rounded-2xl overflow-hidden">
+                    {/* Ảnh cover nếu có, nếu không dùng gradient giống playlist */}
                     {coverImage ? (
                       <img
                         src={coverImage}
                         alt={albumName}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        className="absolute inset-0 h-full w-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Music className="w-16 h-16 text-muted-foreground" />
-                      </div>
+                      <div
+                        className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`}
+                      />
                     )}
-                    
-                    {/* Gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    
-                    {/* Play button overlay on hover */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <Button
-                        size="icon"
-                        className="rounded-full w-16 h-16 bg-primary hover:bg-primary/90 shadow-2xl scale-90 group-hover:scale-100 transition-transform"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/album/${createSlug(albumName, album.id)}`);
-                        }}
-                      >
-                        <Play className="w-7 h-7 ml-1 text-white" fill="white" />
-                      </Button>
-                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/40 to-black/80" />
 
-                    {/* Badge overlay */}
-                    <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                      <Badge variant="secondary" className="bg-black/60 backdrop-blur-sm text-white border-white/20">
-                        <Disc className="w-3 h-3 mr-1" />
-                        Album
-                      </Badge>
+                    <div className="relative z-10 h-full p-4 flex flex-col justify-between">
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/80">
+                          Album
+                        </p>
+                        <h3 className="text-2xl font-semibold text-white leading-tight line-clamp-3">
+                          {albumName}
+                        </h3>
+                      </div>
+
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-white/90 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="truncate">
+                          {getTrackCount(album) > 0
+                            ? `${getTrackCount(album)} bài hát`
+                            : "Album"}
+                        </span>
+                      </div>
+
+                      {/* Nút Play ở giữa card khi hover */}
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          size="icon"
+                          className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 shadow-xl"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handlePlayAlbum(album);
+                          }}
+                        >
+                          <Play className="w-6 h-6" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Album Info - More detailed */}
-                  <div className="p-4 space-y-2">
-                    <h3 className="font-bold text-base line-clamp-2 group-hover:text-primary transition-colors">
-                      {albumName}
-                    </h3>
-                    <p className="text-sm text-muted-foreground line-clamp-1">
+                  <div className="px-1 pt-2 min-w-0">
+                    <p className="text-xs text-muted-foreground truncate">
                       {artistName}
                     </p>
-                    
-                    {/* Metadata */}
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
-                      {releaseYear && (
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{releaseYear}</span>
-                        </div>
-                      )}
-                      {trackCount > 0 && (
-                        <div className="flex items-center gap-1">
-                          <Music className="w-3 h-3" />
-                          <span>{trackCount} {trackCount === 1 ? 'track' : 'tracks'}</span>
-                        </div>
-                      )}
-                    </div>
                   </div>
                 </CardContent>
               </Card>

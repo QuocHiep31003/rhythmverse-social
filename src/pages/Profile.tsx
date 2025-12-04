@@ -273,15 +273,14 @@ const Profile = () => {
   };
 
   const fetchListeningHistory = async (currentUserId: number, page: number = 0) => {
-    if (!currentUserId) return;
-
+    // Không cần userId nữa, API sẽ lấy từ token
     try {
       setLoading(true);
 
       // Gọi overview trước để update thống kê tổng quan (chỉ gọi 1 lần khi page = 0)
       if (page === 0) {
         try {
-          const overview = await listeningHistoryApi.getOverview(currentUserId);
+          const overview = await listeningHistoryApi.getMyOverview();
           setListeningOverview(overview);
         } catch (e) {
           console.error("Failed to fetch listening overview:", e);
@@ -296,7 +295,7 @@ const Profile = () => {
         }
       }
 
-      const pageResponse = await listeningHistoryApi.getByUser(currentUserId, page, historyPageSize);
+      const pageResponse = await listeningHistoryApi.getMyListeningHistory(page, historyPageSize);
 
       // Update pagination state
       setHistoryTotalPages(pageResponse.totalPages);

@@ -8,10 +8,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Play, Heart, MoreHorizontal, Clock, Share2, ListPlus, Download } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { createSlug } from "@/utils/playlistUtils";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 import { useFavoriteSong } from "@/hooks/useFavorites";
+import { useMusic } from "@/contexts/MusicContext";
+import { mapToPlayerSong } from "@/lib/utils";
+import { songsApi } from "@/services/api";
 
 interface MusicCardProps {
   title: string;
@@ -36,7 +37,7 @@ const MusicCard = ({
   songId,
   likes = 0
 }: MusicCardProps) => {
-  const navigate = useNavigate();
+  const { playSong, setQueue } = useMusic();
   const [isHovered, setIsHovered] = useState(false);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   
@@ -52,9 +53,18 @@ const MusicCard = ({
   
   const favoriteHook = useFavoriteSong(numericSongId, { disableToast: false });
 
-  const handleCardClick = () => {
-    if (songId) {
-      navigate(`/song/${createSlug(title || 'song', songId)}`);
+  const handleCardClick = async () => {
+    if (!songId) return;
+    try {
+      const songData = await songsApi.getById(String(songId));
+      if (songData) {
+        const playerSong = mapToPlayerSong(songData as any);
+        await setQueue([playerSong]);
+        const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+        await playSongWithStreamUrl(playerSong, playSong);
+      }
+    } catch (error) {
+      console.error("Failed to play song:", error);
     }
   };
 

@@ -24,7 +24,6 @@ import Premium from "./pages/Premium";
 import Profile from "./pages/Profile";
 import Social from "./pages/Social";
 import Settings from "./pages/Settings";
-import SongDetail from "./pages/SongDetail";
 import AlbumDetail from "./pages/AlbumDetail";
 import ArtistDetail from "./pages/ArtistDetail";
 import MusicPlayer from "./components/MusicPlayer";
@@ -131,7 +130,6 @@ const App = () => (
                     <Route path="/social" element={<Social />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/notifications" element={<Notifications />} />
-                    <Route path="/song/:slug" element={<SongDetail />} />
                     <Route path="/album/:slug" element={<AlbumDetail />} />
                     <Route path="/artist/:id" element={<ArtistDetail />} />
                     <Route path="/music-recognition" element={<MusicRecognition />} />

@@ -6,8 +6,8 @@ import { Play, Pause, Volume2, VolumeX, MoreHorizontal, SkipForward, SkipBack, R
 import { cn } from "@/lib/utils";
 import { useMusic, type Song } from "@/contexts/MusicContext";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { getSongDisplay } from "@/lib/songDisplay";
+import QueueSidebar from "@/components/QueueSidebar";
 
 // QueueItem component
 const QueueItem = memo(({ 
@@ -1298,18 +1298,37 @@ const ControlMusicPlayer = () => {
               </DropdownMenu>
             )}
 
-            <QueuePanel
-              queue={localState.queue || []}
-              currentSongId={localState.songId}
-              showQueue={showQueue}
-              onOpenChange={setShowQueue}
-              onPlaySong={handlePlaySong}
-              onRemoveFromQueue={handleRemoveFromQueue}
-              moveQueueItem={handleMoveQueueItem}
-            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              title="Danh sách chờ"
+              onClick={() => setShowQueue(!showQueue)}
+            >
+              <List className="w-5 h-5" />
+            </Button>
           </div>
         </div>
       </div>
+
+      {/* Queue Sidebar */}
+      <QueueSidebar 
+        isOpen={showQueue} 
+        onClose={() => setShowQueue(false)}
+        customQueue={localState.queue?.map(q => ({
+          id: String(q.id),
+          name: q.title || q.name || q.songName || "Unknown Song",
+          songName: q.title || q.name || q.songName || "Unknown Song",
+          title: q.title || q.name || q.songName || "Unknown Song",
+          artist: q.artist || "Unknown Artist",
+          album: "",
+          duration: 0,
+          cover: q.cover || "",
+        }))}
+        customCurrentSongId={localState.songId}
+        onPlaySong={handlePlaySong}
+        onRemoveFromQueue={handleRemoveFromQueue}
+      />
     </div>
   );
 };

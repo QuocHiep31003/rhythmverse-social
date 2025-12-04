@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Music, Play, Sparkles, MoreHorizontal, ListPlus, Info, Heart, ListMusic } from "lucide-react";
+import { Music, Play, Sparkles, MoreHorizontal, ListPlus, Heart, ListMusic, AlertTriangle } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import { songsApi } from "@/services/api";
@@ -15,7 +15,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
-import { createSlug } from "@/utils/playlistUtils";
+import GenreMoodAlbumsSection from "@/components/ui/GenreMoodAlbumsSection";
+import { useFavoriteSong } from "@/hooks/useFavorites";
+import { ReportDialog } from "@/components/ui/ReportDialog";
+import { ReportType } from "@/services/api/reportApi";
+import { toast } from "@/hooks/use-toast";
 
 interface AIPickSong {
   id: number | string;
@@ -75,17 +79,20 @@ const resolveArtists = (rawArtists?: string, fullSong?: Song | null): string => 
 const AIPicksSection = () => {
   const navigate = useNavigate();
   const { playSong, setQueue, addToQueue } = useMusic();
-  const [aiPicks, setAiPicks] = useState<AIPickSong[]>([]);
+  const [allAiPicks, setAllAiPicks] = useState<AIPickSong[]>([]); // All songs
   const [loading, setLoading] = useState(true);
   const [addToPlaylistOpen, setAddToPlaylistOpen] = useState(false);
   const [selectedSongId, setSelectedSongId] = useState<string | number | null>(null);
   const [selectedSongTitle, setSelectedSongTitle] = useState<string>("");
   const [selectedSongCover, setSelectedSongCover] = useState<string | undefined>(undefined);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportSongId, setReportSongId] = useState<number | string | null>(null);
+  const [reportSongName, setReportSongName] = useState<string>("");
 
   const fetchAIPicks = useCallback(async () => {
     const token = getAuthToken();
     if (!token) {
-      setAiPicks([]);
+      setAllAiPicks([]);
       setLoading(false);
       return;
     }
@@ -102,7 +109,7 @@ const AIPicksSection = () => {
           if (!songs || songs.length === 0) {
             songs = await songsApi.getMonthlyTop100();
             if (songs && songs.length > 0) {
-              songs = songs.slice(0, 10);
+              songs = songs.slice(0, 20);
             }
           }
         } catch (fallbackError) {
@@ -140,14 +147,22 @@ const AIPicksSection = () => {
         };
       });
 
-      setAiPicks(picks.slice(0, 10));
+      // Save all songs
+      setAllAiPicks(picks);
     } catch (error) {
       console.error("Error fetching AI picks:", error);
-      setAiPicks([]);
+      setAllAiPicks([]);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  // Random 9 songs to display
+  const displayedPicks = useMemo(() => {
+    if (allAiPicks.length <= 9) return allAiPicks;
+    const shuffled = [...allAiPicks].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 9);
+  }, [allAiPicks]);
 
   useEffect(() => {
     fetchAIPicks();
@@ -168,28 +183,154 @@ const AIPicksSection = () => {
   );
 
   const handlePlaySong = async (song: AIPickSong) => {
-    const playerSong = buildPlayerSong(song);
-    await setQueue([playerSong]);
+    if (allAiPicks.length === 0) return;
+    // Play all songs starting from the clicked song
+    const allSongs = allAiPicks.map(buildPlayerSong);
+    const clickedSong = buildPlayerSong(song);
+    // Find the index of the clicked song in the full list
+    const songIndex = allSongs.findIndex(s => s.id === clickedSong.id);
+    // Reorder queue to start from clicked song
+    const reorderedQueue = songIndex >= 0 
+      ? [...allSongs.slice(songIndex), ...allSongs.slice(0, songIndex)]
+      : allSongs;
+    await setQueue(reorderedQueue);
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-    await playSongWithStreamUrl(playerSong, playSong);
+    await playSongWithStreamUrl(reorderedQueue[0], playSong);
   };
 
   const handlePlayAll = async () => {
-    if (aiPicks.length === 0) return;
-    const songs = aiPicks.map(buildPlayerSong);
+    if (allAiPicks.length === 0) return;
+    // Play all songs, not just 9 displayed
+    const songs = allAiPicks.map(buildPlayerSong);
     await setQueue(songs);
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
     await playSongWithStreamUrl(songs[0], playSong);
   };
 
-  // Ẩn section này nếu không có token (guest)
+  // Hide this section if no token (guest)
   const token = getAuthToken();
   if (!token) {
     return null;
   }
 
-  const featuredSong = aiPicks[0];
-  const secondarySongs = aiPicks.slice(1);
+  // Component for each song in grid - Horizontal layout
+  const SongCard = ({ song }: { song: AIPickSong }) => {
+    const numericSongId = typeof song.id === 'number' ? song.id : (typeof song.id === 'string' ? Number(song.id) : undefined);
+    const favoriteHook = useFavoriteSong(numericSongId, { disableToast: false });
+
+    return (
+      <div className="group flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
+        {/* Album Art - Left side, small square */}
+        <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-gradient-subtle flex-shrink-0 border border-border/40">
+          {song.albumImageUrl ? (
+            <img
+              src={song.albumImageUrl}
+              alt={song.songName}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-white/5">
+              <Music className="w-6 h-6 text-white/60" />
+            </div>
+          )}
+        </div>
+
+        {/* Song Info - Right side */}
+        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 
+              className="font-semibold text-sm mb-0.5 line-clamp-1 text-white hover:text-primary transition-colors cursor-pointer"
+              onClick={() => handlePlaySong(song)}
+            >
+              {song.songName}
+            </h3>
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              {song.artists}
+            </p>
+          </div>
+          
+          {/* Icons - Right side */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`rounded-full w-7 h-7 text-white/60 hover:text-white hover:bg-white/10 ${favoriteHook.isFavorite ? 'text-red-500 hover:text-red-400' : ''}`}
+              onClick={async (e) => {
+                e.stopPropagation();
+                await favoriteHook.toggleFavorite();
+              }}
+              disabled={favoriteHook.pending || !numericSongId}
+            >
+              <Heart className={`h-4 w-4 ${favoriteHook.isFavorite ? 'fill-current' : ''}`} />
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full w-7 h-7 text-white/60 hover:text-white hover:bg-white/10"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSongId(song.id);
+                    setSelectedSongTitle(song.songName);
+                    setSelectedSongCover(song.albumImageUrl);
+                    setAddToPlaylistOpen(true);
+                  }}
+                >
+                  <ListPlus className="mr-2 h-4 w-4" />
+                  Add to Playlist
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    const playerSong = buildPlayerSong(song);
+                    await addToQueue(playerSong as any);
+                  }}
+                >
+                  <Music className="mr-2 h-4 w-4" />
+                  Add to Queue
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Validate song.id trước khi mở dialog báo cáo
+                    const songId = song.id;
+                    const isValidId = typeof songId === 'number' 
+                      ? (Number.isInteger(songId) && songId > 0)
+                      : (typeof songId === 'string' && !isNaN(Number(songId)) && Number(songId) > 0);
+                    
+                    if (!isValidId) {
+                      toast({
+                        title: "Lỗi",
+                        description: "Không thể báo cáo bài hát này do ID không hợp lệ.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    
+                    setReportSongId(song.id);
+                    setReportSongName(song.songName);
+                    setReportDialogOpen(true);
+                  }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                  Report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className="mb-12">
@@ -197,169 +338,58 @@ const AIPicksSection = () => {
         <div className="flex items-center gap-2">
           <Sparkles className="w-6 h-6 text-primary" />
           <div>
-            <h2 className="text-2xl font-bold text-foreground">AI Picks For You</h2>
+            <h2 className="text-2xl font-bold text-foreground">Suggested Songs</h2>
             <p className="text-xs text-muted-foreground">
-              Based on your favorite artists and listening preferences
+              Based on your listening preferences
             </p>
           </div>
         </div>
+        {allAiPicks.length > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="rounded-full gap-2 text-[13px]"
+            onClick={handlePlayAll}
+            disabled={loading}
+          >
+            <Play className="w-4 h-4" />
+            Play All
+          </Button>
+        )}
       </div>
 
-      <div className="rounded-3xl bg-white/5 border border-white/10 p-6 backdrop-blur relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent pointer-events-none" />
-        <div className="relative">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div>
-              <h3 className="text-2xl font-semibold text-white mt-1">
-                Personalized AI recommendations just for you
-              </h3>
-            </div>
-          
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[...Array(3)].map((_, idx) => (
-                <div key={idx} className="bg-white/5 rounded-2xl p-4 animate-pulse h-40" />
-              ))}
-            </div>
-          ) : aiPicks.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-muted-foreground text-sm mb-3">
-                No recommendations yet. Listen to more music so AI can learn your taste!
-              </p>
-              <Button variant="outline" size="sm" onClick={() => navigate("/discover")}>
-                Discover now
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col lg:flex-row gap-6">
-              {featuredSong && (
-                <div className="lg:w-1/3 bg-black/30 rounded-3xl p-5 border border-white/10 shadow-xl flex flex-col gap-4">
-                  <div className="rounded-2xl overflow-hidden border border-white/10">
-                    {featuredSong.albumImageUrl ? (
-                      <img
-                        src={featuredSong.albumImageUrl}
-                        alt={featuredSong.songName}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-white/5 aspect-square">
-                        <Music className="w-12 h-12 text-white/60" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-primary/80">
-                      Featured pick
-                    </p>
-                    <h3 className="text-xl font-bold text-white mt-1">{featuredSong.songName}</h3>
-                    <p className="text-sm text-muted-foreground">{featuredSong.artists}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      className="rounded-full gap-2"
-                      onClick={() => handlePlaySong(featuredSong)}
-                    >
-                      <Play className="w-4 h-4" />
-                      Play
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="rounded-full"
-                      onClick={() => handlePlaySong(featuredSong)}
-                    >
-                      <Heart className="w-4 h-4" />
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="rounded-full border border-white/10"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setSelectedSongId(featuredSong.id);
-                            setSelectedSongTitle(featuredSong.songName);
-                            setSelectedSongCover(featuredSong.albumImageUrl);
-                            setAddToPlaylistOpen(true);
-                          }}
-                        >
-                          <ListPlus className="mr-2 h-4 w-4" />
-                          Add to Playlist
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={async () => {
-                            const playerSong = buildPlayerSong(featuredSong);
-                            await addToQueue(playerSong);
-                          }}
-                        >
-                          <Music className="mr-2 h-4 w-4" />
-                          Add to Queue
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() =>
-                            navigate(`/song/${createSlug(featuredSong.songName, featuredSong.id)}`)
-                          }
-                        >
-                          <Info className="mr-2 h-4 w-4" />
-                          View Details
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {(secondarySongs.length > 0 ? secondarySongs : aiPicks).map((song) => (
-                  <div
-                    key={song.id}
-                    className="flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 transition cursor-pointer"
-                    onClick={() => handlePlaySong(song)}
-                  >
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/5 flex-shrink-0 border border-white/10">
-                      {song.albumImageUrl ? (
-                        <img
-                          src={song.albumImageUrl}
-                          alt={song.songName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Music className="w-5 h-5 text-white/60" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-white line-clamp-1">{song.songName}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-1">{song.artists}</p>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full w-9 h-9 text-white/80 hover:text-white"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePlaySong(song);
-                      }}
-                    >
-                      <Play className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
+      {/* Grid 3x3 - Horizontal layout */}
+      {loading ? (
+        <div className="grid grid-cols-3 gap-2">
+          {[...Array(9)].map((_, idx) => (
+            <div key={idx} className="flex items-center gap-3 p-2 rounded-lg">
+              <div className="w-16 h-16 bg-muted/20 rounded-lg animate-pulse" />
+              <div className="flex-1">
+                <div className="h-4 bg-muted/20 rounded animate-pulse mb-2" />
+                <div className="h-3 bg-muted/20 rounded w-3/4 animate-pulse" />
               </div>
             </div>
-          )}
+          ))}
         </div>
-      </div>
+      ) : displayedPicks.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-muted-foreground text-sm mb-3">
+            No recommendations yet. Listen to more music so AI can learn your taste!
+          </p>
+          <Button variant="outline" size="sm" onClick={() => navigate("/discover")}>
+            Discover now
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          {displayedPicks.map((song) => (
+            <SongCard 
+              key={song.id} 
+              song={song}
+            />
+          ))}
+        </div>
+      )}
       
       {/* Add to Playlist Dialog */}
       {selectedSongId && (
@@ -371,6 +401,22 @@ const AIPicksSection = () => {
           songCover={selectedSongCover}
         />
       )}
+
+      {/* Report Dialog */}
+      {reportSongId && (
+        <ReportDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          type={ReportType.SONG}
+          typeId={reportSongId}
+          typeName={reportSongName}
+        />
+      )}
+      
+      {/* Genre & Mood Mix Albums - Display right below songs */}
+      <div className="mt-8">
+        <GenreMoodAlbumsSection />
+      </div>
     </section>
   );
 };
