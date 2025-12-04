@@ -418,12 +418,14 @@ const TopBar = () => {
 
                   // Show modal if expires within 1 day (0 or 1 day remaining)
                   if (diffDays >= 0 && diffDays <= 1) {
-                    const sessionKey = `premiumExpiringModal_shown_${me.id}`;
-                    const alreadyShownInSession = sessionStorage.getItem(sessionKey);
+                    const today = new Date().toDateString(); // Get date string (e.g., "Mon Jan 01 2024")
+                    const sessionKey = `premiumExpiringModal_shown_${me.id}_${today}`;
+                    const alreadyShownToday = sessionStorage.getItem(sessionKey);
 
-                    // If new login → always show modal
-                    // If reload → only show once per session
-                    if (isNewLogin || !alreadyShownInSession) {
+                    // Show modal if:
+                    // 1. New login → always show
+                    // 2. Reload → show once per day (not just once per session)
+                    if (isNewLogin || !alreadyShownToday) {
                       setShowPremiumExpiringModal(true);
                       sessionStorage.setItem(sessionKey, "true");
                     }
@@ -666,9 +668,17 @@ const TopBar = () => {
     stopTokenRefreshInterval();
     clearTokens();
 
-    // Clear sessionStorage for premium expiring modal
+    // Clear sessionStorage for premium expiring modal (clear all date-based keys)
     if (currentUserId) {
-      sessionStorage.removeItem(`premiumExpiringModal_shown_${currentUserId}`);
+      // Clear all date-based keys for this user
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith(`premiumExpiringModal_shown_${currentUserId}_`)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => sessionStorage.removeItem(key));
     }
 
     localStorage.clear();
@@ -955,6 +965,20 @@ const TopBar = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Premium Expiring Modal */}
+      <PremiumExpiringModal
+        open={showPremiumExpiringModal}
+        onOpenChange={setShowPremiumExpiringModal}
+        planName={profilePlanLabel || currentSubscription?.planName}
+        planCode={currentSubscription?.planCode}
+        expirationDate={
+          currentSubscription?.expiresAt ||
+          currentSubscription?.endDate ||
+          currentSubscription?.currentPeriodEnd ||
+          undefined
+        }
+      />
     </header>
   );
 };

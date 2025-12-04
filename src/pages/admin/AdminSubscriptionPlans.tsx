@@ -180,16 +180,23 @@ const AdminSubscriptionPlans = () => {
         // Các plan khác: tất cả = unlimited
         const isFreePlan = plan.planCode?.toUpperCase() === "FREE";
         const isFriendLimit = opt.value === FeatureName.FRIEND_LIMIT;
+        const isPlaylistCreate = opt.value === FeatureName.PLAYLIST_CREATE;
         return {
           featureName: opt.value,
           limitValue: isFreePlan && isFriendLimit ? 20 : null, // FREE plan: 20 friends, others: unlimited
           isEnabled: true,
-          limitCycle: isFreePlan && isFriendLimit ? "NONE" : undefined, // Friend limit không có cycle
+          limitCycle: (isFreePlan && isFriendLimit) || isPlaylistCreate ? "NONE" : undefined, // Friend limit và Playlist Create không có cycle
         };
       });
+      // Lock planName for default plans: PREMIUM = "Premium", FREE = keep original
+      const isDefaultPlan = plan.planCode && DEFAULT_PLANS.includes(plan.planCode.toUpperCase());
+      const finalPlanName = isDefaultPlan && plan.planCode?.toUpperCase() === "PREMIUM" 
+        ? "Premium" 
+        : plan.planName;
+      
       setFormData({
         planCode: plan.planCode,
-        planName: plan.planName,
+        planName: finalPlanName,
         description: plan.description || "",
         isActive: plan.isActive ?? true,
         displayOrder: plan.displayOrder || 0,
@@ -236,13 +243,14 @@ const AdminSubscriptionPlans = () => {
   const handleLimitValueChange = (index: number, value: number | null) => {
     const newFeatures = [...(formData.features || [])];
     const isFriendLimit = newFeatures[index].featureName === FeatureName.FRIEND_LIMIT;
+    const isPlaylistCreate = newFeatures[index].featureName === FeatureName.PLAYLIST_CREATE;
     // Nếu nhập số > 0, tự động tắt unlimited (set limitValue)
     // Nếu nhập 0, vẫn là limited nhưng không cho dùng
     newFeatures[index] = {
       ...newFeatures[index],
       limitValue: value,
-      // Friend limit không có cycle, các tính năng khác có cycle
-      limitCycle: isFriendLimit ? undefined : (value && value > 0 ? (newFeatures[index].limitCycle || "DAILY") : undefined),
+      // Friend limit và Playlist Create không có cycle, các tính năng khác có cycle
+      limitCycle: (isFriendLimit || isPlaylistCreate) ? undefined : (value && value > 0 ? (newFeatures[index].limitCycle || "DAILY") : undefined),
     };
     setFormData({ ...formData, features: newFeatures });
   };
@@ -313,11 +321,13 @@ const AdminSubscriptionPlans = () => {
         // - limitValue = 0 → LIMITED nhưng không cho dùng
         // - limitValue > 0 → LIMITED với giới hạn
         const finalLimitValue = f.limitValue;
+        const isFriendLimit = f.featureName === FeatureName.FRIEND_LIMIT;
+        const isPlaylistCreate = f.featureName === FeatureName.PLAYLIST_CREATE;
         
         return {
           featureName: f.featureName || FeatureName.PLAYLIST_CREATE,
           limitValue: finalLimitValue,
-          limitCycle: finalLimitValue && finalLimitValue > 0 ? (f.limitCycle || "DAILY") : undefined,
+          limitCycle: (isFriendLimit || isPlaylistCreate) ? undefined : (finalLimitValue && finalLimitValue > 0 ? (f.limitCycle || "DAILY") : undefined),
           isEnabled: finalLimitValue === null || (finalLimitValue !== null && finalLimitValue > 0),
           // Giữ lại các field khác nếu có
           ...(f.id && { id: f.id }),
@@ -340,11 +350,19 @@ const AdminSubscriptionPlans = () => {
       }));
 
       if (editingPlan?.id) {
+        // Lock planCode and planName for default plans
+        const isDefaultPlan = editingPlan.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase());
+        const finalPlanCode = isDefaultPlan ? editingPlan.planCode : (formData.planCode || editingPlan.planCode || "");
+        const finalPlanName = isDefaultPlan 
+          ? (editingPlan.planCode?.toUpperCase() === "PREMIUM" ? "Premium" : editingPlan.planName)
+          : (formData.planName || editingPlan.planName || "");
+        
         const payload: SubscriptionPlanDTO = {
           ...editingPlan,
           ...formData,
           id: editingPlan.id,
-          planCode: formData.planCode || editingPlan.planCode || "",
+          planCode: finalPlanCode,
+          planName: finalPlanName,
           features: normalizedFeatures,
           details: normalizedDetails,
         };
@@ -420,8 +438,9 @@ const AdminSubscriptionPlans = () => {
   return (
     <>
       <div className="h-screen overflow-hidden p-6 flex flex-col">
-        <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0">
+        <div className="w-full flex-1 flex flex-col overflow-hidden min-h-0">
+          {/* Header Section with Modern Design */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-[hsl(var(--admin-hover))]/20 via-[hsl(var(--admin-hover))]/10 to-transparent p-6 rounded-xl border border-[hsl(var(--admin-border))] flex-shrink-0 mb-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-[hsl(var(--admin-active))] rounded-xl flex items-center justify-center shadow-lg">
                 <Package className="w-6 h-6 text-[hsl(var(--admin-active-foreground))]" />
@@ -434,7 +453,7 @@ const AdminSubscriptionPlans = () => {
                   <Badge variant="secondary" className="font-normal">
                     {plans.length} plans visible
                   </Badge>
-                  
+                  {loading && <span className="text-xs">Loading...</span>}
                 </p>
               </div>
             </div>
@@ -442,21 +461,37 @@ const AdminSubscriptionPlans = () => {
               <Button
                 variant="outline"
                 onClick={loadPlans}
-                className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))]"
+                className="gap-2 border-[hsl(var(--admin-border))] hover:bg-[hsl(var(--admin-hover))] dark:hover:text-[hsl(var(--admin-hover-text))] transition-colors"
               >
                 <RefreshCw className="h-4 w-4" />
                 Refresh
               </Button>
-              <Button onClick={() => handleOpenDialog()} className="gap-2">
+              <Button 
+                onClick={() => handleOpenDialog()} 
+                className="gap-2 bg-[hsl(var(--admin-active))] text-[hsl(var(--admin-active-foreground))] hover:bg-[hsl(var(--admin-active))] hover:opacity-85 font-semibold transition-opacity shadow-lg"
+              >
                 <Plus className="h-4 w-4" />
-                Create plan
+                Create Plan
               </Button>
             </div>
           </div>
 
           <div className="flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto scroll-smooth scrollbar-invoice pb-6">
-              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {plans.length === 0 && !loading ? (
+                <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Package className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">No subscription plans yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">Get started by creating your first subscription plan</p>
+                  <Button onClick={() => handleOpenDialog()} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Plan
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {plans.map((plan) => {
                   const isDefaultPlan = plan.planCode && DEFAULT_PLANS.includes(plan.planCode.toUpperCase());
                   const featureCount = plan.features?.length || 0;
@@ -528,12 +563,12 @@ const AdminSubscriptionPlans = () => {
                         </p>
 
                         <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
+                          <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-muted/30 p-3">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Features</p>
                             <p className="text-2xl font-bold text-foreground">{featureCount}</p>
                             <p className="text-xs text-muted-foreground">Flexible limit customization</p>
                           </div>
-                          <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-black/10 p-3">
+                          <div className="rounded-xl border border-[hsl(var(--admin-border))] bg-muted/30 p-3">
                             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pricing options</p>
                             <p className="text-2xl font-bold text-foreground">{priceOptionsCount}</p>
                             <p className="text-xs text-muted-foreground">Configured billing options</p>
@@ -553,65 +588,96 @@ const AdminSubscriptionPlans = () => {
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto scrollbar-invoice bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]">
-          <DialogHeader>
-            <DialogTitle>
-              {editingPlan ? "Edit plan" : "Create new plan"}
-            </DialogTitle>
-            <DialogDescription>
-              {editingPlan
-                ? "Update subscription plan information"
-                : "Create a new subscription plan with features and limits"}
-            </DialogDescription>
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto scrollbar-invoice bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]">
+          <DialogHeader className="pb-4 border-b border-[hsl(var(--admin-border))]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                {editingPlan ? (
+                  <Edit className="w-5 h-5 text-primary" />
+                ) : (
+                  <Plus className="w-5 h-5 text-primary" />
+                )}
+              </div>
+              <div>
+                <DialogTitle className="text-2xl">
+                  {editingPlan ? "Edit Subscription Plan" : "Create New Subscription Plan"}
+                </DialogTitle>
+                <DialogDescription className="mt-1.5">
+                  {editingPlan
+                    ? "Update plan information, features, and pricing options"
+                    : "Configure a new subscription plan with features and limits"}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-5 py-4">
-            <section className="rounded-2xl border-2 border-[hsl(var(--admin-border))] bg-gradient-to-br from-[hsl(var(--admin-card))] to-[hsl(var(--admin-card))]/80 shadow-lg p-6 space-y-5">
-              <div className="pb-3 border-b border-[hsl(var(--admin-border))]">
-                <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Plan Details</Label>
-                <p className="text-sm text-muted-foreground mt-1">Configure the basic information for this subscription plan.</p>
+          <div className="space-y-6 py-6">
+            <section className="rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-6 space-y-5">
+              <div className="flex items-center gap-3 pb-4 border-b border-[hsl(var(--admin-border))]">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Package className="w-4 h-4 text-blue-500" />
+                </div>
+                <div>
+                  <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Plan Information</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Basic details about this subscription plan</p>
+                </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="planCode" className="text-sm font-medium">Plan code *</Label>
+                  <Label htmlFor="planCode" className="text-sm font-medium flex items-center gap-2">
+                    Plan Code <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="planCode"
                     value={formData.planCode}
                     onChange={(e) => setFormData({ ...formData, planCode: e.target.value.toUpperCase() })}
                     placeholder="BASIC, PREMIUM, PRO"
-                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-11 focus:border-primary transition-colors"
+                    disabled={editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase())}
+                    className="h-10 bg-background border-[hsl(var(--admin-border))] focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
-                    <p className="text-xs text-amber-600 flex items-center gap-1 mt-1">
-                      <span>⚠</span>
-                      Note: Changing default plan codes may affect system logic.
+                    <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5 mt-1">
+                      <span className="text-base">⚠️</span>
+                      Default plan code cannot be changed
                     </p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="planName" className="text-sm font-medium">Plan name *</Label>
+                  <Label htmlFor="planName" className="text-sm font-medium flex items-center gap-2">
+                    Plan Name <span className="text-destructive">*</span>
+                  </Label>
                   <Input
                     id="planName"
                     value={formData.planName}
                     onChange={(e) => setFormData({ ...formData, planName: e.target.value })}
                     placeholder="Basic Plan"
-                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-11 focus:border-primary transition-colors"
+                    disabled={editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase())}
+                    className="h-10 bg-background border-[hsl(var(--admin-border))] focus:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   />
+                  {editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase()) && (
+                    <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5 mt-1">
+                      <span className="text-base">⚠️</span>
+                      Default plan name cannot be changed
+                    </p>
+                  )}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="description" className="text-sm font-medium">Description</Label>
-                  <span className={`text-xs font-medium ${descriptionCounterClass}`}>{descriptionLength}/300</span>
+                  <span className={`text-xs font-medium ${descriptionCounterClass}`}>
+                    {descriptionLength}/300
+                  </span>
                 </div>
                 <Textarea
                   id="description"
@@ -624,28 +690,30 @@ const AdminSubscriptionPlans = () => {
                   }}
                   placeholder="Briefly describe the main benefits of this plan..."
                   maxLength={300}
-                  rows={4}
-                  className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] focus:border-primary transition-colors resize-none"
+                  rows={3}
+                  className="bg-background border-[hsl(var(--admin-border))] focus:border-primary transition-colors resize-none"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="displayOrder" className="text-sm font-medium">Display order</Label>
+                  <Label htmlFor="displayOrder" className="text-sm font-medium">Display Order</Label>
                   <Input
                     id="displayOrder"
                     inputMode="numeric"
-                    value={formatNumber(formData.displayOrder)}
+                    type="number"
+                    value={formData.displayOrder || 0}
                     onChange={(e) => setFormData({ ...formData, displayOrder: parseNumber(e.target.value) })}
-                    placeholder="Example: 1"
-                    className="bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-11 focus:border-primary transition-colors"
+                    placeholder="0"
+                    className="h-10 bg-background border-[hsl(var(--admin-border))] focus:border-primary transition-colors"
                   />
+                  <p className="text-xs text-muted-foreground">Lower numbers appear first</p>
                 </div>
-                <div className="rounded-xl border-2 border-[hsl(var(--admin-border))] bg-gradient-to-r from-[hsl(var(--admin-card))]/60 to-[hsl(var(--admin-card))]/40 p-4 flex items-center justify-between gap-4 hover:border-primary/30 transition-colors">
+                <div className="rounded-lg border border-[hsl(var(--admin-border))] bg-muted/30 p-4 flex items-center justify-between gap-4">
                   <div className="flex-1">
-                    <p className="font-semibold text-sm">Plan status</p>
+                    <Label htmlFor="isActive" className="text-sm font-medium">Plan Status</Label>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {formData.isActive ? "Plan is visible to users" : "Plan is hidden and cannot be purchased"}
+                      {formData.isActive ? "Visible to users" : "Hidden from users"}
                     </p>
                   </div>
                   <Switch
@@ -658,14 +726,19 @@ const AdminSubscriptionPlans = () => {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[hsl(var(--admin-border))] bg-gradient-to-br from-[hsl(var(--admin-card))] to-[hsl(var(--admin-card))]/80 shadow-lg p-6 space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[hsl(var(--admin-border))]">
-                <div>
-                  <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Default Features</Label>
-                  <p className="text-sm text-muted-foreground mt-1">Each plan always has 4 features; you only configure limits.</p>
+            <section className="rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[hsl(var(--admin-border))]">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-purple-500" />
+                  </div>
+                  <div>
+                    <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Feature Limits</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Configure usage limits for each feature</p>
+                  </div>
                 </div>
-                <Badge variant="secondary" className="text-xs px-3 py-1">
-                  All plans share these 4 features
+                <Badge variant="secondary" className="text-xs px-2.5 py-1">
+                  4 features
                 </Badge>
               </div>
 
@@ -678,49 +751,51 @@ const AdminSubscriptionPlans = () => {
                       FEATURE_OPTIONS.find((opt) => opt.value === feature.featureName)?.label ||
                       feature.featureName;
                     const isFriendLimit = feature.featureName === FeatureName.FRIEND_LIMIT;
-                    const showCycle = !isUnlimited && !isFriendLimit; // Friend limit không có cycle
+                    const isPlaylistCreate = feature.featureName === FeatureName.PLAYLIST_CREATE;
+                    const showCycle = !isUnlimited && !isFriendLimit && !isPlaylistCreate; // Friend limit và Playlist Create không có cycle
 
                     return (
                       <div
                         key={index}
-                        className={`rounded-lg border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] transition-colors ${
-                          isDisabled ? "opacity-60" : "hover:bg-[hsl(var(--admin-hover))]"
+                        className={`rounded-lg border border-[hsl(var(--admin-border))] bg-muted/20 transition-all ${
+                          isDisabled ? "opacity-50" : "hover:bg-muted/40 hover:border-primary/20"
                         }`}
                       >
-                        <div className="grid grid-cols-1 md:grid-cols-[1.4fr_1fr_1.2fr_1fr] gap-3 md:gap-4 p-4 items-center">
-                          {/* Feature Name */}
-                          <div className="flex items-center justify-between md:justify-start">
-                            <p className="font-medium text-sm text-[hsl(var(--admin-active-foreground))]">
+                        <div className="p-4 space-y-4">
+                          {/* Feature Name Row */}
+                          <div className="flex items-center justify-between">
+                            <p className="font-medium text-sm text-foreground">
                               {featureLabel}
                             </p>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                id={`toggle-${index}`}
+                                checked={isUnlimited}
+                                onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
+                                className="data-[state=checked]:bg-primary"
+                              />
+                              <span className="text-xs font-medium text-muted-foreground whitespace-nowrap min-w-[70px] text-right">
+                                {isUnlimited
+                                  ? "Unlimited"
+                                  : isDisabled
+                                  ? "Disabled"
+                                  : "Limited"}
+                              </span>
+                            </div>
                           </div>
 
-                          {/* Toggle & status */}
-                          <div className="flex items-center gap-2">
-                            <Switch
-                              id={`toggle-${index}`}
-                              checked={isUnlimited}
-                              onCheckedChange={(checked) => handleToggleUnlimited(index, checked)}
-                            />
-                            <span className="text-xs text-muted-foreground whitespace-nowrap">
-                              {isUnlimited
-                                ? "Unlimited"
-                                : isDisabled
-                                ? "Disabled"
-                                : "Limited"}
-                            </span>
-                          </div>
-
-                          {/* Limit Input */}
-                          <div className="flex items-center gap-2">
-                            {isUnlimited ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              <>
+                          {/* Limit Configuration Row */}
+                          {!isUnlimited && (
+                            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[hsl(var(--admin-border))]">
+                              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                                <Label htmlFor={`limit-${index}`} className="text-xs text-muted-foreground whitespace-nowrap">
+                                  {isFriendLimit ? "Max friends:" : "Usage limit:"}
+                                </Label>
                                 <Input
+                                  id={`limit-${index}`}
                                   type="number"
                                   min="0"
-                                  placeholder={isFriendLimit ? "Max friends" : "Number of uses"}
+                                  placeholder={isFriendLimit ? "20" : "10"}
                                   value={feature.limitValue || 0}
                                   onChange={(e) => {
                                     const numValue =
@@ -729,40 +804,41 @@ const AdminSubscriptionPlans = () => {
                                       handleLimitValueChange(index, numValue);
                                     }
                                   }}
-                                  className="w-24 bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-9 text-sm"
+                                  className="w-24 h-8 bg-background border-[hsl(var(--admin-border))] text-sm"
                                 />
                                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                                   {isFriendLimit
                                     ? feature.limitValue === 0
-                                      ? "(Disabled)"
+                                      ? "(disabled)"
                                       : "friends"
                                     : feature.limitValue === 0
-                                    ? "(Disabled)"
-                                    : "uses"}
+                                    ? "(disabled)"
+                                    : "times"}
                                 </span>
-                              </>
-                            )}
-                          </div>
+                              </div>
 
-                          {/* Cycle Select or placeholder */}
-                          <div className="flex items-center">
-                            {showCycle ? (
-                              <Select
-                                value={feature.limitCycle || "DAILY"}
-                                onValueChange={(value) => handleLimitCycleChange(index, value)}
-                              >
-                                <SelectTrigger className="w-full sm:w-[140px] md:w-[160px] bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))] h-9 text-sm">
-                                  <SelectValue placeholder="Select cycle" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="DAILY">Daily</SelectItem>
-                                  <SelectItem value="MONTHLY">Monthly</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
-                          </div>
+                              {/* Cycle Select */}
+                              {showCycle && (
+                                <div className="flex items-center gap-2">
+                                  <Label htmlFor={`cycle-${index}`} className="text-xs text-muted-foreground whitespace-nowrap">
+                                    Reset cycle:
+                                  </Label>
+                                  <Select
+                                    value={feature.limitCycle || "DAILY"}
+                                    onValueChange={(value) => handleLimitCycleChange(index, value)}
+                                  >
+                                    <SelectTrigger id={`cycle-${index}`} className="w-[120px] h-8 bg-background border-[hsl(var(--admin-border))] text-xs">
+                                      <SelectValue placeholder="Select cycle" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="DAILY">Daily</SelectItem>
+                                      <SelectItem value="MONTHLY">Monthly</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -775,15 +851,20 @@ const AdminSubscriptionPlans = () => {
               )}
             </section>
 
-            <section className="rounded-2xl border-2 border-[hsl(var(--admin-border))] bg-gradient-to-br from-[hsl(var(--admin-card))] to-[hsl(var(--admin-card))]/80 shadow-lg p-6 space-y-5">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[hsl(var(--admin-border))]">
-                <div>
-                  <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Pricing / Duration Options</Label>
-                  <p className="text-sm text-muted-foreground mt-1">Add multiple billing options to optimize conversion.</p>
+            <section className="rounded-xl border border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))] shadow-sm p-6 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[hsl(var(--admin-border))]">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                    <Package className="w-4 h-4 text-green-500" />
+                  </div>
+                  <div>
+                    <Label className="text-lg font-semibold text-[hsl(var(--admin-active-foreground))]">Pricing Options</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Configure billing periods and prices</p>
+                  </div>
                 </div>
-                <Button type="button" variant="outline" size="sm" onClick={handleAddDetail} className="gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={handleAddDetail} className="gap-2 h-9">
                   <Plus className="h-4 w-4" />
-                  Add option
+                  Add Option
                 </Button>
               </div>
 
@@ -794,99 +875,106 @@ const AdminSubscriptionPlans = () => {
                     return (
                       <div
                         key={index}
-                        className={`rounded-xl border p-4 space-y-4 transition ${
-                          isRecommended ? "border-primary/60 bg-primary/5" : "border-[hsl(var(--admin-border))]"
+                        className={`rounded-lg border p-4 space-y-4 transition-all ${
+                          isRecommended 
+                            ? "border-primary/50 bg-primary/5 shadow-sm" 
+                            : "border-[hsl(var(--admin-border))] bg-muted/20 hover:bg-muted/30"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-semibold">Option #{index + 1}</p>
-                          {isRecommended && (
-                            <Badge variant="default" className="text-xs bg-primary text-primary-foreground">
-                              Recommended
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="grid gap-3 md:grid-cols-4">
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Option name</Label>
-                            <Input
-                              value={detail.detailName || ""}
-                              onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
-                              placeholder="Example: 1 month"
-                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Price</Label>
-                            <Input
-                              inputMode="numeric"
-                              value={formatNumber(detail.price)}
-                              onChange={(e) => handlePriceInputChange(index, e.target.value)}
-                              placeholder="99.000"
-                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Duration (days)</Label>
-                            <Input
-                              type="number"
-                              value={detail.durationDays || 30}
-                              onChange={(e) =>
-                                handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))
-                              }
-                              placeholder="30"
-                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                          <Label className="text-xs text-muted-foreground">Display order</Label>
-                            <Input
-                              type="number"
-                              value={detail.displayOrder || 0}
-                              onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
-                              placeholder="0"
-                              className="w-full bg-[hsl(var(--admin-card))] border-[hsl(var(--admin-border))]"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <Switch
-                              checked={isRecommended}
-                              onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
-                            />
-                            <span className="text-sm text-muted-foreground">
-                              {isRecommended ? "This option is highlighted as recommended." : "Enable to recommend this option to users."}
-                            </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-foreground">Option #{index + 1}</span>
+                            {isRecommended && (
+                              <Badge variant="default" className="text-xs bg-primary text-primary-foreground">
+                                ⭐ Recommended
+                              </Badge>
+                            )}
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveDetail(index)}
-                            className="hover:bg-destructive/10 hover:text-destructive"
+                            className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive"
                           >
                             <X className="h-4 w-4" />
                           </Button>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-foreground">Option Name</Label>
+                            <Input
+                              value={detail.detailName || ""}
+                              onChange={(e) => handleDetailChange(index, "detailName", e.target.value)}
+                              placeholder="e.g., 1 month"
+                              className="h-9 bg-background border-[hsl(var(--admin-border))] text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-foreground">Price (VND)</Label>
+                            <Input
+                              inputMode="numeric"
+                              value={formatNumber(detail.price)}
+                              onChange={(e) => handlePriceInputChange(index, e.target.value)}
+                              placeholder="99,000"
+                              className="h-9 bg-background border-[hsl(var(--admin-border))] text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-foreground">Duration (days)</Label>
+                            <Input
+                              type="number"
+                              min="1"
+                              value={detail.durationDays || 30}
+                              onChange={(e) =>
+                                handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))
+                              }
+                              placeholder="30"
+                              className="h-9 bg-background border-[hsl(var(--admin-border))] text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-foreground">Display Order</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              value={detail.displayOrder || 0}
+                              onChange={(e) => handleDetailChange(index, "displayOrder", parseNumber(e.target.value))}
+                              placeholder="0"
+                              className="h-9 bg-background border-[hsl(var(--admin-border))] text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 pt-2 border-t border-[hsl(var(--admin-border))]">
+                          <Switch
+                            checked={isRecommended}
+                            onCheckedChange={(checked) => handleDetailChange(index, "isRecommended", checked)}
+                            className="data-[state=checked]:bg-primary"
+                          />
+                          <Label htmlFor={`recommended-${index}`} className="text-xs text-muted-foreground cursor-pointer">
+                            Mark as recommended option
+                          </Label>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="rounded-xl border border-dashed border-[hsl(var(--admin-border))] p-6 text-center text-sm text-muted-foreground">
-                  No options yet. Click “Add option” to create the first pricing option.
+                <div className="rounded-lg border border-dashed border-[hsl(var(--admin-border))] p-8 text-center">
+                  <Package className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
+                  <p className="text-sm text-muted-foreground">No pricing options yet</p>
+                  <p className="text-xs text-muted-foreground mt-1">Click "Add Option" to create the first one</p>
                 </div>
               )}
             </section>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseDialog}>
+          <DialogFooter className="pt-4 border-t border-[hsl(var(--admin-border))] gap-2">
+            <Button variant="outline" onClick={handleCloseDialog} className="h-10">
               Cancel
             </Button>
-            <Button onClick={handleSave}>
-              <Save className="h-4 w-4 mr-2" />
-              Save
+            <Button onClick={handleSave} className="h-10 gap-2">
+              <Save className="h-4 w-4" />
+              {editingPlan ? "Update Plan" : "Create Plan"}
             </Button>
           </DialogFooter>
         </DialogContent>

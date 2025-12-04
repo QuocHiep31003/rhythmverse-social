@@ -40,6 +40,7 @@ import { paymentApi, OrderHistoryItem, PlanFeatureSnapshot } from "@/services/ap
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { featureUsageApi, FeatureUsageDTO, FeatureName } from "@/services/api/featureUsageApi";
 
 const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
@@ -70,10 +71,42 @@ const Profile = () => {
   const [pendingTick, setPendingTick] = useState(0);
   const [profilePlanCode, setProfilePlanCode] = useState<string | null>(null);
   const [isPlanFeaturesDialogOpen, setIsPlanFeaturesDialogOpen] = useState(false);
+  const [featureUsages, setFeatureUsages] = useState<FeatureUsageDTO[]>([]);
+  const [loadingFeatureUsages, setLoadingFeatureUsages] = useState(false);
 
   useEffect(() => {
     fetchProfile();
+    fetchFeatureUsages();
   }, []);
+
+  const fetchFeatureUsages = async () => {
+    try {
+      setLoadingFeatureUsages(true);
+      const features = [
+        FeatureName.PLAYLIST_CREATE,
+        FeatureName.FRIEND_LIMIT,
+        FeatureName.AI_SEARCH,
+        FeatureName.ADVANCED_ANALYTICS,
+      ];
+      
+      const usages = await Promise.all(
+        features.map(async (feature) => {
+          try {
+            return await featureUsageApi.getFeatureUsage(feature);
+          } catch (error) {
+            console.warn(`Failed to fetch usage for ${feature}:`, error);
+            return null;
+          }
+        })
+      );
+      
+      setFeatureUsages(usages.filter((u): u is FeatureUsageDTO => u !== null));
+    } catch (error) {
+      console.error("Failed to fetch feature usages:", error);
+    } finally {
+      setLoadingFeatureUsages(false);
+    }
+  };
 
   useEffect(() => {
     if (userId) {
@@ -131,9 +164,22 @@ const Profile = () => {
       try {
         // Lấy subscription từ /me endpoint để có đầy đủ thông tin
         subscription = await premiumSubscriptionApi.getMySubscription();
-        setPremiumSubscription(subscription);
+        // Chỉ set subscription nếu status là ACTIVE (không hiển thị PENDING)
+        if (subscription) {
+          const status = subscription.status?.toUpperCase() || subscription.subscriptionStatus?.toUpperCase();
+          // Chỉ hiển thị subscription ACTIVE, bỏ qua PENDING
+          if (status === 'ACTIVE' || status === 'TRIALING' || status === 'SUCCESS' || status === 'PAID') {
+            setPremiumSubscription(subscription);
+          } else {
+            // Nếu subscription là PENDING hoặc status khác, không hiển thị
+            setPremiumSubscription(null);
+          }
+        } else {
+          setPremiumSubscription(null);
+        }
       } catch (subscriptionError) {
         console.warn("Failed to fetch premium subscription", subscriptionError);
+        setPremiumSubscription(null);
       }
       const getPremiumStringFlag = (value?: string | null) => {
         if (!value) return undefined;
@@ -738,8 +784,6 @@ const Profile = () => {
         // Reset preview on error
         setAvatarPreview(profileData.avatar || "");
         setAvatarFile(null);
-        const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
-        setProfilePlanCode(resolvedPlanCode);
       } finally {
         setUploadingAvatar(false);
       }
@@ -761,8 +805,6 @@ const Profile = () => {
       await userApi.updateProfile(updatePayload);
       await fetchProfile();
       setAvatarFile(null);
-      const resolvedPlanCode = subscription?.planCode || (user as any)?.planCode || (user as any)?.plan_code || null;
-      setProfilePlanCode(resolvedPlanCode);
       setIsEditing(false);
       toast({ title: "Success", description: "Profile updated successfully" });
     } catch (error) {
@@ -913,7 +955,7 @@ const Profile = () => {
                             {profileData.premium && <Crown className="w-3 h-3" />}
                             {profileData.planLabel || (profileData.premium ? "Premium" : "Free")}
                           </Badge>
-                          {(profilePlanCode || profileData.premium) && (
+                          {isSubscriptionActive(premiumSubscription) && (
                             <Button
                               variant="link"
                               size="sm"
@@ -1028,6 +1070,119 @@ const Profile = () => {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Feature Usage */}
+              <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Crown className="w-5 h-5" />
+                    Plan Usage
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {loadingFeatureUsages ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin" />
+                      <p className="text-sm">Loading feature usage...</p>
+                    </div>
+                  ) : featureUsages.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Crown className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p className="text-sm">No feature usage data available</p>
+                    </div>
+                  ) : (
+                    featureUsages.map((usage) => {
+                      const limitType = usage.limitType?.toUpperCase();
+                      const isUnlimited = limitType === "UNLIMITED";
+                      const isDisabled = limitType === "DISABLED" || usage.isEnabled === false;
+                      const usageCount = usage.usageCount || 0;
+                      const limit = usage.limit;
+                      const remaining = usage.remaining;
+                      
+                      const getFeatureDisplayName = (featureName: string) => {
+                        const names: Record<string, string> = {
+                          PLAYLIST_CREATE: "Playlist Creation",
+                          FRIEND_LIMIT: "Friend Limit",
+                          AI_SEARCH: "AI Search",
+                          ADVANCED_ANALYTICS: "Advanced Analytics",
+                        };
+                        return names[featureName] || featureName.replace(/_/g, " ");
+                      };
+
+                      return (
+                        <div
+                          key={usage.featureName}
+                          className="p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm">
+                                {getFeatureDisplayName(usage.featureName)}
+                              </span>
+                            </div>
+                            <Badge
+                              variant={
+                                isUnlimited
+                                  ? "default"
+                                  : isDisabled
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                              className="text-xs"
+                            >
+                              {isUnlimited
+                                ? "Unlimited"
+                                : isDisabled
+                                ? "Disabled"
+                                : limitType || "Limited"}
+                            </Badge>
+                          </div>
+                          
+                          {!isUnlimited && !isDisabled && limit !== null && limit !== undefined && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                <span>Used: {usageCount}</span>
+                                <span>Limit: {limit}</span>
+                                {remaining !== null && remaining !== undefined && (
+                                  <span className="text-primary font-medium">
+                                    Remaining: {remaining}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="w-full bg-muted/20 rounded-full h-2">
+                                <div
+                                  className={`h-2 rounded-full transition-all duration-500 ${
+                                    remaining !== null && remaining !== undefined && remaining <= limit * 0.2
+                                      ? "bg-red-500"
+                                      : remaining !== null && remaining !== undefined && remaining <= limit * 0.5
+                                      ? "bg-yellow-500"
+                                      : "bg-gradient-primary"
+                                  }`}
+                                  style={{
+                                    width: `${limit > 0 ? Math.min(100, (usageCount / limit) * 100) : 0}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          
+                          {isUnlimited && (
+                            <div className="text-xs text-muted-foreground">
+                              You have unlimited access to this feature
+                            </div>
+                          )}
+                          
+                          {isDisabled && (
+                            <div className="text-xs text-muted-foreground">
+                              This feature is not available in your current plan
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Top Genres */}
               <Card className="bg-gradient-glass backdrop-blur-sm border-white/10">

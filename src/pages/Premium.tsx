@@ -122,13 +122,14 @@ const Premium = () => {
         displayText = "Not available";
       } else {
         status = "limited";
-        // Hiển thị với cycle: "3 lần/ngày" hoặc "3 lần/tháng"
+        // Display with cycle: e.g. "3 times/day" or "3 times/month"
+        const timesLabel = limitValue === 1 ? "time" : "times";
         if (limitCycle === "DAILY") {
-          displayText = `${limitValue} lần/ngày`;
+          displayText = `${limitValue} ${timesLabel}/day`;
         } else if (limitCycle === "MONTHLY") {
-          displayText = `${limitValue} lần/tháng`;
+          displayText = `${limitValue} ${timesLabel}/month`;
         } else {
-          displayText = `${limitValue} lần`;
+          displayText = `${limitValue} ${timesLabel}`;
         }
       }
       
