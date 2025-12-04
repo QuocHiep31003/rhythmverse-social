@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import TopBar from "./TopBar";
@@ -42,6 +42,7 @@ const MobileTrigger = () => {
 const AppLayout = ({ children }: AppLayoutProps) => {
   const isMobile = useIsMobile();
   const location = useLocation();
+  const navigate = useNavigate();
   const seedStatusRef = useRef<"unknown" | "checking" | "completed" | "required">("unknown");
   const inflightRef = useRef(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -101,6 +102,24 @@ const AppLayout = ({ children }: AppLayoutProps) => {
     coldStartStorage.markCompleted();
     seedStatusRef.current = "completed";
     setShowOnboarding(false);
+    
+    // Lưu pathname hiện tại để tránh vấn đề closure
+    const currentPath = location.pathname;
+    
+    // Reload trang Home để gọi lại API recommend ban đầu sau khi chọn 10 artist
+    // Đợi một chút để modal đóng hoàn toàn trước khi reload
+    setTimeout(() => {
+      if (currentPath === "/") {
+        // Nếu đang ở trang Home, reload để refresh các component recommend
+        window.location.reload();
+      } else {
+        // Nếu không ở trang Home, navigate về Home và reload
+        navigate("/", { replace: true });
+        setTimeout(() => {
+          window.location.reload();
+        }, 50);
+      }
+    }, 300);
   };
 
   return (

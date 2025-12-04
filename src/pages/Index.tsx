@@ -27,6 +27,8 @@ import TopArtistSection from "@/components/ui/TopArtistSection"; // ✅ Ca sĩ n
 import TopGenreMoodSection from "@/components/ui/TopGenreMoodSection"; // ✅ Genre/Mood nổi bật
 import RecommendedArtistsSection from "@/components/ui/RecommendedArtistsSection"; // ✅ Gợi ý ca sĩ dựa trên lịch sử nghe
 import RecommendedAlbumsSection from "@/components/ui/RecommendedAlbumsSection"; // ✅ Gợi ý album dựa trên lịch sử nghe
+import TopTrendingSection from "@/components/ui/TopTrendingSection"; // ✅ Nghe nhiều nhất gần đây
+import ARRahmanFansSection from "@/components/ui/ARRahmanFansSection"; // ✅ For A.R. Rahman Fans
 import { getAuthToken } from "@/services/api/config";
 import { useEffect, useState } from "react";
 import { formatPlayCount, mapToPlayerSong } from "@/lib/utils";
@@ -39,24 +41,9 @@ const Index = () => {
 
   // Dữ liệu từ API thực tế - Hot Month (Monthly Trending)
   const [topHitsMonth, setTopHitsMonth] = useState([]);
-  const aiPicks: any[] = [];
 
   // Danh sách Editor's albums
-  const editorsChoice = [
-    {
-      id: 1,
-      title: "Chill Vibes Collection",
-      tracks: 25,
-      editor: "Music Team",
-    },
-    { id: 2, title: "Indie Rock Rising", tracks: 30, editor: "Alex Chen" },
-    {
-      id: 3,
-      title: "Electronic Dreams",
-      tracks: 22,
-      editor: "Sofia Rodriguez",
-    },
-  ];
+
 
   // Dữ liệu từ API thực tế - Hot Week (Weekly Trending)
   const [topHitsWeek, setTopHitsWeek] = useState([]);
@@ -126,17 +113,22 @@ const Index = () => {
           <div className="container px-6">
             {/* AI Picks For You - Smart Recommendations (ẩn hoàn toàn nếu chưa đăng nhập) */}
             {getAuthToken() && <AIPicksSection />}
+            {/* Nghe nhiều nhất gần đây - Top trending songs */}
+            {topHitsWeek.length > 0 && <TopTrendingSection songs={topHitsWeek} />}
             {/* Nghe gần đây - Các bài hát đã nghe từ playlist, albums, ... */}
             <RecentListeningSection />
 
             {/* Ca sĩ nổi bật - Nghệ sĩ nghe nhiều nhất và bài hát của họ */}
-            <TopArtistSection />
+            {/* <TopArtistSection /> */}
 
             {/* Genre/Mood nổi bật - Thể loại/tâm trạng nghe nhiều nhất */}
-            {/* <TopGenreMoodSection /> */}
+            <TopGenreMoodSection />
 
             {/* Artist Fan Sections - Gợi ý bài hát theo artist hay nghe */}
-            {/* <ArtistFanSection /> */}
+            <ArtistFanSection />
+
+            {/* For A.R. Rahman Fans - Top albums */}
+            <ARRahmanFansSection />
 
             {/* Gợi ý ca sĩ - Dựa trên lịch sử nghe và vector người dùng */}
             <RecommendedArtistsSection />

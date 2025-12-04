@@ -2,7 +2,7 @@
 export { API_BASE_URL } from './api/config';
 
 // Re-export common utilities
-export { buildJsonHeaders, parseErrorResponse, getAuthToken, forceRefreshAccessToken } from './api/config';
+export { buildJsonHeaders, parseErrorResponse, getAuthToken, forceRefreshAccessToken, decodeToken } from './api/config';
 
 // Re-export shared interfaces
 export type { PaginationParams, PaginatedResponse } from './api/config';
@@ -27,6 +27,8 @@ export { songGenreApi } from './api/songGenreApi';
 export { songMoodApi } from './api/songMoodApi';
 export { dashboardApi } from './api/dashboardApi';
 export { playbackApi } from './api/playbackApi';
+export { reportApi, ReportType, ReportStatus } from './api/reportApi';
+export type { ReportDTO, CreateReportRequest } from './api/reportApi';
 
 
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse, apiClient } from "./api/config";

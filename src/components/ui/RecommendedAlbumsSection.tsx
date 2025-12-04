@@ -1,15 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Music, Play, Disc, Sparkles, Calendar } from "lucide-react";
+import { Sparkles, Play, Music } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { getAuthToken } from "@/services/api/config";
-import { createSlug } from "@/utils/playlistUtils";
 import { useMusic } from "@/contexts/MusicContext";
-import { songsApi } from "@/services/api";
 import { mapToPlayerSong } from "@/lib/utils";
+import { createSlug } from "@/utils/playlistUtils";
 
 interface Album {
   id: number | string;
@@ -19,7 +17,7 @@ interface Album {
   coverUrl?: string;
   cover?: string;
   releaseDate?: string;
-  songs?: any[];
+  songs?: Array<{ id: number | string; [key: string]: unknown }>;
   tracks?: number;
   songCount?: number;
   releaseYear?: number;
@@ -42,7 +40,7 @@ const RecommendedAlbumsSection = () => {
     let cancelled = false;
 
     const fetchRecommendedAlbums = async (retryCount = 0) => {
-      let token = getAuthToken();
+      const token = getAuthToken();
       
       // ✅ Nếu tab mới mở, đợi một chút để token có thể được share từ tab khác
       if (!token && retryCount < 3) {
@@ -79,12 +77,18 @@ const RecommendedAlbumsSection = () => {
         const artistIds = new Set<number>();
         
         history.content.forEach((entry) => {
-          if (entry.song?.album?.id) {
-            albumIds.add(entry.song.album.id);
-          }
+          // Note: entry.song.album chỉ có name, không có id trong ListeningHistoryDTO
+          // Nếu cần album ID, có thể tìm từ song.albumId hoặc search bằng tên album
+          // Hiện tại bỏ qua việc lấy album ID từ listening history
+          
           if (entry.song?.artists && Array.isArray(entry.song.artists)) {
-            entry.song.artists.forEach((artist: { id: number }) => {
-              if (artist.id) artistIds.add(artist.id);
+            entry.song.artists.forEach((artist: { id?: number | string; name?: string }) => {
+              if (artist.id) {
+                const artistId = typeof artist.id === 'number' ? artist.id : Number(artist.id);
+                if (Number.isFinite(artistId)) {
+                  artistIds.add(artistId);
+                }
+              }
             });
           }
         });
@@ -94,15 +98,16 @@ const RecommendedAlbumsSection = () => {
         const recommended: Album[] = [];
 
         // Lấy albums từ top artists (giới hạn 3 artists để tránh quá nhiều request)
+        // Dựa trên tổng hợp ca sĩ vector từ listening history
         const topArtists = await listeningHistoryApi.getTopArtists(userId, 3);
         
         for (const topArtist of topArtists) {
           try {
-            // Lấy albums của artist này
+            // Lấy albums của artist này, ưu tiên albums mới nhất
             const albumsResponse = await albumsApi.getAll({
               page: 0,
               size: 5,
-              sort: "id,desc",
+              sort: "releaseDate,desc", // Ưu tiên albums mới nhất từ artists này
               artistId: topArtist.artistId,
             });
 
@@ -176,7 +181,7 @@ const RecommendedAlbumsSection = () => {
       // Lấy songs của album
       const albumDetail = await albumsApi.getById(album.id);
       if (albumDetail?.songs && albumDetail.songs.length > 0) {
-        const songs = albumDetail.songs.map((s: any) => mapToPlayerSong(s));
+        const songs = albumDetail.songs.map((s: { id: number | string; [key: string]: unknown }) => mapToPlayerSong(s));
         await setQueue(songs);
         if (songs.length > 0) {
           const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
@@ -188,19 +193,15 @@ const RecommendedAlbumsSection = () => {
     }
   };
 
-  const getArtistName = (artist: any): string => {
+  const getArtistName = (artist: { id?: number | string; name?: string } | string | undefined): string => {
     if (typeof artist === 'string') return artist;
     if (artist?.name) return artist.name;
     return "Unknown Artist";
   };
 
-  const getTrackCount = (album: Album): number => {
-    return album.songCount || album.tracks || album.songs?.length || 0;
-  };
-
-  // Ẩn section này nếu không có token (guest) hoặc không có data
+  // Ẩn section này nếu không có token (guest)
   const token = getAuthToken();
-  if (!token || recommendedAlbums.length === 0) {
+  if (!token) {
     return null;
   }
 
@@ -215,21 +216,21 @@ const RecommendedAlbumsSection = () => {
               Recommended albums for you
             </h2>
             <p className="text-xs text-muted-foreground">
-              Based on your listening history
+              Dựa trên tổng hợp ca sĩ vector từ lịch sử nghe của bạn
             </p>
           </div>
         </div>
       </div>
 
-      {/* Grid Layout */}
+      {/* Grid Layout - Apple Music style: đơn giản, chỉ cover + tên album + tên nghệ sĩ */}
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="bg-gradient-glass backdrop-blur-sm border-white/10 rounded-lg overflow-hidden">
-              <div className="aspect-[4/3] bg-muted/20 rounded-t-lg animate-pulse" />
-              <div className="p-4 space-y-2">
-                <div className="h-5 bg-muted/20 rounded animate-pulse mb-2" />
-                <div className="h-4 bg-muted/20 rounded w-3/4 animate-pulse" />
+            <div key={i} className="space-y-2">
+              <div className="aspect-square bg-muted/20 rounded-lg animate-pulse" />
+              <div className="space-y-1">
+                <div className="h-4 bg-muted/20 rounded animate-pulse" />
+                <div className="h-3 bg-muted/20 rounded w-3/4 animate-pulse" />
               </div>
             </div>
           ))}
@@ -239,86 +240,64 @@ const RecommendedAlbumsSection = () => {
           No album recommendations yet. Listen to more music to get suggestions!
         </p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
           {recommendedAlbums.map((album) => {
-            const artistName = getArtistName(album.artist);
             const albumName = album.name || album.title || "Unknown Album";
+            const artistName = getArtistName(album.artist);
             const coverImage = album.coverUrl || album.cover;
-            const releaseYear = album.releaseYear || (album.releaseDate ? new Date(album.releaseDate).getFullYear() : null);
-            const trackCount = getTrackCount(album);
+            const albumSlug = createSlug(albumName, album.id);
+            const albumUrl = `/album/${albumSlug}`;
 
             return (
               <div
                 key={album.id}
-                className="group bg-gradient-glass backdrop-blur-sm border-white/10 hover:border-primary/40 transition-all duration-300 hover:shadow-glow cursor-pointer overflow-hidden rounded-lg"
-                onClick={() => navigate(`/album/${createSlug(albumName, album.id)}`)}
+                className="group cursor-pointer"
+                onClick={() => navigate(albumUrl)}
               >
-                {/* Cover Art */}
-                <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20">
+                {/* Cover Image - Aspect Square */}
+                <div className="relative aspect-square rounded-lg overflow-hidden bg-muted/10 mb-2">
                   {coverImage ? (
                     <img
                       src={coverImage}
                       alt={albumName}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Music className="w-16 h-16 text-muted-foreground" />
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-primary-glow/20">
+                      <Music className="w-12 h-12 text-muted-foreground" />
                     </div>
                   )}
                   
-                  {/* Gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  
-                  {/* Play button overlay on hover */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  {/* Play Button - Hiện khi hover, giống Apple Music */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <Button
                       size="icon"
-                      className="rounded-full w-16 h-16 bg-primary hover:bg-primary/90 shadow-2xl scale-90 group-hover:scale-100 transition-transform"
+                      className="w-12 h-12 rounded-full bg-primary hover:bg-primary/90 shadow-lg"
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         handlePlayAlbum(album);
                       }}
                     >
-                      <Play className="w-7 h-7 ml-1 text-white" fill="white" />
+                      <Play className="w-6 h-6 fill-current" />
                     </Button>
-                  </div>
-
-                  {/* Badge overlay */}
-                  <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <Badge variant="secondary" className="bg-black/60 backdrop-blur-sm text-white border-white/20">
-                      <Disc className="w-3 h-3 mr-1" />
-                      Album
-                    </Badge>
                   </div>
                 </div>
 
-                {/* Album Info */}
-                <div className="p-4 space-y-2">
-                  <h3 className="font-bold text-base line-clamp-2 group-hover:text-primary transition-colors">
+                {/* Album Info - Chỉ tên album và tên nghệ sĩ */}
+                <div className="space-y-1 min-w-0">
+                  <h3 
+                    className="font-semibold text-sm line-clamp-2 hover:text-primary transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(albumUrl);
+                    }}
+                  >
                     {albumName}
                   </h3>
-                  <p className="text-sm text-muted-foreground line-clamp-1">
+                  <p className="text-xs text-muted-foreground line-clamp-1">
                     {artistName}
                   </p>
-                  
-                  {/* Metadata */}
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
-                    {releaseYear && (
-                      <div className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        <span>{releaseYear}</span>
-                      </div>
-                    )}
-                    {trackCount > 0 && (
-                      <div className="flex items-center gap-1">
-                        <Music className="w-3 h-3" />
-                        <span>
-                          {trackCount} {trackCount === 1 ? 'track' : 'tracks'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               </div>
             );

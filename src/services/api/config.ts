@@ -138,7 +138,7 @@ export const getRefreshToken = (): string | null => {
 export const setTokens = (token: string, refreshToken?: string) => {
   try {
     if (typeof window === 'undefined') return;
-    
+
     // Kiểm tra xem đang ở admin page hay không
     const isAdminPage = window.location.pathname.startsWith('/admin');
 
@@ -155,13 +155,13 @@ export const setTokens = (token: string, refreshToken?: string) => {
         sessionStorage.setItem('refreshToken', refreshToken);
       }
     }
-    
-    console.log('[setTokens] Tokens saved to sessionStorage:', { 
-      isAdminPage, 
-      hasToken: !!token, 
-      hasRefreshToken: !!refreshToken 
+
+    console.log('[setTokens] Tokens saved to sessionStorage:', {
+      isAdminPage,
+      hasToken: !!token,
+      hasRefreshToken: !!refreshToken
     });
-    
+
     // Gửi broadcast message đến các tab khác để chúng check auth lại
     // QUAN TRỌNG: sessionStorage không share giữa các tab, nên cần broadcast
     if (typeof window !== 'undefined' && window.BroadcastChannel) {
@@ -177,7 +177,7 @@ export const setTokens = (token: string, refreshToken?: string) => {
         console.warn('[setTokens] Failed to broadcast token update:', error);
       }
     }
-    
+
     // Dispatch custom event để các component trong cùng tab có thể listen
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tokenUpdated'));
@@ -191,13 +191,13 @@ export const setTokens = (token: string, refreshToken?: string) => {
 export const clearTokens = () => {
   try {
     if (typeof window === 'undefined') return;
-    
+
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('refreshToken');
     sessionStorage.removeItem('adminToken');
     sessionStorage.removeItem('adminRefreshToken');
     sessionStorage.removeItem('userId'); // Clear userId khi logout
-    
+
     console.log('[clearTokens] All tokens and userId cleared from sessionStorage');
   } catch (error) {
     console.error('[clearTokens] Failed to clear tokens:', error);
@@ -247,7 +247,7 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use(
   async (config) => {
     const token = getAuthToken();
-    
+
     // Check if token is expiring soon before sending request (refresh nếu còn 5 phút)
     if (token && isTokenExpiringSoon(token, 5)) {
       console.log('[apiClient] Token expiring soon (within 5 min), refreshing before request...');
@@ -267,11 +267,11 @@ apiClient.interceptors.request.use(
         // Continue with existing token, let response interceptor handle 401
       }
     }
-    
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     return config;
   },
   (error) => {
@@ -329,11 +329,11 @@ apiClient.interceptors.response.use(
         // ✅ Không clear tokens ngay - có thể đang đợi token từ tab khác
         // ✅ Không redirect ngay - để các component có cơ hội retry hoặc đợi token
         processQueue(new Error('No refresh token available'), null);
-        
+
         // ✅ Chỉ redirect nếu đang ở trang cần authentication và đã đợi một chút
         // ✅ Hoặc đơn giản là không redirect, để component tự xử lý
         console.warn('[apiClient] No refresh token available. Tab may be waiting for token from other tabs.');
-        
+
         return Promise.reject(new Error('No refresh token available'));
       }
 
@@ -365,16 +365,16 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         console.error('[apiClient] Refresh token failed:', refreshError);
         isRefreshing = false;
-        
+
         // ✅ Chỉ clear tokens nếu refresh thực sự fail (không phải do chưa có token)
         const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
         const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
-        
+
         if (!isNoTokenError) {
           // Chỉ clear tokens nếu refresh thực sự fail (token invalid, expired, etc.)
           clearTokens();
         }
-        
+
         processQueue(refreshError, null);
 
         // ✅ Không redirect ngay - để component có cơ hội retry hoặc đợi token từ tab khác
@@ -387,10 +387,10 @@ apiClient.interceptors.response.use(
 
     // ✅ Xử lý lỗi 403 (Access Denied) - Yêu cầu đăng nhập để phát nhạc
     if (error.response?.status === 403) {
-      const message = error.response.data?.message || 
-        error.response.data?.error || 
+      const message = error.response.data?.message ||
+        error.response.data?.error ||
         'Access Denied';
-      
+
       console.error("[apiClient] Access Denied (403):", {
         status: error.response.status,
         data: error.response.data,
@@ -414,7 +414,7 @@ apiClient.interceptors.response.use(
 
         // Clear tokens và redirect về login
         clearTokens();
-        
+
         // Đợi một chút để toast hiển thị trước khi redirect
         setTimeout(() => {
           const isAdminPage = window.location.pathname.startsWith('/admin');
@@ -592,16 +592,16 @@ export const fetchWithAuth = async (
         }
       } catch (refreshError) {
         isRefreshingFetch = false;
-        
+
         // ✅ Chỉ clear tokens nếu refresh thực sự fail (không phải do chưa có token)
         const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
         const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
-        
+
         if (!isNoTokenError) {
           // Chỉ clear tokens nếu refresh thực sự fail (token invalid, expired, etc.)
           clearTokens();
         }
-        
+
         processQueueFetch(refreshError, null);
 
         // ✅ Không redirect ngay - để component có cơ hội retry hoặc đợi token từ tab khác
@@ -629,7 +629,7 @@ export const fetchWithAuth = async (
       }
 
       const message = errorData.message || errorData.error || 'Access Denied';
-      
+
       console.error("[fetchWithAuth] Access Denied (403):", {
         status: response.status,
         data: errorData,
@@ -653,7 +653,7 @@ export const fetchWithAuth = async (
 
         // Clear tokens và redirect về login
         clearTokens();
-        
+
         // Đợi một chút để toast hiển thị trước khi redirect
         setTimeout(() => {
           const isAdminPage = window.location.pathname.startsWith('/admin');

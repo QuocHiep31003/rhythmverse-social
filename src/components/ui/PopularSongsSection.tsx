@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Play, Star, MoreHorizontal, ListPlus, Info } from "lucide-react";
+import { Music, Play, Star, MoreHorizontal, ListPlus } from "lucide-react";
 import { songsApi } from "@/services/api";
 import { createSlug } from "@/utils/playlistUtils";
 import { useMusic } from "@/contexts/MusicContext";
@@ -121,7 +121,7 @@ const PopularSongsSection = () => {
                   <div
                     key={song.id}
                     className="w-[200px] flex-shrink-0 group cursor-pointer"
-                    onClick={() => navigate(`/song/${createSlug(songName, song.id)}`)}
+                    onClick={() => handlePlaySong(song)}
                   >
                     {/* Cover Art */}
                     <div className="relative aspect-square rounded-lg overflow-hidden bg-gradient-subtle mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105 border border-border/40">
@@ -185,15 +185,6 @@ const PopularSongsSection = () => {
                               >
                                 <Music className="mr-2 h-4 w-4" />
                                 Add to Queue
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/song/${createSlug(songName, song.id)}`);
-                                }}
-                              >
-                                <Info className="mr-2 h-4 w-4" />
-                                View Details
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
