@@ -35,6 +35,8 @@ interface Artist {
   verified?: boolean;
 }
 
+type PerformerParticipation = 'PERFORMER_MAIN' | 'PERFORMER_FEAT' | 'BOTH';
+
 interface Song {
   id: string | number;
   name?: string;
@@ -44,6 +46,7 @@ interface Song {
   audioUrl?: string;
   urlImageAlbum?: string;
   playCount?: number;
+  contributorRole?: PerformerParticipation;
 }
 
 interface Album {
@@ -112,21 +115,67 @@ const ArtistDetail = () => {
     }
   };
 
+  const fetchArtistPerformerSongs = async (artistId: number, fallbackSongs: Song[] = []) => {
+    try {
+      const [mainSongs, featSongs] = await Promise.all([
+        songsApi.getByArtist(artistId, { role: 'PERFORMER_MAIN' }),
+        songsApi.getByArtist(artistId, { role: 'PERFORMER_FEAT' }),
+      ]);
+
+      const mergedSongs = new Map<string | number, Song>();
+
+      const mergeSongs = (list: Song[] = [], role: PerformerParticipation = 'PERFORMER_MAIN') => {
+        list.forEach((song) => {
+          if (!song?.id) return;
+          const existing = mergedSongs.get(song.id);
+          if (existing) {
+            if (existing.contributorRole && existing.contributorRole !== role) {
+              existing.contributorRole = 'BOTH';
+            }
+            return;
+          }
+          mergedSongs.set(song.id, {
+            ...song,
+            contributorRole: role,
+          });
+        });
+      };
+
+      mergeSongs(mainSongs, 'PERFORMER_MAIN');
+      mergeSongs(featSongs, 'PERFORMER_FEAT');
+
+      const sortedSongs = Array.from(mergedSongs.values()).sort((a, b) => {
+        const playCountA = Number(a.playCount ?? 0);
+        const playCountB = Number(b.playCount ?? 0);
+        return playCountB - playCountA;
+      });
+
+      setSongs(sortedSongs);
+    } catch (error) {
+      console.error("Error fetching artist performer songs:", error);
+      setSongs(fallbackSongs);
+    }
+  };
+
   useEffect(() => {
     const fetchArtistData = async () => {
       if (!id) return;
       
       try {
         setLoading(true);
+        const artistId = parseInt(id);
+        if (Number.isNaN(artistId)) {
+          throw new Error("Invalid artist id");
+        }
         
         // Fetch artist data with details (songs and albums)
-        const artistDetailData = await artistsApi.getByIdWithDetails(parseInt(id));
+        const artistDetailData = await artistsApi.getByIdWithDetails(artistId);
         if (artistDetailData) {
           setArtist(artistDetailData);
-          // Set songs and albums from detail data
-          setSongs(artistDetailData.songs || []);
           setAlbums(artistDetailData.albums || []);
         }
+
+        await fetchArtistPerformerSongs(artistId, artistDetailData?.songs || []);
 
         // Fetch random artists for "Fans also like" section
         try {
@@ -134,7 +183,7 @@ const ArtistDetail = () => {
           if (allArtists.content && allArtists.content.length > 0) {
             // Filter out current artist and take first 6
             const filteredArtists = allArtists.content
-              .filter(a => a.id !== parseInt(id))
+              .filter(a => a.id !== artistId)
               .slice(0, 6);
             setRelatedArtists(filteredArtists);
           }
@@ -297,6 +346,15 @@ const ArtistDetail = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="font-medium truncate">{song.name || song.songName || "Unknown Song"}</p>
+                        {song.contributorRole && (
+                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide border-white/20">
+                            {song.contributorRole === 'BOTH'
+                              ? 'Main & Feat'
+                              : song.contributorRole === 'PERFORMER_MAIN'
+                                ? 'Main'
+                                : 'Feat'}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <span>{song.releaseYear || "Unknown year"}</span>

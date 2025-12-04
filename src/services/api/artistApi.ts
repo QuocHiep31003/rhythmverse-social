@@ -1,5 +1,4 @@
 import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse } from './config';
-import { mockArtists } from '@/data/mockData';
 
 // Interface cho Artist data
 export interface Artist {
@@ -103,7 +102,7 @@ export const artistsApi = {
             return response.data;
         } catch (error) {
             console.error("Error fetching artist:", error);
-            return mockArtists.find(a => a.id === id) || null;
+            return null;
         }
     },
 
@@ -114,19 +113,7 @@ export const artistsApi = {
             return response.data;
         } catch (error) {
             console.error("Error fetching artist details:", error);
-            const artist = mockArtists.find(a => a.id === id);
-            if (!artist) return null;
-
-            return {
-                id: artist.id,
-                name: artist.name,
-                country: artist.country,
-                debutYear: artist.debutYear,
-                description: artist.country,
-                avatar: artist.avatar,
-                songs: [],
-                albums: []
-            };
+            return null;
         }
     },
 
@@ -200,7 +187,7 @@ export const artistsApi = {
             return response.data;
         } catch (error) {
             console.error("Error fetching artist count:", error);
-            return mockArtists.length;
+            return 0;
         }
     },
 

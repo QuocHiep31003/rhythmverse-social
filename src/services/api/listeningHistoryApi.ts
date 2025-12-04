@@ -37,7 +37,7 @@ export interface ListeningHistoryDTO {
 }
 
 export const listeningHistoryApi = {
-  
+
   recordListen: async (payload: ListeningHistoryPayload): Promise<void> => {
     try {
       const response = await fetch(`${API_BASE_URL}/listening-history`, {
@@ -212,13 +212,13 @@ export const listeningHistoryApi = {
     try {
       // Lấy listening history của user
       const history = await listeningHistoryApi.getByUser(userId, 0, 1000);
-      
+
       // Đếm số lần nghe theo artist name (vì có thể không có ID)
       const artistCountsByName = new Map<string, number>();
-      
+
       history.content.forEach((entry) => {
         const listenCount = entry.listenCount || 1;
-        
+
         // Ưu tiên lấy từ song.artists (có ID)
         if (entry.song?.artists && Array.isArray(entry.song.artists)) {
           entry.song.artists.forEach((artist: { id: number; name: string }) => {
@@ -228,7 +228,7 @@ export const listeningHistoryApi = {
             }
           });
         }
-        
+
         // Fallback: sử dụng artistNames nếu có
         if (entry.artistNames && Array.isArray(entry.artistNames) && entry.artistNames.length > 0) {
           entry.artistNames.forEach((artistName: string) => {
@@ -239,7 +239,7 @@ export const listeningHistoryApi = {
           });
         }
       });
-      
+
       // Chuyển Map thành Array và sort theo listenCount
       const topArtistsByName = Array.from(artistCountsByName.entries())
         .map(([name, count]) => ({
@@ -248,22 +248,22 @@ export const listeningHistoryApi = {
         }))
         .sort((a, b) => b.listenCount - a.listenCount)
         .slice(0, limit);
-      
+
       // Tìm artist ID từ name (gọi API search)
       const topArtists: Array<{
         artistId: number;
         artistName: string;
         listenCount: number;
       }> = [];
-      
+
       for (const artist of topArtistsByName) {
         try {
           // Tìm artist bằng tên
-          const searchResult = await artistsApi.searchPublic(artist.artistName, {
+          const searchResult = await artistsApi.searchPublicActive(artist.artistName, {
             page: 0,
             size: 1,
           });
-          
+
           if (searchResult?.content && searchResult.content.length > 0) {
             const foundArtist = searchResult.content[0];
             topArtists.push({
@@ -279,7 +279,7 @@ export const listeningHistoryApi = {
           console.error(`Error searching artist ${artist.artistName}:`, error);
         }
       }
-      
+
       return topArtists;
     } catch (error) {
       console.error("❌ Error fetching top artists:", error);

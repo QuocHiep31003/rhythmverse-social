@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Play, MoreHorizontal, ListPlus, Info } from "lucide-react";
+import { Music, Play, MoreHorizontal, ListPlus, Info, Sparkles } from "lucide-react";
 import { songsApi } from "@/services/api";
 import { createSlug } from "@/utils/playlistUtils";
 import { useMusic } from "@/contexts/MusicContext";
@@ -25,28 +25,28 @@ const NewReleases = () => {
   const [selectedSongTitle, setSelectedSongTitle] = useState<string>("");
   const [selectedSongCover, setSelectedSongCover] = useState<string | undefined>(undefined);
 
-  useEffect(() => {
-    const fetchNewSongs = async () => {
-      try {
-        // Lấy bài hát mới nhất cho user (chỉ ACTIVE)
-        // Backend tự động filter ACTIVE cho user không phải admin
-        const res = await songsApi.getAll({ 
-          page: 0, 
-          size: 10, 
-          sort: "createdAt,desc", // Sort theo ngày tạo mới nhất
-          status: "ACTIVE" // Chỉ lấy bài hát ACTIVE
-        });
-        setSongs(res?.content || []);
-      } catch (error) {
-        console.error("Error fetching new releases:", error);
-        setSongs([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNewSongs();
+  const fetchNewSongs = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Lấy top 10 bài hát mới ra mắt (chỉ ACTIVE), sort theo ngày phát hành
+      const res = await songsApi.getPublic({
+        page: 0,
+        size: 10,
+        sort: "releaseAt,desc", // Ưu tiên sort theo ngày phát hành
+        status: "ACTIVE",
+      });
+      setSongs(res?.content || []);
+    } catch (error) {
+      console.error("Error fetching new releases:", error);
+      setSongs([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchNewSongs();
+  }, [fetchNewSongs]);
 
   const getArtistName = (artists: Song["artists"]): string => {
     if (typeof artists === 'string') return artists;
@@ -63,6 +63,19 @@ const NewReleases = () => {
     await playSongWithStreamUrl(playerSong, playSong);
   };
 
+  const handlePlayAll = async () => {
+    if (!songs.length) return;
+    const queue = songs.map((s) =>
+      mapToPlayerSong({
+        ...s,
+        songName: getSongName(s),
+      })
+    );
+    await setQueue(queue);
+    const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
+    await playSongWithStreamUrl(queue[0], playSong);
+  };
+
   const getCoverImage = (song: Song): string | undefined => {
     return song.albumImageUrl || 
            song.albumCoverImg || 
@@ -74,91 +87,214 @@ const NewReleases = () => {
     return song.songName || song.name || "Unknown Song";
   };
 
+  const featuredSong = songs[0];
+  const secondarySongs = songs.slice(1);
+
   return (
     <section className="mb-12">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-foreground">New Releases</h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          Latest songs just released
-        </p>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-6 h-6 text-primary" />
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">New Releases</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Top 10 bài hát mới phát hành gần đây
+            </p>
+          </div>
+        </div>
+        {songs.length > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="rounded-full gap-2 text-[13px]"
+            onClick={handlePlayAll}
+            disabled={loading}
+          >
+            <Play className="w-4 h-4" />
+            Phát tất cả
+          </Button>
+        )}
       </div>
 
-      {/* Horizontal scrolling container */}
-      <div className="relative">
-        <div className="overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4">
-          <div className="flex gap-4 min-w-max">
-            {loading ? (
-              <div className="flex gap-4">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="w-[200px] flex-shrink-0">
-                    <div className="aspect-square bg-muted/20 rounded-lg animate-pulse mb-3" />
-                    <div className="h-4 bg-muted/20 rounded animate-pulse mb-2" />
-                    <div className="h-3 bg-muted/20 rounded w-3/4 animate-pulse" />
-                  </div>
-                ))}
-              </div>
-            ) : songs.length === 0 ? (
-              <p className="text-muted-foreground text-sm py-8">No new releases available.</p>
-            ) : (
-              songs.map((song) => {
-                const songName = getSongName(song);
-                const artistName = getArtistName(song.artists);
-                const coverImage = getCoverImage(song);
-
-                return (
+      <div className="rounded-2xl bg-white/5 border border-white/10 p-4 backdrop-blur relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent pointer-events-none" />
+        <div className="relative">
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[...Array(3)].map((_, idx) => (
+                <div key={idx} className="bg-white/5 rounded-2xl p-4 animate-pulse h-40" />
+              ))}
+            </div>
+          ) : songs.length === 0 ? (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground text-sm mb-3">
+                Hiện chưa có bài hát mới nào được phát hành.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+              {/* Featured song bên trái */}
+              {featuredSong && (
+                <div className="lg:w-1/3 bg-black/30 rounded-2xl p-4 border border-white/10 shadow-xl flex flex-col gap-3">
                   <div
-                    key={song.id}
-                    className="w-[200px] flex-shrink-0 group cursor-pointer"
-                    onClick={() => navigate(`/song/${createSlug(songName, song.id)}`)}
+                    className="flex gap-4 cursor-pointer"
+                    onClick={() =>
+                      navigate(`/song/${createSlug(getSongName(featuredSong), featuredSong.id)}`)
+                    }
                   >
-                    {/* Cover Art */}
-                    <div className="relative aspect-square rounded-lg overflow-hidden bg-gradient-subtle mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105 border border-border/40">
-                      {coverImage ? (
+                    <div className="relative w-28 h-28 rounded-xl overflow-hidden bg-gradient-subtle border border-white/20 flex-shrink-0">
+                      {getCoverImage(featuredSong) ? (
                         <img
-                          src={coverImage}
-                          alt={songName}
+                          src={getCoverImage(featuredSong)!}
+                          alt={getSongName(featuredSong)}
                           className="w-full h-full object-cover"
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Music className="w-12 h-12 text-muted-foreground" />
+                          <Music className="w-10 h-10 text-muted-foreground" />
                         </div>
                       )}
-                      
-                      {/* Play button overlay on hover */}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                      <Button
+                        size="icon"
+                        className="absolute bottom-2 right-2 rounded-full w-10 h-10 bg-primary hover:bg-primary/90 shadow-lg"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePlaySong(featuredSong);
+                        }}
+                      >
+                        <Play className="w-5 h-5 ml-0.5 text-white" />
+                      </Button>
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between gap-2">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-primary mb-1">
+                          Mới phát hành
+                        </p>
+                        <h3 className="text-lg font-semibold text-white line-clamp-2">
+                          {getSongName(featuredSong)}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {getArtistName(featuredSong.artists)}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
                         <Button
-                          size="icon"
-                          className="rounded-full w-14 h-14 bg-primary hover:bg-primary/90 shadow-lg scale-90 group-hover:scale-100 transition-transform"
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-full gap-2 text-[13px]"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handlePlaySong(song);
+                            handlePlaySong(featuredSong);
                           }}
                         >
-                          <Play className="w-6 h-6 ml-1 text-white" fill="white" />
+                          <Play className="w-4 h-4" />
+                          Phát ngay
                         </Button>
-                        
-                        {/* Menu 3 chấm */}
-                        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="rounded-full w-9 h-9"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSongId(featuredSong.id);
+                            setSelectedSongTitle(getSongName(featuredSong));
+                            setSelectedSongCover(getCoverImage(featuredSong));
+                            setAddToPlaylistOpen(true);
+                          }}
+                        >
+                          <ListPlus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Danh sách các bài còn lại bên phải */}
+              <div className="flex-1 bg-black/20 rounded-2xl p-4 border border-white/10">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    Các bài hát mới khác
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    {songs.length} bài hát
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                  {secondarySongs.map((song) => {
+                    const songName = getSongName(song);
+                    const artistName = getArtistName(song.artists);
+
+                    return (
+                      <div
+                        key={song.id}
+                        className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/5 cursor-pointer group"
+                        onClick={() =>
+                          navigate(`/song/${createSlug(songName, song.id)}`)
+                        }
+                      >
+                        <div className="w-10 h-10 rounded-lg overflow-hidden bg-gradient-subtle flex-shrink-0 border border-white/10">
+                          {getCoverImage(song) ? (
+                            <img
+                              src={getCoverImage(song)!}
+                              alt={songName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Music className="w-5 h-5 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate group-hover:text-primary">
+                            {songName}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {artistName}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="w-8 h-8 rounded-full"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePlaySong(song);
+                            }}
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
-                                variant="glass"
+                                variant="ghost"
                                 size="icon"
-                                className="rounded-full w-9 h-9 bg-black/55 hover:bg-black/70 border border-white/20"
+                                className="w-8 h-8 rounded-full"
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <MoreHorizontal className="h-5 w-5 text-white" />
+                                <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-48"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <DropdownMenuItem
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedSongId(song.id);
                                   setSelectedSongTitle(songName);
-                                  setSelectedSongCover(coverImage);
+                                  setSelectedSongCover(getCoverImage(song));
                                   setAddToPlaylistOpen(true);
                                 }}
                               >
@@ -188,25 +324,15 @@ const NewReleases = () => {
                           </DropdownMenu>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Song Info */}
-                    <div className="min-h-[60px]">
-                      <h3 className="font-semibold text-sm mb-1 line-clamp-2 group-hover:text-primary transition-colors">
-                        {songName}
-                      </h3>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {artistName}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-      
+
       {/* Add to Playlist Dialog */}
       {selectedSongId && (
         <AddToPlaylistDialog

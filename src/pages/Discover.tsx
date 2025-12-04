@@ -41,9 +41,10 @@ const Discover = () => {
   const [selectedGenreIds, setSelectedGenreIds] = useState<number[]>([]);
   const [isLoadingMoodRecs, setIsLoadingMoodRecs] = useState(false);
 
-  useEffect(() => {
-    getTrendingComparison(10).then(setHotToday).catch(() => {});
-  }, []);
+  // Hot Today / rank chart đã deprecated theo yêu cầu => không load nữa
+  // useEffect(() => {
+  //   getTrendingComparison(10).then(setHotToday).catch(() => {});
+  // }, []);
 
   // Load moods for AI mood-based recommendations (only get ACTIVE)
   useEffect(() => {
@@ -87,27 +88,8 @@ const Discover = () => {
     loadGenres();
   }, []);
 
-  // FE mock 8 rank points (fake dev, BE needs to add API to get real history points)
-  useEffect(() => {
-    if (hotToday.length < 3) return;
-    // Assume 8 time points
-    const mockTimes = [
-      "9h", "10h", "11h", "12h", "13h", "14h", "15h", "16h"
-    ];
-    // Top 3 songs, each with 8 rank points (1 is top)
-    const mockRanks = [
-      [3,2,3,2,1,1,1,1], // top 1: fluctuating
-      [2,1,1,1,2,3,2,2], // top 2
-      [1,3,2,3,3,2,3,3], // top 3
-    ];
-    const data = mockTimes.map((time, idx) => ({
-      time,
-      song1: mockRanks[0][idx],
-      song2: mockRanks[1][idx],
-      song3: mockRanks[2][idx],
-    }));
-    setRankHistoryData(data);
-  }, [hotToday]);
+  // FE mock 8 rank points cho Hot Today đã bỏ theo yêu cầu
+  // useEffect(() => { ... }, [hotToday]);
 
   const toneConflicts = useCallback((currentTones: Set<string>, newTone: "positive" | "negative") => {
     if (newTone === "positive") return currentTones.has("negative");
@@ -395,7 +377,14 @@ const Discover = () => {
               <h3 className="text-lg font-semibold mb-3 text-center">Genre</h3>
               <div className="flex flex-wrap justify-center gap-3 mb-2">
                 {availableGenres.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Loading genres...</p>
+                  <div className="flex flex-wrap justify-center gap-3 mb-2">
+                    {[...Array(8)].map((_, idx) => (
+                      <div
+                        key={idx}
+                        className="h-9 px-8 rounded-full bg-white/5 border border-white/10 animate-pulse"
+                      />
+                    ))}
+                  </div>
                 ) : (
                   availableGenres.map((genre) => {
                     const isSelected = selectedGenreIds.includes(genre.id);
@@ -433,7 +422,14 @@ const Discover = () => {
               <h3 className="text-lg font-semibold mb-3 text-center">Mood</h3>
               <div className="flex flex-wrap justify-center gap-2 mb-2">
                 {availableMoods.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Loading moods...</p>
+                  <div className="flex flex-wrap justify-center gap-2 mb-2">
+                    {[...Array(10)].map((_, idx) => (
+                      <div
+                        key={idx}
+                        className="h-7 px-6 rounded-full bg-white/5 border border-white/10 animate-pulse"
+                      />
+                    ))}
+                  </div>
                 ) : (
                   availableMoods.map((mood) => {
                     const isSelected = selectedMoodIds.includes(mood.id);

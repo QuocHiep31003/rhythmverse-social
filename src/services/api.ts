@@ -29,8 +29,6 @@ export { dashboardApi } from './api/dashboardApi';
 export { playbackApi } from './api/playbackApi';
 
 
-// Import mock data for fallback
-import { mockUsers, mockGenres } from "@/data/mockData";
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, getAuthToken, PaginationParams, PaginatedResponse, apiClient } from "./api/config";
 import axios from "axios";
 
@@ -179,14 +177,14 @@ export const genresApi = {
       console.error("Error fetching genres:", error);
       await delay(300);
       return {
-        content: mockGenres,
-        totalElements: mockGenres.length,
-        totalPages: 1,
-        size: 10,
-        number: 0,
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
         first: true,
         last: true,
-        empty: false
+        empty: true
       } as PaginatedResponse<GenreDTO>;
     }
   },
@@ -231,7 +229,7 @@ export const genresApi = {
       return await response.json();
     } catch (error) {
       console.error("Error fetching genre:", error);
-      return mockGenres.find(g => g.id === id);
+      return null;
     }
   },
 
@@ -302,7 +300,7 @@ export const genresApi = {
     } catch (error) {
       console.error("Error fetching genre count:", error);
       await delay(300);
-      return mockGenres.length;
+      return 0;
     }
   },
 
@@ -357,13 +355,13 @@ export const statsApi = {
   getDashboard: async () => {
     await delay(300);
     return {
-      totalUsers: mockUsers.length,
-      totalSongs: 0, // Will be updated when songsApi is used
-      totalPlaylists: 0, // Will be updated when playlistsApi is used
-      totalAlbums: 0, // Will be updated when albumsApi is used
-      totalArtists: 0, // Will be updated when artistsApi is used
-      totalGenres: mockGenres.length,
-      totalPlays: 0, // Will be updated when songsApi is used
+      totalUsers: 0,
+      totalSongs: 0,
+      totalPlaylists: 0,
+      totalAlbums: 0,
+      totalArtists: 0,
+      totalGenres: 0,
+      totalPlays: 0,
     };
   },
 };

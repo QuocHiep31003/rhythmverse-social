@@ -204,6 +204,35 @@ export const clearTokens = () => {
   }
 };
 
+// Helper functions để quản lý userId - DÙNG sessionStorage để đồng nhất với token
+export const getUserId = (): string | null => {
+  try {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem('userId');
+  } catch (error) {
+    console.error('[getUserId] Failed to get userId:', error);
+    return null;
+  }
+};
+
+export const setUserId = (userId: string | number): void => {
+  try {
+    if (typeof window === 'undefined') return;
+    sessionStorage.setItem('userId', String(userId));
+  } catch (error) {
+    console.error('[setUserId] Failed to set userId:', error);
+  }
+};
+
+export const removeUserId = (): void => {
+  try {
+    if (typeof window === 'undefined') return;
+    sessionStorage.removeItem('userId');
+  } catch (error) {
+    console.error('[removeUserId] Failed to remove userId:', error);
+  }
+};
+
 // Tạo axios instance với config cơ bản
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -297,12 +326,14 @@ apiClient.interceptors.response.use(
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
         isRefreshing = false;
-        clearTokens();
+        // ✅ Không clear tokens ngay - có thể đang đợi token từ tab khác
+        // ✅ Không redirect ngay - để các component có cơ hội retry hoặc đợi token
         processQueue(new Error('No refresh token available'), null);
-        // Redirect to login
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        
+        // ✅ Chỉ redirect nếu đang ở trang cần authentication và đã đợi một chút
+        // ✅ Hoặc đơn giản là không redirect, để component tự xử lý
+        console.warn('[apiClient] No refresh token available. Tab may be waiting for token from other tabs.');
+        
         return Promise.reject(new Error('No refresh token available'));
       }
 
@@ -334,17 +365,64 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         console.error('[apiClient] Refresh token failed:', refreshError);
         isRefreshing = false;
-        clearTokens();
+        
+        // ✅ Chỉ clear tokens nếu refresh thực sự fail (không phải do chưa có token)
+        const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
+        const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
+        
+        if (!isNoTokenError) {
+          // Chỉ clear tokens nếu refresh thực sự fail (token invalid, expired, etc.)
+          clearTokens();
+        }
+        
         processQueue(refreshError, null);
 
-        // Redirect to login
-        if (typeof window !== 'undefined') {
-          const isAdminPage = window.location.pathname.startsWith('/admin');
-          window.location.href = isAdminPage ? '/admin/login' : '/login';
-        }
+        // ✅ Không redirect ngay - để component có cơ hội retry hoặc đợi token từ tab khác
+        // ✅ Chỉ log warning thay vì redirect
+        console.warn('[apiClient] Refresh token failed. Component will handle retry or wait for token from other tabs.');
 
         return Promise.reject(refreshError);
       }
+    }
+
+    // ✅ Xử lý lỗi 403 (Access Denied) - Yêu cầu đăng nhập để phát nhạc
+    if (error.response?.status === 403) {
+      const message = error.response.data?.message || 
+        error.response.data?.error || 
+        'Access Denied';
+      
+      console.error("[apiClient] Access Denied (403):", {
+        status: error.response.status,
+        data: error.response.data,
+        message
+      });
+
+      // Hiển thị thông báo cho người dùng
+      if (typeof window !== 'undefined') {
+        // Sử dụng sonner toast nếu có, hoặc alert
+        try {
+          // Thử import sonner dynamically
+          const { toast } = await import('sonner');
+          toast.error('Yêu cầu đăng nhập', {
+            description: 'Vui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.',
+            duration: 5000,
+          });
+        } catch {
+          // Fallback nếu sonner không có
+          alert('Yêu cầu đăng nhập\nVui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.');
+        }
+
+        // Clear tokens và redirect về login
+        clearTokens();
+        
+        // Đợi một chút để toast hiển thị trước khi redirect
+        setTimeout(() => {
+          const isAdminPage = window.location.pathname.startsWith('/admin');
+          window.location.href = isAdminPage ? '/admin/login' : '/login';
+        }, 1000);
+      }
+
+      return Promise.reject(new Error(message));
     }
 
     // Xử lý lỗi chung
@@ -484,11 +562,10 @@ export const fetchWithAuth = async (
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
         isRefreshingFetch = false;
-        clearTokens();
+        // ✅ Không clear tokens ngay - có thể đang đợi token từ tab khác
+        // ✅ Không redirect ngay - để các component có cơ hội retry hoặc đợi token
         processQueueFetch(new Error('No refresh token available'), null);
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        console.warn('[fetchWithAuth] No refresh token available. Tab may be waiting for token from other tabs.');
         return Promise.reject(new Error('No refresh token available'));
       }
 
@@ -515,15 +592,76 @@ export const fetchWithAuth = async (
         }
       } catch (refreshError) {
         isRefreshingFetch = false;
-        clearTokens();
+        
+        // ✅ Chỉ clear tokens nếu refresh thực sự fail (không phải do chưa có token)
+        const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
+        const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
+        
+        if (!isNoTokenError) {
+          // Chỉ clear tokens nếu refresh thực sự fail (token invalid, expired, etc.)
+          clearTokens();
+        }
+        
         processQueueFetch(refreshError, null);
 
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        // ✅ Không redirect ngay - để component có cơ hội retry hoặc đợi token từ tab khác
+        console.warn('[fetchWithAuth] Refresh token failed. Component will handle retry or wait for token from other tabs.');
 
         return Promise.reject(refreshError);
       }
+    }
+
+    // ✅ Xử lý lỗi 403 (Access Denied) - Yêu cầu đăng nhập để phát nhạc
+    if (response.status === 403) {
+      // Clone response để đọc body mà không consume response gốc
+      const clonedResponse = response.clone();
+      let errorData: any = {};
+      try {
+        errorData = await clonedResponse.json();
+      } catch {
+        try {
+          const clonedResponse2 = response.clone();
+          const text = await clonedResponse2.text();
+          errorData = { message: text || 'Access Denied', error: 'Access Denied' };
+        } catch {
+          errorData = { message: 'Access Denied', error: 'Access Denied' };
+        }
+      }
+
+      const message = errorData.message || errorData.error || 'Access Denied';
+      
+      console.error("[fetchWithAuth] Access Denied (403):", {
+        status: response.status,
+        data: errorData,
+        message
+      });
+
+      // Hiển thị thông báo cho người dùng
+      if (typeof window !== 'undefined') {
+        // Sử dụng sonner toast nếu có, hoặc alert
+        try {
+          // Thử import sonner dynamically
+          const { toast } = await import('sonner');
+          toast.error('Yêu cầu đăng nhập', {
+            description: 'Vui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.',
+            duration: 5000,
+          });
+        } catch {
+          // Fallback nếu sonner không có
+          alert('Yêu cầu đăng nhập\nVui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.');
+        }
+
+        // Clear tokens và redirect về login
+        clearTokens();
+        
+        // Đợi một chút để toast hiển thị trước khi redirect
+        setTimeout(() => {
+          const isAdminPage = window.location.pathname.startsWith('/admin');
+          window.location.href = isAdminPage ? '/admin/login' : '/login';
+        }, 1000);
+      }
+
+      return Promise.reject(new Error(message));
     }
 
     return response;
