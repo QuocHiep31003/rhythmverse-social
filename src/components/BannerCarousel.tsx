@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { bannersApi, type Banner } from "@/services/api/bannerApi";
-import { mockBanners } from "@/data/mockBanners";
 
 const BannerCarousel = () => {
   const navigate = useNavigate();
@@ -51,18 +50,13 @@ const BannerCarousel = () => {
       .getActive()
       .then((data) => {
         if (!mounted) return;
-        // Nếu không có data từ API, dùng mock data để xem trước
-        if (data && data.length > 0) {
-          setBanners(data);
-        } else {
-          // Fallback to mock data for preview
-          setBanners(mockBanners as Banner[]);
-        }
+        // Use data from API, or empty array if no data
+        setBanners(data && data.length > 0 ? data : []);
       })
       .catch(() => {
         if (!mounted) return;
-        // Fallback to mock data on error
-        setBanners(mockBanners as Banner[]);
+        // On error, set empty array (data will be seeded from backend)
+        setBanners([]);
       });
     return () => {
       mounted = false;
