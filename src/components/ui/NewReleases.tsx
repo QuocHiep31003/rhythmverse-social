@@ -28,13 +28,12 @@ const NewReleases = () => {
   useEffect(() => {
     const fetchNewSongs = async () => {
       try {
-        // Lấy bài hát mới nhất cho user (chỉ ACTIVE)
-        // Backend tự động filter ACTIVE cho user không phải admin
-        const res = await songsApi.getAll({ 
-          page: 0, 
-          size: 10, 
-          sort: "createdAt,desc", // Sort theo ngày tạo mới nhất
-          status: "ACTIVE" // Chỉ lấy bài hát ACTIVE
+        // Lấy top 10 bài hát mới ra mắt (chỉ ACTIVE), sort theo ngày phát hành
+        const res = await songsApi.getPublic({
+          page: 0,
+          size: 10,
+          sort: "releaseAt,desc", // Ưu tiên sort theo ngày phát hành
+          status: "ACTIVE",
         });
         setSongs(res?.content || []);
       } catch (error) {

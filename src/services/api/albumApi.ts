@@ -1,5 +1,3 @@
-import { mockAlbums } from "@/data/mockData";
-
 const API_BASE_URL = "http://localhost:8080/api";
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -51,14 +49,14 @@ export const albumsApi = {
       console.error("Error fetching albums:", error);
       await delay(300);
       return {
-        content: mockAlbums,
-        totalElements: mockAlbums.length,
-        totalPages: 1,
-        size: 10,
-        number: 0,
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
         first: true,
         last: true,
-        empty: false,
+        empty: true,
       } as PaginatedResponse<any>;
     }
   },
@@ -84,29 +82,16 @@ export const albumsApi = {
       return await response.json();
     } catch (error) {
       console.error("Error searching albums (combined):", error);
-      // Fallback: filter local mock by title or artist
       await delay(200);
-      const q = query.toLowerCase();
-      const matches = mockAlbums.filter((a: any) => {
-        const title = (a.name || a.title || "").toLowerCase();
-        const artist = (a.artist?.name || a.artist || "").toLowerCase();
-        return title.includes(q) || artist.includes(q);
-      });
-      const page = params?.page ?? 0;
-      const size = params?.size ?? matches.length;
-      const start = page * size;
-      const end = start + size;
-      const paged = matches.slice(start, end);
-      const totalPages = Math.max(1, Math.ceil(matches.length / size));
       return {
-        content: paged as any[],
-        totalElements: matches.length,
-        totalPages,
-        size,
-        number: page,
-        first: page === 0,
-        last: page >= totalPages - 1,
-        empty: paged.length === 0,
+        content: [],
+        totalElements: 0,
+        totalPages: 0,
+        size: params?.size ?? 0,
+        number: params?.page ?? 0,
+        first: true,
+        last: true,
+        empty: true,
       } as PaginatedResponse<any>;
     }
   },
@@ -123,11 +108,7 @@ export const albumsApi = {
     } catch (error) {
       console.error("Error searching albums by name:", error);
       await delay(200);
-      // Fallback: filter mock by title/name
-      const n = name.toLowerCase();
-      return mockAlbums.filter((a: any) =>
-        ((a.name || a.title || "") as string).toLowerCase().includes(n)
-      );
+      return [];
     }
   },
 
@@ -139,7 +120,7 @@ export const albumsApi = {
       return await response.json();
     } catch (error) {
       console.error("Error fetching album:", error);
-      return mockAlbums.find((a) => (a as any).id?.toString?.() === id.toString());
+      return null;
     }
   },
 
@@ -208,7 +189,7 @@ export const albumsApi = {
       throw error;
     }
   },
-    // ✅ Tìm kiếm album theo tên nghệ sĩ
+  // ✅ Tìm kiếm album theo tên nghệ sĩ
   searchByArtist: async (artistName: string) => {
     try {
       const response = await fetch(
@@ -219,10 +200,7 @@ export const albumsApi = {
     } catch (error) {
       console.error("Error searching albums by artist:", error);
       await delay(300);
-      // fallback mock nếu server down
-      return mockAlbums.filter((a) =>
-        (a.artist || "").toLowerCase().includes(artistName.toLowerCase())
-      );
+      return [];
     }
   },
 

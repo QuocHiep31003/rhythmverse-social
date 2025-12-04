@@ -646,13 +646,31 @@ const ControlMusicPlayer = () => {
           }));
         }
       } else if (data.type === "MAIN_TAB_CLOSED") {
-        // Tab chính đã đóng → set flag "no main tab"
-        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_CLOSED, không còn tab đang phát');
+        // Tab chính đã đóng → set flag "no main tab" và cập nhật state với thông tin từ tab chính
+        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_CLOSED, không còn tab đang phát, cập nhật state với thông tin từ tab chính');
         noMainTabRef.current = true;
+        
+        // Cập nhật state với thông tin đầy đủ từ tab chính (bao gồm song, queue, currentTime, duration, isPlaying)
         setLocalState(prev => ({
           ...prev,
-          isPlaying: false,
+          songId: data.song?.id || prev.songId,
+          currentTime: (data.currentTime !== undefined && data.currentTime !== null && data.currentTime >= 0) 
+            ? data.currentTime 
+            : prev.currentTime,
+          duration: (data.duration !== undefined && data.duration !== null && data.duration > 0)
+            ? data.duration
+            : prev.duration,
+          isPlaying: false, // Luôn set false vì tab chính đã đóng
+          songTitle: data.song?.title || data.song?.name || data.song?.songName || prev.songTitle,
+          songArtist: data.song?.artist || prev.songArtist,
+          songCover: data.song?.cover || prev.songCover,
+          queue: data.queue || prev.queue,
         }));
+        
+        // Cập nhật songIdRef để track bài hát hiện tại
+        if (data.song?.id) {
+          songIdRef.current = data.song.id;
+        }
       } else if (data.type === "MAIN_TAB_ACTIVE") {
         // Tab chính mới đã bắt đầu phát nhạc → set flag
         console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_ACTIVE, đã có tab đang phát mới');

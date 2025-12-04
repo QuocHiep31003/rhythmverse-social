@@ -1,5 +1,4 @@
 import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse, API_BASE_URL, fetchWithAuth, parseErrorResponse } from './config';
-import { mockSongs } from '@/data/mockData';
 
 // Interface cho Song data - đồng bộ với BE SongDTO
 export interface Song {
@@ -189,10 +188,23 @@ export const songsApi = {
     }
   },
 
-  // Lấy songs theo artist
-  getByArtist: async (artistId: number): Promise<Song[]> => {
+  // Lấy songs theo artist, có thể filter theo role
+  getByArtist: async (
+    artistId: number,
+    params?: {
+      role?: 'PERFORMER_MAIN' | 'PERFORMER_FEAT';
+    }
+  ): Promise<Song[]> => {
     try {
-      const response = await apiClient.get(`/songs/by-artist/${artistId}`);
+      const queryParams = new URLSearchParams();
+      if (params?.role) {
+        queryParams.append('role', params.role);
+      }
+      const queryString = queryParams.toString();
+      const endpoint = queryString
+        ? `/songs/by-artist/${artistId}?${queryString}`
+        : `/songs/by-artist/${artistId}`;
+      const response = await apiClient.get(endpoint);
       return response.data;
     } catch (error) {
       console.error("Error fetching songs by artist:", error);
@@ -235,7 +247,7 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("❌ Error fetching songs:", error);
-      // Return empty paginated response instead of mock
+      // Return empty paginated response thay vì dùng mock
       return {
         content: [],
         totalElements: 0,
@@ -466,7 +478,7 @@ export const songsApi = {
       return response.data;
     } catch (error) {
       console.error("Error fetching song count:", error);
-      return mockSongs.length;
+      return 0;
     }
   },
 

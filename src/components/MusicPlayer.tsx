@@ -532,41 +532,136 @@ const MusicPlayer = () => {
     };
   }, []);
 
+  // Xử lý logout event - dừng audio, cleanup và reload page
+  useEffect(() => {
+    const handleLogout = () => {
+      console.log('[MusicPlayer] 🔔 Logout event received, stopping player and reloading page...');
+      
+      // Dừng audio ngay lập tức
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
+      
+      // Cleanup HLS
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      
+      // Reset state
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsLoading(false);
+      
+      // Reload page để đảm bảo mọi thứ được reset hoàn toàn (chỉ khi không ở trang login)
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        console.log('[MusicPlayer] Reloading page after logout...');
+        // Đợi một chút để đảm bảo các cleanup khác đã hoàn thành
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    };
+
+    // Lắng nghe logout event từ cùng tab
+    window.addEventListener('logout', handleLogout);
+    
+    // Lắng nghe logout event từ BroadcastChannel (từ tab khác)
+    if (typeof window !== 'undefined' && window.BroadcastChannel) {
+      const logoutChannel = new BroadcastChannel('auth_channel');
+      logoutChannel.onmessage = (event) => {
+        if (event.data.type === 'LOGOUT') {
+          handleLogout();
+        }
+      };
+      
+      return () => {
+        window.removeEventListener('logout', handleLogout);
+        logoutChannel.close();
+      };
+    }
+    
+    return () => {
+      window.removeEventListener('logout', handleLogout);
+    };
+  }, []);
+
   // Detect khi tab bị đóng - pause audio và gửi message "MAIN_TAB_CLOSED"
   useEffect(() => {
     const handleBeforeUnload = () => {
-      // Khi tab đang phát bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
-      if (currentSong && isPlaying && audioRef.current && !audioRef.current.paused) {
-        console.log('[MusicPlayer] Tab bị đóng, pause audio và gửi message MAIN_TAB_CLOSED');
+      // QUAN TRỌNG: Gửi MAIN_TAB_CLOSED ngay cả khi đang pause, miễn là có currentSong
+      // Để tab phụ biết tab chính đã đóng và có thể tiếp tục phát nhạc
+      if (currentSong && channelRef.current) {
+        console.log('[MusicPlayer] Tab bị đóng, gửi message MAIN_TAB_CLOSED với thông tin bài hát');
         
-        // Pause audio element
-        audioRef.current.pause();
-        
-        // Gửi message "MAIN_TAB_CLOSED" qua BroadcastChannel để các tab khác biết không còn tab đang phát
-        if (channelRef.current) {
-          channelRef.current.postMessage({
-            type: "MAIN_TAB_CLOSED",
-            tabId: tabIdRef.current,
-          });
+        // Pause audio element nếu đang phát
+        if (audioRef.current && !audioRef.current.paused) {
+          audioRef.current.pause();
         }
+        
+        // Gửi message "MAIN_TAB_CLOSED" với thông tin đầy đủ để tab phụ có thể tiếp tục
+        channelRef.current.postMessage({
+          type: "MAIN_TAB_CLOSED",
+          tabId: tabIdRef.current,
+          song: {
+            id: currentSong.id,
+            title: currentSong.title || currentSong.name || currentSong.songName,
+            name: currentSong.name || currentSong.songName,
+            songName: currentSong.songName,
+            artist: currentSong.artist,
+            cover: currentSong.cover,
+          },
+          currentTime: currentTime,
+          duration: duration,
+          isPlaying: isPlaying,
+          queue: queueRef.current.map(s => ({ 
+            id: s.id, 
+            title: s.title || s.name || s.songName, 
+            name: s.name || s.songName,
+            artist: s.artist, 
+            cover: s.cover 
+          })),
+        });
       }
     };
 
     const handleUnload = () => {
-      // Khi tab đang phát bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
-      if (currentSong && isPlaying && audioRef.current && !audioRef.current.paused) {
-        console.log('[MusicPlayer] Tab bị đóng (unload), pause audio và gửi message MAIN_TAB_CLOSED');
+      // QUAN TRỌNG: Gửi MAIN_TAB_CLOSED ngay cả khi đang pause, miễn là có currentSong
+      // Để tab phụ biết tab chính đã đóng và có thể tiếp tục phát nhạc
+      if (currentSong && channelRef.current) {
+        console.log('[MusicPlayer] Tab bị đóng (unload), gửi message MAIN_TAB_CLOSED với thông tin bài hát');
         
-        // Pause audio element
-        audioRef.current.pause();
-        
-        // Gửi message "MAIN_TAB_CLOSED" qua BroadcastChannel
-        if (channelRef.current) {
-          channelRef.current.postMessage({
-            type: "MAIN_TAB_CLOSED",
-            tabId: tabIdRef.current,
-          });
+        // Pause audio element nếu đang phát
+        if (audioRef.current && !audioRef.current.paused) {
+          audioRef.current.pause();
         }
+        
+        // Gửi message "MAIN_TAB_CLOSED" với thông tin đầy đủ để tab phụ có thể tiếp tục
+        channelRef.current.postMessage({
+          type: "MAIN_TAB_CLOSED",
+          tabId: tabIdRef.current,
+          song: {
+            id: currentSong.id,
+            title: currentSong.title || currentSong.name || currentSong.songName,
+            name: currentSong.name || currentSong.songName,
+            songName: currentSong.songName,
+            artist: currentSong.artist,
+            cover: currentSong.cover,
+          },
+          currentTime: currentTime,
+          duration: duration,
+          isPlaying: isPlaying,
+          queue: queueRef.current.map(s => ({ 
+            id: s.id, 
+            title: s.title || s.name || s.songName, 
+            name: s.name || s.songName,
+            artist: s.artist, 
+            cover: s.cover 
+          })),
+        });
       }
     };
 

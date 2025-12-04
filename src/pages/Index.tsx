@@ -25,8 +25,9 @@ import ArtistFanSection from "@/components/ui/ArtistFanSection"; // ✅ Artist f
 import RecentListeningSection from "@/components/ui/RecentListeningSection"; // ✅ Nghe gần đây
 import TopArtistSection from "@/components/ui/TopArtistSection"; // ✅ Ca sĩ nổi bật
 import TopGenreMoodSection from "@/components/ui/TopGenreMoodSection"; // ✅ Genre/Mood nổi bật
+import RecommendedArtistsSection from "@/components/ui/RecommendedArtistsSection"; // ✅ Gợi ý ca sĩ dựa trên lịch sử nghe
+import RecommendedAlbumsSection from "@/components/ui/RecommendedAlbumsSection"; // ✅ Gợi ý album dựa trên lịch sử nghe
 import { getAuthToken } from "@/services/api/config";
-import { mockSongs } from "@/data/mockData";
 import { useEffect, useState } from "react";
 import { formatPlayCount, mapToPlayerSong } from "@/lib/utils";
 import { songsApi } from "@/services/api";
@@ -38,7 +39,7 @@ const Index = () => {
 
   // Dữ liệu từ API thực tế - Hot Month (Monthly Trending)
   const [topHitsMonth, setTopHitsMonth] = useState([]);
-  const aiPicks = mockSongs.slice(0, 3);
+  const aiPicks: any[] = [];
 
   // Danh sách Editor's albums
   const editorsChoice = [
@@ -73,11 +74,11 @@ const Index = () => {
           return;
         }
 
-        console.log('⚠️ No trending data, falling back to mock data...');
-        setTopHitsWeek(mockSongs.slice(0, 5));
+        console.log('⚠️ No trending data from API.');
+        setTopHitsWeek([]);
       } catch (err) {
         console.error("❌ Lỗi tải trending:", err);
-        setTopHitsWeek(mockSongs.slice(0, 5));
+        setTopHitsWeek([]);
       }
     };
 
@@ -100,11 +101,11 @@ const Index = () => {
         }
 
         // Fallback nếu API không có data
-        console.log('⚠️ No monthly data, falling back to mock data...');
-        setTopHitsMonth(mockSongs.slice(0, 5));
+        console.log('⚠️ No monthly data from API.');
+        setTopHitsMonth([]);
       } catch (err) {
         console.error("❌ Lỗi tải monthly trending:", err);
-        setTopHitsMonth(mockSongs.slice(0, 5));
+        setTopHitsMonth([]);
       }
     };
 
@@ -137,6 +138,12 @@ const Index = () => {
 
             {/* Artist Fan Sections - Gợi ý bài hát theo artist hay nghe */}
             <ArtistFanSection />
+
+            {/* Gợi ý ca sĩ - Dựa trên lịch sử nghe và vector người dùng */}
+            <RecommendedArtistsSection />
+            
+            {/* Gợi ý album - Dựa trên lịch sử nghe và vector người dùng */}
+            <RecommendedAlbumsSection />
 
             {/* New Releases - Bài hát mới ra mắt */}
             <NewReleases />

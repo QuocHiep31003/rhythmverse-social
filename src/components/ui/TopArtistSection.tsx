@@ -40,8 +40,23 @@ const TopArtistSection = () => {
   }, []);
 
   useEffect(() => {
-    const fetchTopArtistSection = async () => {
-      const token = getAuthToken();
+    let retryTimeout: NodeJS.Timeout | undefined;
+    let cancelled = false;
+
+    const fetchTopArtistSection = async (retryCount = 0) => {
+      let token = getAuthToken();
+      
+      // ✅ Nếu tab mới mở, đợi một chút để token có thể được share từ tab khác
+      if (!token && retryCount < 3) {
+        const waitTime = (retryCount + 1) * 500; // 500ms, 1000ms, 1500ms
+        retryTimeout = setTimeout(() => {
+          if (!cancelled) {
+            fetchTopArtistSection(retryCount + 1);
+          }
+        }, waitTime);
+        return;
+      }
+
       if (!token || !userId) {
         setLoading(false);
         setTopArtist(null);
@@ -107,6 +122,13 @@ const TopArtistSection = () => {
     };
 
     fetchTopArtistSection();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
   }, [userId]);
 
   const getArtistName = (artists: Song["artists"]): string => {

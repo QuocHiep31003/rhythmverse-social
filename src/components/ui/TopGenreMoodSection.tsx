@@ -43,8 +43,23 @@ const TopGenreMoodSection = () => {
   }, []);
 
   useEffect(() => {
-    const fetchTopGenreMoodSection = async () => {
-      const token = getAuthToken();
+    let retryTimeout: NodeJS.Timeout | undefined;
+    let cancelled = false;
+
+    const fetchTopGenreMoodSection = async (retryCount = 0) => {
+      let token = getAuthToken();
+      
+      // ✅ Nếu tab mới mở, đợi một chút để token có thể được share từ tab khác
+      if (!token && retryCount < 3) {
+        const waitTime = (retryCount + 1) * 500; // 500ms, 1000ms, 1500ms
+        retryTimeout = setTimeout(() => {
+          if (!cancelled) {
+            fetchTopGenreMoodSection(retryCount + 1);
+          }
+        }, waitTime);
+        return;
+      }
+
       if (!token || !userId) {
         setLoading(false);
         setTopGenreMood(null);
@@ -129,6 +144,13 @@ const TopGenreMoodSection = () => {
     };
 
     fetchTopGenreMoodSection();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
   }, [userId]);
 
   const getArtistName = (artists: Song["artists"]): string => {
