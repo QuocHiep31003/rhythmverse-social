@@ -19,7 +19,7 @@ import {
 import { toast } from "@/hooks/use-toast";
 import ShareButton from "@/components/ShareButton";
 import Footer from "@/components/Footer";
-import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, PlaylistLibraryItemDTO } from "@/services/api/playlistApi";
+import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, PlaylistLibraryItemDTO, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { authApi } from "@/services/api";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DeleteConfirmDialog } from "@/components/admin/DeleteConfirmDialog";
@@ -294,6 +294,8 @@ const PlaylistCardWithFavoriteInLibrary = ({
   onDelete,
   onRemove,
   layout = "carousel",
+  isUnavailable = false,
+  unavailableReason,
 }: { 
   playlist: PlaylistItem;
   onPlay?: (playlist: PlaylistItem) => void;
@@ -304,6 +306,8 @@ const PlaylistCardWithFavoriteInLibrary = ({
   onDelete?: () => void;
   onRemove?: () => void;
   layout?: PlaylistCardLayout;
+  isUnavailable?: boolean;
+  unavailableReason?: string;
 }) => {
   const numericId = Number(playlist.id);
   const favoriteHook = useFavoritePlaylist(Number.isFinite(numericId) ? numericId : undefined, { disableToast: false });
@@ -347,6 +351,8 @@ const PlaylistCardWithFavoriteInLibrary = ({
         onDelete={onDelete}
         getCollaboratorBadgeText={getCollaboratorBadgeText || defaultGetCollaboratorBadgeText}
         formatNumber={formatNumber || defaultFormatNumber}
+        isUnavailable={isUnavailable}
+        unavailableReason={unavailableReason}
       />
     </div>
   );
@@ -358,6 +364,7 @@ const PlaylistLibrary = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recent");
   const [likedPlaylists, setLikedPlaylists] = useState<string[]>([]);
+  const [unavailablePlaylists, setUnavailablePlaylists] = useState<Record<string, { reason?: string }>>({});
   const [durations, setDurations] = useState<Record<string, string>>({});
   const [playlistMeta, setPlaylistMeta] = useState<Record<string, { songCount?: number; updatedAt?: string | null; visibility?: PlaylistVisibility | string | null }>>({});
   const [loading, setLoading] = useState<boolean>(false);
@@ -386,6 +393,28 @@ const PlaylistLibrary = () => {
   const [playlistFilter, setPlaylistFilter] = useState<
     "all" | "owned" | "collab" | "favorites" | "public" | "private" | "friends_only"
   >("all");
+  
+  const markUnavailable = useCallback((id: string | number, reason?: string) => {
+    setUnavailablePlaylists((prev) => {
+      const key = String(id);
+      if (prev[key]?.reason === reason) {
+        return prev;
+      }
+      return { ...prev, [key]: { reason } };
+    });
+  }, []);
+
+  const clearUnavailable = useCallback((id: string | number) => {
+    setUnavailablePlaylists((prev) => {
+      const key = String(id);
+      if (!(key in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
   
   // Debounce search query
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -733,6 +762,7 @@ const PlaylistLibrary = () => {
         const res = await Promise.all(ids.map(async (id) => {
           try {
             const detail = await playlistsApi.getById(id);
+            clearUnavailable(id);
             const secs = Array.isArray(detail.songs)
               ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0)
               : 0;
@@ -756,7 +786,10 @@ const PlaylistLibrary = () => {
               visibility,
               updatedAt,
             };
-          } catch {
+          } catch (error) {
+            if (error instanceof PlaylistPermissionError) {
+              markUnavailable(id, "Playlist không còn khả dụng");
+            }
             return { id, duration: '--' };
           }
         }));
@@ -797,7 +830,7 @@ const PlaylistLibrary = () => {
     };
     if (playlists.length) run();
     return () => { cancelled = true; };
-  }, [playlists]);
+  }, [playlists, markUnavailable, clearUnavailable]);
 
   useEffect(() => {
     const fetchFriends = async () => {
@@ -970,6 +1003,39 @@ const PlaylistLibrary = () => {
     return base;
   }, [favoritePlaylistItems, normalizedSearch]);
 
+  const resolveUnavailableReason = useCallback(
+    (playlist: PlaylistItem): string => {
+      const metaVisibility =
+        playlistMeta[String(playlist.id)]?.visibility ?? playlist.visibility ?? "";
+      const normalized =
+        typeof metaVisibility === "string"
+          ? metaVisibility.toString().toUpperCase()
+          : "";
+      if (normalized === PlaylistVisibility.PRIVATE) {
+        return "Playlist đã chuyển sang Private";
+      }
+      if (normalized === PlaylistVisibility.FRIENDS_ONLY) {
+        return "Playlist chỉ hiển thị với bạn bè";
+      }
+      return "Playlist không còn khả dụng";
+    },
+    [playlistMeta]
+  );
+
+  const getUnavailableState = useCallback(
+    (playlist: PlaylistItem) => {
+      const entry = unavailablePlaylists[String(playlist.id)];
+      if (!entry) {
+        return { isUnavailable: false, reason: undefined as string | undefined };
+      }
+      return {
+        isUnavailable: true,
+        reason: entry.reason || resolveUnavailableReason(playlist),
+      };
+    },
+    [unavailablePlaylists, resolveUnavailableReason]
+  );
+
   const filteredExtraFavoritePlaylists = useMemo(() => {
     let base = favoritePlaylistItems.filter(
       (p) => !libraryPlaylistIdSet.has(String(p.id))
@@ -1102,11 +1168,15 @@ const PlaylistLibrary = () => {
           ids.map(async (id) => {
             try {
               const detail = await playlistsApi.getById(id);
+              clearUnavailable(id);
               const secs = Array.isArray(detail.songs)
                 ? detail.songs.reduce((acc: number, s: SongDTO) => acc + toSeconds(s.duration), 0)
                 : 0;
               return { id, duration: formatTotal(secs) };
-            } catch {
+            } catch (error) {
+              if (error instanceof PlaylistPermissionError) {
+                markUnavailable(id, "Playlist không còn khả dụng");
+              }
               return { id, duration: "--" };
             }
           })
@@ -1127,7 +1197,7 @@ const PlaylistLibrary = () => {
     return () => {
       cancelled = true;
     };
-  }, [favoritePlaylistItems]);
+  }, [favoritePlaylistItems, markUnavailable, clearUnavailable]);
 
   const toggleLike = (playlistId: string) => {
     setLikedPlaylists(prev =>
@@ -1588,7 +1658,8 @@ const PlaylistLibrary = () => {
                               // Kiểm tra xem là playlist hay album
                               if ('title' in item) {
                                 // Là PlaylistItem
-                                const playlist = item as PlaylistItem;
+                              const playlist = item as PlaylistItem;
+                              const { isUnavailable, reason: unavailableReason } = getUnavailableState(playlist);
                                 return (
                                   <PlaylistCardWithFavoriteInLibrary
                                     key={`fav-pl-${playlist.id}`}
@@ -1599,6 +1670,8 @@ const PlaylistLibrary = () => {
                                     getCollaboratorBadgeText={getCollaboratorBadgeText}
                                     formatNumber={formatNumber}
                                     layout="grid"
+                                    isUnavailable={isUnavailable}
+                                    unavailableReason={unavailableReason}
                                   />
                                 );
                               } else {
@@ -1634,6 +1707,7 @@ const PlaylistLibrary = () => {
                   ) : (
                     sortItems(filteredFavoritePlaylistItems, sortBy).map((item) => {
                       const playlist = item as PlaylistItem;
+                      const { isUnavailable, reason: unavailableReason } = getUnavailableState(playlist);
                       return (
                       <PlaylistCardWithFavoriteInLibrary
                         key={`fav-pl-${playlist.id}`}
@@ -1644,6 +1718,8 @@ const PlaylistLibrary = () => {
                         getCollaboratorBadgeText={getCollaboratorBadgeText}
                         formatNumber={formatNumber}
                         layout="grid"
+                        isUnavailable={isUnavailable}
+                        unavailableReason={unavailableReason}
                       />
                     );
                     })
@@ -1678,6 +1754,7 @@ const PlaylistLibrary = () => {
                                   // Là PlaylistItem
                                   const playlist = item as PlaylistItem;
                                   const isExtra = filteredExtraFavoritePlaylists.some(p => p.id === playlist.id);
+                                  const { isUnavailable, reason: unavailableReason } = getUnavailableState(playlist);
                                   return (
                                     <PlaylistCardWithFavoriteInLibrary
                                       key={isExtra ? `extra-fav-${playlist.id}` : playlist.id}
@@ -1689,6 +1766,8 @@ const PlaylistLibrary = () => {
                                       getCollaboratorBadgeText={getCollaboratorBadgeText}
                                       formatNumber={formatNumber}
                                       layout="grid"
+                                      isUnavailable={isUnavailable}
+                                      unavailableReason={unavailableReason}
                                     />
                                   );
                                 } else {
@@ -1725,19 +1804,22 @@ const PlaylistLibrary = () => {
                     <>
                       {sortItems(filteredPlaylists, sortBy).map((item) => {
                         const playlist = item as PlaylistItem;
+                        const { isUnavailable, reason: unavailableReason } = getUnavailableState(playlist);
                         return (
-                        <PlaylistCardWithFavoriteInLibrary
-                          key={playlist.id}
-                          playlist={playlist}
-                          playlistMeta={playlistMeta[playlist.id]}
-                          duration={durations[playlist.id]}
-                          onPlay={() => playPlaylist(playlist)}
-                          onDelete={playlist.isOwner ? () => openDelete(playlist) : undefined}
-                          getCollaboratorBadgeText={getCollaboratorBadgeText}
-                          formatNumber={formatNumber}
-                          layout="grid"
-                        />
-                      );
+                          <PlaylistCardWithFavoriteInLibrary
+                            key={playlist.id}
+                            playlist={playlist}
+                            playlistMeta={playlistMeta[playlist.id]}
+                            duration={durations[playlist.id]}
+                            onPlay={() => playPlaylist(playlist)}
+                            onDelete={playlist.isOwner ? () => openDelete(playlist) : undefined}
+                            getCollaboratorBadgeText={getCollaboratorBadgeText}
+                            formatNumber={formatNumber}
+                            layout="grid"
+                            isUnavailable={isUnavailable}
+                            unavailableReason={unavailableReason}
+                          />
+                        );
                       })}
                     </>
                   )
