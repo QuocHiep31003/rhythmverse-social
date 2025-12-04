@@ -82,31 +82,17 @@ const TopArtistSection = () => {
 
         // Lấy các bài hát của artist này (nổi bật - sort theo playCount desc)
         try {
-          // Thử lấy từ artist API trước
-          const songsResponse = await artistsApi.getSongs(artist.artistId, {
+          const songsResponse = await songsApi.getPublic({
             page: 0,
             size: 10,
             sort: "playCount,desc",
+            artistId: artist.artistId,
           });
 
-          const artistSongs = songsResponse?.content || [];
-          
-          // Nếu không có songs từ artist API, thử lấy từ songs API với artistId filter
-          if (artistSongs.length === 0) {
-            const songsResponse2 = await songsApi.getPublic({
-              page: 0,
-              size: 10,
-              sort: "playCount,desc",
-              artistId: artist.artistId,
-            });
-            
-            if (songsResponse2?.content && songsResponse2.content.length > 0) {
-              setSongs(songsResponse2.content);
-            } else {
-              setSongs([]);
-            }
+          if (songsResponse?.content && songsResponse.content.length > 0) {
+            setSongs(songsResponse.content);
           } else {
-            setSongs(artistSongs);
+            setSongs([]);
           }
         } catch (error) {
           console.error(`Error fetching songs for artist ${artist.artistName}:`, error);
@@ -172,11 +158,8 @@ const TopArtistSection = () => {
             <Star className="w-6 h-6 text-primary" />
             <div>
               <h2 className="text-2xl font-bold text-foreground">
-                Ca sĩ nổi bật của bạn
+                For {topArtist.artistName} fans
               </h2>
-              <p className="text-xs text-muted-foreground">
-                {topArtist.artistName} - Nghệ sĩ bạn nghe nhiều nhất
-              </p>
             </div>
           </div>
           {songs.length > 0 && (
@@ -186,7 +169,7 @@ const TopArtistSection = () => {
               className="text-xs rounded-full"
               onClick={() => navigate(`/artist/${topArtist.artistId}`)}
             >
-              Xem tất cả
+              View all
             </Button>
           )}
         </div>
@@ -207,7 +190,7 @@ const TopArtistSection = () => {
                 </div>
               ) : songs.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8">
-                  Không có bài hát nào từ {topArtist.artistName}
+                  No songs available from {topArtist.artistName}
                 </p>
               ) : (
                 songs.map((song) => {
@@ -309,7 +292,7 @@ const TopArtistSection = () => {
                         </p>
                         {song.playCount && (
                           <p className="text-xs text-muted-foreground/70 mt-1">
-                            {song.playCount.toLocaleString()} lượt nghe
+                            {song.playCount.toLocaleString()} plays
                           </p>
                         )}
                       </div>

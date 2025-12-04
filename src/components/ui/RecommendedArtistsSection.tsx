@@ -154,10 +154,10 @@ const RecommendedArtistsSection = () => {
           <Sparkles className="w-6 h-6 text-primary" />
           <div>
             <h2 className="text-2xl font-bold text-foreground">
-              Gợi ý ca sĩ cho bạn
+            Recommended artists for you
             </h2>
             <p className="text-xs text-muted-foreground">
-              Dựa trên lịch sử nghe của bạn
+            Based on your listening history
             </p>
           </div>
         </div>
@@ -179,7 +179,7 @@ const RecommendedArtistsSection = () => {
               </div>
             ) : recommendedArtists.length === 0 ? (
               <p className="text-muted-foreground text-sm py-8">
-                Chưa có gợi ý ca sĩ. Hãy nghe thêm nhạc để nhận gợi ý!
+              No artist recommendations yet. Listen to more music to get suggestions!
               </p>
             ) : (
               recommendedArtists.map((artist) => {
@@ -241,7 +241,7 @@ const RecommendedArtistsSection = () => {
                       )}
                       {artist.monthlyListeners && (
                         <p className="text-xs text-muted-foreground/70 mt-1">
-                          {artist.monthlyListeners} người nghe
+                    {artist.monthlyListeners} monthly listeners
                         </p>
                       )}
                     </div>

@@ -212,10 +212,10 @@ const RecommendedAlbumsSection = () => {
           <Sparkles className="w-6 h-6 text-primary" />
           <div>
             <h2 className="text-2xl font-bold text-foreground">
-              Gợi ý album cho bạn
+              Recommended albums for you
             </h2>
             <p className="text-xs text-muted-foreground">
-              Dựa trên lịch sử nghe của bạn
+              Based on your listening history
             </p>
           </div>
         </div>
@@ -236,7 +236,7 @@ const RecommendedAlbumsSection = () => {
         </div>
       ) : recommendedAlbums.length === 0 ? (
         <p className="text-muted-foreground text-sm py-8 text-center">
-          Chưa có gợi ý album. Hãy nghe thêm nhạc để nhận gợi ý!
+          No album recommendations yet. Listen to more music to get suggestions!
         </p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -313,7 +313,9 @@ const RecommendedAlbumsSection = () => {
                     {trackCount > 0 && (
                       <div className="flex items-center gap-1">
                         <Music className="w-3 h-3" />
-                        <span>{trackCount} {trackCount === 1 ? 'bài' : 'bài'}</span>
+                        <span>
+                          {trackCount} {trackCount === 1 ? 'track' : 'tracks'}
+                        </span>
                       </div>
                     )}
                   </div>

@@ -152,9 +152,9 @@ const RecentListeningSection = () => {
           <div className="flex items-center gap-2">
             <Clock className="w-6 h-6 text-primary" />
             <div>
-              <h2 className="text-2xl font-bold text-foreground">Nghe gần đây</h2>
+              <h2 className="text-2xl font-bold text-foreground">Recently played</h2>
               <p className="text-xs text-muted-foreground">
-                Các bài hát bạn đã nghe từ playlist, albums và các nguồn khác
+                Songs you've recently listened to from playlists, albums, and more
               </p>
             </div>
           </div>
@@ -165,7 +165,7 @@ const RecentListeningSection = () => {
               className="text-xs rounded-full"
               onClick={() => navigate("/listening-history")}
             >
-              Xem tất cả
+              View all
             </Button>
           )}
         </div>
@@ -186,7 +186,7 @@ const RecentListeningSection = () => {
                 </div>
               ) : recentSongs.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8">
-                  Chưa có bài hát nào được nghe gần đây
+                  You haven&apos;t played any songs recently
                 </p>
               ) : (
                 recentSongs.map((entry) => {

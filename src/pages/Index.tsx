@@ -124,9 +124,8 @@ const Index = () => {
         {/* Quick Features */}
         <section className="py-8">
           <div className="container px-6">
-            {/* AI Picks For You - Smart Recommendations (chỉ hiển thị khi đã đăng nhập) */}
-            <AIPicksSection />
-
+            {/* AI Picks For You - Smart Recommendations (ẩn hoàn toàn nếu chưa đăng nhập) */}
+            {getAuthToken() && <AIPicksSection />}
             {/* Nghe gần đây - Các bài hát đã nghe từ playlist, albums, ... */}
             <RecentListeningSection />
 
@@ -134,14 +133,14 @@ const Index = () => {
             <TopArtistSection />
 
             {/* Genre/Mood nổi bật - Thể loại/tâm trạng nghe nhiều nhất */}
-            <TopGenreMoodSection />
+            {/* <TopGenreMoodSection /> */}
 
             {/* Artist Fan Sections - Gợi ý bài hát theo artist hay nghe */}
-            <ArtistFanSection />
+            {/* <ArtistFanSection /> */}
 
             {/* Gợi ý ca sĩ - Dựa trên lịch sử nghe và vector người dùng */}
             <RecommendedArtistsSection />
-            
+
             {/* Gợi ý album - Dựa trên lịch sử nghe và vector người dùng */}
             <RecommendedAlbumsSection />
 

@@ -318,7 +318,7 @@ const ArtistFanSection = () => {
                           </p>
                           {song.playCount && (
                             <p className="text-xs text-muted-foreground/70 mt-1">
-                              {song.playCount.toLocaleString()} lượt nghe
+                            {song.playCount.toLocaleString()} plays
                             </p>
                           )}
                         </div>

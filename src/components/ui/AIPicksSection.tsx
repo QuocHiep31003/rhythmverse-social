@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Music, Play, Sparkles, MoreHorizontal, ListPlus, Info, Heart, ListMusic, RefreshCcw } from "lucide-react";
+import { Music, Play, Sparkles, MoreHorizontal, ListPlus, Info, Heart, ListMusic } from "lucide-react";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import { songsApi } from "@/services/api";
@@ -81,7 +81,6 @@ const AIPicksSection = () => {
   const [selectedSongId, setSelectedSongId] = useState<string | number | null>(null);
   const [selectedSongTitle, setSelectedSongTitle] = useState<string>("");
   const [selectedSongCover, setSelectedSongCover] = useState<string | undefined>(undefined);
-  const [refreshing, setRefreshing] = useState(false);
 
   const fetchAIPicks = useCallback(async () => {
     const token = getAuthToken();
@@ -154,15 +153,6 @@ const AIPicksSection = () => {
     fetchAIPicks();
   }, [fetchAIPicks]);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await fetchAIPicks();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [fetchAIPicks]);
-
   const buildPlayerSong = useCallback(
     (song: AIPickSong) =>
       mapToPlayerSong({
@@ -203,7 +193,7 @@ const AIPicksSection = () => {
 
   return (
     <section className="mb-12">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <Sparkles className="w-6 h-6 text-primary" />
           <div>
@@ -215,28 +205,16 @@ const AIPicksSection = () => {
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white/5 border border-white/10 p-4 backdrop-blur relative overflow-hidden">
+      <div className="rounded-3xl bg-white/5 border border-white/10 p-6 backdrop-blur relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent pointer-events-none" />
         <div className="relative">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-primary font-semibold">
-                Phần 1: Gợi ý bài hát
-              </p>
-              <h3 className="text-2xl font-semibold text-white mt-1">AI gợi ý dành riêng cho bạn</h3>
+              <h3 className="text-2xl font-semibold text-white mt-1">
+                Personalized AI recommendations just for you
+              </h3>
             </div>
-            {aiPicks.length > 0 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="rounded-full gap-2 text-[13px]"
-                onClick={handlePlayAll}
-                disabled={loading}
-              >
-                <Play className="w-4 h-4" />
-                Phát tất cả
-              </Button>
-            )}
+          
           </div>
 
           {loading ? (
@@ -248,17 +226,17 @@ const AIPicksSection = () => {
           ) : aiPicks.length === 0 ? (
             <div className="text-center py-10">
               <p className="text-muted-foreground text-sm mb-3">
-                Chưa có gợi ý. Hãy nghe thêm nhạc để AI hiểu bạn hơn!
+                No recommendations yet. Listen to more music so AI can learn your taste!
               </p>
               <Button variant="outline" size="sm" onClick={() => navigate("/discover")}>
-                Khám phá ngay
+                Discover now
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+            <div className="flex flex-col lg:flex-row gap-6">
               {featuredSong && (
-                <div className="lg:w-1/3 bg-black/30 rounded-2xl p-4 border border-white/10 shadow-xl flex flex-col gap-3">
-                  <div className="rounded-xl overflow-hidden border border-white/10 aspect-video">
+                <div className="lg:w-1/3 bg-black/30 rounded-3xl p-5 border border-white/10 shadow-xl flex flex-col gap-4">
+                  <div className="rounded-2xl overflow-hidden border border-white/10">
                     {featuredSong.albumImageUrl ? (
                       <img
                         src={featuredSong.albumImageUrl}
@@ -266,30 +244,26 @@ const AIPicksSection = () => {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-white/5">
+                      <div className="w-full h-full flex items-center justify-center bg-white/5 aspect-square">
                         <Music className="w-12 h-12 text-white/60" />
                       </div>
                     )}
                   </div>
-                  <div className="space-y-1">
-                    <p className="text-[11px] uppercase tracking-[0.25em] text-primary/80">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.3em] text-primary/80">
                       Featured pick
                     </p>
-                    <h3 className="text-lg font-semibold text-white line-clamp-1">
-                      {featuredSong.songName}
-                    </h3>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {featuredSong.artists}
-                    </p>
+                    <h3 className="text-xl font-bold text-white mt-1">{featuredSong.songName}</h3>
+                    <p className="text-sm text-muted-foreground">{featuredSong.artists}</p>
                   </div>
-                  <div className="flex items-center gap-2 mt-auto">
+                  <div className="flex items-center gap-2">
                     <Button
                       size="sm"
                       className="rounded-full gap-2"
                       onClick={() => handlePlaySong(featuredSong)}
                     >
                       <Play className="w-4 h-4" />
-                      Phát
+                      Play
                     </Button>
                     <Button
                       variant="secondary"

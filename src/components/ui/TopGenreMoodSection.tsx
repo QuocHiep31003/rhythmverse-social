@@ -185,7 +185,7 @@ const TopGenreMoodSection = () => {
     return null;
   }
 
-  const typeLabel = topGenreMood.type === 'genre' ? 'Thể loại' : 'Tâm trạng';
+  const typeLabel = topGenreMood.type === 'genre' ? 'Genre' : 'Mood';
   const typeIcon = topGenreMood.type === 'genre' ? '🎵' : '🎭';
 
   return (
@@ -197,10 +197,10 @@ const TopGenreMoodSection = () => {
             <Sparkles className="w-6 h-6 text-primary" />
             <div>
               <h2 className="text-2xl font-bold text-foreground">
-                {typeLabel} nổi bật: {topGenreMood.name}
+                Top {typeLabel.toLowerCase()}: {topGenreMood.name}
               </h2>
               <p className="text-xs text-muted-foreground">
-                {topGenreMood.percentage.toFixed(1)}% bài hát bạn nghe thuộc {typeLabel.toLowerCase()} này
+                {topGenreMood.percentage.toFixed(1)}% of the songs you listen to are in this {typeLabel.toLowerCase()}
               </p>
             </div>
           </div>
@@ -217,7 +217,7 @@ const TopGenreMoodSection = () => {
                 }
               }}
             >
-              Khám phá thêm
+              Explore more
             </Button>
           )}
         </div>
@@ -238,7 +238,7 @@ const TopGenreMoodSection = () => {
                 </div>
               ) : songs.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8">
-                  Không có bài hát nào thuộc {typeLabel.toLowerCase()} {topGenreMood.name}
+                  No songs found for {typeLabel.toLowerCase()} {topGenreMood.name}
                 </p>
               ) : (
                 songs.map((song) => {
@@ -350,7 +350,7 @@ const TopGenreMoodSection = () => {
                         </p>
                         {song.playCount && (
                           <p className="text-xs text-muted-foreground/70 mt-1">
-                            {song.playCount.toLocaleString()} lượt nghe
+                            {song.playCount.toLocaleString()} plays
                           </p>
                         )}
                       </div>

@@ -2355,7 +2355,7 @@ const MusicPlayer = () => {
             />
           </div>
 
-          {/* Volume, Lyrics và Queue - Bên phải */}
+          {/* Volume + Lyrics + Queue - Bên phải */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <VolumeControl
               volume={volume}
@@ -2371,10 +2371,10 @@ const MusicPlayer = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9"
+                    className="h-9 w-9 rounded-full bg-gradient-to-br from-pink-500/25 via-fuchsia-500/20 to-purple-500/25 border border-pink-400/50 text-pink-100 shadow-[0_0_14px_rgba(236,72,153,0.7)] hover:bg-pink-500/35 hover:text-white transition-all"
                     title="Lời bài hát"
                   >
-                    <Mic className="w-5 h-5" />
+                    <Mic className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[420px] max-h-[500px] overflow-y-auto">
