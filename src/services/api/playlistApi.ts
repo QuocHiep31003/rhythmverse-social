@@ -400,6 +400,17 @@ export const playlistsApi = {
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     try { return await res.text(); } catch { return "Imported"; }
   },
+
+  // Search songs trong playlist
+  searchSongs: async (playlistId: number | string, searchQuery: string) => {
+    const qs = new URLSearchParams({ search: searchQuery });
+    const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}/songs/search?${qs.toString()}`, {
+      method: "GET",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return (await res.json()) as PlaylistDTO;
+  },
 };
 
 // Collaborator invites (invite by playlistId to receiver)

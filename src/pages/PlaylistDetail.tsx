@@ -117,6 +117,9 @@ const PlaylistDetail = () => {
   const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PlaylistState | null>(null);
+  const [searching, setSearching] = useState(false);
+  const debouncedSearchQuery = useDebounceValue(searchQuery, 500);
   const [loading, setLoading] = useState<boolean>(true);
   const [playlist, setPlaylist] = useState<PlaylistState | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -993,6 +996,64 @@ const PlaylistDetail = () => {
       unsubscribe();
     };
   }, [meId, playlist?.id, playlist?.title, isCreateMode, navigate]);
+
+  // Search songs trong playlist từ BE
+  useEffect(() => {
+    const searchSongs = async () => {
+      if (!playlistNumericId || !debouncedSearchQuery.trim()) {
+        setSearchResults(null);
+        return;
+      }
+      
+      try {
+        setSearching(true);
+        const data: PlaylistDTO = await playlistsApi.searchSongs(playlistNumericId, debouncedSearchQuery);
+        const extendedData = data as ExtendedPlaylistDTO;
+        const mappedSongs = mapSongsFromResponse(data.songs);
+        
+        const ownerId = data.ownerId ?? data.owner?.id;
+        const normalizeVisibility = (v: unknown): PlaylistVisibility => {
+          const raw = typeof v === 'string' ? v.toUpperCase() : '';
+          if (raw === 'FRIENDS_ONLY') return PlaylistVisibility.FRIENDS_ONLY;
+          if (raw === 'PRIVATE') return PlaylistVisibility.PRIVATE;
+          if (raw === 'PUBLIC') return PlaylistVisibility.PUBLIC;
+          return PlaylistVisibility.PUBLIC;
+        };
+        const visibility = normalizeVisibility((data as PlaylistDTO).visibility);
+        
+        const ownerName = extendedData?.owner?.name 
+          ?? (data.owner as { name?: string } | undefined)?.name 
+          ?? (data as { ownerName?: string }).ownerName
+          ?? undefined;
+        const ownerAvatar = extendedData?.owner?.avatar 
+          ?? (data.owner as { avatar?: string | null } | undefined)?.avatar 
+          ?? (data as { ownerAvatar?: string | null }).ownerAvatar
+          ?? null;
+        
+        const playlistCover = data.coverUrl || extendedData.urlImagePlaylist || null;
+        setSearchResults({
+          id: data.id,
+          title: data.name,
+          description: data.description || '',
+          cover: playlistCover,
+          ownerName,
+          ownerAvatar,
+          ownerId,
+          visibility,
+          totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
+          updatedAt: extendedData?.dateUpdate || null,
+          songs: mappedSongs,
+        });
+      } catch (error) {
+        console.error('Failed to search songs:', error);
+        setSearchResults(null);
+      } finally {
+        setSearching(false);
+      }
+    };
+    
+    searchSongs();
+  }, [debouncedSearchQuery, playlistNumericId]);
   
   useEffect(() => {
     const load = async () => {
@@ -2866,31 +2927,58 @@ const PlaylistDetail = () => {
             >
               <Heart className={`w-5 h-5 ${isPlaylistSaved ? "fill-current" : ""}`} />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? 'opacity-50 cursor-not-allowed' : ''}`}
-              disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
-              onClick={() => {
-                if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
-                  toast({
-                    title: "Cannot share",
-                    description: "Your playlist is private",
-                    variant: "destructive",
-                  });
-                } else {
-                  setSharePlaylistOpen(true);
-                }
-              }}
-            >
-              <Share2 className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
-              <Download className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
-              <MoreHorizontal className="w-5 h-5" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
+                    onClick={() => {
+                      if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
+                        toast({
+                          title: "Cannot share",
+                          description: "Your playlist is private",
+                          variant: "destructive",
+                        });
+                      } else {
+                        setSharePlaylistOpen(true);
+                      }
+                    }}
+                  >
+                    <Share2 className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+                    <Download className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+                    <MoreHorizontal className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>More options</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </section>
@@ -2909,7 +2997,30 @@ const PlaylistDetail = () => {
             </div>
 
             <div className="space-y-2">
-              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => {
+              {(() => {
+                // Sử dụng searchResults nếu có search query, nếu không dùng playlist gốc
+                const currentPlaylist = debouncedSearchQuery.trim() ? searchResults : playlist;
+                const allSongs = (currentPlaylist?.songs || []).filter(s => !hiddenSongIds.includes(s.id));
+                
+                // Hiển thị loading khi đang search
+                if (searching && debouncedSearchQuery.trim()) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">Searching...</p>
+                    </div>
+                  );
+                }
+                
+                // Hiển thị message nếu không tìm thấy
+                if (debouncedSearchQuery.trim() && allSongs.length === 0 && !searching) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">No songs found matching "{debouncedSearchQuery}"</p>
+                    </div>
+                  );
+                }
+                
+                return allSongs.map((song, index) => {
                 // L?y avatar c?a ngu?i ThÃªm bÃ i hÃ¡t t? friends list
                 let addedByAvatar: string | null = null;
                 if ((song as { addedById?: number }).addedById && friends.length > 0) {
@@ -2941,7 +3052,8 @@ const PlaylistDetail = () => {
                     meId={meId}
                   />
                 );
-              })}
+              });
+              })()}
             </div>
           </CardContent>
         </Card>

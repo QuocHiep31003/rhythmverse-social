@@ -370,6 +370,10 @@ const PlaylistLibrary = () => {
   const [playlistFilter, setPlaylistFilter] = useState<
     "all" | "owned" | "collab" | "favorites" | "public" | "private" | "friends_only"
   >("all");
+  
+  // Phân trang: số trang hiện tại và số items mỗi trang
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   // Lắng nghe notification ban để tự động ẩn playlist
   useEffect(() => {
@@ -1033,6 +1037,44 @@ const PlaylistLibrary = () => {
     filteredFavoriteAlbums.length,
     filteredFavoritePlaylistItems.length,
   ]);
+
+  // Reset về trang 1 khi filter/scope thay đổi
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [scope, playlistFilter, searchQuery, sortBy]);
+
+  // Tính tổng số items (không bao gồm Liked Songs card)
+  const totalItems = useMemo(() => {
+    if (scope === "albums") {
+      return filteredFavoriteAlbums.length;
+    }
+    if (playlistFilter === "favorites") {
+      if (scope === "all") {
+        return filteredFavoritePlaylistItems.length + filteredFavoriteAlbums.length;
+      } else {
+        return filteredFavoritePlaylistItems.length;
+      }
+    }
+    if (scope === "all") {
+      return filteredPlaylists.length + filteredExtraFavoritePlaylists.length + filteredFavoriteAlbums.length;
+    }
+    if (scope === "playlists") {
+      return filteredPlaylists.length + filteredExtraFavoritePlaylists.length;
+    }
+    return filteredPlaylists.length;
+  }, [scope, playlistFilter, filteredPlaylists.length, filteredExtraFavoritePlaylists.length, filteredFavoriteAlbums.length, filteredFavoritePlaylistItems.length]);
+
+  // Tính số trang
+  const hasLikedSongs = scope !== "albums";
+  const availableSlotsPerPage = itemsPerPage - (hasLikedSongs ? 1 : 0);
+  const totalPages = Math.max(1, Math.ceil(totalItems / availableSlotsPerPage));
+
+  // Helper function để lấy items cho trang hiện tại
+  const getItemsForPage = useCallback(<T,>(items: T[], page: number): T[] => {
+    const startIndex = (page - 1) * availableSlotsPerPage;
+    const endIndex = startIndex + availableSlotsPerPage;
+    return items.slice(startIndex, endIndex);
+  }, [availableSlotsPerPage]);
   // Tính duration cho các playlist yêu thích (dùng /api/playlists/{id})
   useEffect(() => {
     let cancelled = false;
@@ -1437,7 +1479,7 @@ const PlaylistLibrary = () => {
                     </p>
                   </Card>
                 ) : (
-                  filteredFavoriteAlbums.map((album) => (
+                  getItemsForPage<FavoriteAlbumDTO>(filteredFavoriteAlbums, currentPage).map((album) => (
                     <FavoriteAlbumCardInline
                       key={`albums-scope-${album.id}`}
                       album={album}
@@ -1463,30 +1505,53 @@ const PlaylistLibrary = () => {
                     </Card>
                   ) : (
                     <>
-                      {filteredFavoritePlaylistItems.map((playlist) => (
-                        <PlaylistCardWithFavoriteInLibrary
-                          key={`fav-pl-${playlist.id}`}
-                          playlist={playlist}
-                          playlistMeta={playlistMeta[playlist.id]}
-                          duration={durations[String(playlist.id)]}
-                          onPlay={() => playPlaylist(playlist)}
-                          getCollaboratorBadgeText={getCollaboratorBadgeText}
-                          formatNumber={formatNumber}
-                          layout="grid"
-                        />
-                      ))}
-                      {filteredFavoriteAlbums.map((album) => (
-                        <FavoriteAlbumCardInline
-                          key={`fav-al-scope-${album.id}`}
-                          album={album}
-                          onRemove={() => {
-                            const idKey = String(album.id);
-                            setFavoriteAlbums((prev) =>
-                              prev.filter((a) => String(a.id) !== idKey)
-                            );
-                          }}
-                        />
-                      ))}
+                      {(() => {
+                        // Tính toán items cho trang hiện tại - gộp playlists và albums
+                        const allItems: (PlaylistItem | FavoriteAlbumDTO)[] = [
+                          ...filteredFavoritePlaylistItems,
+                          ...filteredFavoriteAlbums
+                        ];
+                        const pageItems = getItemsForPage(allItems, currentPage);
+                        
+                        return (
+                          <>
+                            {pageItems.map((item) => {
+                              // Kiểm tra xem là playlist hay album
+                              if ('title' in item) {
+                                // Là PlaylistItem
+                                const playlist = item as PlaylistItem;
+                                return (
+                                  <PlaylistCardWithFavoriteInLibrary
+                                    key={`fav-pl-${playlist.id}`}
+                                    playlist={playlist}
+                                    playlistMeta={playlistMeta[playlist.id]}
+                                    duration={durations[String(playlist.id)]}
+                                    onPlay={() => playPlaylist(playlist)}
+                                    getCollaboratorBadgeText={getCollaboratorBadgeText}
+                                    formatNumber={formatNumber}
+                                    layout="grid"
+                                  />
+                                );
+                              } else {
+                                // Là FavoriteAlbumDTO
+                                const album = item as FavoriteAlbumDTO;
+                                return (
+                                  <FavoriteAlbumCardInline
+                                    key={`fav-al-scope-${album.id}`}
+                                    album={album}
+                                    onRemove={() => {
+                                      const idKey = String(album.id);
+                                      setFavoriteAlbums((prev) =>
+                                        prev.filter((a) => String(a.id) !== idKey)
+                                      );
+                                    }}
+                                  />
+                                );
+                              }
+                            })}
+                          </>
+                        );
+                      })()}
                     </>
                   )
                 ) : (
@@ -1499,7 +1564,7 @@ const PlaylistLibrary = () => {
                       </p>
                     </Card>
                   ) : (
-                    filteredFavoritePlaylistItems.map((playlist) => (
+                    getItemsForPage<PlaylistItem>(filteredFavoritePlaylistItems, currentPage).map((playlist) => (
                       <PlaylistCardWithFavoriteInLibrary
                         key={`fav-pl-${playlist.id}`}
                         playlist={playlist}
@@ -1518,7 +1583,7 @@ const PlaylistLibrary = () => {
                 playlistFilter === "all" ? (
                   // Filter "all": hiển thị tất cả (playlists + favorite playlists + favorite albums)
                   <>
-                    {filteredPlaylists.length === 0 && filteredExtraFavoritePlaylists.length === 0 && (scope === "albums" || filteredFavoriteAlbums.length === 0) ? (
+                    {filteredPlaylists.length === 0 && filteredExtraFavoritePlaylists.length === 0 && (scope !== "all" || filteredFavoriteAlbums.length === 0) ? (
                       <Card className="bg-[#181818] border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
                         <p className="font-medium text-white mb-1">Không có nội dung nào</p>
                         <p className="text-xs text-muted-foreground">
@@ -1527,55 +1592,56 @@ const PlaylistLibrary = () => {
                       </Card>
                     ) : (
                       <>
-                        {filteredPlaylists.map((playlist) => (
-                          <PlaylistCardWithFavoriteInLibrary
-                            key={playlist.id}
-                            playlist={playlist}
-                            playlistMeta={playlistMeta[playlist.id]}
-                            duration={durations[playlist.id]}
-                            onPlay={() => playPlaylist(playlist)}
-                            onDelete={playlist.isOwner ? () => openDelete(playlist) : undefined}
-                            getCollaboratorBadgeText={getCollaboratorBadgeText}
-                            formatNumber={formatNumber}
-                            layout="grid"
-                          />
-                        ))}
-
-                        {/* Khi scope là "playlists" hoặc "all": hiển thị cả favorite playlists */}
-                        {(scope === "playlists" || scope === "all") && (
-                          <>
-                            {filteredExtraFavoritePlaylists.map((playlist) => (
-                              <PlaylistCardWithFavoriteInLibrary
-                                key={`extra-fav-${playlist.id}`}
-                                playlist={playlist}
-                                playlistMeta={playlistMeta[playlist.id]}
-                                duration={durations[String(playlist.id)]}
-                                onPlay={() => playPlaylist(playlist)}
-                                getCollaboratorBadgeText={getCollaboratorBadgeText}
-                                formatNumber={formatNumber}
-                                layout="grid"
-                              />
-                            ))}
-                          </>
-                        )}
-
-                        {/* Chỉ hiển thị album khi scope là "all" */}
-                        {scope === "all" && (
-                          <>
-                            {filteredFavoriteAlbums.map((album) => (
-                              <FavoriteAlbumCardInline
-                                key={`fav-al-${album.id}`}
-                                album={album}
-                                onRemove={() => {
-                                  const idKey = String(album.id);
-                                  setFavoriteAlbums((prev) =>
-                                    prev.filter((a) => String(a.id) !== idKey)
+                        {(() => {
+                          // Tính toán items cho trang hiện tại - gộp tất cả items
+                          const allItems: (PlaylistItem | FavoriteAlbumDTO)[] = [
+                            ...filteredPlaylists,
+                            ...(scope === "playlists" || scope === "all" ? filteredExtraFavoritePlaylists : []),
+                            ...(scope === "all" ? filteredFavoriteAlbums : [])
+                          ];
+                          const pageItems = getItemsForPage(allItems, currentPage);
+                          
+                          return (
+                            <>
+                              {pageItems.map((item) => {
+                                // Kiểm tra xem là playlist hay album
+                                if ('title' in item) {
+                                  // Là PlaylistItem
+                                  const playlist = item as PlaylistItem;
+                                  const isExtra = filteredExtraFavoritePlaylists.some(p => p.id === playlist.id);
+                                  return (
+                                    <PlaylistCardWithFavoriteInLibrary
+                                      key={isExtra ? `extra-fav-${playlist.id}` : playlist.id}
+                                      playlist={playlist}
+                                      playlistMeta={playlistMeta[playlist.id]}
+                                      duration={durations[playlist.id] || durations[String(playlist.id)]}
+                                      onPlay={() => playPlaylist(playlist)}
+                                      onDelete={playlist.isOwner ? () => openDelete(playlist) : undefined}
+                                      getCollaboratorBadgeText={getCollaboratorBadgeText}
+                                      formatNumber={formatNumber}
+                                      layout="grid"
+                                    />
                                   );
-                                }}
-                              />
-                            ))}
-                          </>
-                        )}
+                                } else {
+                                  // Là FavoriteAlbumDTO
+                                  const album = item as FavoriteAlbumDTO;
+                                  return (
+                                    <FavoriteAlbumCardInline
+                                      key={`fav-al-${album.id}`}
+                                      album={album}
+                                      onRemove={() => {
+                                        const idKey = String(album.id);
+                                        setFavoriteAlbums((prev) =>
+                                          prev.filter((a) => String(a.id) !== idKey)
+                                        );
+                                      }}
+                                    />
+                                  );
+                                }
+                              })}
+                            </>
+                          );
+                        })()}
                       </>
                     )}
                   </>
@@ -1590,7 +1656,7 @@ const PlaylistLibrary = () => {
                     </Card>
                   ) : (
                     <>
-                      {filteredPlaylists.map((playlist) => (
+                      {getItemsForPage<PlaylistItem>(filteredPlaylists, currentPage).map((playlist) => (
                         <PlaylistCardWithFavoriteInLibrary
                           key={playlist.id}
                           playlist={playlist}
@@ -1608,6 +1674,59 @@ const PlaylistLibrary = () => {
                 )
               )}
             </div>
+            
+            {/* Phân trang */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="bg-[#181818] hover:bg-[#262626] border-border/60 text-white"
+                >
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={
+                          currentPage === pageNum
+                            ? "bg-primary text-white"
+                            : "bg-[#181818] hover:bg-[#262626] border-border/60 text-white"
+                        }
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="bg-[#181818] hover:bg-[#262626] border-border/60 text-white"
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </section>
 
           <section className="space-y-8">

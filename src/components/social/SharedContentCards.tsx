@@ -54,7 +54,7 @@ const GlassMediaCard = ({
           draggable={false}
         />
       ) : (
-        <div className="flex items-center justify-center h-full bg-slate-200 dark:bg-gradient-to-br dark:from-purple-700 dark:to-indigo-800">
+        <div className="flex items-center justify-center w-full h-full bg-slate-200 dark:bg-gradient-to-br dark:from-purple-700 dark:to-indigo-800">
           <Music className="w-8 h-8 text-slate-500 dark:text-white/60" />
         </div>
       )}
