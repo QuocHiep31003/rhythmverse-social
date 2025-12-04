@@ -9,6 +9,7 @@ export interface NotificationDTO {
     | 'INVITE'
     | 'INVITE_ACCEPTED'
     | 'INVITE_REJECTED'
+    | 'COLLAB_ADDED'
     | 'FRIEND_REQUEST'
     | 'FRIEND_REQUEST_ACCEPTED'
     | 'PLAYLIST_BANNED'

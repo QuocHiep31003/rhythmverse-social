@@ -583,7 +583,12 @@ const Social = () => {
                   });
                   
                   // Merge: update existing messages with full content from history
+                  // IMPORTANT: Preserve system messages (type === "system" or no backendId) from Firebase
                   const updated = existing.map((msg) => {
+                    // Preserve system messages - they don't have backendId and aren't in history
+                    if (msg.type === "system" || (!msg.backendId && !msg.id?.startsWith("temp-"))) {
+                      return msg;
+                    }
                     // If message has backendId and history has full content for it, use history version
                     if (msg.backendId && historyByBackendId.has(msg.backendId)) {
                       const historyMsg = historyByBackendId.get(msg.backendId)!;
@@ -620,9 +625,11 @@ const Social = () => {
                     }
                   });
                   
-                    // Keep temp messages that aren't in history yet
+                    // Keep temp messages and system messages that aren't in history yet
                     existing.forEach((msg) => {
-                      if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
+                      const isTemp = msg.id?.startsWith("temp-");
+                      const isSystem = msg.type === "system" || (!msg.backendId && !isTemp);
+                      if ((isTemp || isSystem) && !historyIds.has(msg.id)) {
                       const alreadyAdded = updated.some(m => m.id === msg.id);
                       if (!alreadyAdded) {
                         updated.push(msg);
@@ -2280,9 +2287,12 @@ const Social = () => {
           }
           return historyMsg;
         });
-        // Add temp messages that aren't in history
+        // Add temp messages and system messages that aren't in history
+        // System messages don't have backendId and aren't in database, so preserve them from Firebase
         existing.forEach(msg => {
-          if (msg.id?.startsWith('temp-') && !historyIds.has(msg.id)) {
+          const isTemp = msg.id?.startsWith('temp-');
+          const isSystem = msg.type === "system" || (!msg.backendId && !isTemp && !msg.id?.startsWith('temp-'));
+          if ((isTemp || isSystem) && !historyIds.has(msg.id)) {
             merged.push(msg);
           }
         });
