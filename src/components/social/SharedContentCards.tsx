@@ -54,7 +54,7 @@ const GlassMediaCard = ({
           draggable={false}
         />
       ) : (
-        <div className="flex items-center justify-center h-full bg-slate-200 dark:bg-gradient-to-br dark:from-purple-700 dark:to-indigo-800">
+        <div className="flex items-center justify-center w-full h-full bg-slate-200 dark:bg-gradient-to-br dark:from-purple-700 dark:to-indigo-800">
           <Music className="w-8 h-8 text-slate-500 dark:text-white/60" />
         </div>
       )}
@@ -261,17 +261,45 @@ export const SharedSongCard = ({
   if (!song) return null;
   const go = () => _link && navigate(_link);
 
-  // Extract artist name similar to FavoriteSongs.tsx
-  // Ưu tiên artist string, sau đó artists array
-  const artistName = (song as { artist?: string }).artist 
-    || (Array.isArray(song.artists) && song.artists.length > 0
-      ? song.artists.map(a => typeof a === 'string' ? a : (a as { name?: string }).name || '').filter(Boolean).join(", ")
-      : DEFAULT_ARTIST_NAME);
+  // Extract artist name:
+  // 1. Ưu tiên mảng artists (danh sách nghệ sĩ chuẩn)
+  // 2. Fallback: field artist đơn
+  // 3. Cuối cùng: các field contributor (addedByName / createdByName) để tránh "Unknown"
+  const artistsArray =
+    Array.isArray(song.artists) && song.artists.length > 0
+      ? song.artists
+          .map((a) =>
+            typeof a === "string"
+              ? a
+              : (a as { name?: string }).name || ""
+          )
+          .filter((name) => !!name && name.trim().length > 0)
+      : [];
+
+  const artistFromArray = artistsArray.join(", ");
+  const artistField = (song as { artist?: string | null | undefined }).artist;
+  const artistFromField =
+    typeof artistField === "string" && artistField.trim().length > 0
+      ? artistField.trim()
+      : "";
+
+  const contributorFromAddedBy = (song as { addedByName?: string | null }).addedByName;
+  const contributorFromCreatedBy = (song as { createdByName?: string | null }).createdByName;
+  const contributor =
+    (contributorFromAddedBy && contributorFromAddedBy.trim()) ||
+    (contributorFromCreatedBy && contributorFromCreatedBy.trim()) ||
+    "";
+
+  const artistName =
+    artistFromArray ||
+    artistFromField ||
+    contributor ||
+    DEFAULT_ARTIST_NAME;
 
   return (
     <SharedContentWrapper isSentByMe={isSentByMe}>
       <div
-        className="flex items-center w-full rounded-xl
+        className="flex items-center w-full max-w-[520px] sm:max-w-[600px] rounded-xl
         border border-white/20 bg-white/5
         shadow-[0_6px_20px_rgba(91,33,182,0.25)]
         hover:bg-white/10 hover:shadow-[0_8px_24px_rgba(91,33,182,0.35)]
@@ -294,10 +322,10 @@ export const SharedSongCard = ({
 
         {/* Nội dung bài hát */}
         <div className="flex-1 min-w-0 px-3 text-left">
-          <p className="font-medium text-sm text-white leading-tight line-clamp-2">
+          <p className="font-medium text-sm text-white leading-tight line-clamp-2 break-words">
             {song.name || "Unknown Song"}
           </p>
-          <p className="text-xs text-white/70 truncate mt-0.5">
+          <p className="text-xs text-white/70 mt-0.5 break-words line-clamp-2">
             {artistName}
           </p>
           {song.durationLabel && (

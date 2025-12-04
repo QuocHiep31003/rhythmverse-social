@@ -95,7 +95,11 @@ const OAuthCallback = () => {
         console.warn("[OAuthCallback] Failed to fetch /me after OAuth:", err);
       } finally {
         const target = resolveRedirectTarget();
-        navigate(target, { replace: true });
+        // Force full page reload after OAuth2 login to ensure Firebase recognizes top-level origin
+        // This fixes the issue where "Share Profile" doesn't work until manual reload
+        // OAuth2 redirect flow doesn't trigger a true top-level navigation, so Firebase
+        // treats the page as "outside of the top-level site" and blocks sensitive APIs
+        window.location.replace(target);
       }
     };
 

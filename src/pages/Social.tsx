@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { friendsApi } from "@/services/api/friendsApi";
 import { authApi } from "@/services/api/authApi";
 import { API_BASE_URL } from "@/services/api/config";
+import { premiumSubscriptionApi, type PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 
 import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
 
@@ -407,6 +408,8 @@ const Social = () => {
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
 
   const [shareUrl, setShareUrl] = useState<string>("");
+  const [profilePlanLabel, setProfilePlanLabel] = useState<string>("");
+  const [profileIsPremium, setProfileIsPremium] = useState<boolean>(false);
   const [profileUsername, setProfileUsername] = useState<string>("");
   const [profileUserId, setProfileUserId] = useState<number | null>(null);
   // Inline public profile viewing via /social?u=USERNAME
@@ -583,7 +586,12 @@ const Social = () => {
                   });
                   
                   // Merge: update existing messages with full content from history
+                  // IMPORTANT: Preserve system messages (type === "system" or no backendId) from Firebase
                   const updated = existing.map((msg) => {
+                    // Preserve system messages - they don't have backendId and aren't in history
+                    if (msg.type === "system" || (!msg.backendId && !msg.id?.startsWith("temp-"))) {
+                      return msg;
+                    }
                     // If message has backendId and history has full content for it, use history version
                     if (msg.backendId && historyByBackendId.has(msg.backendId)) {
                       const historyMsg = historyByBackendId.get(msg.backendId)!;
@@ -620,9 +628,11 @@ const Social = () => {
                     }
                   });
                   
-                    // Keep temp messages that aren't in history yet
+                    // Keep temp messages and system messages that aren't in history yet
                     existing.forEach((msg) => {
-                      if (msg.id?.startsWith("temp-") && !historyIds.has(msg.id)) {
+                      const isTemp = msg.id?.startsWith("temp-");
+                      const isSystem = msg.type === "system" || (!msg.backendId && !isTemp);
+                      if ((isTemp || isSystem) && !historyIds.has(msg.id)) {
                       const alreadyAdded = updated.some(m => m.id === msg.id);
                       if (!alreadyAdded) {
                         updated.push(msg);
@@ -895,6 +905,89 @@ const Social = () => {
           return Number.isFinite(idNum) ? idNum : null;
         })();
         setProfileUserId(resolvedUserId);
+
+        // ======== Premium label (sync với Profile.tsx) ========
+        try {
+          let subscription: PremiumSubscriptionDTO | null = null;
+          if (resolvedUserId) {
+            subscription = await premiumSubscriptionApi.getMySubscription(resolvedUserId);
+          }
+
+          const getPremiumStringFlag = (value?: string | null) => {
+            if (!value) return false;
+            const v = String(value).toLowerCase();
+            return (
+              v === "premium" ||
+              v === "vip" ||
+              v === "paid" ||
+              v === "yes" ||
+              v === "true" ||
+              v === "1"
+            );
+          };
+
+          const userPremiumBoolean =
+            Boolean((me as any)?.isPremium) ||
+            Boolean((me as any)?.premium) ||
+            getPremiumStringFlag((me as any)?.plan) ||
+            getPremiumStringFlag((me as any)?.membership) ||
+            getPremiumStringFlag(me?.roleName);
+
+          const premiumSources = [
+            userPremiumBoolean,
+            getPremiumStringFlag(subscription?.planName),
+            getPremiumStringFlag(subscription?.planCode),
+          ];
+          const isPremiumUser = premiumSources.some((flag) => Boolean(flag));
+
+          const premiumStartDate =
+            subscription?.createdAt ||
+            subscription?.startDate ||
+            subscription?.currentPeriodStart ||
+            (me as any)?.premiumStartDate ||
+            (me as any)?.premiumStartedAt ||
+            null;
+          const premiumEndDate =
+            subscription?.expiresAt ||
+            subscription?.endDate ||
+            subscription?.currentPeriodEnd ||
+            (me as any)?.premiumEndDate ||
+            (me as any)?.premiumExpiresAt ||
+            null;
+
+          let rawPlanLabel =
+            subscription?.planName ||
+            subscription?.planCode ||
+            (me as any)?.planName ||
+            (me as any)?.plan ||
+            (me as any)?.membership ||
+            (isPremiumUser ? "Premium" : "Free");
+
+          const planLabel = rawPlanLabel
+            ?.replace(/Premium\s*1\s*tháng/gi, "Premium Monthly")
+            ?.replace(/Premium\s*3\s*tháng/gi, "Premium Quarterly")
+            ?.replace(/Premium\s*1\s*năm/gi, "Premium Yearly")
+            ?.replace(/Premium\s*tháng/gi, "Premium Monthly")
+            ?.replace(/Premium\s*năm/gi, "Premium Yearly")
+            || (isPremiumUser ? "Premium" : "Free");
+
+          let finalPremium = isPremiumUser;
+          let finalPlanLabel = planLabel;
+          if (premiumEndDate) {
+            const end = new Date(premiumEndDate);
+            if (!Number.isNaN(end.getTime()) && end.getTime() < Date.now()) {
+              finalPremium = false;
+              finalPlanLabel = "Free";
+            }
+          }
+
+          setProfileIsPremium(finalPremium);
+          setProfilePlanLabel(finalPlanLabel);
+        } catch (e) {
+          console.warn("[Social] Failed to load premium subscription for FriendsPanel:", e);
+          setProfileIsPremium(false);
+          setProfilePlanLabel("");
+        }
         const uname = (me?.username || (me?.email ? me.email.split('@')[0] : '') || '').trim();
         setProfileUsername(uname);
         try {
@@ -1906,11 +1999,11 @@ const Social = () => {
         (messageIdStr && !messageIdStr.startsWith('temp-') ? Number(messageIdStr) : null);
       
       if (!derivedMessageId || !Number.isFinite(derivedMessageId)) {
-        console.warn('[Social] Cannot delete: message ID is invalid', {
+        console.warn('[Social] Cannot recall: message ID is invalid', {
           messageIdStr,
           backendId: messageIdFromBackend,
         });
-        toast.error("Không thể xóa tin nhắn: ID không hợp lệ");
+        toast.error("Không thể thu hồi tin nhắn: ID không hợp lệ");
         return false;
       }
 
@@ -1928,11 +2021,11 @@ const Social = () => {
           });
         }
         
-        toast.success("Đã xóa tin nhắn");
+        toast.success("Đã thu hồi tin nhắn");
         return true;
       } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : "Không thể xóa tin nhắn";
-        console.error('[Social] Failed to delete message:', error);
+        const errorMsg = error instanceof Error ? error.message : "Không thể thu hồi tin nhắn";
+        console.error('[Social] Failed to recall message:', error);
         toast.error(errorMsg);
         return false;
       }
@@ -2280,9 +2373,12 @@ const Social = () => {
           }
           return historyMsg;
         });
-        // Add temp messages that aren't in history
+        // Add temp messages and system messages that aren't in history
+        // System messages don't have backendId and aren't in database, so preserve them from Firebase
         existing.forEach(msg => {
-          if (msg.id?.startsWith('temp-') && !historyIds.has(msg.id)) {
+          const isTemp = msg.id?.startsWith('temp-');
+          const isSystem = msg.type === "system" || (!msg.backendId && !isTemp && !msg.id?.startsWith('temp-'));
+          if ((isTemp || isSystem) && !historyIds.has(msg.id)) {
             merged.push(msg);
           }
         });
@@ -3269,6 +3365,9 @@ const Social = () => {
                 profileEmail={profileEmail}
                 profileAvatar={profileAvatar}
                 shareUrl={shareUrl}
+                profilePlanLabel={profilePlanLabel}
+                profileIsPremium={profileIsPremium}
+                profileUsername={profileUsername}
                 onToggleInvite={(id) => setExpandedInviteId(prev => (prev === id ? null : id))}
                 onAcceptInvite={handleAcceptCollabInvite}
                 onRejectInvite={handleRejectCollabInvite}

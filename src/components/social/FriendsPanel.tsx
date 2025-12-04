@@ -2,7 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Users, Share2, MessageCircle, Flame, Headphones } from "lucide-react";
+import { Users, Share2, MessageCircle, Flame, Headphones, MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Friend, CollabInviteDTO } from "@/types/social";
 import { CollabInviteCard } from "@/components/social/CollabInviteCard";
 
@@ -15,6 +21,9 @@ interface FriendsPanelProps {
   profileEmail: string;
   profileAvatar?: string | null;
   shareUrl: string;
+  profileUsername?: string;
+  profilePlanLabel?: string;
+  profileIsPremium?: boolean;
   onToggleInvite: (id: number) => void;
   onAcceptInvite: (id: number) => Promise<void>;
   onRejectInvite: (id: number) => Promise<void>;
@@ -32,6 +41,9 @@ export const FriendsPanel = ({
   profileEmail,
   profileAvatar,
   shareUrl,
+  profilePlanLabel,
+  profileIsPremium,
+  profileUsername,
   onToggleInvite,
   onAcceptInvite,
   onRejectInvite,
@@ -96,13 +108,30 @@ export const FriendsPanel = ({
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1">
-                <h3 className="text-xl font-bold">{profileName || (profileEmail ? profileEmail.split('@')[0] : 'Your Username')}</h3>
+                <h3 className="text-xl font-bold">
+                  {profileName || profileUsername || (profileEmail ? profileEmail.split("@")[0] : "Your Username")}
+                </h3>
                 <p className="text-muted-foreground">
-                  @{profileEmail ? profileEmail.split('@')[0] : (profileName ? profileName.toLowerCase().replace(/\s+/g, '') : 'yourusername')}
+                  {(() => {
+                    const raw =
+                      profileUsername && profileUsername.trim().length > 0
+                        ? profileUsername.trim()
+                        : profileEmail
+                        ? profileEmail.split("@")[0]
+                        : profileName
+                        ? profileName.toLowerCase().replace(/\s+/g, "")
+                        : "yourusername";
+                    const normalized = raw.startsWith("@") ? raw.slice(1) : raw;
+                    return `@${normalized}`;
+                  })()}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="secondary">{friends.length} friends</Badge>
-                  <Badge variant="outline">Premium</Badge>
+                    {profileIsPremium ? (
+                      <Badge variant="outline">
+                        {profilePlanLabel || "Premium"}
+                      </Badge>
+                    ) : null}
                 </div>
               </div>
               <div className="text-right">
@@ -149,7 +178,7 @@ export const FriendsPanel = ({
         {friends.map((friend) => (
           <Card key={friend.id} className="bg-gradient-glass backdrop-blur-sm border-white/10 hover:shadow-glow transition-all duration-300">
             <CardContent className="p-6">
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-start gap-3 mb-4">
                 <div className="relative">
                   <Avatar className="w-12 h-12">
                     {friend.avatar ? (
@@ -163,16 +192,18 @@ export const FriendsPanel = ({
                     <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background" />
                   )}
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold">{friend.name}</h3>
-                  <p className="text-sm text-muted-foreground">{friend.username}</p>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold truncate">{friend.name}</h3>
+                  <p className="text-sm text-muted-foreground break-all">{friend.username}</p>
+                  {friend.streak >= 1 && (
+                    <div className="mt-1 inline-flex items-center gap-1 bg-orange-500/10 px-2 py-0.5 rounded-full">
+                      <Flame className="w-3 h-3 text-orange-500" />
+                      <span className="text-xs text-orange-500">
+                        {friend.streak}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {friend.streak >= 7 && (
-                  <div className="flex items-center gap-1 bg-orange-500/10 px-2 py-1 rounded-full">
-                    <Flame className="w-3 h-3 text-orange-500" />
-                    <span className="text-xs text-orange-500">{friend.streak}</span>
-                  </div>
-                )}
               </div>
 
               {friend.currentlyListening && (
@@ -186,14 +217,40 @@ export const FriendsPanel = ({
                 </div>
               )}
 
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1" onClick={() => onSelectChat(friend.id)}>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => onSelectChat(friend.id)}
+                >
                   <MessageCircle className="w-4 h-4 mr-2" />
                   Message
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => onUnfriend(friend.id)}>
-                  Unfriend
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      aria-label="More actions"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem
+                      className="text-red-500 cursor-pointer"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onUnfriend(friend.id);
+                      }}
+                    >
+                      Hủy kết bạn
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </CardContent>
           </Card>

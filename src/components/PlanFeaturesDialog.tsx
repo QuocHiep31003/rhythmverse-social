@@ -12,6 +12,11 @@ import {
   PlanFeatureDTO,
   subscriptionPlanApi,
 } from "@/services/api/subscriptionPlanApi";
+import {
+  featureUsageApi,
+  FeatureName,
+  type FeatureUsageDTO,
+} from "@/services/api/featureUsageApi";
 
 interface PlanFeaturesDialogProps {
   open: boolean;
@@ -117,6 +122,7 @@ const PlanFeaturesDialog = ({
   const [planFeatures, setPlanFeatures] = useState<PlanFeatureDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [featureUsageMap, setFeatureUsageMap] = useState<Record<string, FeatureUsageDTO>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +160,56 @@ const PlanFeaturesDialog = ({
       cancelled = true;
     };
   }, [open, planCode]);
+
+  // Load usage cho các feature trong plan khi dialog mở
+  useEffect(() => {
+    const loadFeatureUsages = async () => {
+      if (!open || !planFeatures.length) {
+        setFeatureUsageMap({});
+        return;
+      }
+
+      const uniqueNames = Array.from(
+        new Set(
+          planFeatures
+            .map((f) => f.featureName)
+            .filter((name): name is string => !!name)
+        )
+      );
+
+      if (!uniqueNames.length) {
+        setFeatureUsageMap({});
+        return;
+      }
+
+      const entries: Array<[string, FeatureUsageDTO]> = [];
+
+      await Promise.all(
+        uniqueNames.map(async (name) => {
+          const enumKey = name as keyof typeof FeatureName;
+          const enumValue = FeatureName[enumKey];
+          if (!enumValue) return;
+
+          try {
+            const usage = await featureUsageApi.getFeatureUsage(enumValue);
+            if (usage) {
+              entries.push([name, usage]);
+            }
+          } catch {
+            // Nếu feature chưa có usage/limit → bỏ qua
+          }
+        })
+      );
+
+      const map: Record<string, FeatureUsageDTO> = {};
+      for (const [name, usage] of entries) {
+        map[name] = usage;
+      }
+      setFeatureUsageMap(map);
+    };
+
+    void loadFeatureUsages();
+  }, [open, planFeatures]);
 
   const featureList: FeatureDisplayItem[] = useMemo(() => {
     if (!planFeatures.length) {
@@ -208,37 +264,50 @@ const PlanFeaturesDialog = ({
                 {error}
               </div>
             )}
-            {featureList.map((feature) => (
-              <div
-                key={feature.key}
-                className="flex items-center justify-between gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-primary/10 text-primary">
-                    <Sparkles className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm">{feature.name}</p>
-                    <p className="text-xs text-muted-foreground">{feature.detail}</p>
-                  </div>
-                </div>
-                <Badge
-                  className={
-                    feature.status === "unlimited"
-                      ? "bg-gradient-to-r from-purple-600 to-primary text-white border-0"
-                      : feature.status === "disabled"
-                        ? "border-destructive/40 text-destructive bg-destructive/10"
-                        : "bg-primary/10 text-primary border-primary/30"
-                  }
+            {featureList.map((feature) => {
+              const usage = feature.key
+                ? featureUsageMap[feature.key as string] ||
+                  featureUsageMap[String(feature.key).toUpperCase()]
+                : undefined;
+              const usedCount = usage?.usageCount ?? 0;
+
+              return (
+                <div
+                  key={feature.key}
+                  className="flex items-center justify-between gap-3 p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors"
                 >
-                  {feature.status === "unlimited"
-                    ? "Unlimited"
-                    : feature.status === "disabled"
-                      ? "Disabled"
-                      : "Limited"}
-                </Badge>
-              </div>
-            ))}
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-primary/10 text-primary">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{feature.name}</p>
+                      <p className="text-xs text-muted-foreground">{feature.detail}</p>
+                      {usedCount > 0 && (
+                        <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                          Used {usedCount} time{usedCount !== 1 ? "s" : ""} in current period
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      feature.status === "unlimited"
+                        ? "bg-gradient-to-r from-purple-600 to-primary text-white border-0"
+                        : feature.status === "disabled"
+                          ? "border-destructive/40 text-destructive bg-destructive/10"
+                          : "bg-primary/10 text-primary border-primary/30"
+                    }
+                  >
+                    {feature.status === "unlimited"
+                      ? "Unlimited"
+                      : feature.status === "disabled"
+                        ? "Disabled"
+                        : "Limited"}
+                  </Badge>
+                </div>
+              );
+            })}
           </div>
         )}
 
