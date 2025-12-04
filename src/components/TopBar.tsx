@@ -63,6 +63,10 @@ import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import PremiumExpiringModal from "@/components/PremiumExpiringModal";
+import { friendsApi } from "@/services/api/friendsApi";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 
 const cleanPlanLabel = (label?: string | null) =>
   label ? label.replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim() : "";
@@ -90,6 +94,7 @@ const TopBar = () => {
   const [messageNotifications, setMessageNotifications] = useState<NotificationDTO[]>([]);
   const [alertNotifications, setAlertNotifications] = useState<NotificationDTO[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  const [unreadByUser, setUnreadByUser] = useState<Record<number, number>>({});
 
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
@@ -100,6 +105,7 @@ const TopBar = () => {
   const [currentSubscription, setCurrentSubscription] = useState<PremiumSubscriptionDTO | null>(null);
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const [msgDropdownOpen, setMsgDropdownOpen] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showPremiumExpiringModal, setShowPremiumExpiringModal] = useState(false);
 
@@ -138,6 +144,27 @@ const TopBar = () => {
 
   // ✅ Check nếu đang ở social/chat page - không tăng unread count
   const isOnSocialPage = location.pathname === '/social' || location.pathname.startsWith('/social');
+
+  // ===================== FRIENDS FOR MESSAGE DROPDOWN =====================
+  interface TopbarFriend {
+    userId: number;
+    name: string;
+    avatar?: string;
+  }
+
+  const [friends, setFriends] = useState<TopbarFriend[]>([]);
+
+  const toAbsoluteUrl = (u?: string | null): string | undefined => {
+    if (!u) return undefined;
+    if (/^https?:\/\//i.test(u)) return u;
+    try {
+      const base = window.location.origin.replace(/\/?$/, "");
+      if (u.startsWith("/")) return `${base}${u}`;
+      return `${base}/${u}`;
+    } catch {
+      return u || undefined;
+    }
+  };
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -484,6 +511,44 @@ const TopBar = () => {
     };
   }, []);
 
+  /** ================= LOAD FRIENDS FOR MESSAGE DROPDOWN ================= **/
+  useEffect(() => {
+    if (!currentUserId || !firebaseReady) return;
+
+    let active = true;
+
+    const loadFriends = async () => {
+      try {
+        const apiFriends = await friendsApi.getFriends(currentUserId);
+        if (!active || !Array.isArray(apiFriends)) return;
+
+        const mapped: TopbarFriend[] = apiFriends.map((f: any) => {
+          const userId =
+            typeof f.friendId === "number"
+              ? f.friendId
+              : typeof f.id === "number"
+              ? f.id
+              : NaN;
+          return {
+            userId,
+            name: f.friendName || `User ${userId || ""}`,
+            avatar: toAbsoluteUrl(f.friendAvatar),
+          };
+        }).filter((f: TopbarFriend) => Number.isFinite(f.userId));
+
+        setFriends(mapped);
+      } catch (error) {
+        console.warn("[TopBar] Failed to load friends for message dropdown:", error);
+      }
+    };
+
+    void loadFriends();
+
+    return () => {
+      active = false;
+    };
+  }, [currentUserId, firebaseReady]);
+
   /** ================= LOAD COLLAB INVITES ================= **/
   useEffect(() => {
     const loadInvites = async () => {
@@ -539,12 +604,24 @@ const TopBar = () => {
         if (!cancelled) {
           console.log('[TopBar] Loaded initial unread count from API:', data.totalUnread);
           setUnreadMsgCount(data.totalUnread);
+
+          const unreadByUserMap: Record<number, number> = {};
+          Object.entries(data.unreadCounts || {}).forEach(([roomKey, count]) => {
+            const [minId, maxId] = roomKey.split("_").map(Number);
+            if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+            const friendUserId = minId === currentUserId ? maxId : minId;
+            if (friendUserId && friendUserId !== currentUserId && count > 0) {
+              unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+            }
+          });
+          setUnreadByUser(unreadByUserMap);
         }
       } catch (error) {
         console.warn('[TopBar] Failed to load initial unread count from API:', error);
         // Fallback: set 0, Firebase listener will update
         if (!cancelled) {
           setUnreadMsgCount(0);
+          setUnreadByUser({});
         }
       }
     };
@@ -571,14 +648,19 @@ const TopBar = () => {
       (unreadCounts, totalUnread) => {
         lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
 
-        // ✅ Nếu đang ở social page → không cập nhật unread count (để tránh tăng khi đang xem)
-        if (isOnSocialPage) {
-          console.log('[TopBar] Skipping unread count update - user is on social page:', totalUnread);
-          return;
-        }
-
         console.log('[TopBar] Chat unread counts updated from Firebase:', { unreadCounts, totalUnread });
         setUnreadMsgCount(totalUnread);
+
+        const unreadByUserMap: Record<number, number> = {};
+        Object.entries(unreadCounts || {}).forEach(([roomKey, count]) => {
+          const [minId, maxId] = roomKey.split("_").map(Number);
+          if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+          const friendUserId = minId === currentUserId ? maxId : minId;
+          if (friendUserId && friendUserId !== currentUserId && count > 0) {
+            unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+          }
+        });
+        setUnreadByUser(unreadByUserMap);
       }
     );
 
@@ -596,6 +678,17 @@ const TopBar = () => {
         const data = await chatApi.getUnreadCounts(currentUserId);
         console.log('[TopBar] Polled unread count from API (Firebase fallback):', data.totalUnread);
         setUnreadMsgCount(data.totalUnread);
+
+        const unreadByUserMap: Record<number, number> = {};
+        Object.entries(data.unreadCounts || {}).forEach(([roomKey, count]) => {
+          const [minId, maxId] = roomKey.split("_").map(Number);
+          if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+          const friendUserId = minId === currentUserId ? maxId : minId;
+          if (friendUserId && friendUserId !== currentUserId && count > 0) {
+            unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+          }
+        });
+        setUnreadByUser(unreadByUserMap);
       } catch (error) {
         console.warn('[TopBar] Failed to poll unread counts from API:', error);
       }
@@ -612,7 +705,7 @@ const TopBar = () => {
         pollInterval = null;
       }
     };
-  }, [currentUserId, firebaseReady, isOnSocialPage]); // ✅ Re-run khi location thay đổi
+  }, [currentUserId, firebaseReady]);
 
   useEffect(() => {
     if (!notifOpen || !currentUserId || !firebaseReady) return;
@@ -738,24 +831,107 @@ const TopBar = () => {
           </DropdownMenu>
 
           {/* Messages */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative"
-            onClick={() => {
-              // Reset unread count về 0 khi nhấn vào icon message
-              setUnreadMsgCount(0);
-              // Chuyển đến trang social với tab chat
-              navigate("/social?tab=chat");
-            }}
-          >
-            <MessageCircle className="h-5 w-5" />
-            {unreadMsgCount > 0 && (
-              <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
-                {unreadMsgCount > 99 ? "99+" : unreadMsgCount}
-              </Badge>
-            )}
-          </Button>
+          <DropdownMenu open={msgDropdownOpen} onOpenChange={setMsgDropdownOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative"
+              >
+                <MessageCircle className="h-5 w-5" />
+                {unreadMsgCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
+                    {unreadMsgCount > 99 ? "99+" : unreadMsgCount}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[360px] p-0 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+                <div className="text-sm font-semibold">Tin nhắn</div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary hover:text-primary/90"
+                  onClick={() => {
+                    setMsgDropdownOpen(false);
+                    navigate("/social?tab=chat");
+                  }}
+                >
+                  Mở chat
+                </Button>
+              </div>
+
+              {Object.keys(unreadByUser).length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  Không có tin nhắn chưa đọc
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[420px]">
+                  <div className="p-2 space-y-1">
+                    {Object.entries(unreadByUser)
+                      .sort((a, b) => Number(b[1]) - Number(a[1]))
+                      .map(([userIdStr, count]) => {
+                        const userId = Number(userIdStr);
+                        const friend = friends.find((f) => f.userId === userId);
+                        const displayName =
+                          friend?.name || `User ${userIdStr}`;
+                        const avatar = friend?.avatar;
+                        const initials = displayName
+                          .split(" ")
+                          .map((p) => p[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase();
+
+                        return (
+                          <button
+                            key={userIdStr}
+                            type="button"
+                            onClick={() => {
+                              setMsgDropdownOpen(false);
+                              const friendParam = String(userId);
+                              navigate(`/social?tab=chat&friend=${encodeURIComponent(friendParam)}`);
+                            }}
+                            className={cn(
+                              "w-full flex items-center gap-3 rounded-xl p-3 text-left",
+                              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            )}
+                          >
+                            <Avatar className="h-9 w-9">
+                              {avatar ? (
+                                <AvatarImage src={avatar} alt={displayName} />
+                              ) : null}
+                              <AvatarFallback>{initials}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium truncate">
+                                  {displayName}
+                                </p>
+                                <Badge className="h-5 px-2 text-[11px]">
+                                  {Number(count) > 99 ? "99+" : count}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {Number(count) === 1
+                                  ? "1 tin nhắn chưa đọc"
+                                  : `${count} tin nhắn chưa đọc`}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </ScrollArea>
+              )}
+
+              <Separator />
+              <div className="px-4 py-2 text-xs text-muted-foreground">
+                Tổng cộng {unreadMsgCount} tin nhắn chưa đọc
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Premium */}
           {profileIsPremium ? (
