@@ -3083,9 +3083,24 @@ const PlaylistDetail = () => {
               
               <div className="space-y-2">
                 {loadingRecommended ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                  </div>
+                  <>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={`recommend-skeleton-${i}`}
+                        className="flex items-center gap-4 p-3 rounded-lg"
+                      >
+                        <Skeleton className="w-12 h-12 rounded-lg flex-shrink-0 bg-muted dark:bg-white/5" />
+                        <div className="flex-1 min-w-0">
+                          <Skeleton className="h-4 w-3/4 mb-2 bg-muted dark:bg-white/5" />
+                          <Skeleton className="h-3 w-1/2 bg-muted dark:bg-white/5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <Skeleton className="h-3 w-2/3 bg-muted dark:bg-white/5" />
+                        </div>
+                        <Skeleton className="h-9 w-16 rounded-md bg-muted dark:bg-white/5" />
+                      </div>
+                    ))}
+                  </>
                 ) : recommendedSongs.length === 0 ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground">
                     <p className="text-sm">No suggestions yet. Tap "Find more" to fetch fresh picks.</p>

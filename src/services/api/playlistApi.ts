@@ -123,11 +123,12 @@ export const playlistsApi = {
 
   // Lấy tất cả playlists của user (owned + collaborated)
   // GET /api/playlists/library
-  // ĐÃ MỞ RỘNG: hỗ trợ search/visibility (khi backend implement)
-  library: async (params?: { search?: string; visibility?: string }) => {
+  // ĐÃ MỞ RỘNG: hỗ trợ search/visibility/sort (khi backend implement)
+  library: async (params?: { search?: string; visibility?: string; sort?: string }) => {
     const qp = new URLSearchParams();
     if (params?.search) qp.append("search", params.search);
     if (params?.visibility) qp.append("visibility", params.visibility);
+    if (params?.sort) qp.append("sort", params.sort);
 
     const qs = qp.toString();
     const url = qs

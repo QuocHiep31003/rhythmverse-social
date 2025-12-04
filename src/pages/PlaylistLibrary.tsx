@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, useCallback } from "react";
+﻿import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,7 @@ import { AlbumCard } from "@/components/AlbumCard";
 import { useFavoriteAlbum, useFavoritePlaylist } from "@/hooks/useFavorites";
 import { HorizontalScrollableCards } from "@/components/HorizontalScrollableCards";
 import { watchNotifications, type NotificationDTO } from "@/services/firebase/notifications";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const FavoriteAlbumCardInline = ({
   album,
@@ -268,6 +269,21 @@ const toPlaylistItemFromFavorite = (dto: FavoritePlaylistDTO): PlaylistItem => {
 
 type PlaylistCardLayout = "grid" | "carousel";
 
+// Skeleton component cho playlist/album cards
+const PlaylistSkeleton = () => (
+  <Card className="bg-transparent border-none h-full flex flex-col">
+    <CardContent className="p-0 flex flex-col flex-1">
+      <div className="relative aspect-square rounded-2xl overflow-hidden">
+        <Skeleton className="w-full h-full bg-[#181818] dark:bg-white/5" />
+      </div>
+      <div className="px-1 pt-2 min-w-0">
+        <Skeleton className="h-4 w-3/4 mb-2 bg-[#181818] dark:bg-white/5" />
+        <Skeleton className="h-3 w-1/2 bg-[#181818] dark:bg-white/5" />
+      </div>
+    </CardContent>
+  </Card>
+);
+
 const PlaylistCardWithFavoriteInLibrary = ({ 
   playlist, 
   onPlay,
@@ -371,9 +387,23 @@ const PlaylistLibrary = () => {
     "all" | "owned" | "collab" | "favorites" | "public" | "private" | "friends_only"
   >("all");
   
-  // Phân trang: số trang hiện tại và số items mỗi trang
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  // Debounce search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    searchTimeoutRef.current = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery]);
 
   // Lắng nghe notification ban để tự động ẩn playlist
   useEffect(() => {
@@ -449,7 +479,7 @@ const PlaylistLibrary = () => {
         if (Number.isFinite(me as number)) {
           try {
             // Chỉ truyền search/visibility params khi có search query hoặc filter khác "all"
-            const hasSearchOrFilter = searchQuery.trim() || playlistFilter !== "all";
+            const hasSearchOrFilter = debouncedSearchQuery.trim() || playlistFilter !== "all";
             
             // Map playlistFilter to visibility param
             const visibilityParam = playlistFilter === "public" 
@@ -460,21 +490,44 @@ const PlaylistLibrary = () => {
               ? "FRIENDS_ONLY"
               : undefined;
 
+            // Map sortBy to API sort param
+            let sortParam: string | undefined;
+            if (sortBy === "name") {
+              sortParam = "name,asc";
+            } else if (sortBy === "songs") {
+              sortParam = "songCount,desc";
+            } else if (sortBy === "likes") {
+              sortParam = "likes,desc";
+            } else {
+              sortParam = "dateUpdate,desc"; // recent
+            }
+
             libraryItems = await playlistsApi.library(
-              hasSearchOrFilter
+              hasSearchOrFilter || sortParam
                 ? {
-                    search: searchQuery || undefined,
+                    search: debouncedSearchQuery || undefined,
                     visibility: visibilityParam,
+                    sort: sortParam,
                   }
-                : undefined // Không truyền params khi load mặc định
+                : undefined
             );
           } catch (e) {
             console.warn('Library endpoint failed, falling back to getByUser:', e);
+            // Map sortBy to API sort param
+            let sortParam = "dateUpdate,desc";
+            if (sortBy === "name") {
+              sortParam = "name,asc";
+            } else if (sortBy === "songs") {
+              sortParam = "songCount,desc";
+            } else if (sortBy === "likes") {
+              sortParam = "likes,desc";
+            }
+            
             const page = await playlistsApi.getByUser(me as number, {
               page: 0,
-              size: 24,
-              sort: "dateUpdate,desc",
-              search: searchQuery || undefined,
+              size: 1000, // Load tất cả để không cần phân trang
+              sort: sortParam,
+              search: debouncedSearchQuery || undefined,
             });
             const currentUserId = Number(me);
             libraryItems = (page.content || []).map((p: PlaylistDTO) => {
@@ -520,7 +573,17 @@ const PlaylistLibrary = () => {
             });
           }
         } else {
-          const page = await playlistsApi.getAll({ page: 0, size: 24, sort: "dateUpdate,desc", search: searchQuery || undefined });
+          // Map sortBy to API sort param
+          let sortParam = "dateUpdate,desc";
+          if (sortBy === "name") {
+            sortParam = "name,asc";
+          } else if (sortBy === "songs") {
+            sortParam = "songCount,desc";
+          } else if (sortBy === "likes") {
+            sortParam = "likes,desc";
+          }
+          
+          const page = await playlistsApi.getAll({ page: 0, size: 1000, sort: sortParam, search: debouncedSearchQuery || undefined });
           libraryItems = (page.content || []).map((p: PlaylistDTO) => ({
             playlistId: p.id,
             name: p.name,
@@ -545,17 +608,8 @@ const PlaylistLibrary = () => {
           }));
         }
 
-        let filtered = libraryItems;
-        if (searchQuery.trim()) {
-          const query = searchQuery.toLowerCase();
-          filtered = filtered.filter(p => p.name.toLowerCase().includes(query));
-        }
-        
-        if (sortBy === 'name') {
-          filtered.sort((a, b) => a.name.localeCompare(b.name));
-        } else {
-          filtered.sort((a, b) => b.playlistId - a.playlistId);
-        }
+        // BE đã sort rồi, chỉ cần map data
+        const filtered = libraryItems;
 
         const currentUserId =
           typeof me === 'number' && Number.isFinite(me) ? Number(me) : undefined;
@@ -669,7 +723,7 @@ const PlaylistLibrary = () => {
       }
     };
     load();
-  }, [searchQuery, sortBy, playlistFilter]);
+  }, [debouncedSearchQuery, sortBy, playlistFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -773,7 +827,7 @@ const PlaylistLibrary = () => {
     setFavoritesError(null);
     try {
       // Luôn truyền search query cho albums (có thể là empty string)
-      const searchParam = searchQuery.trim() || undefined;
+      const searchParam = debouncedSearchQuery.trim() || undefined;
       
       const [songsRes, playlistsRes, albumsRes] = await Promise.all([
         favoritesApi.listSongs({ page: 0, size: 6, sort: "createdAt,desc" }).catch(() => ({
@@ -807,13 +861,81 @@ const PlaylistLibrary = () => {
     } finally {
       setFavoritesLoading(false);
     }
-  }, [searchQuery]);
+  }, [debouncedSearchQuery]);
 
   useEffect(() => {
     loadFavorites();
   }, [loadFavorites]);
 
-  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const normalizedSearch = debouncedSearchQuery.trim().toLowerCase();
+
+  // Helper function để sort items chung (playlist + album)
+  const sortItems = useCallback((
+    items: (PlaylistItem | FavoriteAlbumDTO)[],
+    sortBy: string
+  ): (PlaylistItem | FavoriteAlbumDTO)[] => {
+    const sorted = [...items];
+    if (sortBy === "name") {
+      sorted.sort((a, b) => {
+        const nameA = ('title' in a ? a.title : (a as FavoriteAlbumDTO).name) || "";
+        const nameB = ('title' in b ? b.title : (b as FavoriteAlbumDTO).name) || "";
+        return nameA.localeCompare(nameB);
+      });
+    } else if (sortBy === "songs") {
+      sorted.sort((a, b) => {
+        const countA = ('songCount' in a ? a.songCount : (a as FavoriteAlbumDTO).songCount) || 0;
+        const countB = ('songCount' in b ? b.songCount : (b as FavoriteAlbumDTO).songCount) || 0;
+        return countB - countA;
+      });
+    } else if (sortBy === "likes") {
+      sorted.sort((a, b) => {
+        const likesA = ('likes' in a ? a.likes : 0) || 0;
+        const likesB = ('likes' in b ? b.likes : 0) || 0;
+        return likesB - likesA;
+      });
+    } else {
+      // recent: sort by updatedAt, createdAt, hoặc id (mới nhất trước)
+      sorted.sort((a, b) => {
+        let dateA: Date | null = null;
+        let dateB: Date | null = null;
+        
+        if ('updatedAt' in a || 'createdAt' in a) {
+          const playlist = a as PlaylistItem;
+          dateA = parseDateSafe(playlist.updatedAt || playlist.createdAt);
+        }
+        
+        if ('updatedAt' in b || 'createdAt' in b) {
+          const playlist = b as PlaylistItem;
+          dateB = parseDateSafe(playlist.updatedAt || playlist.createdAt);
+        }
+        
+        if (dateA && dateB) {
+          return dateB.getTime() - dateA.getTime();
+        }
+        if (!dateA && !dateB) {
+          // Cả hai đều là album hoặc không có date, dùng id
+          const getId = (item: PlaylistItem | FavoriteAlbumDTO): number => {
+            if ('id' in item) {
+              const id = item.id;
+              if (typeof id === "number") return id;
+              if (typeof id === "string") {
+                const num = Number(id);
+                return Number.isFinite(num) ? num : 0;
+              }
+            }
+            return 0;
+          };
+          const idA = getId(a);
+          const idB = getId(b);
+          return idB - idA;
+        }
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return 0;
+      });
+    }
+    return sorted;
+  }, []);
 
   const favoritePlaylistItems = useMemo(
     () => favoritePlaylists.map((playlist) => toPlaylistItemFromFavorite(playlist)),
@@ -844,28 +966,9 @@ const PlaylistLibrary = () => {
       });
     }
 
-    // Áp dụng sort
-    const sorted = [...base];
-    if (sortBy === "name") {
-      sorted.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (sortBy === "songs") {
-      sorted.sort((a, b) => (b.songCount || 0) - (a.songCount || 0));
-    } else if (sortBy === "likes") {
-      sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-    } else {
-      // recent: sort by updatedAt hoặc createdAt (mới nhất trước)
-      sorted.sort((a, b) => {
-        const dateA = parseDateSafe(a.updatedAt || a.createdAt);
-        const dateB = parseDateSafe(b.updatedAt || b.createdAt);
-        if (!dateA && !dateB) return Number(b.id) - Number(a.id);
-        if (!dateA) return 1;
-        if (!dateB) return -1;
-        return dateB.getTime() - dateA.getTime();
-      });
-    }
-
-    return sorted;
-  }, [favoritePlaylistItems, normalizedSearch, sortBy]);
+    // Không sort ở đây, sẽ sort chung với albums sau
+    return base;
+  }, [favoritePlaylistItems, normalizedSearch]);
 
   const filteredExtraFavoritePlaylists = useMemo(() => {
     let base = favoritePlaylistItems.filter(
@@ -883,28 +986,9 @@ const PlaylistLibrary = () => {
       });
     }
 
-    // Áp dụng sort
-    const sorted = [...base];
-    if (sortBy === "name") {
-      sorted.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (sortBy === "songs") {
-      sorted.sort((a, b) => (b.songCount || 0) - (a.songCount || 0));
-    } else if (sortBy === "likes") {
-      sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-    } else {
-      // recent: sort by updatedAt hoặc createdAt (mới nhất trước)
-      sorted.sort((a, b) => {
-        const dateA = parseDateSafe(a.updatedAt || a.createdAt);
-        const dateB = parseDateSafe(b.updatedAt || b.createdAt);
-        if (!dateA && !dateB) return Number(b.id) - Number(a.id);
-        if (!dateA) return 1;
-        if (!dateB) return -1;
-        return dateB.getTime() - dateA.getTime();
-      });
-    }
-
-    return sorted;
-  }, [favoritePlaylistItems, libraryPlaylistIdSet, normalizedSearch, sortBy]);
+    // Không sort ở đây, sẽ sort chung với albums sau
+    return base;
+  }, [favoritePlaylistItems, libraryPlaylistIdSet, normalizedSearch]);
 
   const filteredPlaylists = useMemo(() => {
     let base = playlists;
@@ -941,28 +1025,9 @@ const PlaylistLibrary = () => {
       });
     }
 
-    // Áp dụng sort
-    const sorted = [...base];
-    if (sortBy === "name") {
-      sorted.sort((a, b) => a.title.localeCompare(b.title));
-    } else if (sortBy === "songs") {
-      sorted.sort((a, b) => (b.songCount || 0) - (a.songCount || 0));
-    } else if (sortBy === "likes") {
-      sorted.sort((a, b) => (b.likes || 0) - (a.likes || 0));
-    } else {
-      // recent: sort by updatedAt hoặc createdAt (mới nhất trước)
-      sorted.sort((a, b) => {
-        const dateA = parseDateSafe(a.updatedAt || a.createdAt);
-        const dateB = parseDateSafe(b.updatedAt || b.createdAt);
-        if (!dateA && !dateB) return Number(b.id) - Number(a.id);
-        if (!dateA) return 1;
-        if (!dateB) return -1;
-        return dateB.getTime() - dateA.getTime();
-      });
-    }
-
-    return sorted;
-  }, [playlists, normalizedSearch, playlistFilter, favoritePlaylistIdSet, sortBy]);
+    // Không sort ở đây, sẽ sort chung với albums sau
+    return base;
+  }, [playlists, normalizedSearch, playlistFilter, favoritePlaylistIdSet]);
 
   const filteredFavoriteAlbums = useMemo(() => {
     let base = favoriteAlbums;
@@ -980,21 +1045,9 @@ const PlaylistLibrary = () => {
       });
     }
 
-    // Áp dụng sort (albums cũng có thể sort theo name)
-    const sorted = [...base];
-    if (sortBy === "name") {
-      sorted.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    } else {
-      // recent: sort by id (mới nhất trước) hoặc có thể dùng createdAt nếu có
-      sorted.sort((a, b) => {
-        const idA = typeof a.id === "number" ? a.id : Number(a.id) || 0;
-        const idB = typeof b.id === "number" ? b.id : Number(b.id) || 0;
-        return idB - idA;
-      });
-    }
-
-    return sorted;
-  }, [favoriteAlbums, normalizedSearch, sortBy]);
+    // Không sort ở đây, sẽ sort chung với playlists sau
+    return base;
+  }, [favoriteAlbums, normalizedSearch]);
 
   const libraryItemCount = useMemo(() => {
     // Album-only scope
@@ -1038,43 +1091,6 @@ const PlaylistLibrary = () => {
     filteredFavoritePlaylistItems.length,
   ]);
 
-  // Reset về trang 1 khi filter/scope thay đổi
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [scope, playlistFilter, searchQuery, sortBy]);
-
-  // Tính tổng số items (không bao gồm Liked Songs card)
-  const totalItems = useMemo(() => {
-    if (scope === "albums") {
-      return filteredFavoriteAlbums.length;
-    }
-    if (playlistFilter === "favorites") {
-      if (scope === "all") {
-        return filteredFavoritePlaylistItems.length + filteredFavoriteAlbums.length;
-      } else {
-        return filteredFavoritePlaylistItems.length;
-      }
-    }
-    if (scope === "all") {
-      return filteredPlaylists.length + filteredExtraFavoritePlaylists.length + filteredFavoriteAlbums.length;
-    }
-    if (scope === "playlists") {
-      return filteredPlaylists.length + filteredExtraFavoritePlaylists.length;
-    }
-    return filteredPlaylists.length;
-  }, [scope, playlistFilter, filteredPlaylists.length, filteredExtraFavoritePlaylists.length, filteredFavoriteAlbums.length, filteredFavoritePlaylistItems.length]);
-
-  // Tính số trang
-  const hasLikedSongs = scope !== "albums";
-  const availableSlotsPerPage = itemsPerPage - (hasLikedSongs ? 1 : 0);
-  const totalPages = Math.max(1, Math.ceil(totalItems / availableSlotsPerPage));
-
-  // Helper function để lấy items cho trang hiện tại
-  const getItemsForPage = useCallback(<T,>(items: T[], page: number): T[] => {
-    const startIndex = (page - 1) * availableSlotsPerPage;
-    const endIndex = startIndex + availableSlotsPerPage;
-    return items.slice(startIndex, endIndex);
-  }, [availableSlotsPerPage]);
   // Tính duration cho các playlist yêu thích (dùng /api/playlists/{id})
   useEffect(() => {
     let cancelled = false;
@@ -1126,11 +1142,8 @@ const PlaylistLibrary = () => {
   };
 
   const playPlaylist = (playlist: PlaylistItem) => {
-    toast({
-      title: `Playing ${playlist.title}`,
-      description: `${playlist.songCount} songs`,
-      duration: 3000,
-    });
+    const slug = createSlug(playlist.title, playlist.id);
+    navigate(`/playlist/${slug}`);
   };
 
   const getCollaboratorBadgeText = (role?: CollaboratorRole) => {
@@ -1409,6 +1422,29 @@ const PlaylistLibrary = () => {
 
             <div className="flex items-center gap-2">
               <Select
+                value={sortBy}
+                onValueChange={(value: string) => {
+                  setSortBy(value as typeof sortBy);
+                }}
+              >
+                <SelectTrigger
+                  className="w-[140px] bg-[#181818] border border-border/60 h-8 text-[11px] justify-between text-muted-foreground rounded-full px-3"
+                  title="Sort by"
+                >
+                  <SelectValue
+                    placeholder="Sort by"
+                    aria-label="Sort"
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recent">Recent</SelectItem>
+                  <SelectItem value="name">Name</SelectItem>
+                  <SelectItem value="songs">Songs</SelectItem>
+                  <SelectItem value="likes">Likes</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Select
                 value={playlistFilter}
                 onValueChange={(value: string) => {
                   setPlaylistFilter(value as typeof playlistFilter);
@@ -1440,6 +1476,37 @@ const PlaylistLibrary = () => {
         <div className="space-y-10">
           <section className="space-y-4">
             <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+              {/* Loading skeleton */}
+              {(loading || favoritesLoading) ? (
+                <>
+                  {scope !== "albums" && (
+                    <Card className="cursor-pointer border-0 bg-transparent group">
+                      <CardContent className="p-0 flex flex-col h-full">
+                        <div className="relative aspect-square rounded-xl overflow-hidden bg-gradient-to-br from-[#450af5] to-[#c4efd9] flex flex-col justify-between p-4">
+                          <div>
+                            <p className="text-xs font-medium text-white/80 mb-1">Playlist</p>
+                            <h3 className="text-lg font-semibold text-white mb-2 line-clamp-2">
+                              Liked Songs
+                            </h3>
+                            <p className="text-xs text-white/80 line-clamp-2">
+                              Loading...
+                            </p>
+                          </div>
+                          <div className="mt-4 flex justify-end">
+                            <div className="bg-black/40 rounded-full p-2 shadow-lg">
+                              <Heart className="w-7 h-7 text-white" />
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <PlaylistSkeleton key={`skeleton-${i}`} />
+                  ))}
+                </>
+              ) : (
+                <>
               {/* Liked Songs card: chỉ hiện trong scope all/playlists */}
               {scope !== "albums" && (
                 <Card
@@ -1479,18 +1546,21 @@ const PlaylistLibrary = () => {
                     </p>
                   </Card>
                 ) : (
-                  getItemsForPage<FavoriteAlbumDTO>(filteredFavoriteAlbums, currentPage).map((album) => (
-                    <FavoriteAlbumCardInline
-                      key={`albums-scope-${album.id}`}
-                      album={album}
-                      onRemove={() => {
-                        const idKey = String(album.id);
-                        setFavoriteAlbums((prev) =>
-                          prev.filter((a) => String(a.id) !== idKey)
-                        );
-                      }}
-                    />
-                  ))
+                  sortItems(filteredFavoriteAlbums, sortBy).map((album) => {
+                    const albumItem = album as FavoriteAlbumDTO;
+                    return (
+                      <FavoriteAlbumCardInline
+                        key={`albums-scope-${albumItem.id}`}
+                        album={albumItem}
+                        onRemove={() => {
+                          const idKey = String(albumItem.id);
+                          setFavoriteAlbums((prev) =>
+                            prev.filter((a) => String(a.id) !== idKey)
+                          );
+                        }}
+                      />
+                    );
+                  })
                 )
               ) : playlistFilter === "favorites" ? (
                 // Filter "favorites": hiển thị khác nhau tùy scope
@@ -1505,17 +1575,16 @@ const PlaylistLibrary = () => {
                     </Card>
                   ) : (
                     <>
-                      {(() => {
-                        // Tính toán items cho trang hiện tại - gộp playlists và albums
-                        const allItems: (PlaylistItem | FavoriteAlbumDTO)[] = [
-                          ...filteredFavoritePlaylistItems,
-                          ...filteredFavoriteAlbums
-                        ];
-                        const pageItems = getItemsForPage(allItems, currentPage);
-                        
-                        return (
-                          <>
-                            {pageItems.map((item) => {
+                      <>
+                        {(() => {
+                          // Gộp playlists và albums, sau đó sort chung
+                          const allItems: (PlaylistItem | FavoriteAlbumDTO)[] = [
+                            ...filteredFavoritePlaylistItems,
+                            ...filteredFavoriteAlbums
+                          ];
+                          const sortedItems = sortItems(allItems, sortBy);
+                          
+                          return sortedItems.map((item) => {
                               // Kiểm tra xem là playlist hay album
                               if ('title' in item) {
                                 // Là PlaylistItem
@@ -1548,10 +1617,9 @@ const PlaylistLibrary = () => {
                                   />
                                 );
                               }
-                            })}
-                          </>
-                        );
-                      })()}
+                            });
+                        })()}
+                      </>
                     </>
                   )
                 ) : (
@@ -1564,7 +1632,9 @@ const PlaylistLibrary = () => {
                       </p>
                     </Card>
                   ) : (
-                    getItemsForPage<PlaylistItem>(filteredFavoritePlaylistItems, currentPage).map((playlist) => (
+                    sortItems(filteredFavoritePlaylistItems, sortBy).map((item) => {
+                      const playlist = item as PlaylistItem;
+                      return (
                       <PlaylistCardWithFavoriteInLibrary
                         key={`fav-pl-${playlist.id}`}
                         playlist={playlist}
@@ -1575,7 +1645,8 @@ const PlaylistLibrary = () => {
                         formatNumber={formatNumber}
                         layout="grid"
                       />
-                    ))
+                    );
+                    })
                   )
                 )
               ) : (
@@ -1593,17 +1664,15 @@ const PlaylistLibrary = () => {
                     ) : (
                       <>
                         {(() => {
-                          // Tính toán items cho trang hiện tại - gộp tất cả items
+                          // Gộp tất cả items, sau đó sort chung
                           const allItems: (PlaylistItem | FavoriteAlbumDTO)[] = [
                             ...filteredPlaylists,
                             ...(scope === "playlists" || scope === "all" ? filteredExtraFavoritePlaylists : []),
                             ...(scope === "all" ? filteredFavoriteAlbums : [])
                           ];
-                          const pageItems = getItemsForPage(allItems, currentPage);
+                          const sortedItems = sortItems(allItems, sortBy);
                           
-                          return (
-                            <>
-                              {pageItems.map((item) => {
+                          return sortedItems.map((item) => {
                                 // Kiểm tra xem là playlist hay album
                                 if ('title' in item) {
                                   // Là PlaylistItem
@@ -1638,9 +1707,7 @@ const PlaylistLibrary = () => {
                                     />
                                   );
                                 }
-                              })}
-                            </>
-                          );
+                              });
                         })()}
                       </>
                     )}
@@ -1656,7 +1723,9 @@ const PlaylistLibrary = () => {
                     </Card>
                   ) : (
                     <>
-                      {getItemsForPage<PlaylistItem>(filteredPlaylists, currentPage).map((playlist) => (
+                      {sortItems(filteredPlaylists, sortBy).map((item) => {
+                        const playlist = item as PlaylistItem;
+                        return (
                         <PlaylistCardWithFavoriteInLibrary
                           key={playlist.id}
                           playlist={playlist}
@@ -1668,65 +1737,15 @@ const PlaylistLibrary = () => {
                           formatNumber={formatNumber}
                           layout="grid"
                         />
-                      ))}
+                      );
+                      })}
                     </>
                   )
                 )
               )}
+                </>
+              )}
             </div>
-            
-            {/* Phân trang */}
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-2 mt-6">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="bg-[#181818] hover:bg-[#262626] border-border/60 text-white"
-                >
-                  Previous
-                </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum: number;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={
-                          currentPage === pageNum
-                            ? "bg-primary text-white"
-                            : "bg-[#181818] hover:bg-[#262626] border-border/60 text-white"
-                        }
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="bg-[#181818] hover:bg-[#262626] border-border/60 text-white"
-                >
-                  Next
-                </Button>
-              </div>
-            )}
           </section>
 
           <section className="space-y-8">
