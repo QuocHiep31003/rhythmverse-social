@@ -7,6 +7,8 @@ export interface FirebaseMessage {
   id?: string;
   senderId: number;
   receiverId: number;
+  senderName?: string;
+  senderAvatar?: string | null;
   content?: string; // Encrypted content (ciphertext)
   contentCipher?: string; // Encrypted content (alternative field name)
   contentPreview?: string; // Preview/rút gọn (tạm thời)
@@ -19,10 +21,37 @@ export interface FirebaseMessage {
   sharedContent?: SharedContentDTO | null;
 }
 
+export interface ListeningSession {
+  hostId: number;
+  songId?: number | null;
+  positionMs?: number | null;
+  isPlaying?: boolean;
+  updatedAt?: number | null;
+  participants?: Record<
+    string,
+    {
+      joinedAt?: number | null;
+      lastSeen?: number | null;
+    }
+  >;
+  queue?: Record<
+    string,
+    {
+      suggestedBy: number;
+      suggestedAt: number;
+      songId: number;
+    }
+  >;
+}
+
 export const getChatRoomKey = (userId1: number, userId2: number): string => {
   const min = Math.min(userId1, userId2);
   const max = Math.max(userId1, userId2);
   return `${min}_${max}`;
+};
+
+export const getPlaylistRoomId = (playlistId: number | string): string => {
+  return `pl_${playlistId}`;
 };
 
 export const watchChatMessages = (
@@ -83,6 +112,63 @@ export const watchChatMessages = (
   
   return () => {
     console.log('[Firebase Chat] Unsubscribing from room:', chatRoomKey);
+    unsubscribe();
+  };
+};
+
+/**
+ * Lắng nghe messages cho 1 room bất kỳ (ví dụ: playlist room pl_{playlistId})
+ */
+export const watchChatMessagesForRoom = (
+  roomId: string,
+  callback: (messages: FirebaseMessage[]) => void
+) => {
+  const messagesRef = ref(firebaseDb, `chats/${roomId}/messages`);
+
+  console.log('[Firebase Chat] Watching messages for generic room:', roomId);
+
+  const messagesQuery = query(
+    messagesRef,
+    orderByChild('sentAt'),
+    limitToLast(50)
+  );
+
+  const unsubscribe = onValue(
+    messagesQuery,
+    (snapshot) => {
+      const messages: FirebaseMessage[] = [];
+      if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+          const data = childSnapshot.val() as Omit<FirebaseMessage, 'id'>;
+          const displayContent =
+            data.contentPlain ??
+            data.contentPreview ??
+            (typeof data.content === 'string' ? data.content : '') ??
+            (typeof data.contentCipher === 'string' ? data.contentCipher : '');
+          const message: FirebaseMessage = {
+            id: childSnapshot.key ?? undefined,
+            ...data,
+            content: displayContent,
+            contentPlain: data.contentPlain ?? (data.contentPreview ? undefined : displayContent),
+          };
+          messages.push(message);
+        });
+        messages.sort((a, b) => {
+          const timeA = a.sentAt || 0;
+          const timeB = b.sentAt || 0;
+          return timeA - timeB;
+        });
+      }
+      callback(messages);
+    },
+    (error) => {
+      console.error('[Firebase Chat] Error watching generic room messages:', error);
+      callback([]);
+    }
+  );
+
+  return () => {
+    console.log('[Firebase Chat] Unsubscribing from generic room:', roomId);
     unsubscribe();
   };
 };
@@ -206,7 +292,7 @@ export const watchTyping = (
       }
     },
     (error) => {
-      console.warn("[Firebase Chat] Error watching typing:", error?.code || error?.message || error);
+      console.warn("[Firebase Chat] Error watching typing:", (error as any)?.code || (error as any)?.message || error);
       callback(null);
     }
   );
@@ -342,6 +428,38 @@ export const watchMessageIndex = (
     (error) => {
       console.error("[Firebase Chat] Error watching messageIndex:", error);
       callback({});
+    }
+  );
+  return () => unsubscribe();
+};
+
+export const watchListeningSession = (
+  roomId: string,
+  callback: (session: ListeningSession | null) => void
+) => {
+  const listeningRef = ref(firebaseDb, `listening/${roomId}`);
+  const unsubscribe = onValue(
+    listeningRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null);
+        return;
+      }
+      const data = snapshot.val() as any;
+      const session: ListeningSession = {
+        hostId: Number(data.hostId) || 0,
+        songId: typeof data.songId === "number" ? data.songId : Number(data.songId) || null,
+        positionMs: typeof data.positionMs === "number" ? data.positionMs : null,
+        isPlaying: Boolean(data.isPlaying),
+        updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : null,
+        participants: data.participants || undefined,
+        queue: data.queue || undefined,
+      };
+      callback(session);
+    },
+    (error) => {
+      console.warn("[Firebase Chat] Error watching listening session:", error);
+      callback(null);
     }
   );
   return () => unsubscribe();

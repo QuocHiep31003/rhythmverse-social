@@ -51,6 +51,9 @@ import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import "./PlaylistDetail.css";
+import { PlaylistChatWindow } from "@/components/playlist/PlaylistChatWindow";
+import { PlaylistChatHead } from "@/components/playlist/PlaylistChatHead";
+import { chatApi } from "@/services/api/chatApi";
 
 const getTitleFontClass = (length: number) => {
   // Responsive font-size theo d? d�i t�n playlist
@@ -179,6 +182,8 @@ const PlaylistDetail = () => {
   } | null>(null);
   const [playlistLikeCount, setPlaylistLikeCount] = useState<number | null>(null);
   const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
+  const [playlistChatOpen, setPlaylistChatOpen] = useState(false);
+  const [playlistChatUnread, setPlaylistChatUnread] = useState(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const defaultTop = "rgb(43, 17, 96)";
   const defaultBottom = "rgb(5, 1, 15)";
@@ -443,6 +448,17 @@ const PlaylistDetail = () => {
 
     return entries;
   }, [playlist, collaborators, friends, collaboratorAvatars, toAbsoluteUrl, meId]);
+
+  const canOpenPlaylistChat = useMemo(() => {
+    return (
+      !isCreateMode &&
+      typeof playlistNumericId === "number" &&
+      Number.isFinite(playlistNumericId) &&
+      typeof meId === "number" &&
+      Number.isFinite(meId) &&
+      (permissions.isOwner || isCurrentCollaborator)
+    );
+  }, [isCreateMode, playlistNumericId, meId, permissions.isOwner, isCurrentCollaborator]);
 
   // Load recommended songs based on playlist content
   // Uu ti�n: Mood > Genre > Artist
@@ -2927,17 +2943,17 @@ const PlaylistDetail = () => {
               className={`text-white/80 hover:text-white ${isPlaylistSaved ? "text-red-500" : ""}`}
               onClick={togglePlaylistFavorite}
               disabled={!playlistNumericId || playlistFavoritePending || playlistFavoriteLoading}
-              aria-label={isPlaylistSaved ? "�� luu playlist n�y" : "Luu playlist v�o thu vi?n"}
+              aria-label={isPlaylistSaved ? "Đã lưu playlist này" : "Lưu playlist vào thư viện"}
             >
               <Heart className={`w-5 h-5 ${isPlaylistSaved ? "fill-current" : ""}`} />
             </Button>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? "opacity-50 cursor-not-allowed" : ""}`}
                     disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
                     onClick={() => {
                       if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
@@ -2983,6 +2999,7 @@ const PlaylistDetail = () => {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {/* Nút Open Collab Chat được thay bằng bong bóng chat nổi PlaylistChatHead */}
           </div>
         </div>
       </section>
@@ -3274,6 +3291,42 @@ const PlaylistDetail = () => {
       />
 
       <Footer />
+      {canOpenPlaylistChat && playlistNumericId && typeof meId === "number" && Number.isFinite(meId) && (
+        <>
+          {playlistChatOpen && (
+            <PlaylistChatWindow
+              playlistId={playlistNumericId}
+              playlistName={displayTitle}
+              coverUrl={playlist?.coverUrl}
+              ownerName={ownerDisplayName}
+              memberCount={collaboratorEntries.length || 1}
+              meId={meId}
+              onClose={() => {
+                setPlaylistChatOpen(false);
+              }}
+              onNewMessage={() => {
+                setPlaylistChatUnread((prev) => (playlistChatOpen ? 0 : prev + 1));
+              }}
+              onReact={async (messageId, emoji) => {
+                try {
+                  await chatApi.toggleReaction(messageId, emoji, meId);
+                } catch (e) {
+                  console.error("[PlaylistDetail] Failed to react:", e);
+                }
+              }}
+            />
+          )}
+          <PlaylistChatHead
+            name={displayTitle}
+            coverUrl={playlist?.coverUrl}
+            unreadCount={playlistChatOpen ? 0 : playlistChatUnread}
+            onClick={() => {
+              setPlaylistChatOpen((open) => !open);
+              setPlaylistChatUnread(0);
+            }}
+          />
+        </>
+      )}
       
       {selectedSongForPlaylist && (
         <AddToPlaylistDialog

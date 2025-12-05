@@ -42,7 +42,8 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useState, useRef, useEffect } from "react";
 
 import { arcApi, authApi } from "@/services/api";
-import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { playlistCollabInvitesApi, playlistsApi } from "@/services/api/playlistApi";
+import type { PlaylistLibraryItemDTO } from "@/services/api/playlistApi";
 import {
   watchNotifications,
   NotificationDTO,
@@ -95,6 +96,7 @@ const TopBar = () => {
   const [alertNotifications, setAlertNotifications] = useState<NotificationDTO[]>([]);
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [unreadByUser, setUnreadByUser] = useState<Record<number, number>>({});
+  const [unreadByPlaylist, setUnreadByPlaylist] = useState<Record<string, number>>({});
 
   const [profileName, setProfileName] = useState<string>("");
   const [profileEmail, setProfileEmail] = useState<string>("");
@@ -153,6 +155,15 @@ const TopBar = () => {
   }
 
   const [friends, setFriends] = useState<TopbarFriend[]>([]);
+
+  // ===================== PLAYLIST ROOMS FOR MESSAGE DROPDOWN =====================
+  interface TopbarPlaylistRoom {
+    playlistId: number;
+    name: string;
+    coverUrl?: string | null;
+  }
+
+  const [playlistRooms, setPlaylistRooms] = useState<TopbarPlaylistRoom[]>([]);
 
   const toAbsoluteUrl = (u?: string | null): string | undefined => {
     if (!u) return undefined;
@@ -551,6 +562,43 @@ const TopBar = () => {
     };
   }, [currentUserId, firebaseReady]);
 
+  /** ================= LOAD PLAYLIST ROOMS FOR MESSAGE DROPDOWN ================= **/
+  useEffect(() => {
+    if (!currentUserId) {
+      setPlaylistRooms([]);
+      return;
+    }
+
+    let active = true;
+    const loadPlaylistRooms = async () => {
+      try {
+        const data = await playlistsApi.library();
+        if (!active) return;
+        const rooms: TopbarPlaylistRoom[] = (data || []).filter((p: PlaylistLibraryItemDTO) => {
+          if (!p) return false;
+          const pWithFlags = p as PlaylistLibraryItemDTO & { isOwner?: boolean; isCollaborator?: boolean };
+          if (pWithFlags.isOwner || pWithFlags.isCollaborator) return true;
+          const anyP = p as PlaylistLibraryItemDTO & { collaborative?: boolean; collaborators?: unknown[] };
+          if (anyP.collaborative || (Array.isArray(anyP.collaborators) && anyP.collaborators.length > 0)) return true;
+          return false;
+        }).map((p: PlaylistLibraryItemDTO & { playlistId?: number }) => ({
+          playlistId: typeof p.playlistId === "number" ? p.playlistId : (typeof p.id === "number" ? p.id : 0),
+          name: p.name ?? `Playlist ${p.playlistId ?? p.id ?? 0}`,
+          coverUrl: p.coverUrl ?? null,
+        }));
+        setPlaylistRooms(rooms);
+      } catch (error) {
+        console.warn("[TopBar] Failed to load playlist rooms:", error);
+        if (active) setPlaylistRooms([]);
+      }
+    };
+
+    void loadPlaylistRooms();
+    return () => {
+      active = false;
+    };
+  }, [currentUserId]);
+
   /** ================= LOAD COLLAB INVITES ================= **/
   useEffect(() => {
     const loadInvites = async () => {
@@ -580,8 +628,8 @@ const TopBar = () => {
     const unsubscribe = watchNotifications(
       currentUserId,
       (notifications: NotificationDTO[]) => {
-        const messageNotifs = notifications.filter((n) => n.type === "MESSAGE");
-        const alertNotifs = notifications.filter((n) => n.type !== "MESSAGE");
+        const messageNotifs = notifications.filter((n) => n.type === "MESSAGE" || n.type === "PLAYLIST_MESSAGE");
+        const alertNotifs = notifications.filter((n) => n.type !== "MESSAGE" && n.type !== "PLAYLIST_MESSAGE");
         setMessageNotifications(messageNotifs);
         setAlertNotifications(alertNotifs);
         // Note: unreadMsgCount is now managed by Firebase rooms listener below
@@ -608,15 +656,24 @@ const TopBar = () => {
           setUnreadMsgCount(data.totalUnread);
 
           const unreadByUserMap: Record<number, number> = {};
+          const unreadByPlaylistMap: Record<string, number> = {};
           Object.entries(data.unreadCounts || {}).forEach(([roomKey, count]) => {
-            const [minId, maxId] = roomKey.split("_").map(Number);
-            if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
-            const friendUserId = minId === currentUserId ? maxId : minId;
-            if (friendUserId && friendUserId !== currentUserId && count > 0) {
-              unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+            if (roomKey.startsWith("pl_")) {
+              const playlistId = roomKey.replace("pl_", "");
+              if (playlistId && Number(count) > 0) {
+                unreadByPlaylistMap[playlistId] = Number(count);
+              }
+            } else {
+              const [minId, maxId] = roomKey.split("_").map(Number);
+              if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+              const friendUserId = minId === currentUserId ? maxId : minId;
+              if (friendUserId && friendUserId !== currentUserId && count > 0) {
+                unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+              }
             }
           });
           setUnreadByUser(unreadByUserMap);
+          setUnreadByPlaylist(unreadByPlaylistMap);
         }
       } catch (error) {
         console.warn('[TopBar] Failed to load initial unread count from API:', error);
@@ -651,18 +708,31 @@ const TopBar = () => {
         lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
 
         console.log('[TopBar] Chat unread counts updated from Firebase:', { unreadCounts, totalUnread });
-        setUnreadMsgCount(totalUnread);
 
         const unreadByUserMap: Record<number, number> = {};
+        const unreadByPlaylistMap: Record<string, number> = {}; // playlistId -> count
+        
         Object.entries(unreadCounts || {}).forEach(([roomKey, count]) => {
-          const [minId, maxId] = roomKey.split("_").map(Number);
-          if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
-          const friendUserId = minId === currentUserId ? maxId : minId;
-          if (friendUserId && friendUserId !== currentUserId && count > 0) {
-            unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+          // Playlist room: pl_{playlistId}
+          if (roomKey.startsWith("pl_")) {
+            const playlistId = roomKey.replace("pl_", "");
+            if (playlistId && Number(count) > 0) {
+              unreadByPlaylistMap[playlistId] = Number(count);
+            }
+          } else {
+            // 1-1 chat: minId_maxId
+            const [minId, maxId] = roomKey.split("_").map(Number);
+            if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+            const friendUserId = minId === currentUserId ? maxId : minId;
+            if (friendUserId && friendUserId !== currentUserId && count > 0) {
+              unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+            }
           }
         });
         setUnreadByUser(unreadByUserMap);
+        setUnreadByPlaylist(unreadByPlaylistMap);
+        // Total unread bao gồm cả playlist rooms (totalUnread từ Firebase đã bao gồm)
+        setUnreadMsgCount(totalUnread);
       }
     );
 
@@ -682,15 +752,26 @@ const TopBar = () => {
         setUnreadMsgCount(data.totalUnread);
 
         const unreadByUserMap: Record<number, number> = {};
+        const unreadByPlaylistMap: Record<string, number> = {};
         Object.entries(data.unreadCounts || {}).forEach(([roomKey, count]) => {
-          const [minId, maxId] = roomKey.split("_").map(Number);
-          if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
-          const friendUserId = minId === currentUserId ? maxId : minId;
-          if (friendUserId && friendUserId !== currentUserId && count > 0) {
-            unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+          if (roomKey.startsWith("pl_")) {
+            const playlistId = roomKey.replace("pl_", "");
+            if (playlistId && Number(count) > 0) {
+              unreadByPlaylistMap[playlistId] = Number(count);
+            }
+          } else {
+            const [minId, maxId] = roomKey.split("_").map(Number);
+            if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+            const friendUserId = minId === currentUserId ? maxId : minId;
+            if (friendUserId && friendUserId !== currentUserId && count > 0) {
+              unreadByUserMap[friendUserId] = (unreadByUserMap[friendUserId] || 0) + Number(count);
+            }
           }
         });
         setUnreadByUser(unreadByUserMap);
+        setUnreadByPlaylist(unreadByPlaylistMap);
+        setUnreadByUser(unreadByUserMap);
+        setUnreadByPlaylist(unreadByPlaylistMap);
       } catch (error) {
         console.warn('[TopBar] Failed to poll unread counts from API:', error);
       }
@@ -872,13 +953,14 @@ const TopBar = () => {
                 </Button>
               </div>
 
-              {Object.keys(unreadByUser).length === 0 ? (
+              {Object.keys(unreadByUser).length === 0 && Object.keys(unreadByPlaylist).length === 0 ? (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
                   Không có tin nhắn chưa đọc
                 </div>
               ) : (
                 <ScrollArea className="max-h-[420px]">
                   <div className="p-2 space-y-1">
+                    {/* Friends (1-1 chat) */}
                     {Object.entries(unreadByUser)
                       .sort((a, b) => Number(b[1]) - Number(a[1]))
                       .map(([userIdStr, count]) => {
@@ -896,7 +978,7 @@ const TopBar = () => {
 
                         return (
                           <button
-                            key={userIdStr}
+                            key={`friend-${userIdStr}`}
                             type="button"
                             onClick={() => {
                               setMsgDropdownOpen(false);
@@ -913,6 +995,55 @@ const TopBar = () => {
                                 <AvatarImage src={avatar} alt={displayName} />
                               ) : null}
                               <AvatarFallback>{initials}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium truncate">
+                                  {displayName}
+                                </p>
+                                <Badge className="h-5 px-2 text-[11px]">
+                                  {Number(count) > 99 ? "99+" : count}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {Number(count) === 1
+                                  ? "1 tin nhắn chưa đọc"
+                                  : `${count} tin nhắn chưa đọc`}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    {/* Playlist rooms (group chat) */}
+                    {Object.entries(unreadByPlaylist)
+                      .sort((a, b) => Number(b[1]) - Number(a[1]))
+                      .map(([playlistIdStr, count]) => {
+                        const playlistId = Number(playlistIdStr);
+                        const room = playlistRooms.find((r) => r.playlistId === playlistId);
+                        const displayName = room?.name || `Playlist ${playlistIdStr}`;
+                        const coverUrl = room?.coverUrl;
+                        const initials = displayName.charAt(0).toUpperCase();
+
+                        return (
+                          <button
+                            key={`playlist-${playlistIdStr}`}
+                            type="button"
+                            onClick={() => {
+                              setMsgDropdownOpen(false);
+                              navigate(`/playlist/${playlistId}`);
+                            }}
+                            className={cn(
+                              "w-full flex items-center gap-3 rounded-xl p-3 text-left",
+                              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            )}
+                          >
+                            <Avatar className="h-9 w-9">
+                              {coverUrl ? (
+                                <AvatarImage src={coverUrl || undefined} alt={displayName} />
+                              ) : null}
+                              <AvatarFallback className="bg-primary text-primary-foreground">
+                                {initials}
+                              </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2">
