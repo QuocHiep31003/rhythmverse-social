@@ -343,6 +343,7 @@ const TopBar = () => {
         setProfileEmail("");
         setProfileAvatar("");
         setProfileIsPremium(false);
+        setProfilePlanLabel("Free");
         return;
       }
 
@@ -393,9 +394,12 @@ const TopBar = () => {
                 }
               }
 
+              // Treat SUCCESS/PAID as active to show plan label for freshly purchased users
               const activeByStatus =
                 normalizedStatus === "ACTIVE" ||
                 normalizedStatus === "TRIALING" ||
+                normalizedStatus === "SUCCESS" ||
+                normalizedStatus === "PAID" ||
                 subscription?.isActive ||
                 subscription?.active;
 
@@ -434,7 +438,11 @@ const TopBar = () => {
               } else if (isExpired) {
                 // Force downgrade on FE when subscription is expired by time
                 setProfileIsPremium(false);
-                setProfilePlanLabel("");
+                setProfilePlanLabel("Free");
+              } else {
+                // Cancelled or inactive: revert to base plan label
+                setProfileIsPremium(false);
+                setProfilePlanLabel("Free");
               }
             }
           } catch (e) {
@@ -769,10 +777,15 @@ const TopBar = () => {
 
           {/* Premium */}
           {profileIsPremium ? (
-            <Badge className="gap-1 bg-primary text-white">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-primary text-primary gap-1"
+              onClick={() => navigate("/premium")}
+            >
               <Crown className="h-3.5 w-3.5" />
               {profilePlanLabel || "Premium"}
-            </Badge>
+            </Button>
           ) : (
             <Button
               variant="outline"

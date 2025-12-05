@@ -54,6 +54,7 @@ import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import AdminSubscriptionPlans from "./pages/admin/AdminSubscriptionPlans";
 import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
+import AdminPlanSubscriptions from "./pages/admin/AdminPlanSubscriptions";
 
 import MusicRecognition from "./pages/MusicRecognition";
 import MusicRecognitionResult from "./pages/MusicRecognitionResult";
@@ -106,6 +107,7 @@ const App = () => (
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="snapshots" element={<AdminSnapshots />} />
                     <Route path="subscription-plans" element={<AdminSubscriptionPlans />} />
+                    <Route path="subscriptions-management" element={<AdminPlanSubscriptions />} />
                     <Route path="premium-dashboard" element={<AdminPremiumDashboard />} />
                   </Routes>
                 </AdminLayout>

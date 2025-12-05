@@ -273,11 +273,15 @@ const AdminSubscriptionPlans = () => {
 
   // PlanDetail handlers
   const handleAddDetail = () => {
+    const isDefaultPlan =
+      (editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase())) ||
+      (formData.planCode && DEFAULT_PLANS.includes(formData.planCode.toUpperCase()));
+
     const newDetail: PlanDetailDTO = {
       detailName: "",
       price: 0,
       currency: "VND",
-      durationDays: 30,
+      durationDays: isDefaultPlan ? 30 : 0, // credit-based: duration not used
       isActive: true,
       displayOrder: (formData.details?.length || 0),
       isRecommended: false,
@@ -337,17 +341,27 @@ const AdminSubscriptionPlans = () => {
       });
 
       // Normalize details
-      const normalizedDetails = (formData.details || []).map(d => ({
-        detailName: d.detailName || "",
-        price: d.price || 0,
+      const isDefaultPlanForSave =
+        (editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase())) ||
+        (formData.planCode && DEFAULT_PLANS.includes(formData.planCode.toUpperCase()));
+
+      const normalizedDetails = (formData.details || []).map(d => {
+        const durationDays = isDefaultPlanForSave
+          ? Math.max(d.durationDays ?? 30, 1) // ensure positive and never null for default plans
+          : 0; // credit-based plans use 0 to satisfy NOT NULL while meaning "no expiry"
+
+        return {
+          detailName: d.detailName || "",
+          price: d.price || 0,
         currency: d.currency || "VND",
-        durationDays: d.durationDays || 30,
-        isActive: d.isActive ?? true,
-        displayOrder: d.displayOrder || 0,
-        isRecommended: d.isRecommended ?? false,
-        ...(d.id && { id: d.id }),
-        ...(d.planId && { planId: d.planId }),
-      }));
+          durationDays,
+          isActive: d.isActive ?? true,
+          displayOrder: d.displayOrder || 0,
+          isRecommended: d.isRecommended ?? false,
+          ...(d.id && { id: d.id }),
+          ...(d.planId && { planId: d.planId }),
+        };
+      });
 
       if (editingPlan?.id) {
         // Lock planCode and planName for default plans
@@ -872,6 +886,7 @@ const AdminSubscriptionPlans = () => {
                 <div className="space-y-3">
                   {formData.details.map((detail, index) => {
                     const isRecommended = detail.isRecommended ?? false;
+                    const isDefaultPlan = editingPlan?.planCode && DEFAULT_PLANS.includes(editingPlan.planCode.toUpperCase());
                     return (
                       <div
                         key={index}
@@ -899,7 +914,7 @@ const AdminSubscriptionPlans = () => {
                             <X className="h-4 w-4" />
                           </Button>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                           <div className="space-y-1.5">
                             <Label className="text-xs font-medium text-foreground">Option Name</Label>
                             <Input
@@ -916,19 +931,6 @@ const AdminSubscriptionPlans = () => {
                               value={formatNumber(detail.price)}
                               onChange={(e) => handlePriceInputChange(index, e.target.value)}
                               placeholder="99,000"
-                              className="h-9 bg-background border-[hsl(var(--admin-border))] text-sm"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-xs font-medium text-foreground">Duration (days)</Label>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={detail.durationDays || 30}
-                              onChange={(e) =>
-                                handleDetailChange(index, "durationDays", Math.max(parseNumber(e.target.value), 1))
-                              }
-                              placeholder="30"
                               className="h-9 bg-background border-[hsl(var(--admin-border))] text-sm"
                             />
                           </div>

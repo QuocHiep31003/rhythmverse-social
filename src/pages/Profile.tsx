@@ -74,6 +74,63 @@ const Profile = () => {
   const [featureUsages, setFeatureUsages] = useState<FeatureUsageDTO[]>([]);
   const [loadingFeatureUsages, setLoadingFeatureUsages] = useState(false);
 
+  // Gộp nhiều gói: cộng dồn limit/usage theo feature; nếu có gói unlimited → unlimited
+  const aggregateFeatureUsages = (items: FeatureUsageDTO[]): FeatureUsageDTO[] => {
+    const map = new Map<string, FeatureUsageDTO>();
+
+    items.forEach((u) => {
+      const key = u.featureName;
+      const limitType = (u.limitType || (u.limit === null ? 'UNLIMITED' : 'LIMITED')).toUpperCase();
+      const isUnlimited = limitType === 'UNLIMITED' || u.limit === null;
+      const isDisabled = limitType === 'DISABLED';
+      const usageCount = u.usageCount ?? 0;
+      const limit = u.limit ?? (isUnlimited ? null : 0);
+      const remaining = u.remaining;
+
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, {
+          ...u,
+          usageCount,
+          limit,
+          remaining,
+          limitType: limitType as any,
+          canUse: isDisabled ? false : u.canUse,
+        });
+        return;
+      }
+
+      const merged: FeatureUsageDTO = { ...existing };
+
+      // Nếu bất kỳ gói nào unlimited → toàn bộ unlimited
+      if (existing.limit === null || existing.limitType === 'UNLIMITED' || isUnlimited) {
+        merged.limit = null;
+        merged.limitType = 'UNLIMITED' as any;
+        merged.remaining = null;
+      } else if (existing.limitType === 'DISABLED' || isDisabled) {
+        merged.limit = 0;
+        merged.limitType = 'DISABLED' as any;
+        merged.remaining = 0;
+        merged.canUse = false;
+      } else {
+        const limitA = existing.limit ?? 0;
+        const limitB = limit ?? 0;
+        const usageA = existing.usageCount ?? 0;
+        const usageB = usageCount;
+        merged.limit = limitA + limitB;
+
+        const remA = existing.remaining ?? Math.max(limitA - usageA, 0);
+        const remB = remaining ?? Math.max(limitB - usageB, 0);
+        merged.remaining = remA + remB;
+      }
+
+      merged.usageCount = (existing.usageCount ?? 0) + usageCount;
+      map.set(key, merged);
+    });
+
+    return Array.from(map.values());
+  };
+
   useEffect(() => {
     fetchProfile();
     fetchFeatureUsages();
@@ -100,7 +157,8 @@ const Profile = () => {
         })
       );
       
-      setFeatureUsages(usages.filter((u): u is FeatureUsageDTO => u !== null));
+      const validUsages = usages.filter((u): u is FeatureUsageDTO => u !== null);
+      setFeatureUsages(aggregateFeatureUsages(validUsages));
     } catch (error) {
       console.error("Failed to fetch feature usages:", error);
     } finally {
@@ -189,6 +247,9 @@ const Profile = () => {
         (user as any)?.isPremium ??
         (user as any)?.premium ??
         undefined;
+      const planCodeUpper = subscription?.planCode?.toUpperCase();
+      const isPremiumPlanCode = planCodeUpper === 'PREMIUM';
+      
       const premiumSources = [
         userPremiumBoolean,
         getPremiumStringFlag((user as any)?.plan),
@@ -197,6 +258,8 @@ const Profile = () => {
         isSubscriptionActive(subscription)
       ];
       const isPremiumUser = premiumSources.some((flag) => Boolean(flag));
+      // Nếu có subscription nhưng planCode không phải PREMIUM thì không coi là premium (credit-based → vô hạn, không badge)
+      const effectivePremium = isPremiumPlanCode ? isPremiumUser : false;
       // Ưu tiên lấy từ subscription (startsAt/expiresAt), sau đó mới lấy từ user
       const premiumStartDate =
         subscription?.startsAt ||
@@ -227,10 +290,10 @@ const Profile = () => {
         ?.replace(/Premium\s*1\s*năm/gi, "Premium Yearly")
         ?.replace(/Premium\s*tháng/gi, "Premium Monthly")
         ?.replace(/Premium\s*năm/gi, "Premium Yearly")
-        || (isPremiumUser ? "Premium" : "Free");
+        || (effectivePremium ? "Premium" : (subscription?.planName || subscription?.planCode || "Free"));
 
       // Enforce expiry on FE: if premiumEndDate is in the past, treat user as Free
-      let finalPremium = isPremiumUser;
+      let finalPremium = effectivePremium;
       let finalPlanLabel = planLabel;
       if (premiumEndDate) {
         const end = new Date(premiumEndDate);
@@ -239,6 +302,10 @@ const Profile = () => {
           finalPlanLabel = "Free";
         }
       }
+      // Chỉ lưu start/end khi thực sự là premium; tránh hiển thị hạn dùng cho các gói credit-based/không-premium
+      const resolvedPremiumStart = finalPremium ? (premiumStartDate || "") : "";
+      const resolvedPremiumEnd = finalPremium ? (premiumEndDate || "") : "";
+
       setProfileData({
         name: user.name || "",
         username: user.email ? `@${user.email.split('@')[0]}` : "",
@@ -248,8 +315,8 @@ const Profile = () => {
         address: user.address || "",
         avatar: user.avatar || "",
         premium: finalPremium,
-        premiumStart: premiumStartDate || "",
-        premiumEnd: premiumEndDate || "",
+        premiumStart: resolvedPremiumStart,
+        premiumEnd: resolvedPremiumEnd,
         planLabel: finalPlanLabel
       });
       setAvatarPreview(user.avatar || "");
@@ -1093,8 +1160,8 @@ const Profile = () => {
                   ) : (
                     featureUsages.map((usage) => {
                       const limitType = usage.limitType?.toUpperCase();
-                      const isUnlimited = limitType === "UNLIMITED";
-                      const isDisabled = limitType === "DISABLED" || usage.isEnabled === false;
+                      const isUnlimited = limitType === "UNLIMITED" || usage.limit === null;
+                      const isDisabled = limitType === "DISABLED" || (usage as any).isEnabled === false;
                       const usageCount = usage.usageCount || 0;
                       const limit = usage.limit;
                       const remaining = usage.remaining;
@@ -1549,6 +1616,13 @@ const Profile = () => {
         onOpenChange={setIsPlanFeaturesDialogOpen}
         planCode={profilePlanCode || premiumSubscription?.planCode}
         planName={profileData.planLabel}
+        planFeatureSnapshot={
+          premiumSubscription?.planFeatureSnapshot ||
+          (premiumSubscription?.orderCode
+            ? allPaymentOrders.find((order) => order.orderCode === premiumSubscription.orderCode)
+                ?.planFeatureSnapshot
+            : null)
+        }
       />
       <Dialog
         open={isInvoiceDialogOpen}

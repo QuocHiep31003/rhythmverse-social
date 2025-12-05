@@ -80,6 +80,7 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       children: [
         { label: "Premium Dashboard", path: "/admin/premium-dashboard" },
         { label: "Subscription Plans", path: "/admin/subscription-plans" },
+        { label: "Subscriptions Management", path: "/admin/subscriptions-management" },
       ]
     },
     { icon: Users, label: "Users", path: "/admin/users" },
@@ -93,7 +94,8 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
       return;
     }
     const isPremiumPath = location.pathname === "/admin/premium-dashboard" || 
-                          location.pathname === "/admin/subscription-plans";
+                          location.pathname === "/admin/subscription-plans" ||
+                          location.pathname === "/admin/subscriptions-management";
     if (isPremiumPath) {
       setPremiumMenuOpen(true);
     }
