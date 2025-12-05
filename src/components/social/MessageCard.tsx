@@ -579,7 +579,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
     }
   };
 
-  // System messages: hiển thị trung tâm, không avatar/bubble trái phải, nhưng có thể react
+  // System messages: hiển thị trung tâm, không avatar/bubble trái phải, KHÔNG reaction
   if (message.type === "system") {
     const text = decodeUnicodeEscapes(message.content);
     return (
@@ -592,46 +592,12 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
         }}
       >
         <div className="relative flex items-center gap-2">
-          {/* Reaction button - hiển thị khi hover (bên trái) */}
-          {onReact && (
-            <div className={`${visibilityClasses} flex items-center`}>
-              {reactionButton}
-            </div>
-          )}
-          
           {/* System message content */}
           <div className="relative flex flex-col items-center">
             <span className="px-3 py-1.5 text-[12px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full text-center inline-block">
               {text}
             </span>
-            
-            {/* Reactions - hiển thị bên dưới system message */}
-            {message.reactions && message.reactions.length > 0 && (
-              <div className="mt-1 flex items-center gap-1 rounded-full bg-background/95 dark:bg-background/90 border border-border/40 px-2 py-0.5 shadow-sm z-20 flex-wrap">
-                {message.reactions.map((reaction) => {
-                  const decodedEmoji = decodeUnicodeEscapes(reaction.emoji);
-                  return (
-                    <div
-                      key={`${reaction.emoji}-${reaction.count}`}
-                      className={`flex items-center gap-1 text-xs flex-shrink-0 ${
-                        reaction.reactedByMe ? "text-primary font-semibold" : "text-foreground"
-                      }`}
-                    >
-                      <span>{decodedEmoji}</span>
-                      {reaction.count > 1 && <span>{reaction.count}</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
-          
-          {/* Reaction button - hiển thị khi hover (bên phải) */}
-          {onReact && (
-            <div className={`${visibilityClasses} flex items-center`}>
-              {reactionButton}
-            </div>
-          )}
         </div>
       </div>
     );

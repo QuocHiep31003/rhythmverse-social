@@ -821,7 +821,11 @@ const TopBar = () => {
   // Note: Chat unread count is managed by Firebase rooms listener, not here
   useEffect(() => {
     if (!currentUserId || !firebaseReady) return;
-    const handler = () => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ friendId?: string | null; roomId?: string | null }>).detail;
+      const roomId = detail?.roomId;
+      const friendId = detail?.friendId;
+
       const unreadIds = messageNotifications
         .filter((n) => !n.read && n.id)
         .map((n) => String(n.id));
@@ -835,6 +839,33 @@ const TopBar = () => {
         void markNotificationsAsRead(currentUserId, unreadIds).catch((error) => {
           console.warn('[TopBar] Failed to mark message notifications as read:', error);
           // Optimistic update đã xử lý UI, nên không cần rollback
+        });
+      }
+
+      // Clear local unread badge for friend/group currently opened
+      if (roomId && roomId.startsWith("pl_")) {
+        setUnreadByPlaylist((prev) => {
+          if (!prev[roomId.replace("pl_", "")]) return prev;
+          const next = { ...prev };
+          delete next[roomId.replace("pl_", "")];
+          // Update total unread
+          const restTotal =
+            Object.values(next).reduce((a, b) => a + b, 0) +
+            Object.values(unreadByUser).reduce((a, b) => a + b, 0);
+          setUnreadMsgCount(restTotal);
+          return next;
+        });
+      } else if (friendId) {
+        const friendNumeric = Number(friendId);
+        setUnreadByUser((prev) => {
+          if (!prev[friendNumeric]) return prev;
+          const next = { ...prev };
+          delete next[friendNumeric];
+          const restTotal =
+            Object.values(unreadByPlaylist).reduce((a, b) => a + b, 0) +
+            Object.values(next).reduce((a, b) => a + b, 0);
+          setUnreadMsgCount(restTotal);
+          return next;
         });
       }
     };

@@ -978,7 +978,11 @@ const Social = () => {
 
   useEffect(() => {
     if (activeTab !== "chat" || !selectedChat) return;
-    emitChatTabOpened({ friendId: selectedChat });
+    const payload =
+      selectedChat.startsWith("pl_")
+        ? { roomId: selectedChat, friendId: null }
+        : { friendId: selectedChat, roomId: null };
+    emitChatTabOpened(payload);
   }, [activeTab, selectedChat]);
 
   // ✅ Mark conversation as read ngay khi user vào chat (không delay để tránh unread tăng)
@@ -990,6 +994,23 @@ const Social = () => {
     // Sử dụng setTimeout để đảm bảo mark as read được gọi sau khi component đã render xong
     const timeoutId = setTimeout(() => {
       markConversationAsRead(selectedChat);
+      // Clear local unread state ngay lập tức cho UX mượt
+      if (selectedChat.startsWith("pl_")) {
+        const playlistId = selectedChat.replace("pl_", "");
+        setUnreadByPlaylist((prev) => {
+          if (!prev[playlistId]) return prev;
+          const next = { ...prev };
+          delete next[playlistId];
+          return next;
+        });
+      } else {
+        setUnreadByFriend((prev) => {
+          if (!prev[selectedChat]) return prev;
+          const next = { ...prev };
+          delete next[selectedChat];
+          return next;
+        });
+      }
     }, 100);
     
     return () => {
@@ -1884,7 +1905,7 @@ const Social = () => {
       Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
       chatWatchersRef.current = {};
     };
-  }, [meId, firebaseReady, friendsIdsString]); // ✅ Removed mergeFirebaseMessages from dependencies
+  }, [meId, firebaseReady, friendsIdsString, mergeFirebaseMessages]); // include mergeFirebaseMessages to ensure watcher callbacks active
 
   // Watch messages for playlist rooms when selectedChat is a playlist room
   useEffect(() => {
@@ -1914,7 +1935,7 @@ const Social = () => {
         delete chatWatchersRef.current[roomId];
       }
     };
-  }, [meId, firebaseReady, selectedChat]);
+  }, [meId, firebaseReady, selectedChat, mergeFirebaseMessages]);
 
   useEffect(() => {
     if (!meId || !firebaseReady) {
@@ -2344,8 +2365,7 @@ const Social = () => {
   const handleReact = useCallback(
     async (message: Message, emoji: string) => {
       if (!meId || !selectedChat) return;
-      const friendNumericId = Number(selectedChat);
-      if (!Number.isFinite(friendNumericId)) return;
+      if (message.type === "system") return;
 
       // Find messageId from message (could be in id or firebaseKey)
       const messageIdFromBackend = message.backendId;

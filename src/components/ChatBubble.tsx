@@ -130,7 +130,9 @@ const ChatBubble = () => {
 
   return (
     <div className="fixed bottom-32 right-3 z-40 space-y-3 pointer-events-none">
-      {newMessages.slice(-1).map((message) => (
+      {newMessages.slice(-1).map((message) => {
+        const unreadCount = typeof message.meta?.unreadCount === "number" ? message.meta.unreadCount : null;
+        return (
         <div
           key={message.id}
           className={cn(
@@ -144,12 +146,19 @@ const ChatBubble = () => {
           onClick={() => dismissMessage(message.id)}
         >
           <div className="flex items-start gap-3">
+            <div className="relative">
             <Avatar className="h-8 w-8 ring-2 ring-slate-200 dark:ring-slate-500 ring-offset-0">
               <AvatarImage src={message.avatar} alt={message.from} />
               <AvatarFallback className="text-xs bg-slate-200 text-slate-800 dark:bg-slate-400 dark:text-slate-900">
                 {message.from.charAt(0)}
               </AvatarFallback>
             </Avatar>
+              {unreadCount != null && unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] leading-[18px] text-center shadow-sm">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </div>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
@@ -215,7 +224,8 @@ const ChatBubble = () => {
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
