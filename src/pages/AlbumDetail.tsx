@@ -227,6 +227,8 @@ const AlbumDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { playSong, togglePlay, isPlaying, currentSong, setQueue } = useMusic();
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);
@@ -251,7 +253,6 @@ const AlbumDetail = () => {
   });
   const [albumLikeCount, setAlbumLikeCount] = useState<number | null>(null);
   const heroGradient = useMemo(() => {
-    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const glow = "rgba(167, 139, 250, 0.65)";
     const accent = "rgba(59, 130, 246, 0.45)";
     return `
@@ -259,13 +260,12 @@ const AlbumDetail = () => {
       radial-gradient(circle at 80% 10%, ${accent}, transparent 45%),
       linear-gradient(180deg, ${palette.surfaceTop} 0%, ${palette.surfaceBottom} 65%, rgba(2,4,12,0.98) 100%)
     `;
-  }, [palette.surfaceTop, palette.surfaceBottom, isDark]);
+  }, [palette.surfaceTop, palette.surfaceBottom]);
   const pageGradient = useMemo(() => {
-    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const match = palette.primary.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
     const [r, g, b] = match ? match.slice(1).map(Number) : [168, 85, 247];
     return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
-  }, [palette.primary, isDark]);
+  }, [palette.primary]);
   const albumNumericId = useMemo(() => {
     if (album?.id != null) {
       const numeric = Number(album.id);
@@ -401,8 +401,8 @@ const AlbumDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen text-foreground bg-background album-page-background">
-        <section className="relative overflow-hidden border-b border-border">
+      <div className={`min-h-screen ${isDark ? "text-white" : "text-foreground bg-background"} album-page-background`}>
+        <section className={`relative overflow-hidden border-b ${isDark ? "border-white/10" : "border-border"}`}>
           <div className="absolute inset-0 album-hero-overlay" />
           <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
             <Skeleton className="w-52 h-52 md:w-64 md:h-64 rounded-3xl" />
@@ -421,7 +421,7 @@ const AlbumDetail = () => {
         <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
           <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardContent className="p-0">
-              <div className="px-6 py-3 border-b border-border">
+              <div className={`px-6 py-3 border-b ${isDark ? "border-white/10" : "border-border"}`}>
                 <Skeleton className="h-4 w-full" />
               </div>
               <div className="space-y-2 px-6 py-4">
@@ -437,17 +437,11 @@ const AlbumDetail = () => {
   }
 
   return (
-    <div 
-      className="min-h-screen text-foreground bg-background album-page-background" 
-      style={isDark && pageGradient ? { background: pageGradient } : undefined}
-    >
-      <section className="relative overflow-hidden border-b border-border">
-        <div 
-          className="absolute inset-0 album-hero-overlay" 
-          style={isDark ? { backgroundImage: heroGradient } : undefined} 
-        />
+    <div className={`min-h-screen ${isDark ? "text-white" : "text-foreground bg-background"} album-page-background`} style={isDark && pageGradient ? { background: pageGradient } : undefined}>
+      <section className={`relative overflow-hidden border-b ${isDark ? "border-white/10" : "border-border"}`}>
+        <div className="absolute inset-0 album-hero-overlay" style={isDark ? { backgroundImage: heroGradient } : undefined} />
         <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
-          <div className="relative w-52 h-52 md:w-64 md:h-64 rounded-3xl overflow-hidden shadow-[0_25px_45px_rgba(8,8,35,0.45)] ring-1 ring-border flex items-center justify-center bg-card/20">
+          <div className={`relative w-52 h-52 md:w-64 md:h-64 rounded-3xl overflow-hidden shadow-[0_25px_45px_rgba(8,8,35,0.45)] ring-1 ${isDark ? "ring-white/10" : "ring-border"} flex items-center justify-center ${isDark ? "bg-black/20" : "bg-card/20"}`}>
             <img
               src={album?.cover}
               alt={album?.title}
@@ -455,18 +449,18 @@ const AlbumDetail = () => {
             />
           </div>
           <div className="flex-1 flex flex-col justify-end text-center md:text-left">
-            <Badge className="w-fit mx-auto md:mx-0 mb-3 bg-card/50 text-foreground uppercase tracking-[0.4em] rounded-full px-4 py-1 text-[11px]">
+            <Badge className={`w-fit mx-auto md:mx-0 mb-3 ${isDark ? "bg-white/15 text-white" : "bg-card text-foreground"} uppercase tracking-[0.4em] rounded-full px-4 py-1 text-[11px]`}>
               Album
             </Badge>
             <h1 className="text-4xl md:text-6xl font-black drop-shadow-sm text-foreground">
               {album?.title}
             </h1>
-            <p className="mt-2 text-muted-foreground text-lg">{album?.artist}</p>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-4 text-sm text-muted-foreground">
+            <p className={`mt-2 text-lg ${isDark ? "text-white/80" : "text-muted-foreground"}`}>{album?.artist}</p>
+            <div className={`flex flex-wrap items-center justify-center md:justify-start gap-3 mt-4 text-sm ${isDark ? "text-white/80" : "text-muted-foreground"}`}>
               <span>{songs.length} bài hát</span>
-              <span className="text-muted-foreground/50">•</span>
+              <span className={isDark ? "text-white/40" : "text-muted-foreground/50"}>•</span>
               <span>{formatTotalDuration(totalDuration)}</span>
-              <span className="text-muted-foreground/50">•</span>
+              <span className={isDark ? "text-white/40" : "text-muted-foreground/50"}>•</span>
               <span>
                 {album?.releaseDate
                   ? new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "short", year: "numeric" }).format(
@@ -476,7 +470,7 @@ const AlbumDetail = () => {
               </span>
               {albumLikeCount !== null && (
                 <>
-                  <span className="text-muted-foreground/50">•</span>
+                  <span className={isDark ? "text-white/40" : "text-muted-foreground/50"}>•</span>
                   <span className="flex items-center gap-1">
                     <Heart className="w-4 h-4" />
                     {albumLikeCount.toLocaleString()}
@@ -503,7 +497,7 @@ const AlbumDetail = () => {
             </Button>
             <Button
               variant="outline"
-              className="gap-2 border-border bg-card/50 text-foreground hover:bg-muted"
+              className={`gap-2 ${isDark ? "border-white/20 bg-white/5 text-white hover:bg-white/10" : "border-border bg-card text-foreground hover:bg-muted"}`}
               onClick={handleShuffleAlbum}
               disabled={!songs.length}
             >
@@ -515,7 +509,7 @@ const AlbumDetail = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="text-muted-foreground hover:text-foreground"
+              className={isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"}
               onClick={handleDownloadAlbum}
               disabled={!songs.length}
             >
@@ -524,7 +518,7 @@ const AlbumDetail = () => {
             <Button
               variant="ghost"
               size="icon"
-              className={`text-muted-foreground hover:text-foreground ${isAlbumSaved ? "text-red-500" : ""}`}
+              className={`${isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"} ${isAlbumSaved ? "text-red-500" : ""}`}
               onClick={toggleAlbumFavorite}
               disabled={!albumNumericId || albumFavoritePending || albumFavoriteLoading}
               aria-label={isAlbumSaved ? "Đã lưu album này" : "Lưu album vào thư viện"}
@@ -534,7 +528,7 @@ const AlbumDetail = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="text-muted-foreground hover:text-foreground"
+              className={isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"}
               onClick={() => setShareAlbumOpen(true)}
             >
               <Share2 className="w-5 h-5" />
@@ -542,7 +536,7 @@ const AlbumDetail = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="text-muted-foreground hover:text-foreground"
+              className={isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"}
               onClick={handleActionComingSoon}
             >
               <MoreHorizontal className="w-5 h-5" />
@@ -553,9 +547,9 @@ const AlbumDetail = () => {
 
       {/* song list */}
       <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
-        <Card className="border-border bg-card/50 backdrop-blur">
+        <Card className={`${isDark ? "border-white/10 bg-black/40" : "border-border bg-card"} backdrop-blur`}>
           <CardContent className="p-0">
-            <div className="grid grid-cols-[56px_minmax(0,1fr)_130px_110px_120px] md:grid-cols-[72px_minmax(0,1fr)_180px_130px_140px] px-6 py-3 gap-3 text-xs uppercase text-muted-foreground border-b border-border items-center">
+            <div className={`grid grid-cols-[56px_minmax(0,1fr)_130px_110px_120px] md:grid-cols-[72px_minmax(0,1fr)_180px_130px_140px] px-6 py-3 gap-3 text-xs uppercase ${isDark ? "text-white/70" : "text-muted-foreground"} border-b border-border items-center`}>
               <div className="flex justify-center items-center">#</div>
               <div className="flex items-center">Title</div>
               <div className="hidden sm:flex items-center justify-center w-full">Released</div>

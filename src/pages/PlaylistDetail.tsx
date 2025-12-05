@@ -54,7 +54,6 @@ import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import "./PlaylistDetail.css";
 import { PlaylistChatWindow } from "@/components/playlist/PlaylistChatWindow";
 import { PlaylistChatHead } from "@/components/playlist/PlaylistChatHead";
-import { chatApi } from "@/services/api/chatApi";
 
 const getTitleFontClass = (length: number) => {
   // Responsive font-size theo d? d�i t�n playlist
@@ -118,9 +117,9 @@ const useDebounceValue = (value: string, delay: number) => {
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { theme } = useTheme();
-  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<PlaylistState | null>(null);
@@ -210,7 +209,6 @@ const PlaylistDetail = () => {
   });
 
   const heroGradient = useMemo(() => {
-    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const top = palette?.surfaceTop ?? defaultTop;
     const bottom = palette?.surfaceBottom ?? defaultBottom;
     const glow = "rgba(167, 139, 250, 0.55)";
@@ -220,15 +218,14 @@ const PlaylistDetail = () => {
       radial-gradient(circle at 80% 15%, ${accent}, transparent 45%),
       linear-gradient(180deg, ${top} 0%, ${bottom} 70%, rgba(3,7,18,0.95) 100%)
     `;
-  }, [palette, defaultTop, defaultBottom, isDark]);
+  }, [palette, defaultTop, defaultBottom]);
 
   const pageGradient = useMemo(() => {
-    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const primary = palette?.primary ?? defaultPrimary;
     const match = primary.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
     const [r, g, b] = match ? match.slice(1).map(Number) : [168, 85, 247];
     return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
-  }, [palette?.primary, defaultPrimary, isDark]);
+  }, [palette?.primary, defaultPrimary]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
@@ -455,15 +452,20 @@ const PlaylistDetail = () => {
   }, [playlist, collaborators, friends, collaboratorAvatars, toAbsoluteUrl, meId]);
 
   const canOpenPlaylistChat = useMemo(() => {
+    // Chỉ hiển thị chat khi có ít nhất 2 người (owner + ít nhất 1 collaborator)
+    const totalMembers = 1 + collaborators.length; // 1 owner + số collaborators
+    const hasEnoughMembers = totalMembers >= 2;
+    
     return (
       !isCreateMode &&
       typeof playlistNumericId === "number" &&
       Number.isFinite(playlistNumericId) &&
       typeof meId === "number" &&
       Number.isFinite(meId) &&
-      (permissions.isOwner || isCurrentCollaborator)
+      (permissions.isOwner || isCurrentCollaborator) &&
+      hasEnoughMembers
     );
-  }, [isCreateMode, playlistNumericId, meId, permissions.isOwner, isCurrentCollaborator]);
+  }, [isCreateMode, playlistNumericId, meId, permissions.isOwner, isCurrentCollaborator, collaborators.length]);
 
   // Load recommended songs based on playlist content
   // Uu ti�n: Mood > Genre > Artist
@@ -2076,8 +2078,8 @@ const PlaylistDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen text-foreground bg-background playlist-page-background">
-        <section className="relative overflow-hidden border-b border-border">
+      <div className={`min-h-screen ${isDark ? "text-white" : "text-foreground bg-background"} playlist-page-background`}>
+        <section className={`relative overflow-hidden border-b ${isDark ? "border-white/10" : "border-border"}`}>
           <div className="absolute inset-0 playlist-hero-overlay" />
           <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
             <Skeleton className="w-52 h-52 md:w-64 md:h-64 rounded-3xl" />
@@ -2111,7 +2113,7 @@ const PlaylistDetail = () => {
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    className="bg-card/50 text-foreground border-border hover:bg-muted"
+                    className={isDark ? "bg-white/5 text-white border-white/20 hover:bg-white/10" : "bg-card text-foreground border-border hover:bg-muted"}
                     disabled={!permissions.canEdit}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2179,7 +2181,7 @@ const PlaylistDetail = () => {
               </Dialog>
               <Button
                 variant="outline"
-                className="bg-card/50 text-foreground border-border hover:bg-muted"
+                className={isDark ? "bg-white/5 text-white border-white/20 hover:bg-white/10" : "bg-card text-foreground border-border hover:bg-muted"}
                 onClick={() => {
                   if (!permissions.isOwner) {
                     toast({
@@ -2213,7 +2215,7 @@ const PlaylistDetail = () => {
         <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
           <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardContent className="p-0">
-              <div className="px-6 py-3 border-b border-border">
+              <div className="px-6 py-3 border-b border-white/10">
                 <Skeleton className="h-4 w-full" />
               </div>
               <div className="space-y-2 px-6 py-4">
@@ -2229,15 +2231,9 @@ const PlaylistDetail = () => {
   }
 
   return (
-    <div 
-      className="min-h-screen text-foreground bg-background playlist-page-background" 
-      style={isDark && pageGradient ? { background: pageGradient } : undefined}
-    >
-      <section className="relative overflow-hidden border-b border-border">
-        <div 
-          className="absolute inset-0 playlist-hero-overlay" 
-          style={isDark ? { backgroundImage: heroGradient } : undefined} 
-        />
+    <div className={`min-h-screen ${isDark ? "text-white" : "text-foreground bg-background"} playlist-page-background`} style={isDark && pageGradient ? { background: pageGradient } : undefined}>
+      <section className={`relative overflow-hidden border-b ${isDark ? "border-white/10" : "border-border"}`}>
+        <div className="absolute inset-0 playlist-hero-overlay" style={isDark ? { backgroundImage: heroGradient } : undefined} />
         <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col lg:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div className="flex-shrink-0">
             <div
@@ -2290,7 +2286,7 @@ const PlaylistDetail = () => {
                 }
                 return (
                   <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center music-placeholder">
-                    <Music className="w-24 h-24 text-muted-foreground" />
+                    <Music className="w-24 h-24 text-white/80" />
                   </div>
                 );
               })()}
@@ -2870,7 +2866,7 @@ const PlaylistDetail = () => {
                 {permissions.canEdit && (
                   <Button
                     variant="outline"
-                    className="bg-card/50 text-foreground border-border hover:bg-muted"
+                    className={isDark ? "bg-white/5 text-white border-white/20 hover:bg-white/10" : "bg-card text-foreground border-border hover:bg-muted"}
                     onClick={() => setAddDialogOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2883,7 +2879,7 @@ const PlaylistDetail = () => {
                  (playlist as any)?.type !== "SYSTEM_PERSONALIZED" && (
                   <Button
                     variant="outline"
-                    className="bg-card/50 text-foreground border-border hover:bg-muted"
+                    className={isDark ? "bg-white/5 text-white border-white/20 hover:bg-white/10" : "bg-card text-foreground border-border hover:bg-muted"}
                     onClick={() => setCollabOpen(true)}
                   >
                     <Users className="w-4 h-4 mr-2" />
@@ -2907,7 +2903,7 @@ const PlaylistDetail = () => {
                 {permissions.isOwner && (
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className={isDark ? "bg-white/5 text-white border-white/20 hover:bg-white/10" : "bg-card text-foreground border-border hover:bg-muted"}
                     onClick={() => setIsEditing(true)}
                   >
                     <Edit className="w-4 h-4 mr-2" />
@@ -2936,14 +2932,14 @@ const PlaylistDetail = () => {
             </Button>
             <Button
               variant="outline"
-              className="gap-2 border-white/20 bg-white/5 text-white hover:bg-white/10"
+              className={`gap-2 ${isDark ? "border-white/20 bg-white/5 text-white hover:bg-white/10" : "border-border bg-card text-foreground hover:bg-muted"}`}
               onClick={shufflePlaylistSongs}
               disabled={!playlist?.songs.length}
             >
               <Shuffle className="w-4 h-4" />
               Shuffle
             </Button>
-            <Button variant="ghost" className="text-white/80 hover:text-white" onClick={() => navigate("/playlists")}>
+            <Button variant="ghost" className={isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"} onClick={() => navigate("/playlists")}>
               Back to library
             </Button>
           </div>
@@ -2951,7 +2947,7 @@ const PlaylistDetail = () => {
             <Button
               variant="ghost"
               size="icon"
-              className={`text-white/80 hover:text-white ${isPlaylistSaved ? "text-red-500" : ""}`}
+              className={`${isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"} ${isPlaylistSaved ? "text-red-500" : ""}`}
               onClick={togglePlaylistFavorite}
               disabled={!playlistNumericId || playlistFavoritePending || playlistFavoriteLoading}
               aria-label={isPlaylistSaved ? "Đã lưu playlist này" : "Lưu playlist vào thư viện"}
@@ -2964,7 +2960,7 @@ const PlaylistDetail = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`${isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"} ${playlist?.visibility === PlaylistVisibility.PRIVATE ? "opacity-50 cursor-not-allowed" : ""}`}
                     disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
                     onClick={() => {
                       if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
@@ -2989,7 +2985,7 @@ const PlaylistDetail = () => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+                  <Button variant="ghost" size="icon" className={isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"} onClick={handlePlaylistActionComingSoon}>
                     <Download className="w-5 h-5" />
                   </Button>
                 </TooltipTrigger>
@@ -3001,7 +2997,7 @@ const PlaylistDetail = () => {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+                  <Button variant="ghost" size="icon" className={isDark ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground"} onClick={handlePlaylistActionComingSoon}>
                     <MoreHorizontal className="w-5 h-5" />
                   </Button>
                 </TooltipTrigger>
@@ -3016,7 +3012,7 @@ const PlaylistDetail = () => {
       </section>
 
       <div className="container mx-auto max-w-6xl px-4 md:px-8 pb-12 space-y-8">
-        <Card className="border-white/10 bg-black/40 backdrop-blur">
+        <Card className={`${isDark ? "border-white/10 bg-black/40" : "border-border bg-card"} backdrop-blur`}>
           <CardContent className="p-6">
             <div className="relative mb-6">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -3317,13 +3313,6 @@ const PlaylistDetail = () => {
               }}
               onNewMessage={() => {
                 setPlaylistChatUnread((prev) => (playlistChatOpen ? 0 : prev + 1));
-              }}
-              onReact={async (messageId, emoji) => {
-                try {
-                  await chatApi.toggleReaction(messageId, emoji, meId);
-                } catch (e) {
-                  console.error("[PlaylistDetail] Failed to react:", e);
-                }
               }}
             />
           )}
