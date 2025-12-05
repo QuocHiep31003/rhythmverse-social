@@ -274,11 +274,11 @@ const PlaylistSkeleton = () => (
   <Card className="bg-transparent border-none h-full flex flex-col">
     <CardContent className="p-0 flex flex-col flex-1">
       <div className="relative aspect-square rounded-2xl overflow-hidden">
-        <Skeleton className="w-full h-full bg-[#181818] dark:bg-white/5" />
+        <Skeleton className="w-full h-full" />
       </div>
       <div className="px-1 pt-2 min-w-0">
-        <Skeleton className="h-4 w-3/4 mb-2 bg-[#181818] dark:bg-white/5" />
-        <Skeleton className="h-3 w-1/2 bg-[#181818] dark:bg-white/5" />
+        <Skeleton className="h-4 w-3/4 mb-2" />
+        <Skeleton className="h-3 w-1/2" />
       </div>
     </CardContent>
   </Card>
@@ -1426,11 +1426,11 @@ const PlaylistLibrary = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col gap-4 mb-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <h1 className="text-3xl font-bold text-white">Your Library</h1>
+            <h1 className="text-3xl font-bold text-foreground">Your Library</h1>
             
             <div className="flex items-center gap-3 w-full lg:w-auto">
               <div className="relative flex-1 lg:w-64">
@@ -1439,7 +1439,7 @@ const PlaylistLibrary = () => {
                   placeholder="Search in your playlists"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-[#242424] border border-primary/20 text-sm placeholder:text-muted-foreground"
+                  className="pl-9 bg-card border border-border text-sm placeholder:text-muted-foreground"
                 />
               </div>
               
@@ -1456,29 +1456,29 @@ const PlaylistLibrary = () => {
           </div>
 
           <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm text-white">Library</span>
-                <span className="rounded-full bg-[#181818] px-3 py-1 text-[11px] text-muted-foreground/80 border border-border/40">
-                  {libraryItemCount} {libraryItemCount === 1 ? "item" : "items"}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {[
-                  { id: "all", label: "All" },
-                  { id: "playlists", label: "Playlists" },
-                  { id: "albums", label: "Albums" },
-                ].map((item) => {
-                  return (
-                    <Button
-                      key={item.id}
-                      size="sm"
-                      variant={scope === item.id ? "secondary" : "ghost"}
-                      className={`h-8 px-4 rounded-full border border-transparent text-[11px] font-medium ${
-                        scope === item.id
-                          ? "bg-primary text-white hover:bg-primary/90"
-                          : "bg-[#181818] hover:bg-[#262626] text-muted-foreground"
-                      }`}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-foreground">Library</span>
+                  <span className="rounded-full bg-card px-3 py-1 text-[11px] text-muted-foreground/80 border border-border/40">
+                    {libraryItemCount} {libraryItemCount === 1 ? "item" : "items"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "playlists", label: "Playlists" },
+                    { id: "albums", label: "Albums" },
+                  ].map((item) => {
+                    return (
+                      <Button
+                        key={item.id}
+                        size="sm"
+                        variant={scope === item.id ? "secondary" : "ghost"}
+                        className={`h-8 px-4 rounded-full border border-transparent text-[11px] font-medium ${
+                          scope === item.id
+                            ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                            : "bg-card hover:bg-muted text-muted-foreground"
+                        }`}
                       onClick={() =>
                         setScope(item.id as "all" | "playlists" | "albums")
                       }
@@ -1498,7 +1498,7 @@ const PlaylistLibrary = () => {
                 }}
               >
                 <SelectTrigger
-                  className="w-[140px] bg-[#181818] border border-border/60 h-8 text-[11px] justify-between text-muted-foreground rounded-full px-3"
+                  className="w-[140px] bg-card border border-border h-8 text-[11px] justify-between text-muted-foreground rounded-full px-3"
                   title="Sort by"
                 >
                   <SelectValue
@@ -1521,7 +1521,7 @@ const PlaylistLibrary = () => {
                 }}
               >
                 <SelectTrigger
-                  className="w-[160px] bg-[#181818] border border-border/60 h-8 text-[11px] justify-between text-muted-foreground rounded-full px-3"
+                  className="w-[160px] bg-card border border-border h-8 text-[11px] justify-between text-muted-foreground rounded-full px-3"
                   title="Filter playlists"
                 >
                   <SelectValue
@@ -1609,8 +1609,8 @@ const PlaylistLibrary = () => {
               {/* Scope chỉ album: bỏ toàn bộ playlist, chỉ show album yêu thích */}
               {scope === "albums" ? (
                 filteredFavoriteAlbums.length === 0 ? (
-                  <Card className="bg-[#181818] border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
-                    <p className="font-medium text-white mb-1">Chưa có album yêu thích</p>
+                  <Card className="bg-card border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground mb-1">Chưa có album yêu thích</p>
                     <p className="text-xs text-muted-foreground">
                       Hãy thêm album vào yêu thích để xuất hiện tại đây.
                     </p>
@@ -1637,8 +1637,8 @@ const PlaylistLibrary = () => {
                 scope === "all" ? (
                   // Scope "all" + filter "favorites": hiển thị cả favorite playlists và favorite albums
                   filteredFavoritePlaylistItems.length === 0 && filteredFavoriteAlbums.length === 0 ? (
-                    <Card className="bg-[#181818] border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
-                      <p className="font-medium text-white mb-1">Chưa có nội dung yêu thích</p>
+                    <Card className="bg-card border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground mb-1">Chưa có nội dung yêu thích</p>
                       <p className="text-xs text-muted-foreground">
                         Hãy thêm playlist hoặc album vào yêu thích để xuất hiện tại đây.
                       </p>
@@ -1698,8 +1698,8 @@ const PlaylistLibrary = () => {
                 ) : (
                   // Scope "playlists" + filter "favorites": chỉ hiển thị favorite playlists
                   filteredFavoritePlaylistItems.length === 0 ? (
-                    <Card className="bg-[#181818] border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
-                      <p className="font-medium text-white mb-1">Chưa có playlist yêu thích</p>
+                    <Card className="bg-card border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground mb-1">Chưa có playlist yêu thích</p>
                       <p className="text-xs text-muted-foreground">
                         Hãy thêm playlist vào yêu thích để xuất hiện tại đây.
                       </p>
@@ -1731,8 +1731,8 @@ const PlaylistLibrary = () => {
                   // Filter "all": hiển thị tất cả (playlists + favorite playlists + favorite albums)
                   <>
                     {filteredPlaylists.length === 0 && filteredExtraFavoritePlaylists.length === 0 && (scope !== "all" || filteredFavoriteAlbums.length === 0) ? (
-                      <Card className="bg-[#181818] border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
-                        <p className="font-medium text-white mb-1">Không có nội dung nào</p>
+                      <Card className="bg-card border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
+                        <p className="font-medium text-foreground mb-1">Không có nội dung nào</p>
                         <p className="text-xs text-muted-foreground">
                           Tạo playlist mới hoặc tham gia playlist của bạn bè để hiển thị tại đây.
                         </p>
@@ -1794,8 +1794,8 @@ const PlaylistLibrary = () => {
                 ) : (
                   // Các filter khác (owned, collab, public, private): chỉ hiển thị filteredPlaylists
                   filteredPlaylists.length === 0 ? (
-                    <Card className="bg-[#181818] border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
-                      <p className="font-medium text-white mb-1">Không có playlist nào</p>
+                    <Card className="bg-card border-none flex flex-col items-start justify-center p-4 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground mb-1">Không có playlist nào</p>
                       <p className="text-xs text-muted-foreground">
                         Tạo playlist mới hoặc tham gia playlist của bạn bè để hiển thị tại đây.
                       </p>

@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -117,6 +118,8 @@ const useDebounceValue = (value: string, delay: number) => {
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -207,6 +210,7 @@ const PlaylistDetail = () => {
   });
 
   const heroGradient = useMemo(() => {
+    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const top = palette?.surfaceTop ?? defaultTop;
     const bottom = palette?.surfaceBottom ?? defaultBottom;
     const glow = "rgba(167, 139, 250, 0.55)";
@@ -216,14 +220,15 @@ const PlaylistDetail = () => {
       radial-gradient(circle at 80% 15%, ${accent}, transparent 45%),
       linear-gradient(180deg, ${top} 0%, ${bottom} 70%, rgba(3,7,18,0.95) 100%)
     `;
-  }, [palette, defaultTop, defaultBottom]);
+  }, [palette, defaultTop, defaultBottom, isDark]);
 
   const pageGradient = useMemo(() => {
+    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const primary = palette?.primary ?? defaultPrimary;
     const match = primary.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
     const [r, g, b] = match ? match.slice(1).map(Number) : [168, 85, 247];
     return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
-  }, [palette?.primary, defaultPrimary]);
+  }, [palette?.primary, defaultPrimary, isDark]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
@@ -2071,8 +2076,8 @@ const PlaylistDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen text-white playlist-page-background">
-        <section className="relative overflow-hidden border-b border-white/10">
+      <div className="min-h-screen text-foreground bg-background playlist-page-background">
+        <section className="relative overflow-hidden border-b border-border">
           <div className="absolute inset-0 playlist-hero-overlay" />
           <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
             <Skeleton className="w-52 h-52 md:w-64 md:h-64 rounded-3xl" />
@@ -2106,7 +2111,7 @@ const PlaylistDetail = () => {
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className="bg-card/50 text-foreground border-border hover:bg-muted"
                     disabled={!permissions.canEdit}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2174,7 +2179,7 @@ const PlaylistDetail = () => {
               </Dialog>
               <Button
                 variant="outline"
-                className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                className="bg-card/50 text-foreground border-border hover:bg-muted"
                 onClick={() => {
                   if (!permissions.isOwner) {
                     toast({
@@ -2208,7 +2213,7 @@ const PlaylistDetail = () => {
         <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
           <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardContent className="p-0">
-              <div className="px-6 py-3 border-b border-white/10">
+              <div className="px-6 py-3 border-b border-border">
                 <Skeleton className="h-4 w-full" />
               </div>
               <div className="space-y-2 px-6 py-4">
@@ -2224,9 +2229,15 @@ const PlaylistDetail = () => {
   }
 
   return (
-    <div className="min-h-screen text-white playlist-page-background" style={{ background: pageGradient }}>
-      <section className="relative overflow-hidden border-b border-white/10">
-        <div className="absolute inset-0 playlist-hero-overlay" style={{ backgroundImage: heroGradient }} />
+    <div 
+      className="min-h-screen text-foreground bg-background playlist-page-background" 
+      style={isDark && pageGradient ? { background: pageGradient } : undefined}
+    >
+      <section className="relative overflow-hidden border-b border-border">
+        <div 
+          className="absolute inset-0 playlist-hero-overlay" 
+          style={isDark ? { backgroundImage: heroGradient } : undefined} 
+        />
         <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col lg:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div className="flex-shrink-0">
             <div
@@ -2279,7 +2290,7 @@ const PlaylistDetail = () => {
                 }
                 return (
                   <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center music-placeholder">
-                    <Music className="w-24 h-24 text-white/80" />
+                    <Music className="w-24 h-24 text-muted-foreground" />
                   </div>
                 );
               })()}
@@ -2859,7 +2870,7 @@ const PlaylistDetail = () => {
                 {permissions.canEdit && (
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className="bg-card/50 text-foreground border-border hover:bg-muted"
                     onClick={() => setAddDialogOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2872,7 +2883,7 @@ const PlaylistDetail = () => {
                  (playlist as any)?.type !== "SYSTEM_PERSONALIZED" && (
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className="bg-card/50 text-foreground border-border hover:bg-muted"
                     onClick={() => setCollabOpen(true)}
                   >
                     <Users className="w-4 h-4 mr-2" />
