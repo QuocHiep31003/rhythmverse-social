@@ -118,12 +118,12 @@ export const FeatureLimitModal = ({
           </div>
           <DialogDescription className="text-base">
             {isDisabled
-              ? `${displayName} is not available in your current plan. Upgrade to Premium to unlock this feature!`
+              ? `${displayName} is not available in your current plan. Upgrade to Premium or purchase credits to unlock this feature!`
               : hasFreeQuota
               ? remaining === 0
-                ? `You've reached your limit for ${displayName}. You've used all ${limitNumber} free uses. Upgrade to Premium for unlimited access!`
-                : `You have ${remaining} of ${limitNumber} ${displayName} uses remaining. Upgrade to Premium for unlimited access!`
-              : `${displayName} is only available for Premium users. Upgrade to Premium to unlock this feature!`}
+                ? `You've reached your limit for ${displayName}. You've used all ${limitNumber} free uses. Upgrade to Premium or purchase a credit-based plan to continue using this feature!`
+                : `You have ${remaining} of ${limitNumber} ${displayName} uses remaining. Upgrade to Premium or purchase credits for unlimited access!`
+              : `${displayName} is only available for Premium users or credit-based plans. Upgrade to Premium or purchase credits to unlock this feature!`}
           </DialogDescription>
         </DialogHeader>
 

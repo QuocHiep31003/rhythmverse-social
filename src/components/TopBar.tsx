@@ -437,9 +437,12 @@ const TopBar = () => {
                 }
               }
 
+              // Treat SUCCESS/PAID as active to show plan label for freshly purchased users
               const activeByStatus =
                 normalizedStatus === "ACTIVE" ||
                 normalizedStatus === "TRIALING" ||
+                normalizedStatus === "SUCCESS" ||
+                normalizedStatus === "PAID" ||
                 subscription?.isActive ||
                 subscription?.active;
 
@@ -478,7 +481,11 @@ const TopBar = () => {
               } else if (isExpired) {
                 // Force downgrade on FE when subscription is expired by time
                 setProfileIsPremium(false);
-                setProfilePlanLabel("");
+                setProfilePlanLabel("Free");
+              } else {
+                // Cancelled or inactive: revert to base plan label
+                setProfileIsPremium(false);
+                setProfilePlanLabel("Free");
               }
             }
           } catch (e) {

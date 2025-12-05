@@ -23,6 +23,8 @@ interface PlanFeaturesDialogProps {
   onOpenChange: (open: boolean) => void;
   planCode?: string | null;
   planName?: string | null;
+  // Snapshot string (JSON) to render purchase-time benefits instead of live plan config
+  planFeatureSnapshot?: string | null;
 }
 
 interface FeatureDisplayItem {
@@ -118,17 +120,49 @@ const PlanFeaturesDialog = ({
   onOpenChange,
   planCode,
   planName = "Premium",
+  planFeatureSnapshot,
 }: PlanFeaturesDialogProps) => {
   const [planFeatures, setPlanFeatures] = useState<PlanFeatureDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [featureUsageMap, setFeatureUsageMap] = useState<Record<string, FeatureUsageDTO>>({});
 
+  const parseSnapshot = (raw?: string | null): PlanFeatureDTO[] => {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => ({
+          featureName: item.featureName,
+          featureDisplayName: item.featureDisplayName,
+          limitType: item.limitType,
+          limitValue: item.limitValue,
+          limitPeriod: item.limitPeriod,
+          periodValue: item.periodValue,
+          isEnabled: item.isEnabled,
+        }));
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
     const fetchPlanFeatures = async () => {
       if (!open) return;
+
+      // Prefer snapshot (purchase-time) if provided
+      const snapshotFeatures = parseSnapshot(planFeatureSnapshot);
+      if (snapshotFeatures.length) {
+        setPlanFeatures(snapshotFeatures);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
       if (!planCode) {
         setPlanFeatures([]);
         setError("Current subscription code not found.");
@@ -159,7 +193,7 @@ const PlanFeaturesDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [open, planCode]);
+  }, [open, planCode, planFeatureSnapshot]);
 
   // Load usage cho các feature trong plan khi dialog mở
   useEffect(() => {

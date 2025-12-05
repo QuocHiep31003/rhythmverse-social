@@ -233,9 +233,23 @@ const Premium = () => {
 
   const getDurationLabel = (plan: SubscriptionPlanDTO) => {
     if (plan.planCode?.toUpperCase() === "FREE") return null;
+    const planCodeUpper = plan.planCode?.toUpperCase() || "";
+    const isDefaultPlan = planCodeUpper === "FREE" || planCodeUpper === "PREMIUM";
+    
+    // Nếu không phải gói mặc định → hiển thị "Credits" thay vì "days"
+    if (!isDefaultPlan) {
+      return "Credits (No time limit)";
+    }
+    
     const detail = getRecommendedDetail(plan);
     if (!detail || !detail.durationDays) return null;
     return `${detail.durationDays} days`;
+  };
+  
+  // Kiểm tra xem plan có phải là credit-based (không phải FREE/PREMIUM) không
+  const isCreditBasedPlan = (plan: SubscriptionPlanDTO) => {
+    const planCodeUpper = plan.planCode?.toUpperCase() || "";
+    return planCodeUpper !== "FREE" && planCodeUpper !== "PREMIUM";
   };
 
   const renderPlanCard = (
@@ -316,6 +330,11 @@ const Premium = () => {
               <p className="text-sm text-white/70">{getDurationLabel(plan)}</p>
             ) : (
               <div className="h-3" />
+            )}
+            {isCreditBasedPlan(plan) && (
+              <p className="text-xs text-white/50 mt-1">
+                Credits are added to your account and never expire
+              </p>
             )}
           </div>
           <p className="text-sm text-muted-foreground mb-3 line-clamp-2 min-h-[40px]">
