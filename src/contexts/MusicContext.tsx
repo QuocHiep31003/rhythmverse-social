@@ -97,6 +97,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
   const queueSongMapRef = useRef<Map<number, Song>>(new Map()); // Cache song data by ID
   const checkingAuthRef = useRef<Promise<boolean> | null>(null); // Cache để tránh gọi đồng thời
   const queueRef = useRef<Song[]>([]); // Ref để lưu queue mới nhất (tránh closure stale)
+  const resetPlayerRef = useRef<(() => void) | null>(null); // Ref để lưu resetPlayer function
   
   // Get userId from token or storage
   const getUserId = useCallback((): number | null => {
@@ -411,8 +412,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
       authChannel.onmessage = (event) => {
         if (event.data.type === 'USER_CHANGED') {
           const newUserId = event.data.userId;
-          // Lấy userId hiện tại từ localStorage (không phải từ token)
-          const currentUserIdFromStorage = localStorage.getItem('userId');
+          // Lấy userId hiện tại từ sessionStorage (không phải từ token)
+          const currentUserIdFromStorage = sessionStorage.getItem('userId');
           
           if (currentUserIdFromStorage && currentUserIdFromStorage !== String(newUserId)) {
             console.log('[MusicContext] ⚠️ User changed via BroadcastChannel! Logging out...', {
@@ -424,8 +425,8 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
             try {
               clearTokens();
               
-              // Clear userId từ localStorage
-              localStorage.removeItem('userId');
+              // Clear userId từ sessionStorage
+              sessionStorage.removeItem('userId');
               
               // Clear local state
               userIdRef.current = null;
@@ -443,7 +444,7 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
           }
         } else if (event.data.type === 'TOKEN_UPDATED') {
           // Khi tab khác đăng nhập, lưu token vào sessionStorage và check auth
-          const { token, refreshToken } = event.data;
+          const { token, refreshToken, userId } = event.data;
           if (token) {
             console.log('[MusicContext] 🔔 Token updated in another tab, saving token...');
             waitingForTokenRef.current = false; // Đã nhận token, không cần chờ nữa
@@ -451,6 +452,31 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
               try {
                 const { setTokens } = await import('@/services/api/config');
                 setTokens(token, refreshToken);
+                
+                // Lưu userId vào sessionStorage để đồng nhất với token
+                if (userId) {
+                  try {
+                    sessionStorage.setItem('userId', String(userId));
+                    console.log('[MusicContext] ✅ Saved userId to sessionStorage:', userId);
+                  } catch (storageError) {
+                    console.warn('[MusicContext] Failed to save userId to sessionStorage:', storageError);
+                  }
+                } else {
+                  // Nếu không có userId trong event, thử decode từ token
+                  const decoded = decodeToken(token);
+                  if (decoded && decoded.sub) {
+                    try {
+                      const userIdFromToken = parseInt(decoded.sub, 10);
+                      if (!isNaN(userIdFromToken)) {
+                        sessionStorage.setItem('userId', String(userIdFromToken));
+                        console.log('[MusicContext] ✅ Saved userId from token to sessionStorage:', userIdFromToken);
+                      }
+                    } catch (error) {
+                      console.warn('[MusicContext] Failed to parse userId from token:', error);
+                    }
+                  }
+                }
+                
                 // Reset cache và check auth
                 checkingAuthRef.current = null;
                 const authenticated = await checkAuth();
@@ -459,6 +485,12 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
                   // Dispatch event để các component khác biết đã đăng nhập
                   if (typeof window !== 'undefined') {
                     window.dispatchEvent(new Event('tokenUpdated'));
+                    
+                    // Nếu đang ở trang login, redirect về trang chính
+                    if (window.location.pathname === '/login') {
+                      console.log('[MusicContext] 🔄 Redirecting from login page to home after receiving token from another tab');
+                      window.location.href = '/';
+                    }
                   }
                 }
               } catch (error) {
@@ -473,6 +505,12 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
               if (authenticated) {
                 console.log('[MusicContext] ✅ Auth check successful after token update from another tab');
                 waitingForTokenRef.current = false;
+                
+                // Nếu đang ở trang login, redirect về trang chính
+                if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+                  console.log('[MusicContext] 🔄 Redirecting from login page to home after token update from another tab');
+                  window.location.href = '/';
+                }
               }
             });
           }
@@ -500,6 +538,21 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
               try {
                 const { setTokens } = await import('@/services/api/config');
                 setTokens(token, refreshToken);
+                
+                // Lưu userId vào sessionStorage từ token để đồng nhất với token
+                const decoded = decodeToken(token);
+                if (decoded && decoded.sub) {
+                  try {
+                    const userIdFromToken = parseInt(decoded.sub, 10);
+                    if (!isNaN(userIdFromToken)) {
+                      sessionStorage.setItem('userId', String(userIdFromToken));
+                      console.log('[MusicContext] ✅ Saved userId from token to sessionStorage:', userIdFromToken);
+                    }
+                  } catch (error) {
+                    console.warn('[MusicContext] Failed to parse userId from token:', error);
+                  }
+                }
+                
                 // Reset cache và check auth
                 checkingAuthRef.current = null;
                 const authenticated = await checkAuth();
@@ -508,6 +561,12 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
                   // Dispatch event để các component khác biết đã đăng nhập
                   if (typeof window !== 'undefined') {
                     window.dispatchEvent(new Event('tokenUpdated'));
+                    
+                    // Nếu đang ở trang login, redirect về trang chính
+                    if (window.location.pathname === '/login') {
+                      console.log('[MusicContext] 🔄 Redirecting from login page to home after receiving token response from another tab');
+                      window.location.href = '/';
+                    }
                   }
                 } else {
                   console.warn('[MusicContext] ⚠️ Token received but auth check failed');
@@ -518,9 +577,93 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
             };
             handleTokenResponse();
           }
+        } else if (event.data.type === 'LOGOUT') {
+          // Nhận logout event từ tab khác, clear toàn bộ và redirect
+          console.log('[MusicContext] 🔔 Logout event received from another tab, logging out...');
+          
+          // Clear tokens và storage
+          try {
+            clearTokens();
+            
+            // Clear toàn bộ sessionStorage và localStorage
+            if (typeof window !== 'undefined') {
+              sessionStorage.clear();
+              localStorage.clear();
+            }
+          } catch (error) {
+            console.error('[MusicContext] Failed to clear tokens on logout:', error);
+          }
+          
+          // Reset player
+          if (resetPlayerRef.current) {
+            resetPlayerRef.current();
+          } else {
+            // Fallback: reset trực tiếp nếu resetPlayer chưa được định nghĩa
+            setCurrentSong(null);
+            setIsPlaying(false);
+            setQueueState([]);
+            setIsShuffled(false);
+            setRepeatModeState("off");
+            setActiveDeviceId(null);
+            setActiveDeviceName(null);
+            setPosition(0);
+          }
+          
+          // Clear authentication state
+          userIdRef.current = null;
+          setIsAuthenticated(false);
+          
+          // Redirect to login
+          if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+            console.log('[MusicContext] Redirecting to login page...');
+            window.location.href = '/login';
+          }
         }
       };
     }
+    
+    // Lắng nghe sự kiện logout từ cùng tab
+    const handleLogout = () => {
+      console.log('[MusicContext] Logout event received from same tab, logging out...');
+      
+      // Clear tokens và storage
+      try {
+        clearTokens();
+        
+        // Clear toàn bộ sessionStorage và localStorage
+        if (typeof window !== 'undefined') {
+          sessionStorage.clear();
+          localStorage.clear();
+        }
+      } catch (error) {
+        console.error('[MusicContext] Failed to clear tokens on logout:', error);
+      }
+      
+      // Reset player
+      if (resetPlayerRef.current) {
+        resetPlayerRef.current();
+      } else {
+        // Fallback: reset trực tiếp nếu resetPlayer chưa được định nghĩa
+        setCurrentSong(null);
+        setIsPlaying(false);
+        setQueueState([]);
+        setIsShuffled(false);
+        setRepeatModeState("off");
+        setActiveDeviceId(null);
+        setActiveDeviceName(null);
+        setPosition(0);
+      }
+      
+      // Clear authentication state
+      userIdRef.current = null;
+      setIsAuthenticated(false);
+      
+      // Redirect to login (nếu chưa ở trang login)
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        console.log('[MusicContext] Redirecting to login page...');
+        window.location.href = '/login';
+      }
+    };
     
     // Lắng nghe sự kiện tokenUpdated khi token được lưu (từ Login page)
     const handleTokenUpdated = () => {
@@ -532,10 +675,12 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
     
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('tokenUpdated', handleTokenUpdated);
+    window.addEventListener('logout', handleLogout);
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('tokenUpdated', handleTokenUpdated);
+      window.removeEventListener('logout', handleLogout);
       if (authChannel) {
         authChannel.close();
       }
@@ -1084,6 +1229,11 @@ export const MusicProvider = ({ children }: { children: ReactNode }) => {
     setActiveDeviceName(null);
     setPosition(0);
   }, []);
+  
+  // Cập nhật ref khi resetPlayer được định nghĩa
+  useEffect(() => {
+    resetPlayerRef.current = resetPlayer;
+  }, [resetPlayer]);
   
   const selectOutputDevice = useCallback(async (deviceId: string) => {
     if (!checkAuth() || !userIdRef.current) return;

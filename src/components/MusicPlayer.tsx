@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 import { useMusic, type Song } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
 import { apiClient } from "@/services/api/config";
-import { getAuthToken } from "@/services/api";
+import { getAuthToken, decodeToken } from "@/services/api";
+import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import Hls from "hls.js";
 import {
   DropdownMenu,
@@ -16,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getSongDisplay } from "@/lib/songDisplay";
+import QueueSidebar from "@/components/QueueSidebar";
 
 // QueueItem component tách riêng để tránh re-render
 const QueueItem = memo(({ 
@@ -498,6 +500,11 @@ const MusicPlayer = () => {
   const [isTabActive, setIsTabActive] = useState(true);
   const [isMainTab, setIsMainTab] = useState(false); // Track if this tab is the main tab
   const channelRef = useRef<BroadcastChannel | null>(null);
+  // Tracking listening history
+  const listeningHistoryIdRef = useRef<number | null>(null);
+  const sessionIdRef = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substring(7)}`);
+  const lastUpdateTimeRef = useRef<number>(0);
+  const trackingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   // Lấy hoặc tạo tabId chung cho tab này (dùng sessionStorage để đảm bảo cùng tabId cho cả ControlMusicPlayer và MusicPlayer)
   const getOrCreateTabId = () => {
     if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -532,41 +539,136 @@ const MusicPlayer = () => {
     };
   }, []);
 
+  // Xử lý logout event - dừng audio, cleanup và reload page
+  useEffect(() => {
+    const handleLogout = () => {
+      console.log('[MusicPlayer] 🔔 Logout event received, stopping player and reloading page...');
+      
+      // Dừng audio ngay lập tức
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        audioRef.current = null;
+      }
+      
+      // Cleanup HLS
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      
+      // Reset state
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsLoading(false);
+      
+      // Reload page để đảm bảo mọi thứ được reset hoàn toàn (chỉ khi không ở trang login)
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        console.log('[MusicPlayer] Reloading page after logout...');
+        // Đợi một chút để đảm bảo các cleanup khác đã hoàn thành
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    };
+
+    // Lắng nghe logout event từ cùng tab
+    window.addEventListener('logout', handleLogout);
+    
+    // Lắng nghe logout event từ BroadcastChannel (từ tab khác)
+    if (typeof window !== 'undefined' && window.BroadcastChannel) {
+      const logoutChannel = new BroadcastChannel('auth_channel');
+      logoutChannel.onmessage = (event) => {
+        if (event.data.type === 'LOGOUT') {
+          handleLogout();
+        }
+      };
+      
+      return () => {
+        window.removeEventListener('logout', handleLogout);
+        logoutChannel.close();
+      };
+    }
+    
+    return () => {
+      window.removeEventListener('logout', handleLogout);
+    };
+  }, []);
+
   // Detect khi tab bị đóng - pause audio và gửi message "MAIN_TAB_CLOSED"
   useEffect(() => {
     const handleBeforeUnload = () => {
-      // Khi tab đang phát bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
-      if (currentSong && isPlaying && audioRef.current && !audioRef.current.paused) {
-        console.log('[MusicPlayer] Tab bị đóng, pause audio và gửi message MAIN_TAB_CLOSED');
+      // QUAN TRỌNG: Gửi MAIN_TAB_CLOSED ngay cả khi đang pause, miễn là có currentSong
+      // Để tab phụ biết tab chính đã đóng và có thể tiếp tục phát nhạc
+      if (currentSong && channelRef.current) {
+        console.log('[MusicPlayer] Tab bị đóng, gửi message MAIN_TAB_CLOSED với thông tin bài hát');
         
-        // Pause audio element
-        audioRef.current.pause();
-        
-        // Gửi message "MAIN_TAB_CLOSED" qua BroadcastChannel để các tab khác biết không còn tab đang phát
-        if (channelRef.current) {
-          channelRef.current.postMessage({
-            type: "MAIN_TAB_CLOSED",
-            tabId: tabIdRef.current,
-          });
+        // Pause audio element nếu đang phát
+        if (audioRef.current && !audioRef.current.paused) {
+          audioRef.current.pause();
         }
+        
+        // Gửi message "MAIN_TAB_CLOSED" với thông tin đầy đủ để tab phụ có thể tiếp tục
+        channelRef.current.postMessage({
+          type: "MAIN_TAB_CLOSED",
+          tabId: tabIdRef.current,
+          song: {
+            id: currentSong.id,
+            title: currentSong.title || currentSong.name || currentSong.songName,
+            name: currentSong.name || currentSong.songName,
+            songName: currentSong.songName,
+            artist: currentSong.artist,
+            cover: currentSong.cover,
+          },
+          currentTime: currentTime,
+          duration: duration,
+          isPlaying: isPlaying,
+          queue: queueRef.current.map(s => ({ 
+            id: s.id, 
+            title: s.title || s.name || s.songName, 
+            name: s.name || s.songName,
+            artist: s.artist, 
+            cover: s.cover 
+          })),
+        });
       }
     };
 
     const handleUnload = () => {
-      // Khi tab đang phát bị đóng, pause audio và gửi message "MAIN_TAB_CLOSED"
-      if (currentSong && isPlaying && audioRef.current && !audioRef.current.paused) {
-        console.log('[MusicPlayer] Tab bị đóng (unload), pause audio và gửi message MAIN_TAB_CLOSED');
+      // QUAN TRỌNG: Gửi MAIN_TAB_CLOSED ngay cả khi đang pause, miễn là có currentSong
+      // Để tab phụ biết tab chính đã đóng và có thể tiếp tục phát nhạc
+      if (currentSong && channelRef.current) {
+        console.log('[MusicPlayer] Tab bị đóng (unload), gửi message MAIN_TAB_CLOSED với thông tin bài hát');
         
-        // Pause audio element
-        audioRef.current.pause();
-        
-        // Gửi message "MAIN_TAB_CLOSED" qua BroadcastChannel
-        if (channelRef.current) {
-          channelRef.current.postMessage({
-            type: "MAIN_TAB_CLOSED",
-            tabId: tabIdRef.current,
-          });
+        // Pause audio element nếu đang phát
+        if (audioRef.current && !audioRef.current.paused) {
+          audioRef.current.pause();
         }
+        
+        // Gửi message "MAIN_TAB_CLOSED" với thông tin đầy đủ để tab phụ có thể tiếp tục
+        channelRef.current.postMessage({
+          type: "MAIN_TAB_CLOSED",
+          tabId: tabIdRef.current,
+          song: {
+            id: currentSong.id,
+            title: currentSong.title || currentSong.name || currentSong.songName,
+            name: currentSong.name || currentSong.songName,
+            songName: currentSong.songName,
+            artist: currentSong.artist,
+            cover: currentSong.cover,
+          },
+          currentTime: currentTime,
+          duration: duration,
+          isPlaying: isPlaying,
+          queue: queueRef.current.map(s => ({ 
+            id: s.id, 
+            title: s.title || s.name || s.songName, 
+            name: s.name || s.songName,
+            artist: s.artist, 
+            cover: s.cover 
+          })),
+        });
       }
     };
 
@@ -1803,6 +1905,37 @@ const MusicPlayer = () => {
 
         const handleEnded = async () => {
           setIsPlaying(false);
+          
+          // Update listening history khi bài hát kết thúc
+          if (listeningHistoryIdRef.current && currentSong) {
+            try {
+              const token = getAuthToken();
+              if (token) {
+                const decoded = decodeToken(token);
+                if (decoded && decoded.sub) {
+                  const userId = parseInt(decoded.sub, 10);
+                  if (!isNaN(userId)) {
+                    const listenedDuration = Math.floor(duration); // Đã nghe hết bài
+                    const songDuration = duration > 0 ? Math.floor(duration) : undefined;
+                    
+                    await listeningHistoryApi.updateDuration(
+                      listeningHistoryIdRef.current,
+                      listenedDuration,
+                      songDuration
+                    );
+                    console.log('[MusicPlayer] ✅ Updated listening history on song end:', listenedDuration, 's');
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('[MusicPlayer] ❌ Failed to update listening history on song end:', error);
+            }
+            
+            // Reset tracking
+            listeningHistoryIdRef.current = null;
+            sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          }
+          
           setCurrentTime(0);
           
           // Xử lý khi bài hát kết thúc dựa trên repeatMode và shuffle
@@ -1926,6 +2059,148 @@ const MusicPlayer = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSong]);
+
+  // Track listening history - tạo record khi bắt đầu phát và update định kỳ
+  useEffect(() => {
+    if (!currentSong || !isPlaying) {
+      // Dừng tracking nếu không có bài hát hoặc đang pause
+      if (trackingIntervalRef.current) {
+        clearInterval(trackingIntervalRef.current);
+        trackingIntervalRef.current = null;
+      }
+      return;
+    }
+
+    const trackListeningHistory = async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) return;
+
+        const decoded = decodeToken(token);
+        if (!decoded || !decoded.sub) return;
+
+        const userId = parseInt(decoded.sub, 10);
+        if (isNaN(userId)) return;
+
+        const songId = typeof currentSong.id === 'string' ? parseInt(currentSong.id, 10) : currentSong.id;
+        if (isNaN(songId)) return;
+
+        const listenedDuration = Math.floor(currentTime);
+        const songDuration = duration > 0 ? Math.floor(duration) : undefined;
+
+        // Nếu chưa có listening history ID, tạo record mới
+        if (!listeningHistoryIdRef.current) {
+          try {
+            // Lấy sourceId và sourceType từ queue hoặc context nếu có
+            // TODO: Có thể cải thiện để lấy từ context khi phát từ album/playlist
+            const sourceId = undefined; // Có thể lấy từ queue hoặc context
+            const sourceType = undefined; // Có thể lấy từ queue hoặc context
+
+            const historyRecord = await listeningHistoryApi.recordListen({
+              userId,
+              songId,
+              listenedDuration,
+              songDuration,
+              sessionId: sessionIdRef.current,
+              sourceId,
+              sourceType,
+            });
+            if (historyRecord?.id) {
+              listeningHistoryIdRef.current = historyRecord.id;
+              console.log('[MusicPlayer] ✅ Created listening history record, ID:', historyRecord.id);
+            }
+          } catch (error) {
+            console.error('[MusicPlayer] ❌ Failed to create listening history:', error);
+          }
+        } else {
+          // Update record hiện có định kỳ (mỗi 15s)
+          const now = Date.now();
+          if (now - lastUpdateTimeRef.current >= 15000) { // Update mỗi 15 giây
+            try {
+              await listeningHistoryApi.updateDuration(
+                listeningHistoryIdRef.current,
+                listenedDuration,
+                songDuration
+              );
+              lastUpdateTimeRef.current = now;
+              console.log('[MusicPlayer] ✅ Updated listening history duration:', listenedDuration, 's');
+            } catch (error) {
+              console.error('[MusicPlayer] ❌ Failed to update listening history:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[MusicPlayer] ❌ Error tracking listening history:', error);
+      }
+    };
+
+    // Track ngay lập tức khi bắt đầu phát
+    trackListeningHistory();
+
+    // Update định kỳ mỗi 15 giây
+    trackingIntervalRef.current = setInterval(() => {
+      trackListeningHistory();
+    }, 15000);
+
+    return () => {
+      if (trackingIntervalRef.current) {
+        clearInterval(trackingIntervalRef.current);
+        trackingIntervalRef.current = null;
+      }
+    };
+  }, [currentSong, isPlaying, currentTime, duration]);
+
+  // Update listening history khi pause hoặc bài hát kết thúc
+  useEffect(() => {
+    if (!currentSong || !listeningHistoryIdRef.current) return;
+
+    const updateOnPauseOrEnd = async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) return;
+
+        const decoded = decodeToken(token);
+        if (!decoded || !decoded.sub) return;
+
+        const listenedDuration = Math.floor(currentTime);
+        const songDuration = duration > 0 ? Math.floor(duration) : undefined;
+
+        // Update record khi pause hoặc bài hát kết thúc
+        if (!isPlaying || currentTime >= duration - 1) {
+          try {
+            await listeningHistoryApi.updateDuration(
+              listeningHistoryIdRef.current,
+              listenedDuration,
+              songDuration
+            );
+            console.log('[MusicPlayer] ✅ Final update listening history:', listenedDuration, 's');
+            
+            // Reset listening history ID khi bài hát kết thúc
+            if (currentTime >= duration - 1) {
+              listeningHistoryIdRef.current = null;
+              sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+            }
+          } catch (error) {
+            console.error('[MusicPlayer] ❌ Failed to final update listening history:', error);
+          }
+        }
+      } catch (error) {
+        console.error('[MusicPlayer] ❌ Error updating listening history on pause/end:', error);
+      }
+    };
+
+    // Chỉ update khi pause (không phải khi đang play)
+    if (!isPlaying) {
+      updateOnPauseOrEnd();
+    }
+  }, [isPlaying, currentSong, currentTime, duration]);
+
+  // Reset tracking khi chuyển bài hát
+  useEffect(() => {
+    listeningHistoryIdRef.current = null;
+    lastUpdateTimeRef.current = 0;
+    sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  }, [currentSong?.id]);
 
   // Update volume separately to avoid reloading stream
   useEffect(() => {
@@ -2260,7 +2535,7 @@ const MusicPlayer = () => {
             />
           </div>
 
-          {/* Volume, Lyrics và Queue - Bên phải */}
+          {/* Volume + Lyrics + Queue - Bên phải */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <VolumeControl
               volume={volume}
@@ -2276,10 +2551,10 @@ const MusicPlayer = () => {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9"
+                    className="h-9 w-9 rounded-full bg-gradient-to-br from-pink-500/25 via-fuchsia-500/20 to-purple-500/25 border border-pink-400/50 text-pink-100 shadow-[0_0_14px_rgba(236,72,153,0.7)] hover:bg-pink-500/35 hover:text-white transition-all"
                     title="Lời bài hát"
                   >
-                    <Mic className="w-5 h-5" />
+                    <Mic className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[420px] max-h-[500px] overflow-y-auto">
@@ -2300,19 +2575,21 @@ const MusicPlayer = () => {
               </DropdownMenu>
             )}
 
-            <QueueMenu
-              queue={queue}
-              currentSong={currentSong}
-              showQueue={showQueue}
-              onOpenChange={setShowQueue}
-              onPlaySong={playSong}
-              onRemoveFromQueue={removeFromQueue}
-              setQueue={setQueue}
-              moveQueueItem={moveQueueItem}
-            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              title="Danh sách chờ"
+              onClick={() => setShowQueue(!showQueue)}
+            >
+              <List className="w-5 h-5" />
+            </Button>
           </div>
         </div>
       </div>
+
+      {/* Queue Sidebar */}
+      <QueueSidebar isOpen={showQueue} onClose={() => setShowQueue(false)} />
     </div>
   );
 };

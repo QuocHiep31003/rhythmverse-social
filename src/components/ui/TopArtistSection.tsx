@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Music, Play, MoreHorizontal, ListPlus, Info, Star } from "lucide-react";
+import { Music, Play, MoreHorizontal, ListPlus, Star } from "lucide-react";
 import { songsApi, artistsApi } from "@/services/api";
 import { createSlug } from "@/utils/playlistUtils";
 import { useMusic } from "@/contexts/MusicContext";
@@ -40,8 +40,23 @@ const TopArtistSection = () => {
   }, []);
 
   useEffect(() => {
-    const fetchTopArtistSection = async () => {
-      const token = getAuthToken();
+    let retryTimeout: NodeJS.Timeout | undefined;
+    let cancelled = false;
+
+    const fetchTopArtistSection = async (retryCount = 0) => {
+      let token = getAuthToken();
+      
+      // ✅ Nếu tab mới mở, đợi một chút để token có thể được share từ tab khác
+      if (!token && retryCount < 3) {
+        const waitTime = (retryCount + 1) * 500; // 500ms, 1000ms, 1500ms
+        retryTimeout = setTimeout(() => {
+          if (!cancelled) {
+            fetchTopArtistSection(retryCount + 1);
+          }
+        }, waitTime);
+        return;
+      }
+
       if (!token || !userId) {
         setLoading(false);
         setTopArtist(null);
@@ -53,8 +68,31 @@ const TopArtistSection = () => {
         setLoading(true);
 
         // Lấy top artists từ listening history (chỉ lấy 1 artist nổi bật nhất)
-        const topArtists = await listeningHistoryApi.getTopArtists(userId, 1);
+        let topArtists = await listeningHistoryApi.getTopArtists(userId, 1);
         
+        // Nếu không có data từ listening history, lấy random artist làm fallback
+        if (topArtists.length === 0) {
+          console.log("⚠️ No listening history, fetching random artist as fallback...");
+          try {
+            const randomArtistsResponse = await artistsApi.getAll({
+              page: 0,
+              size: 1,
+              sort: "id,desc", // Lấy artist mới nhất
+            });
+            if (randomArtistsResponse?.content && randomArtistsResponse.content.length > 0) {
+              const randomArtist = randomArtistsResponse.content[0];
+              topArtists = [{
+                artistId: randomArtist.id,
+                artistName: randomArtist.name,
+                listenCount: 0,
+              }];
+            }
+          } catch (fallbackError) {
+            console.error("Error fetching fallback artist:", fallbackError);
+          }
+        }
+
+        // Nếu vẫn không có artist, return empty
         if (topArtists.length === 0) {
           setTopArtist(null);
           setSongs([]);
@@ -67,35 +105,52 @@ const TopArtistSection = () => {
 
         // Lấy các bài hát của artist này (nổi bật - sort theo playCount desc)
         try {
-          // Thử lấy từ artist API trước
-          const songsResponse = await artistsApi.getSongs(artist.artistId, {
+          const songsResponse = await songsApi.getPublic({
             page: 0,
             size: 10,
             sort: "playCount,desc",
+            artistId: artist.artistId,
           });
 
-          const artistSongs = songsResponse?.content || [];
-          
-          // Nếu không có songs từ artist API, thử lấy từ songs API với artistId filter
-          if (artistSongs.length === 0) {
-            const songsResponse2 = await songsApi.getPublic({
-              page: 0,
-              size: 10,
-              sort: "playCount,desc",
-              artistId: artist.artistId,
-            });
-            
-            if (songsResponse2?.content && songsResponse2.content.length > 0) {
-              setSongs(songsResponse2.content);
-            } else {
+          if (songsResponse?.content && songsResponse.content.length > 0) {
+            setSongs(songsResponse.content);
+          } else {
+            // Nếu không có songs từ artist, lấy random songs làm fallback
+            console.log(`⚠️ No songs from artist ${artist.artistName}, fetching random songs as fallback...`);
+            try {
+              const randomSongsResponse = await songsApi.getPublic({
+                page: 0,
+                size: 10,
+                sort: "playCount,desc",
+              });
+              if (randomSongsResponse?.content && randomSongsResponse.content.length > 0) {
+                setSongs(randomSongsResponse.content);
+              } else {
+                setSongs([]);
+              }
+            } catch (fallbackError) {
+              console.error("Error fetching fallback songs:", fallbackError);
               setSongs([]);
             }
-          } else {
-            setSongs(artistSongs);
           }
         } catch (error) {
           console.error(`Error fetching songs for artist ${artist.artistName}:`, error);
-          setSongs([]);
+          // Fallback: lấy random songs
+          try {
+            const randomSongsResponse = await songsApi.getPublic({
+              page: 0,
+              size: 10,
+              sort: "playCount,desc",
+            });
+            if (randomSongsResponse?.content && randomSongsResponse.content.length > 0) {
+              setSongs(randomSongsResponse.content);
+            } else {
+              setSongs([]);
+            }
+          } catch (fallbackError) {
+            console.error("Error fetching fallback songs:", fallbackError);
+            setSongs([]);
+          }
         }
       } catch (error) {
         console.error("Error fetching top artist section:", error);
@@ -107,6 +162,13 @@ const TopArtistSection = () => {
     };
 
     fetchTopArtistSection();
+
+    return () => {
+      cancelled = true;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
   }, [userId]);
 
   const getArtistName = (artists: Song["artists"]): string => {
@@ -135,10 +197,46 @@ const TopArtistSection = () => {
     return song.songName || song.name || "Unknown Song";
   };
 
-  // Ẩn section này nếu không có token (guest) hoặc không có data
+  // Ẩn section này nếu không có token (guest)
   const token = getAuthToken();
-  if (!token || !topArtist || songs.length === 0) {
+  if (!token) {
     return null;
+  }
+
+  // Hiển thị skeleton khi đang loading hoặc chưa có data
+  if (loading || !topArtist) {
+    return (
+      <section className="mb-12">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Star className="w-6 h-6 text-primary" />
+            <div>
+              <h2 className="text-2xl font-bold text-foreground">
+                For fans
+              </h2>
+            </div>
+          </div>
+        </div>
+
+        {/* Horizontal scrolling container */}
+        <div className="relative">
+          <div className="overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4">
+            <div className="flex gap-4 min-w-max">
+              <div className="flex gap-4">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="w-[200px] flex-shrink-0">
+                    <div className="aspect-square bg-muted/20 rounded-lg animate-pulse mb-3" />
+                    <div className="h-4 bg-muted/20 rounded animate-pulse mb-2" />
+                    <div className="h-3 bg-muted/20 rounded w-3/4 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -150,11 +248,8 @@ const TopArtistSection = () => {
             <Star className="w-6 h-6 text-primary" />
             <div>
               <h2 className="text-2xl font-bold text-foreground">
-                Ca sĩ nổi bật của bạn
+                For {topArtist.artistName} fans
               </h2>
-              <p className="text-xs text-muted-foreground">
-                {topArtist.artistName} - Nghệ sĩ bạn nghe nhiều nhất
-              </p>
             </div>
           </div>
           {songs.length > 0 && (
@@ -164,7 +259,7 @@ const TopArtistSection = () => {
               className="text-xs rounded-full"
               onClick={() => navigate(`/artist/${topArtist.artistId}`)}
             >
-              Xem tất cả
+              View all
             </Button>
           )}
         </div>
@@ -173,19 +268,9 @@ const TopArtistSection = () => {
         <div className="relative">
           <div className="overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4">
             <div className="flex gap-4 min-w-max">
-              {loading ? (
-                <div className="flex gap-4">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="w-[200px] flex-shrink-0">
-                      <div className="aspect-square bg-muted/20 rounded-lg animate-pulse mb-3" />
-                      <div className="h-4 bg-muted/20 rounded animate-pulse mb-2" />
-                      <div className="h-3 bg-muted/20 rounded w-3/4 animate-pulse" />
-                    </div>
-                  ))}
-                </div>
-              ) : songs.length === 0 ? (
+              {songs.length === 0 ? (
                 <p className="text-muted-foreground text-sm py-8">
-                  Không có bài hát nào từ {topArtist.artistName}
+                  No songs available from {topArtist.artistName}
                 </p>
               ) : (
                 songs.map((song) => {
@@ -197,7 +282,7 @@ const TopArtistSection = () => {
                     <div
                       key={song.id}
                       className="w-[200px] flex-shrink-0 group cursor-pointer"
-                      onClick={() => navigate(`/song/${createSlug(songName, song.id)}`)}
+                      onClick={() => handlePlaySong(song)}
                     >
                       {/* Cover Art */}
                       <div className="relative aspect-square rounded-lg overflow-hidden bg-gradient-subtle mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300 group-hover:scale-105 border border-border/40">
@@ -263,15 +348,6 @@ const TopArtistSection = () => {
                                 <Music className="mr-2 h-4 w-4" />
                                 Add to Queue
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/song/${createSlug(songName, song.id)}`);
-                                }}
-                              >
-                                <Info className="mr-2 h-4 w-4" />
-                                View Details
-                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -287,7 +363,7 @@ const TopArtistSection = () => {
                         </p>
                         {song.playCount && (
                           <p className="text-xs text-muted-foreground/70 mt-1">
-                            {song.playCount.toLocaleString()} lượt nghe
+                            {song.playCount.toLocaleString()} plays
                           </p>
                         )}
                       </div>

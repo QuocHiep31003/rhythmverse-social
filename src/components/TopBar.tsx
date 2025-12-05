@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bell,
   MessageCircle,
@@ -36,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { stopTokenRefreshInterval, clearTokens, getAuthToken } from "@/services/api/config";
+import { useMusic } from "@/contexts/MusicContext";
 
 import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate, useLocation } from "react-router-dom";
@@ -79,6 +81,7 @@ const resolvePlanLabel = (planName?: string | null, planCode?: string | null) =>
 };
 
 const TopBar = () => {
+  const { resetPlayer } = useMusic();
   const [searchText, setSearchText] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isRecognizing, setIsRecognizing] = useState(false);
@@ -110,6 +113,7 @@ const TopBar = () => {
   const [msgDropdownOpen, setMsgDropdownOpen] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [showPremiumExpiringModal, setShowPremiumExpiringModal] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true); // Loading state cho profile
 
   // Feature limit hook for AI Search
   const {
@@ -373,6 +377,7 @@ const TopBar = () => {
   /** ================= LOAD USER PROFILE + PREMIUM ================= **/
   useEffect(() => {
     const loadMe = async (isNewLogin: boolean = false) => {
+      setIsLoadingProfile(true); // Bắt đầu loading
       const token = getAuthToken();
       if (!token) {
         setIsAuthenticated(false);
@@ -381,6 +386,7 @@ const TopBar = () => {
         setProfileEmail("");
         setProfileAvatar("");
         setProfileIsPremium(false);
+        setIsLoadingProfile(false); // Kết thúc loading
         return;
       }
 
@@ -483,6 +489,8 @@ const TopBar = () => {
         console.error("Failed to load profile", err);
         setIsAuthenticated(false);
         setCurrentUserId(null);
+      } finally {
+        setIsLoadingProfile(false); // Kết thúc loading dù thành công hay thất bại
       }
     };
 
@@ -540,8 +548,8 @@ const TopBar = () => {
             typeof f.friendId === "number"
               ? f.friendId
               : typeof f.id === "number"
-              ? f.id
-              : NaN;
+                ? f.id
+                : NaN;
           return {
             userId,
             name: f.friendName || `User ${userId || ""}`,
@@ -837,35 +845,71 @@ const TopBar = () => {
   }, [currentUserId, firebaseReady, messageNotifications]);
 
   /** ================= LOGOUT ================= **/
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Reset music player trước khi clear tokens
+    resetPlayer();
+
     // Stop token refresh interval
     stopTokenRefreshInterval();
-    clearTokens();
 
-    // Clear sessionStorage for premium expiring modal (clear all date-based keys)
-    if (currentUserId) {
-      // Clear all date-based keys for this user
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (key && key.startsWith(`premiumExpiringModal_shown_${currentUserId}_`)) {
-          keysToRemove.push(key);
-        }
+    // QUAN TRỌNG: Gửi logout event TRƯỚC khi clear storage để các tab khác nhận được
+    // Broadcast logout event đến tất cả các tab
+    if (typeof window !== 'undefined' && window.BroadcastChannel) {
+      try {
+        const authChannel = new BroadcastChannel('auth_channel');
+        authChannel.postMessage({
+          type: 'LOGOUT',
+          timestamp: Date.now()
+        });
+        console.log('[TopBar] ✅ Broadcasted LOGOUT event to other tabs');
+        // Đợi một chút để đảm bảo message được gửi đi trước khi close
+        setTimeout(() => {
+          authChannel.close();
+        }, 200);
+      } catch (error) {
+        console.warn('[TopBar] Failed to broadcast logout event:', error);
       }
-      keysToRemove.forEach(key => sessionStorage.removeItem(key));
     }
 
-    localStorage.clear();
-    sessionStorage.clear();
+    // Dispatch custom event để các component trong cùng tab có thể listen
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('logout'));
+      // Clear sessionStorage for premium expiring modal (clear all date-based keys)
+      if (currentUserId) {
+        // Clear all date-based keys for this user
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && key.startsWith(`premiumExpiringModal_shown_${currentUserId}_`)) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach(key => sessionStorage.removeItem(key));
+      }
 
-    setIsAuthenticated(false);
-    setProfileName("");
-    setProfileEmail("");
-    setProfileAvatar("");
-    setProfileIsPremium(false);
+      // Đợi một chút để đảm bảo event được gửi đi trước khi clear storage
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-    navigate("/login");
-  };
+      // Clear tokens và storage SAU KHI đã gửi event
+      clearTokens();
+
+      // Clear toàn bộ sessionStorage và localStorage (KHÔNG LƯU LẠI GÌ CẢ)
+      if (typeof window !== 'undefined') {
+        sessionStorage.clear();
+        localStorage.clear();
+      }
+
+      // Clear local state
+      setIsAuthenticated(false);
+      setProfileName("");
+      setProfileEmail("");
+      setProfileAvatar("");
+      setProfileIsPremium(false);
+
+      // Redirect to login
+      navigate("/login");
+    }
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/70">
@@ -903,31 +947,45 @@ const TopBar = () => {
 
         {/* Right section */}
         <div className="flex items-center gap-3 relative z-10">
-          {/* Notifications */}
-          <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                {unreadAlertCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
-                    {unreadAlertCount > 99 ? "99+" : unreadAlertCount}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <NotificationsDropdown
-              userId={currentUserId ?? undefined}
-              onClose={() => setNotifOpen(false)}
-            />
-          </DropdownMenu>
+          {isLoadingProfile ? (
+            // Skeleton loading state
+            <>
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="h-8 w-8 rounded-full" />
+            </>
+          ) : (
+            <>
+              {/* Notifications */}
+              <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative">
+                    <Bell className="h-5 w-5" />
+                    {unreadAlertCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
+                        {unreadAlertCount > 99 ? "99+" : unreadAlertCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <NotificationsDropdown
+                  userId={currentUserId ?? undefined}
+                  onClose={() => setNotifOpen(false)}
+                />
+              </DropdownMenu>
 
-          {/* Messages */}
-          <DropdownMenu open={msgDropdownOpen} onOpenChange={setMsgDropdownOpen}>
-            <DropdownMenuTrigger asChild>
+              {/* Messages */}
               <Button
                 variant="ghost"
                 size="icon"
                 className="relative"
+                onClick={() => {
+                  // Reset unread count về 0 khi nhấn vào icon message
+                  setUnreadMsgCount(0);
+                  // Chuyển đến trang social với tab chat
+                  navigate("/social?tab=chat");
+                }}
               >
                 <MessageCircle className="h-5 w-5" />
                 {unreadMsgCount > 0 && (
@@ -936,220 +994,309 @@ const TopBar = () => {
                   </Badge>
                 )}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[360px] p-0 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-                <div className="text-sm font-semibold">Tin nhắn</div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-primary hover:text-primary/90"
-                  onClick={() => {
-                    setMsgDropdownOpen(false);
-                    navigate("/social?tab=chat");
-                  }}
-                >
-                  Mở chat
-                </Button>
-              </div>
 
-              {Object.keys(unreadByUser).length === 0 && Object.keys(unreadByPlaylist).length === 0 ? (
-                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  Không có tin nhắn chưa đọc
-                </div>
-              ) : (
-                <ScrollArea className="max-h-[420px]">
-                  <div className="p-2 space-y-1">
-                    {/* Friends (1-1 chat) */}
-                    {Object.entries(unreadByUser)
-                      .sort((a, b) => Number(b[1]) - Number(a[1]))
-                      .map(([userIdStr, count]) => {
-                        const userId = Number(userIdStr);
-                        const friend = friends.find((f) => f.userId === userId);
-                        const displayName =
-                          friend?.name || `User ${userIdStr}`;
-                        const avatar = friend?.avatar;
-                        const initials = displayName
-                          .split(" ")
-                          .map((p) => p[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase();
-
-                        return (
-                          <button
-                            key={`friend-${userIdStr}`}
-                            type="button"
-                            onClick={() => {
-                              setMsgDropdownOpen(false);
-                              const friendParam = String(userId);
-                              navigate(`/social?tab=chat&friend=${encodeURIComponent(friendParam)}`);
-                            }}
-                            className={cn(
-                              "w-full flex items-center gap-3 rounded-xl p-3 text-left",
-                              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                            )}
-                          >
-                            <Avatar className="h-9 w-9">
-                              {avatar ? (
-                                <AvatarImage src={avatar} alt={displayName} />
-                              ) : null}
-                              <AvatarFallback>{initials}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-medium truncate">
-                                  {displayName}
-                                </p>
-                                <Badge className="h-5 px-2 text-[11px]">
-                                  {Number(count) > 99 ? "99+" : count}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {Number(count) === 1
-                                  ? "1 tin nhắn chưa đọc"
-                                  : `${count} tin nhắn chưa đọc`}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    {/* Playlist rooms (group chat) */}
-                    {Object.entries(unreadByPlaylist)
-                      .sort((a, b) => Number(b[1]) - Number(a[1]))
-                      .map(([playlistIdStr, count]) => {
-                        const playlistId = Number(playlistIdStr);
-                        const room = playlistRooms.find((r) => r.playlistId === playlistId);
-                        const displayName = room?.name || `Playlist ${playlistIdStr}`;
-                        const coverUrl = room?.coverUrl;
-                        const initials = displayName.charAt(0).toUpperCase();
-
-                        return (
-                          <button
-                            key={`playlist-${playlistIdStr}`}
-                            type="button"
-                            onClick={() => {
-                              setMsgDropdownOpen(false);
-                              navigate(`/playlist/${playlistId}`);
-                            }}
-                            className={cn(
-                              "w-full flex items-center gap-3 rounded-xl p-3 text-left",
-                              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                            )}
-                          >
-                            <Avatar className="h-9 w-9">
-                              {coverUrl ? (
-                                <AvatarImage src={coverUrl || undefined} alt={displayName} />
-                              ) : null}
-                              <AvatarFallback className="bg-primary text-primary-foreground">
-                                {initials}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-medium truncate">
-                                  {displayName}
-                                </p>
-                                <Badge className="h-5 px-2 text-[11px]">
-                                  {Number(count) > 99 ? "99+" : count}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {Number(count) === 1
-                                  ? "1 tin nhắn chưa đọc"
-                                  : `${count} tin nhắn chưa đọc`}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
+              {/* Messages */}
+              <DropdownMenu open={msgDropdownOpen} onOpenChange={setMsgDropdownOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    {unreadMsgCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 py-0 text-[10px]">
+                        {unreadMsgCount > 99 ? "99+" : unreadMsgCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[360px] p-0 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+                    <div className="text-sm font-semibold">Tin nhắn</div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-primary hover:text-primary/90"
+                      onClick={() => {
+                        setMsgDropdownOpen(false);
+                        navigate("/social?tab=chat");
+                      }}
+                    >
+                      Mở chat
+                    </Button>
                   </div>
-                </ScrollArea>
+
+                  {Object.keys(unreadByUser).length === 0 ? (
+                    <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                      Không có tin nhắn chưa đọc
+                    </div>
+                  ) : (
+                    <ScrollArea className="max-h-[420px]">
+                      <div className="p-2 space-y-1">
+                        {Object.entries(unreadByUser)
+                          .sort((a, b) => Number(b[1]) - Number(a[1]))
+                          .map(([userIdStr, count]) => {
+                            const userId = Number(userIdStr);
+                            const friend = friends.find((f) => f.userId === userId);
+                            const displayName =
+                              friend?.name || `User ${userIdStr}`;
+                            const avatar = friend?.avatar;
+                            const initials = displayName
+                              .split(" ")
+                              .map((p) => p[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase();
+
+                            return (
+                              <button
+                                key={userIdStr}
+                                type="button"
+                                onClick={() => {
+                                  setMsgDropdownOpen(false);
+                                  const friendParam = String(userId);
+                                  navigate(`/social?tab=chat&friend=${encodeURIComponent(friendParam)}`);
+                                }}
+                                className={cn(
+                                  "w-full flex items-center gap-3 rounded-xl p-3 text-left",
+                                  "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                                )}
+                              >
+                                <Avatar className="h-9 w-9">
+                                  {avatar ? (
+                                    <AvatarImage src={avatar} alt={displayName} />
+                                  ) : null}
+                                  <AvatarFallback>{initials}</AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="text-sm font-medium truncate">
+                                      {displayName}
+                                    </p>
+                                    <Badge className="h-5 px-2 text-[11px]">
+                                      {Number(count) > 99 ? "99+" : count}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {Number(count) === 1
+                                      ? "1 tin nhắn chưa đọc"
+                                      : `${count} tin nhắn chưa đọc`}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </ScrollArea>
+                  )}
+
+                  <Separator />
+                  <div className="px-4 py-2 text-xs text-muted-foreground">
+                    Tổng cộng {unreadMsgCount} tin nhắn chưa đọc
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Premium */}
+              {profileIsPremium ? (
+                <Badge className="gap-1 bg-primary text-white">
+                  <Crown className="h-3.5 w-3.5" />
+                  {profilePlanLabel || "Premium"}
+                </Badge>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-primary text-primary"
+                  onClick={() => navigate("/premium")}
+                >
+                  Discover Premium
+                </Button>
               )}
 
-              <Separator />
-              <div className="px-4 py-2 text-xs text-muted-foreground">
-                Tổng cộng {unreadMsgCount} tin nhắn chưa đọc
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+{/* 🔔 Message Dropdown */}
+{Object.keys(unreadByUser).length === 0 && Object.keys(unreadByPlaylist).length === 0 ? (
+  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+    Không có tin nhắn chưa đọc
+  </div>
+) : (
+  <ScrollArea className="max-h-[420px]">
+    <div className="p-2 space-y-1">
 
-          {/* Premium */}
-          {profileIsPremium ? (
-            <Badge className="gap-1 bg-primary text-white">
-              <Crown className="h-3.5 w-3.5" />
-              {profilePlanLabel || "Premium"}
-            </Badge>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-primary text-primary"
-              onClick={() => navigate("/premium")}
+      {/* ============================ */}
+      {/* 1-1 Chat (Friends Messages) */}
+      {/* ============================ */}
+      {Object.entries(unreadByUser)
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .map(([userIdStr, count]) => {
+          const userId = Number(userIdStr);
+          const friend = friends.find((f) => f.userId === userId);
+          const displayName = friend?.name || `User ${userIdStr}`;
+          const avatar = friend?.avatar;
+
+          const initials = displayName
+            .split(" ")
+            .map((p) => p[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+
+          return (
+            <button
+              key={`friend-${userIdStr}`}
+              type="button"
+              onClick={() => {
+                setMsgDropdownOpen(false);
+                navigate(`/social?tab=chat&friend=${encodeURIComponent(String(userId))}`);
+              }}
+              className={cn(
+                "w-full flex items-center gap-3 rounded-xl p-3 text-left",
+                "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              )}
             >
-              Discover Premium
-            </Button>
-          )}
+              <Avatar className="h-9 w-9">
+                {avatar ? <AvatarImage src={avatar} alt={displayName} /> : null}
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
 
-          {/* Account */}
-          {isAuthenticated ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 rounded-full">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage
-                      src={profileAvatar || "/placeholder.svg"}
-                      alt="User"
-                    />
-                    <AvatarFallback>
-                      {(() => {
-                        const base =
-                          profileName ||
-                          (profileEmail ? profileEmail.split("@")[0] : "U");
-                        const parts = base.split(" ");
-                        const initials =
-                          parts.length >= 2
-                            ? parts[0][0] + parts[1][0]
-                            : base[0];
-                        return initials.toUpperCase();
-                      })()}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent className="w-56" align="end">
-                <div className="flex items-center gap-2 p-2">
-                  <div>
-                    <p className="font-medium">{profileName}</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {profileEmail}
-                    </p>
-                  </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium truncate">{displayName}</p>
+                  <Badge className="h-5 px-2 text-[11px]">
+                    {Number(count) > 99 ? "99+" : count}
+                  </Badge>
                 </div>
-                <DropdownMenuSeparator />
 
-                <DropdownMenuItem asChild>
-                  <Link to="/profile">
-                    <User className="h-4 w-4 mr-2" /> Profile
-                  </Link>
-                </DropdownMenuItem>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {Number(count) === 1
+                    ? "1 tin nhắn chưa đọc"
+                    : `${count} tin nhắn chưa đọc`}
+                </p>
+              </div>
+            </button>
+          );
+        })}
 
-                <DropdownMenuItem asChild>
-                  <Link to="/settings">
-                    <Settings className="h-4 w-4 mr-2" /> Settings
-                  </Link>
-                </DropdownMenuItem>
+      {/* ============================ */}
+      {/* Playlist Group Chat Messages */}
+      {/* ============================ */}
+      {Object.entries(unreadByPlaylist)
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .map(([playlistIdStr, count]) => {
+          const playlistId = Number(playlistIdStr);
+          const room = playlistRooms.find((r) => r.playlistId === playlistId);
+          const displayName = room?.name || `Playlist ${playlistIdStr}`;
+          const coverUrl = room?.coverUrl;
+          const initials = displayName.charAt(0).toUpperCase();
 
-                <DropdownMenuSeparator />
+          return (
+            <button
+              key={`playlist-${playlistIdStr}`}
+              type="button"
+              onClick={() => {
+                setMsgDropdownOpen(false);
+                navigate(`/playlist/${playlistId}`);
+              }}
+              className={cn(
+                "w-full flex items-center gap-3 rounded-xl p-3 text-left",
+                "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+              )}
+            >
+              <Avatar className="h-9 w-9">
+                {coverUrl ? (
+                  <AvatarImage src={coverUrl} alt={displayName} />
+                ) : null}
+                <AvatarFallback className="bg-primary text-primary-foreground">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
 
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 mr-2" /> Log out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button onClick={() => navigate("/login")}>Login</Button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium truncate">{displayName}</p>
+                  <Badge className="h-5 px-2 text-[11px]">
+                    {Number(count) > 99 ? "99+" : count}
+                  </Badge>
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {Number(count) === 1
+                    ? "1 tin nhắn chưa đọc"
+                    : `${count} tin nhắn chưa đọc`}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+    </div>
+  </ScrollArea>
+)}
+
+{/* =============================== */}
+{/* 👤 ACCOUNT DROPDOWN (MAIN CODE) */}
+{/* =============================== */}
+
+{isAuthenticated ? (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button variant="ghost" className="h-8 w-8 rounded-full">
+        <Avatar className="h-8 w-8">
+          <AvatarImage
+            src={profileAvatar || "/placeholder.svg"}
+            alt="User"
+          />
+          <AvatarFallback>
+            {(() => {
+              const base =
+                profileName ||
+                (profileEmail ? profileEmail.split("@")[0] : "U");
+              const parts = base.split(" ");
+              const initials =
+                parts.length >= 2 ? parts[0][0] + parts[1][0] : base[0];
+              return initials.toUpperCase();
+            })()}
+          </AvatarFallback>
+        </Avatar>
+      </Button>
+    </DropdownMenuTrigger>
+
+    <DropdownMenuContent className="w-56 z-[200]" align="end">
+      <div className="flex items-center gap-2 p-2">
+        <div>
+          <p className="font-medium">{profileName}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {profileEmail}
+          </p>
+        </div>
+      </div>
+      <DropdownMenuSeparator />
+
+      <DropdownMenuItem asChild>
+        <Link to="/profile">
+          <User className="h-4 w-4 mr-2" /> Profile
+        </Link>
+      </DropdownMenuItem>
+
+      <DropdownMenuItem asChild>
+        <Link to="/settings">
+          <Settings className="h-4 w-4 mr-2" /> Settings
+        </Link>
+      </DropdownMenuItem>
+
+      <DropdownMenuSeparator />
+
+      <DropdownMenuItem onClick={handleLogout}>
+        <LogOut className="h-4 w-4 mr-2" /> Log out
+      </DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+) : (
+  <Button onClick={() => navigate("/login")}>Login</Button>
+)}
+
+              )}
+            </>
           )}
         </div>
       </div>

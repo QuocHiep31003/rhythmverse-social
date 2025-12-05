@@ -63,7 +63,29 @@ const Login = () => {
       // Start automatic token refresh interval
       startTokenRefreshInterval();
       
+      // Fetch current user and persist userId for flows that rely on it
+      let userId: string | undefined;
+      try {
+        const me = await authApi.me();
+        userId = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
+        if (userId) {
+          try { 
+            // DÙNG sessionStorage để đồng nhất với token
+            const oldUserId = sessionStorage.getItem('userId');
+            sessionStorage.setItem('userId', userId); 
+            
+            // Storage event will be automatically fired by browser when sessionStorage changes from another tab
+            if (oldUserId && oldUserId !== userId) {
+              console.log('[Login] User changed, broadcasting to other tabs:', { oldUserId, newUserId: userId });
+            }
+          } catch (storageError) { 
+            console.warn("Failed to store userId in sessionStorage", storageError); 
+          }
+        }
+      } catch { /* ignore */ }
+      
       // Broadcast token to other tabs via BroadcastChannel (vì sessionStorage không share giữa tab)
+      // Gửi cả userId để các tab khác có thể lưu ngay
       if (typeof window !== 'undefined' && window.BroadcastChannel) {
         try {
           const authChannel = new BroadcastChannel('auth_channel');
@@ -71,10 +93,11 @@ const Login = () => {
             type: 'TOKEN_UPDATED',
             token: response.token,
             refreshToken: response.refreshToken,
+            userId: userId, // Gửi userId để các tab khác có thể lưu ngay
             timestamp: Date.now()
           });
           setTimeout(() => authChannel.close(), 200); // Close after sending
-          console.log('[Login] ✅ Broadcasted token to other tabs');
+          console.log('[Login] ✅ Broadcasted token and userId to other tabs');
         } catch (error) {
           console.warn('[Login] Failed to broadcast token:', error);
         }
@@ -84,33 +107,6 @@ const Login = () => {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('tokenUpdated'));
       }
-
-      // Fetch current user and persist userId for flows that rely on it
-      try {
-        const me = await authApi.me();
-        const uid = (me && (me.id || me.userId)) ? String(me.id || me.userId) : undefined;
-        if (uid) {
-          try { 
-            // DÙNG localStorage để chia sẻ giữa các tab
-            const oldUserId = localStorage.getItem('userId');
-            localStorage.setItem('userId', uid); 
-            
-            // Broadcast userId change to other tabs via BroadcastChannel
-            if (typeof window !== 'undefined' && window.BroadcastChannel) {
-              const channel = new BroadcastChannel('auth_channel');
-              channel.postMessage({ type: 'USER_CHANGED', userId: uid, oldUserId });
-              setTimeout(() => channel.close(), 100); // Close after a short delay to ensure message is sent
-            }
-            
-            // Storage event will be automatically fired by browser when sessionStorage changes from another tab
-            if (oldUserId && oldUserId !== uid) {
-              console.log('[Login] User changed, broadcasting to other tabs:', { oldUserId, newUserId: uid });
-            }
-          } catch (storageError) { 
-            console.warn("Failed to store userId in sessionStorage", storageError); 
-          }
-        }
-      } catch { /* ignore */ }
 
       console.log('âœ… User authenticated, redirecting...');
 
