@@ -327,6 +327,42 @@ export const playlistChatApi = {
       throw new Error(errorMsg);
     }
   },
+  shareAlbum: async (playlistId: number, senderId: number, albumId: number): Promise<void> => {
+    const payload = {
+      playlistId,
+      senderId,
+      sharedType: "ALBUM",
+      sharedContentId: albumId,
+    };
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/send`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error("[playlistChatApi] shareAlbum error:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  sharePlaylist: async (playlistId: number, senderId: number, sharedPlaylistId: number): Promise<void> => {
+    const payload = {
+      playlistId,
+      senderId,
+      sharedType: "PLAYLIST",
+      sharedContentId: sharedPlaylistId,
+    };
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/send`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error("[playlistChatApi] sharePlaylist error:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
   startListening: async (playlistId: number, hostId: number, songId: number, positionMs: number, playing: boolean, initialQueue?: number[]): Promise<void> => {
     const payload: any = { playlistId, hostId, songId, positionMs, playing };
     if (initialQueue && initialQueue.length > 0) {

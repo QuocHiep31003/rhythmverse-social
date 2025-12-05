@@ -11,6 +11,7 @@ import { MessageCard } from "@/components/social/MessageCard";
 import { cn } from "@/lib/utils";
 import { StreakBadge } from "@/components/streak/StreakBadge";
 import { useStreakManager } from "@/hooks/useStreakManager";
+import { createStreakSystemMessage } from "@/components/streak/StreakSystemMessage";
 import { useStreaksByFriends } from "@/hooks/useStreaksByFriends";
 const getMessageUniqueKey = (message: Message): string => {
   if (typeof message.backendId === "number" && Number.isFinite(message.backendId)) {
@@ -126,6 +127,7 @@ export const ChatArea = ({
   }, [selectedChat, playlistRooms]);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [optimisticHiddenMessages, setOptimisticHiddenMessages] = useState<Record<string, Record<string, boolean>>>({});
+  const [streakSystemMessages, setStreakSystemMessages] = useState<Record<string, Message[]>>({});
   const friendUserIdMap = useMemo(() => {
     const map: Record<string, string> = {};
     friends.forEach((friend) => {
@@ -142,11 +144,63 @@ export const ChatArea = ({
     return selectedChat;
   }, [friendUserIdMap, selectedChat, selectedFriend]);
 
+  const pushStreakSystemMessage = useCallback((friendKey: string, message: Message) => {
+    setStreakSystemMessages((prev) => {
+      const existing = prev[friendKey] || [];
+      // Kiểm tra xem message đã tồn tại chưa (tránh duplicate)
+      const messageId = message.id;
+      const alreadyExists = existing.some((m) => m.id === messageId);
+      if (alreadyExists) {
+        return prev; // Không thêm nếu đã tồn tại
+      }
+      return {
+        ...prev,
+        [friendKey]: [...existing, message],
+      };
+    });
+  }, []);
+
+  const handleStreakWarning = useCallback(
+    (friendName: string, hoursRemaining: number) => {
+      if (!selectedChat || selectedChat.startsWith("pl_")) return;
+      const friendKey = selectedFriendUserKey ?? selectedChat;
+      if (!friendKey) return;
+      const msg = createStreakSystemMessage({ type: "warning", friendName, hoursRemaining });
+      pushStreakSystemMessage(friendKey, msg);
+    },
+    [pushStreakSystemMessage, selectedChat, selectedFriendUserKey],
+  );
+
+  const handleStreakExpired = useCallback(
+    (friendName: string) => {
+      if (!selectedChat || selectedChat.startsWith("pl_")) return;
+      const friendKey = selectedFriendUserKey ?? selectedChat;
+      if (!friendKey) return;
+      const msg = createStreakSystemMessage({ type: "expired", friendName });
+      pushStreakSystemMessage(friendKey, msg);
+    },
+    [pushStreakSystemMessage, selectedChat, selectedFriendUserKey],
+  );
+
+  const handleStreakStarted = useCallback(
+    (friendName: string, currentStreak: number) => {
+      if (!selectedChat || selectedChat.startsWith("pl_")) return;
+      const friendKey = selectedFriendUserKey ?? selectedChat;
+      if (!friendKey) return;
+      const msg = createStreakSystemMessage({ type: "started", friendName, currentStreak });
+      pushStreakSystemMessage(friendKey, msg);
+    },
+    [pushStreakSystemMessage, selectedChat, selectedFriendUserKey],
+  );
+
   const streakManagerOptions = useMemo(
     () => ({
       friendName: selectedFriend?.name,
+      onStreakWarning: handleStreakWarning,
+      onStreakExpired: handleStreakExpired,
+      onStreakStarted: handleStreakStarted,
     }),
-    [selectedFriend?.name],
+    [selectedFriend?.name, handleStreakWarning, handleStreakExpired, handleStreakStarted],
   );
 
   const {
@@ -171,6 +225,53 @@ export const ChatArea = ({
     void refreshFromServer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFriendUserKey]);
+
+  // Xóa streak system messages khi chuyển chat hoặc khi chat không còn active
+  useEffect(() => {
+    if (!selectedChat) {
+      // Nếu không có chat nào được chọn, xóa tất cả streak messages
+      setStreakSystemMessages({});
+      return;
+    }
+    // Xóa streak messages của các chat khác (chỉ giữ lại chat hiện tại)
+    setStreakSystemMessages((prev) => {
+      const friendKey = selectedChat.startsWith("pl_") ? null : (selectedFriendUserKey ?? selectedChat);
+      if (!friendKey) {
+        // Nếu là playlist room, xóa tất cả streak messages
+        return {};
+      }
+      // Chỉ giữ lại streak messages của chat hiện tại
+      const filtered: Record<string, Message[]> = {};
+      if (prev[friendKey]) {
+        filtered[friendKey] = prev[friendKey];
+      }
+      return filtered;
+    });
+  }, [selectedChat, selectedFriendUserKey]);
+
+  // Xóa streak messages của các friend không còn trong danh sách friends (đã unfriend)
+  useEffect(() => {
+    setStreakSystemMessages((prev) => {
+      const friendIds = new Set(friends.map((f) => {
+        const resolved = f.friendUserId ?? f.id;
+        return String(resolved);
+      }));
+      
+      // Xóa streak messages của các friend không còn trong danh sách
+      const filtered: Record<string, Message[]> = {};
+      Object.entries(prev).forEach(([friendKey, msgs]) => {
+        if (friendIds.has(friendKey)) {
+          filtered[friendKey] = msgs;
+        }
+      });
+      
+      // Nếu có thay đổi (đã xóa một số messages), trả về object mới
+      if (Object.keys(filtered).length !== Object.keys(prev).length) {
+        return filtered;
+      }
+      return prev;
+    });
+  }, [friends]);
 
   const visibleMessagesByFriend = useMemo(() => {
     const result: Record<string, Message[]> = {};
@@ -238,7 +339,16 @@ export const ChatArea = ({
 
   const getVisibleMessagesForFriend = (friendId?: string | null): Message[] => {
     if (!friendId) return [];
-    return visibleMessagesByFriend[friendId] ?? messages[friendId] ?? [];
+    const base = visibleMessagesByFriend[friendId] ?? messages[friendId] ?? [];
+    const streakMsgs = streakSystemMessages[friendId] ?? [];
+    if (streakMsgs.length === 0) return base;
+    const combined = [...base, ...streakMsgs];
+    const sortKey = (m: Message) => {
+      if (typeof m.sentAt === "number" && Number.isFinite(m.sentAt)) return m.sentAt;
+      const parsed = Date.parse(m.timestamp);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    return combined.sort((a, b) => sortKey(a) - sortKey(b));
   };
 
   const handleDeleteRequest = (message: Message) => {
@@ -368,10 +478,16 @@ export const ChatArea = ({
     });
 
     // Playlist rooms (đã được map trong Social.tsx với id, name, coverUrl, ownerName)
+    // Chỉ hiển thị group chat khi có >=2 thành viên
     if (playlistRooms && playlistRooms.length > 0) {
       playlistRooms.forEach((room) => {
         if (!room.id) {
           return;
+        }
+        // Chỉ hiển thị group chat khi có >=2 thành viên
+        const memberCount = room.memberCount ?? 1;
+        if (memberCount < 2) {
+          return; // Không hiển thị group chat khi chỉ có 1 người
         }
         const roomKey = `pl_${room.id}`;
         const roomMessages = messages[roomKey] || [];
@@ -729,13 +845,24 @@ export const ChatArea = ({
                 {/* Input field */}
                 <div className="flex-1 relative">
                   <Input
-                    placeholder={selectedPlaylistRoom ? `Nhắn gì đó về ${selectedPlaylistRoom.name}…` : "Nhập tin nhắn..."}
+                    placeholder={
+                      selectedPlaylistRoom && selectedPlaylistRoom.memberCount !== undefined && selectedPlaylistRoom.memberCount < 2
+                        ? "Group chat đã bị khóa (cần ít nhất 2 thành viên)"
+                        : selectedPlaylistRoom 
+                        ? `Nhắn gì đó về ${selectedPlaylistRoom.name}…` 
+                        : "Nhập tin nhắn..."
+                    }
                     value={newMessage}
                     onChange={(e) => onMessageChange(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && onSendMessage()}
-                    className="w-full pl-4 pr-12 h-10 rounded-full bg-muted/50 dark:bg-muted/30 border-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40"
+                    onKeyPress={(e) => {
+                      if (e.key === "Enter" && !(selectedPlaylistRoom && selectedPlaylistRoom.memberCount !== undefined && selectedPlaylistRoom.memberCount < 2)) {
+                        onSendMessage();
+                      }
+                    }}
+                    disabled={selectedPlaylistRoom && selectedPlaylistRoom.memberCount !== undefined && selectedPlaylistRoom.memberCount < 2}
+                    className="w-full pl-4 pr-12 h-10 rounded-full bg-muted/50 dark:bg-muted/30 border-0 text-sm text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
-                  {newMessage.trim() && (
+                  {newMessage.trim() && !(selectedPlaylistRoom && selectedPlaylistRoom.memberCount !== undefined && selectedPlaylistRoom.memberCount < 2) && (
                     <Button
                       variant="default"
                       size="icon"

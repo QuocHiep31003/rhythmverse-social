@@ -21,29 +21,6 @@ export interface FirebaseMessage {
   sharedContent?: SharedContentDTO | null;
 }
 
-export interface ListeningSession {
-  hostId: number;
-  songId?: number | null;
-  positionMs?: number | null;
-  isPlaying?: boolean;
-  updatedAt?: number | null;
-  participants?: Record<
-    string,
-    {
-      joinedAt?: number | null;
-      lastSeen?: number | null;
-    }
-  >;
-  queue?: Record<
-    string,
-    {
-      suggestedBy: number;
-      suggestedAt: number;
-      songId: number;
-    }
-  >;
-}
-
 export const getChatRoomKey = (userId1: number, userId2: number): string => {
   const min = Math.min(userId1, userId2);
   const max = Math.max(userId1, userId2);
@@ -428,38 +405,6 @@ export const watchMessageIndex = (
     (error) => {
       console.error("[Firebase Chat] Error watching messageIndex:", error);
       callback({});
-    }
-  );
-  return () => unsubscribe();
-};
-
-export const watchListeningSession = (
-  roomId: string,
-  callback: (session: ListeningSession | null) => void
-) => {
-  const listeningRef = ref(firebaseDb, `listening/${roomId}`);
-  const unsubscribe = onValue(
-    listeningRef,
-    (snapshot) => {
-      if (!snapshot.exists()) {
-        callback(null);
-        return;
-      }
-      const data = snapshot.val() as any;
-      const session: ListeningSession = {
-        hostId: Number(data.hostId) || 0,
-        songId: typeof data.songId === "number" ? data.songId : Number(data.songId) || null,
-        positionMs: typeof data.positionMs === "number" ? data.positionMs : null,
-        isPlaying: Boolean(data.isPlaying),
-        updatedAt: typeof data.updatedAt === "number" ? data.updatedAt : null,
-        participants: data.participants || undefined,
-        queue: data.queue || undefined,
-      };
-      callback(session);
-    },
-    (error) => {
-      console.warn("[Firebase Chat] Error watching listening session:", error);
-      callback(null);
     }
   );
   return () => unsubscribe();
