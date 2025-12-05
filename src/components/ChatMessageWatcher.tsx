@@ -1,5 +1,4 @@
-import { useEffect, useRef, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { useEffect, useRef, useMemo, useState } from "react";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 import { watchChatMessages, type FirebaseMessage } from "@/services/firebase/chat";
 import { friendsApi } from "@/services/api/friendsApi";
@@ -12,9 +11,6 @@ import { API_BASE_URL } from "@/services/api/config";
  * khi người dùng không ở trang social
  */
 const ChatMessageWatcher = () => {
-  const location = useLocation();
-  const isOnSocialPage = location.pathname === '/social' || location.pathname.startsWith('/social');
-  
   const userIdRaw = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
   const meId = useMemo(() => {
     try {
@@ -30,6 +26,8 @@ const ChatMessageWatcher = () => {
   const friendsRef = useRef<Friend[]>([]);
   const lastMessageIdsRef = useRef<Record<string, string>>({});
   const isInitializedRef = useRef<Record<string, boolean>>({});
+  const unreadCountRef = useRef<Record<string, number>>({});
+  const [friendsReadyVersion, setFriendsReadyVersion] = useState(0);
 
   // Helper để convert URL relative thành absolute
   const toAbsoluteUrl = (u?: string | null): string | undefined => {
@@ -66,6 +64,7 @@ const ChatMessageWatcher = () => {
             streak: 0,
           }));
           friendsRef.current = mapped;
+          setFriendsReadyVersion((v) => v + 1);
         }
       } catch (error) {
         console.warn('[ChatMessageWatcher] Failed to load friends:', error);
@@ -84,26 +83,17 @@ const ChatMessageWatcher = () => {
       // Cleanup khi không có meId hoặc Firebase chưa sẵn sàng
       Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
       chatWatchersRef.current = {};
+      unreadCountRef.current = {};
       return;
     }
 
-    // Nếu đang ở trang social, không cần lắng nghe (trang social tự xử lý)
-    if (isOnSocialPage) {
-      Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
-      chatWatchersRef.current = {};
-      // Reset initialization state khi vào trang social để khi rời khỏi sẽ khởi tạo lại
-      isInitializedRef.current = {};
-      lastMessageIdsRef.current = {};
-      return;
-    }
-
-    const friends = friendsRef.current;
-    if (!Array.isArray(friends) || friends.length === 0) {
+    const allFriends = friendsRef.current;
+    if (!Array.isArray(allFriends) || allFriends.length === 0) {
       return;
     }
 
     // Lắng nghe tin nhắn mới cho mỗi bạn
-    friends.forEach((friend: Friend) => {
+    allFriends.forEach((friend: Friend) => {
       const friendId = String(friend.id);
       if (!friendId || chatWatchersRef.current[friendId]) {
         return;
@@ -150,6 +140,8 @@ const ChatMessageWatcher = () => {
             
             const friendName = friendInfo?.name || friendInfo?.username || 'Someone';
             const friendAvatar = friendInfo?.avatar || null;
+            const nextUnread = (unreadCountRef.current[friendId] || 0) + 1;
+            unreadCountRef.current[friendId] = nextUnread;
             
             // Lấy nội dung tin nhắn
             const messageContent = 
@@ -167,6 +159,7 @@ const ChatMessageWatcher = () => {
               meta: {
                 friendId: friendId,
                 friendNumericId: friendNumericId,
+                unreadCount: nextUnread,
               },
             });
           }
@@ -183,7 +176,7 @@ const ChatMessageWatcher = () => {
       Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
       chatWatchersRef.current = {};
     };
-  }, [meId, firebaseReady, isOnSocialPage, location.pathname]);
+  }, [meId, firebaseReady, friendsReadyVersion]);
 
   return null;
 };

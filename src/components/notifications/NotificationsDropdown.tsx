@@ -260,6 +260,7 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const navigate = useNavigate();
   const itemsRef = useRef<NotificationDTO[]>([]); // ✅ Ref để persist
+  const [unreadFriendRequests, setUnreadFriendRequests] = useState(0);
 
   const resolvedUserId = useMemo(() => {
     if (typeof userId === "number" && Number.isFinite(userId)) {
@@ -293,6 +294,9 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
       // ✅ Update cả state và ref để persist - HIỂN THỊ TẤT CẢ, KHÔNG DEDUPLICATE
       setItems(safe);
       itemsRef.current = safe;
+      setUnreadFriendRequests(
+        safe.filter((n) => n.type === "FRIEND_REQUEST" && n.read !== true).length
+      );
     });
     return () => {
       try {
@@ -449,7 +453,17 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
   return (
     <DropdownMenuContent align="end" className="w-[420px] p-0 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-        <div className="text-sm font-semibold">Thông báo</div>
+        <div className="text-sm font-semibold flex items-center gap-2">
+          Thông báo
+          {unreadFriendRequests > 0 && (
+            <Badge
+              variant="secondary"
+              className="h-5 px-2 rounded-full bg-primary/10 text-primary border border-primary/30"
+            >
+              {unreadFriendRequests > 99 ? "99+" : unreadFriendRequests} lời mời mới
+            </Badge>
+          )}
+        </div>
         <Button
           variant="ghost"
           size="sm"

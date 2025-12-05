@@ -2,6 +2,7 @@ export const CHAT_TAB_OPENED_EVENT = 'app:chat-tab-opened';
 
 type ChatTabPayload = {
   friendId?: string | null;
+  roomId?: string | null; // pl_{playlistId} for group chat
 };
 
 export const emitChatTabOpened = (payload?: ChatTabPayload) => {

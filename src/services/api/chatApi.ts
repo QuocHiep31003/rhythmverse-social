@@ -327,8 +327,11 @@ export const playlistChatApi = {
       throw new Error(errorMsg);
     }
   },
-  startListening: async (playlistId: number, hostId: number, songId: number, positionMs: number, playing: boolean): Promise<void> => {
-    const payload = { playlistId, hostId, songId, positionMs, playing };
+  startListening: async (playlistId: number, hostId: number, songId: number, positionMs: number, playing: boolean, initialQueue?: number[]): Promise<void> => {
+    const payload: any = { playlistId, hostId, songId, positionMs, playing };
+    if (initialQueue && initialQueue.length > 0) {
+      payload.initialQueue = initialQueue;
+    }
     const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/start`, {
       method: "POST",
       headers: buildJsonHeaders(),
@@ -401,6 +404,19 @@ export const playlistChatApi = {
     if (!res.ok) {
       const errorMsg = await parseErrorResponse(res);
       console.error("[playlistChatApi] markRoomAsRead error:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  removeFromQueue: async (playlistId: number, songId: number): Promise<void> => {
+    const payload = { playlistId, songId };
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/queue/${songId}`, {
+      method: "DELETE",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error("[playlistChatApi] removeFromQueue error:", errorMsg);
       throw new Error(errorMsg);
     }
   },
