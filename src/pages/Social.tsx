@@ -6,7 +6,7 @@ import { authApi } from "@/services/api/authApi";
 import { API_BASE_URL } from "@/services/api/config";
 import { premiumSubscriptionApi, type PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 
-import { playlistCollabInvitesApi } from "@/services/api/playlistApi";
+import { playlistCollabInvitesApi, playlistsApi, playlistCollaboratorsApi } from "@/services/api/playlistApi";
 
 import { Button } from "@/components/ui/button";
 
@@ -18,10 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import useFirebaseRealtime from "@/hooks/useFirebaseRealtime";
 import { useFirebaseAuth } from "@/hooks/useFirebaseAuth";
 
-import { chatApi, ChatMessageDTO } from "@/services/api/chatApi";
+import { chatApi, ChatMessageDTO, playlistChatApi } from "@/services/api/chatApi";
 import { useMusic } from "@/contexts/MusicContext";
 import type { Song } from "@/contexts/MusicContext";
-import { watchChatMessages, type FirebaseMessage, watchTyping, watchReactions, watchMessageIndex, getChatRoomKey, watchAllRoomUnreadCounts } from "@/services/firebase/chat";
+import { watchChatMessages, watchChatMessagesForRoom, type FirebaseMessage, watchTyping, watchReactions, watchMessageIndex, getChatRoomKey, watchAllRoomUnreadCounts } from "@/services/firebase/chat";
 
 import { NotificationDTO as FBNotificationDTO, watchNotifications } from "@/services/firebase/notifications";
 import {
@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 
 import type { CollabInviteDTO, Message, Friend, ApiFriendDTO, ApiPendingDTO, MessageReactionSummary } from "@/types/social";
+import type { PlaylistLibraryItemDTO } from "@/services/api/playlistApi";
 import { parseIncomingContent, DEFAULT_ARTIST_NAME, decodeUnicodeEscapes } from "@/utils/socialUtils";
 import { emitChatBubble } from "@/utils/chatBubbleBus";
 import { emitChatTabOpened } from "@/utils/chatEvents";
@@ -58,6 +59,7 @@ import { STREAK_STORAGE_EVENT, StreakStorageEventDetail } from "@/constants/stre
 import { chatStreakApi } from "@/services/api/chatStreakApi";
 import { mapDtoToStreakState } from "@/hooks/useStreakManager";
 import { clearStreakCache } from "@/utils/streakCache";
+import { PlaylistChatWindow } from "@/components/playlist/PlaylistChatWindow";
 
 
 // Realtime notification DTO from /user/queue/notifications
@@ -434,6 +436,119 @@ const Social = () => {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState<number>(0);
   // unreadByFriend: key = friendId (string), value = unread count (number)
   const [unreadByFriend, setUnreadByFriend] = useState<Record<string, number>>({});
+  const [unreadByPlaylist, setUnreadByPlaylist] = useState<Record<string, number>>({});
+
+  const [playlistRooms, setPlaylistRooms] = useState<PlaylistLibraryItemDTO[]>([]);
+  const [loadingPlaylistRooms, setLoadingPlaylistRooms] = useState(false);
+  // Track collaborator count for each playlist to determine if group chat should be locked
+  const [playlistCollaboratorCounts, setPlaylistCollaboratorCounts] = useState<Record<number, number>>({});
+
+  // Load playlist rooms (owner + collaborator) để hiển thị trong Social chat
+  useEffect(() => {
+    let active = true;
+    const loadRooms = async () => {
+      if (!meId) {
+        if (active) {
+          setPlaylistRooms([]);
+          setLoadingPlaylistRooms(false);
+        }
+        return;
+      }
+      try {
+        setLoadingPlaylistRooms(true);
+        const data = await playlistsApi.library();
+        if (!active) return;
+        // Library API đã trả về tất cả owned + collaborated playlists
+        // Hiển thị tất cả để user có thể chat trong các playlist groups
+        console.log("[Social] Raw library data:", data?.length, data);
+        const rooms: PlaylistLibraryItemDTO[] = (data || []).filter((p: PlaylistLibraryItemDTO) => {
+          if (!p) return false;
+          // Hiển thị tất cả playlists từ library (đã bao gồm owned + collaborated)
+          return true;
+        });
+        console.log("[Social] Loaded playlist rooms:", rooms.length, rooms);
+        
+        // Xử lý khi playlist bị xóa - cleanup Firebase listeners và clear messages
+        const currentRoomIds = new Set(
+          rooms.map((r) => typeof r.playlistId === "number" ? r.playlistId : (typeof (r as any).id === "number" ? (r as any).id : 0))
+        );
+        const previousRoomIds = new Set(
+          playlistRooms.map((r) => typeof r.playlistId === "number" ? r.playlistId : (typeof (r as any).id === "number" ? (r as any).id : 0))
+        );
+        
+        // Tìm các playlist đã bị xóa
+        const deletedPlaylistIds: number[] = [];
+        previousRoomIds.forEach((id) => {
+          if (id > 0 && !currentRoomIds.has(id)) {
+            deletedPlaylistIds.push(id);
+          }
+        });
+        
+        // Cleanup Firebase listeners và clear messages cho các playlist đã bị xóa
+        if (deletedPlaylistIds.length > 0 && active) {
+          console.log("[Social] Playlists deleted, cleaning up:", deletedPlaylistIds);
+          deletedPlaylistIds.forEach((playlistId) => {
+            const roomId = `pl_${playlistId}`;
+            // Unsubscribe Firebase listener
+            if (chatWatchersRef.current[roomId]) {
+              chatWatchersRef.current[roomId]();
+              delete chatWatchersRef.current[roomId];
+            }
+            // Clear messages
+            setChatByFriend((prev) => {
+              const next = { ...prev };
+              delete next[roomId];
+              return next;
+            });
+            // Clear unread count
+            setUnreadByPlaylist((prev) => {
+              const next = { ...prev };
+              delete next[String(playlistId)];
+              return next;
+            });
+            // Nếu đang xem playlist này, đóng chat
+            if (selectedChatRef.current === roomId) {
+              setSelectedChat(null);
+            }
+          });
+        }
+        
+        setPlaylistRooms(rooms);
+        
+        // Fetch collaborator counts for each playlist
+        const collaboratorCounts: Record<number, number> = {};
+        await Promise.all(
+          rooms.map(async (room) => {
+            const playlistId = typeof room.playlistId === "number" ? room.playlistId : (typeof (room as any).id === "number" ? (room as any).id : 0);
+            if (!playlistId) return;
+            try {
+              const collaborators = await playlistCollaboratorsApi.list(playlistId);
+              // Count includes owner, so total members = collaborators.length + 1 (owner)
+              const totalMembers = collaborators.length + 1; // owner + collaborators
+              collaboratorCounts[playlistId] = totalMembers;
+            } catch (error) {
+              // If error (e.g., playlist deleted or no permission), assume 0 members (playlist deleted)
+              collaboratorCounts[playlistId] = 0;
+            }
+          })
+        );
+        if (active) {
+          setPlaylistCollaboratorCounts(collaboratorCounts);
+        }
+      } catch {
+        if (active) setPlaylistRooms([]);
+      } finally {
+        if (active) setLoadingPlaylistRooms(false);
+      }
+    };
+    void loadRooms();
+    return () => {
+      active = false;
+    };
+  }, [meId]);
+
+  const [playlistChatOpen, setPlaylistChatOpen] = useState(false);
+  const [activePlaylistChat, setActivePlaylistChat] = useState<PlaylistLibraryItemDTO | null>(null);
 
   useEffect(() => {
     friendsRef.current = friends;
@@ -480,6 +595,34 @@ const Social = () => {
   const markConversationAsRead = useCallback(
     (friendKey: string | number | null | undefined) => {
       if (!meId || friendKey == null) return;
+      
+      // Xử lý playlist room (pl_{playlistId})
+      if (typeof friendKey === "string" && friendKey.startsWith("pl_")) {
+        const playlistId = Number(friendKey.replace("pl_", ""));
+        if (!Number.isFinite(playlistId)) return;
+        
+        const cacheKey = `pl_${meId}-${playlistId}`;
+        const now = Date.now();
+        const last = lastReadRef.current[cacheKey];
+        if (last && now - last < 1000) {
+          console.log('⏭️ [DEBUG] Skipping mark playlist room as read (throttled)');
+          return;
+        }
+        lastReadRef.current[cacheKey] = now;
+        
+        console.log('✅ [DEBUG] Calling markPlaylistRoomAsRead API...', { playlistId, userId: meId });
+        playlistChatApi
+          .markRoomAsRead(playlistId, meId)
+          .then(() => {
+            console.log('✅ [DEBUG] markPlaylistRoomAsRead API completed successfully');
+          })
+          .catch((error) => {
+            console.warn("[Social] Failed to mark playlist room as read", error);
+          });
+        return;
+      }
+      
+      // Xử lý 1-1 chat (friend)
       const friendId = Number(friendKey);
       if (!Number.isFinite(friendId)) return;
       
@@ -542,10 +685,15 @@ const Social = () => {
         // Store firebaseKey for reactions lookup
         // Priority: firebaseKey field in message object > snapshot key (id)
         const firebaseKey = (firebaseMessage as { firebaseKey?: string }).firebaseKey || firebaseMessage.id;
-        if (firebaseKey) {
-          return { ...parsed, firebaseKey };
+        // Preserve senderName and senderAvatar from Firebase for playlist room messages
+        const result = firebaseKey ? { ...parsed, firebaseKey } : parsed;
+        if (firebaseMessage.senderName) {
+          (result as any).senderName = firebaseMessage.senderName;
         }
-        return parsed;
+        if (firebaseMessage.senderAvatar !== undefined) {
+          (result as any).senderAvatar = firebaseMessage.senderAvatar;
+        }
+        return result;
       });
       
       // If any message lacks plaintext, trigger history refresh to get full content immediately
@@ -555,7 +703,8 @@ const Social = () => {
         return original && (!original.contentPlain || (original.contentPreview && !original.contentPlain)) && original.messageId;
       });
       
-      if (needsRefresh && meId) {
+      // Skip history refresh for playlist rooms (pl_{playlistId}) - they don't have history API
+      if (needsRefresh && meId && !friendKey.startsWith("pl_")) {
         const friendNumericId = Number(friendKey);
         if (Number.isFinite(friendNumericId)) {
           // Fetch immediately without debounce for better UX
@@ -693,10 +842,27 @@ const Social = () => {
 
         const unique = new Map<string, Message>();
         replaced.forEach((message) => {
-          unique.set(String(message.id), message);
+          // For system messages, use firebaseKey or content + timestamp as key to avoid duplicates
+          const key = message.type === "system" 
+            ? (message.firebaseKey || `${message.content}_${message.sentAt || message.timestamp || Date.now()}`)
+            : String(message.id);
+          unique.set(key, message);
         });
         parsed.forEach((message) => {
-          unique.set(String(message.id), message);
+          // For system messages, use firebaseKey or content + timestamp as key to avoid duplicates
+          const key = message.type === "system"
+            ? (message.firebaseKey || `${message.content}_${message.sentAt || message.timestamp || Date.now()}`)
+            : String(message.id);
+          // Only add if not already exists (for system messages, check by content + timestamp)
+          if (!unique.has(key)) {
+            unique.set(key, message);
+          } else if (message.type === "system" && message.firebaseKey) {
+            // If system message has firebaseKey, prefer the one with firebaseKey
+            const existing = unique.get(key);
+            if (existing && !existing.firebaseKey) {
+              unique.set(key, message);
+            }
+          }
         });
 
         const sorted = sortMessagesChronologically(
@@ -747,6 +913,10 @@ const Social = () => {
 
   useEffect(() => {
     if (!selectedChat) return;
+    // Don't reset if it's a playlist room (pl_{playlistId})
+    if (selectedChat.startsWith("pl_")) {
+      return;
+    }
     const stillExists = friends.some((friend) => friend.id === selectedChat);
     if (!stillExists) {
       setSelectedChat(null);
@@ -758,14 +928,22 @@ const Social = () => {
   // Do NOT mark as read when auto-selecting - only mark when user explicitly clicks
   useEffect(() => {
     if (activeTab !== "chat") return;
-    // If user already has a selected chat, don't auto-switch
-    if (selectedChat && friends.some((friend) => friend.id === selectedChat)) {
-      return;
+    // If user already has a selected chat (friend or playlist room), don't auto-switch
+    if (selectedChat) {
+      // Check if it's a friend
+      if (friends.some((friend) => friend.id === selectedChat)) {
+        return;
+      }
+      // Check if it's a playlist room (pl_{playlistId})
+      if (selectedChat.startsWith("pl_")) {
+        return;
+      }
     }
     if (!friends.length) return;
 
     // Only auto-select when selectedChat is null (first time entering chat tab)
     // Use setSelectedChat directly (not handleFriendSelect) to avoid auto-marking as read
+    // Use getLastActivityTimestamp directly instead of in dependencies to avoid infinite loop
     const unreadCandidates = friends
       .filter((friend) => (unreadByFriend[friend.id] || 0) > 0)
       .sort((a, b) => {
@@ -785,7 +963,8 @@ const Social = () => {
       isUserSelectedRef.current = false; // Mark as auto-selected
       setSelectedChat(nextFriend.id);
     }
-  }, [activeTab, friends, selectedChat, unreadByFriend, getLastActivityTimestamp]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, friends, selectedChat, unreadByFriend]);
 
   // Handle friend selection - mark as read when user explicitly clicks on a friend
   const handleFriendSelect = useCallback((friendId: string) => {
@@ -808,7 +987,14 @@ const Social = () => {
     
     // ✅ Mark as read ngay lập tức (không delay) để tránh unread count tăng
     console.log('👁️ [Social] User is viewing chat, marking as read immediately:', selectedChat);
-    markConversationAsRead(selectedChat);
+    // Sử dụng setTimeout để đảm bảo mark as read được gọi sau khi component đã render xong
+    const timeoutId = setTimeout(() => {
+      markConversationAsRead(selectedChat);
+    }, 100);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [meId, selectedChat, activeTab, markConversationAsRead]);
 
   // ✅ Mark as read khi có tin nhắn mới đến trong chat đang xem
@@ -1296,22 +1482,32 @@ const Social = () => {
         // roomKey format: "minId_maxId", cần tìm friendId là maxId hoặc minId (không phải meId)
         const unreadByFriendMap: Record<string, number> = {};
         
+        const unreadByPlaylistMap: Record<string, number> = {};
         Object.entries(data.unreadCounts).forEach(([roomKey, count]) => {
-          const [minId, maxId] = roomKey.split('_').map(Number);
-          // Tìm friendId (không phải meId)
-          const friendId = minId === meId ? maxId : minId;
-          if (friendId && friendId !== meId && count > 0) {
-            unreadByFriendMap[String(friendId)] = count;
+          if (roomKey.startsWith("pl_")) {
+            const playlistId = roomKey.replace("pl_", "");
+            if (playlistId && Number(count) > 0) {
+              unreadByPlaylistMap[playlistId] = Number(count);
+            }
+          } else {
+            const [minId, maxId] = roomKey.split('_').map(Number);
+            // Tìm friendId (không phải meId)
+            const friendId = minId === meId ? maxId : minId;
+            if (friendId && friendId !== meId && count > 0) {
+              unreadByFriendMap[String(friendId)] = count;
+            }
           }
         });
         
         console.log('[Social] Loaded initial unread counts from API:', { 
           unreadCounts: data.unreadCounts, 
           unreadByFriendMap,
+          unreadByPlaylistMap,
           totalUnread: data.totalUnread 
         });
         
         setUnreadByFriend(unreadByFriendMap);
+        setUnreadByPlaylist(unreadByPlaylistMap);
         setUnreadMessagesCount(data.totalUnread);
       } catch (error) {
         console.warn('[Social] Failed to load initial unread counts from API:', error);
@@ -1342,15 +1538,26 @@ const Social = () => {
     const unsubscribe = watchAllRoomUnreadCounts(meId, (unreadCounts, totalUnread) => {
       lastFirebaseUpdateRef = Date.now(); // ✅ Mark Firebase đang hoạt động
       
-      // Convert roomKey to friendId
+      // Convert roomKey to friendId (1-1 chat) và playlistId (group chat)
       const unreadByFriendMap: Record<string, number> = {};
+      const unreadByPlaylistMap: Record<string, number> = {}; // playlistId -> count
       
       Object.entries(unreadCounts).forEach(([roomKey, count]) => {
-        const [minId, maxId] = roomKey.split('_').map(Number);
-        // Tìm friendId (không phải meId)
-        const friendId = minId === meId ? maxId : minId;
-        if (friendId && friendId !== meId && count > 0) {
-          unreadByFriendMap[String(friendId)] = count;
+        if (roomKey.startsWith("pl_")) {
+          // Playlist room: pl_{playlistId}
+          const playlistId = roomKey.replace("pl_", "");
+          if (playlistId && Number(count) > 0) {
+            unreadByPlaylistMap[playlistId] = Number(count);
+          }
+        } else {
+          // 1-1 chat: minId_maxId
+          const [minId, maxId] = roomKey.split('_').map(Number);
+          if (!Number.isFinite(minId) || !Number.isFinite(maxId)) return;
+          // Tìm friendId (không phải meId)
+          const friendId = minId === meId ? maxId : minId;
+          if (friendId && friendId !== meId && count > 0) {
+            unreadByFriendMap[String(friendId)] = count;
+          }
         }
       });
       
@@ -1361,28 +1568,48 @@ const Social = () => {
         selectedChat: selectedChatRef.current
       });
       
-      // ✅ Nếu đang xem chat với friend này → không cập nhật unread count (để tránh tăng)
+      // ✅ Nếu đang xem chat (friend hoặc playlist room) → không cập nhật unread count (để tránh tăng)
       const currentSelectedChat = selectedChatRef.current;
       if (currentSelectedChat) {
-        const friendNumericId = Number(currentSelectedChat);
-        if (Number.isFinite(friendNumericId)) {
-          const roomId = getChatRoomKey(meId, friendNumericId);
+        // Xử lý playlist room chat (pl_{playlistId})
+        if (currentSelectedChat.startsWith("pl_")) {
+          const playlistId = currentSelectedChat.replace("pl_", "");
+          const roomId = `pl_${playlistId}`;
           const unreadForCurrentChat = unreadCounts[roomId] || 0;
           if (unreadForCurrentChat > 0) {
-            console.log('[Social] User is viewing this chat, marking as read to prevent unread increase');
+            console.log('[Social] User is viewing this playlist room chat, marking as read to prevent unread increase');
             markConversationAsRead(currentSelectedChat);
             // ✅ Trừ unread của chat đang xem khỏi total
             const adjustedTotal = totalUnread - unreadForCurrentChat;
-            const adjustedUnreadByFriend = { ...unreadByFriendMap };
-            delete adjustedUnreadByFriend[currentSelectedChat];
-            setUnreadByFriend(adjustedUnreadByFriend);
+            const adjustedUnreadByPlaylist = { ...unreadByPlaylistMap };
+            delete adjustedUnreadByPlaylist[playlistId];
+            setUnreadByPlaylist(adjustedUnreadByPlaylist);
             setUnreadMessagesCount(Math.max(0, adjustedTotal));
             return;
+          }
+        } else {
+          // Xử lý 1-1 chat (friend)
+          const friendNumericId = Number(currentSelectedChat);
+          if (Number.isFinite(friendNumericId)) {
+            const roomId = getChatRoomKey(meId, friendNumericId);
+            const unreadForCurrentChat = unreadCounts[roomId] || 0;
+            if (unreadForCurrentChat > 0) {
+              console.log('[Social] User is viewing this friend chat, marking as read to prevent unread increase');
+              markConversationAsRead(currentSelectedChat);
+              // ✅ Trừ unread của chat đang xem khỏi total
+              const adjustedTotal = totalUnread - unreadForCurrentChat;
+              const adjustedUnreadByFriend = { ...unreadByFriendMap };
+              delete adjustedUnreadByFriend[currentSelectedChat];
+              setUnreadByFriend(adjustedUnreadByFriend);
+              setUnreadMessagesCount(Math.max(0, adjustedTotal));
+              return;
+            }
           }
         }
       }
       
       setUnreadByFriend(unreadByFriendMap);
+      setUnreadByPlaylist(unreadByPlaylistMap);
       setUnreadMessagesCount(totalUnread);
     });
     
@@ -1400,17 +1627,26 @@ const Social = () => {
       try {
         const data = await chatApi.getUnreadCounts(meId);
         const unreadByFriendMap: Record<string, number> = {};
+        const unreadByPlaylistMap: Record<string, number> = {};
         
         Object.entries(data.unreadCounts).forEach(([roomKey, count]) => {
-          const [minId, maxId] = roomKey.split('_').map(Number);
-          const friendId = minId === meId ? maxId : minId;
-          if (friendId && friendId !== meId && count > 0) {
-            unreadByFriendMap[String(friendId)] = count;
+          if (roomKey.startsWith("pl_")) {
+            const playlistId = roomKey.replace("pl_", "");
+            if (playlistId && Number(count) > 0) {
+              unreadByPlaylistMap[playlistId] = Number(count);
+            }
+          } else {
+            const [minId, maxId] = roomKey.split('_').map(Number);
+            const friendId = minId === meId ? maxId : minId;
+            if (friendId && friendId !== meId && count > 0) {
+              unreadByFriendMap[String(friendId)] = count;
+            }
           }
         });
         
         console.log('[Social] Polled unread count from API (Firebase fallback):', data.totalUnread);
         setUnreadByFriend(unreadByFriendMap);
+        setUnreadByPlaylist(unreadByPlaylistMap);
         setUnreadMessagesCount(data.totalUnread);
       } catch (error) {
         console.warn('[Social] Failed to poll unread counts from API:', error);
@@ -1650,6 +1886,36 @@ const Social = () => {
     };
   }, [meId, firebaseReady, friendsIdsString]); // ✅ Removed mergeFirebaseMessages from dependencies
 
+  // Watch messages for playlist rooms when selectedChat is a playlist room
+  useEffect(() => {
+    if (!meId || !firebaseReady || !selectedChat || !selectedChat.startsWith("pl_")) {
+      // Cleanup playlist room watcher if exists
+      if (chatWatchersRef.current[selectedChat || ""] && selectedChat && !selectedChat.startsWith("pl_")) {
+        chatWatchersRef.current[selectedChat]();
+        delete chatWatchersRef.current[selectedChat];
+      }
+      return;
+    }
+
+    const roomId = selectedChat; // pl_{playlistId}
+    if (chatWatchersRef.current[roomId]) return; // Already watching
+
+    console.log('[Social] Setting up playlist room message watcher for:', roomId);
+    const unsubscribe = watchChatMessagesForRoom(roomId, (messages) => {
+      if (mergeFirebaseMessagesRef.current) {
+        mergeFirebaseMessagesRef.current(roomId, messages);
+      }
+    });
+    chatWatchersRef.current[roomId] = unsubscribe;
+
+    return () => {
+      if (chatWatchersRef.current[roomId]) {
+        chatWatchersRef.current[roomId]();
+        delete chatWatchersRef.current[roomId];
+      }
+    };
+  }, [meId, firebaseReady, selectedChat]);
+
   useEffect(() => {
     if (!meId || !firebaseReady) {
       Object.values(typingWatchersRef.current).forEach((unsubscribe) => unsubscribe());
@@ -1760,9 +2026,18 @@ const Social = () => {
   useEffect(() => {
     if (!meId || !firebaseReady || !selectedChat) return;
 
-    const friendNumericId = Number(selectedChat);
-    if (!Number.isFinite(friendNumericId)) return;
-    const roomId = getChatRoomKey(meId, friendNumericId);
+    // Xử lý playlist rooms (pl_{playlistId})
+    let roomId: string | null = null;
+    if (selectedChat.startsWith("pl_")) {
+      roomId = selectedChat; // pl_{playlistId}
+    } else {
+      // Xử lý 1-1 chat
+      const friendNumericId = Number(selectedChat);
+      if (!Number.isFinite(friendNumericId)) return;
+      roomId = getChatRoomKey(meId, friendNumericId);
+    }
+    
+    if (!roomId) return;
     const trimmed = newMessage.trim();
 
     const stopTyping = () => {
@@ -1832,6 +2107,11 @@ const Social = () => {
   useEffect(() => {
     if (!meId || !firebaseReady || !selectedChat) {
       setMessageIndexByRoom(prev => {
+        // Xử lý cleanup cho cả playlist rooms và 1-1 chat
+        if (selectedChat && selectedChat.startsWith("pl_")) {
+          const { [selectedChat]: _removed, ...rest } = prev;
+          return rest;
+        }
         const friendNumericId = Number(selectedChat);
         if (!Number.isFinite(friendNumericId)) return prev;
         const roomId = getChatRoomKey(meId, friendNumericId);
@@ -1841,9 +2121,18 @@ const Social = () => {
       return;
     }
 
-    const friendNumericId = Number(selectedChat);
-    if (!Number.isFinite(friendNumericId)) return;
-    const roomId = getChatRoomKey(meId, friendNumericId);
+    // Xử lý playlist rooms (pl_{playlistId})
+    let roomId: string | null = null;
+    if (selectedChat.startsWith("pl_")) {
+      roomId = selectedChat; // pl_{playlistId}
+    } else {
+      // Xử lý 1-1 chat
+      const friendNumericId = Number(selectedChat);
+      if (!Number.isFinite(friendNumericId)) return;
+      roomId = getChatRoomKey(meId, friendNumericId);
+    }
+
+    if (!roomId) return;
     console.log('[Social] Setting up messageIndex watcher for room:', roomId);
 
     const unsubscribe = watchMessageIndex(roomId, (index) => {
@@ -1892,9 +2181,18 @@ const Social = () => {
       return;
     }
 
-    const friendNumericId = Number(selectedChat);
-    if (!Number.isFinite(friendNumericId)) return;
-    const roomId = getChatRoomKey(meId, friendNumericId);
+    // Xử lý playlist rooms (pl_{playlistId})
+    let roomId: string | null = null;
+    if (selectedChat.startsWith("pl_")) {
+      roomId = selectedChat; // pl_{playlistId}
+    } else {
+      // Xử lý 1-1 chat
+      const friendNumericId = Number(selectedChat);
+      if (!Number.isFinite(friendNumericId)) return;
+      roomId = getChatRoomKey(meId, friendNumericId);
+    }
+
+    if (!roomId) return;
     console.log('[Social] Setting up reactions watcher for room:', roomId);
 
     const unsubscribe = watchReactions(roomId, (reactions) => {
@@ -1958,9 +2256,19 @@ const Social = () => {
   // Update messages with firebaseKey when messageIndex changes
   useEffect(() => {
     if (!selectedChat) return;
-    const friendNumericId = Number(selectedChat);
-    if (!Number.isFinite(friendNumericId)) return;
-    const roomId = getChatRoomKey(meId, friendNumericId);
+    
+    // Xử lý playlist rooms (pl_{playlistId})
+    let roomId: string | null = null;
+    if (selectedChat.startsWith("pl_")) {
+      roomId = selectedChat; // pl_{playlistId}
+    } else {
+      // Xử lý 1-1 chat
+      const friendNumericId = Number(selectedChat);
+      if (!Number.isFinite(friendNumericId)) return;
+      roomId = getChatRoomKey(meId, friendNumericId);
+    }
+    
+    if (!roomId) return;
     const messageIndex = messageIndexByRoom[roomId];
     if (!messageIndex || Object.keys(messageIndex).length === 0) return;
 
@@ -2404,6 +2712,13 @@ const Social = () => {
 
     const fetchHistory = async () => {
       try {
+        // Playlist rooms không có history API, chỉ có messages từ Firebase
+        if (selectedChat.startsWith("pl_")) {
+          console.log('📖 [Social] Skipping history load for playlist room:', selectedChat);
+          loadedHistoryRef.current.add(historyKey);
+          return;
+        }
+
         console.log('📖 [Social] Loading chat history (initial load only):', { meId, selectedChat });
         const history = await chatApi.getHistory(meId, Number(selectedChat));
         console.log('📖 [Social] Chat history loaded:', { count: history.length, selectedChat });
@@ -2441,6 +2756,50 @@ const Social = () => {
     const rawInput = newMessage.trim();
     if (!rawInput || !selectedChat || !meId) return;
 
+    // Xử lý playlist room chat (pl_{playlistId})
+    if (selectedChat.startsWith("pl_")) {
+      const playlistId = Number(selectedChat.replace("pl_", ""));
+      if (!Number.isFinite(playlistId)) {
+        console.warn("[Social] Cannot resolve playlist id for chat:", selectedChat);
+        return;
+      }
+
+      const decodedContent = decodeUnicodeEscapes(rawInput);
+      const messageContent = decodedContent || rawInput;
+
+      // Optimistic update
+      const now = Date.now();
+      const optimisticMsg: Message = {
+        id: `temp-${now}`,
+        sender: "You",
+        content: messageContent,
+        timestamp: new Date(now).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        sentAt: now,
+        type: "text",
+      };
+
+      setChatByFriend((prev) => ({ ...prev, [selectedChat]: [...(prev[selectedChat] || []), optimisticMsg] }));
+      setNewMessage("");
+
+      try {
+        await playlistChatApi.sendText(playlistId, meId, messageContent);
+        console.log("[Social] Playlist message sent successfully");
+        // Message sẽ được cập nhật từ Firebase listener
+      } catch (error) {
+        console.error("[Social] Failed to send playlist message:", error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        // Remove optimistic message on error
+        setChatByFriend((prev) => ({
+          ...prev,
+          [selectedChat]: prev[selectedChat]?.filter((m) => m.id !== optimisticMsg.id) || [],
+        }));
+        // Hiển thị error từ backend (có thể là group chat bị khóa hoặc playlist đã bị xóa)
+        pushBubble(errorMessage || "Không thể gửi tin nhắn. Group chat có thể đã bị khóa hoặc playlist đã bị xóa.", "error");
+      }
+      return;
+    }
+
+    // Xử lý 1-1 chat (friend)
     const friend = friends.find((f) => f.id === selectedChat);
     const receiverSource = friend?.friendUserId ?? selectedChat;
     const receiverId = Number(receiverSource);
@@ -2449,7 +2808,9 @@ const Social = () => {
       return;
     }
 
-    const friendKeyForStreak = String(receiverId);
+    // Calculate friendKeyForStreak the same way as selectedFriendUserKey in ChatArea.tsx
+    // This ensures the event friendId matches the useStreakManager friendId
+    const friendKeyForStreak = friend?.friendUserId ? String(friend.friendUserId) : String(receiverId);
     const decodedContent = decodeUnicodeEscapes(rawInput);
     const messageContent = decodedContent || rawInput;
 
@@ -2495,6 +2856,7 @@ const Social = () => {
             type: "updated",
             payload: mapDtoToStreakState(updatedStreak),
           };
+          console.log("[Social] Streak incremented, dispatching event for friendId:", friendKeyForStreak, "streak:", updatedStreak.streak || updatedStreak.currentStreakCount);
           window.dispatchEvent(new CustomEvent(STREAK_STORAGE_EVENT, { detail }));
         }
       } catch (incrementError) {
@@ -2514,6 +2876,31 @@ const Social = () => {
   const isSelectedFriendTyping = selectedChat ? !!typingByFriend[selectedChat] : false;
 
   // ✅ Removed debug typing status useEffect - gây spam log
+
+  // Memoize mapped playlist rooms to prevent infinite re-renders
+  const mappedPlaylistRooms = useMemo(() => {
+    return playlistRooms.map(
+      (
+        p: PlaylistLibraryItemDTO & {
+          playlistId?: number;
+          title?: string;
+          ownerName?: string;
+          owner?: string;
+          id?: number;
+        }
+      ) => {
+        const playlistId = typeof p.playlistId === "number" ? p.playlistId : (typeof p.id === "number" ? p.id : 0);
+        const memberCount = playlistCollaboratorCounts[playlistId] ?? 1; // Default to 1 if not loaded yet
+        return {
+          id: playlistId,
+          name: p.name ?? p.title ?? `Playlist ${playlistId}`,
+          coverUrl: p.coverUrl ?? null,
+          ownerName: p.ownerName ?? p.owner ?? null,
+          memberCount, // Total members (owner + collaborators)
+        };
+      }
+    );
+  }, [playlistRooms, playlistCollaboratorCounts]);
 
   // ✅ Merge reactions into messages for selected chat - chỉ merge khi reactionsByMessage thay đổi
   const messagesWithReactions = useMemo(() => {
@@ -3330,6 +3717,7 @@ const Social = () => {
                 friends={friends}
                 messages={messagesWithReactions}
                 unreadByFriend={unreadByFriend}
+                unreadByPlaylist={unreadByPlaylist}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 onFriendSelect={handleFriendSelect}
@@ -3344,6 +3732,16 @@ const Social = () => {
                 isFriendTyping={isSelectedFriendTyping}
                 onReact={handleReact}
                 onDelete={handleDeleteMessage}
+                playlistRooms={mappedPlaylistRooms}
+                onOpenPlaylistChat={(playlistId) => {
+                  // Trong Social, dùng chung giao diện với chat 1:1 trong ChatArea
+                  // Chỉ khi vào PlaylistDetail mới dùng PlaylistChatWindow
+                  const roomKey = `pl_${playlistId}`;
+                  console.log('[Social] Opening playlist chat:', playlistId);
+                  setSelectedChat(roomKey);
+                  // Đảm bảo tab chat được active
+                  setActiveTab("chat");
+                }}
               />
             </TabsContent>
 
@@ -3406,6 +3804,8 @@ const Social = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* PlaylistChatWindow chỉ dùng trong PlaylistDetail, không dùng trong Social */}
 
       <style>{`
         /* Hide scrollbar */

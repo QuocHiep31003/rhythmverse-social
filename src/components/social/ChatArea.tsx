@@ -24,6 +24,7 @@ interface ChatAreaProps {
   friends: Friend[];
   messages: Record<string, Message[]>;
   unreadByFriend?: Record<string, number>;
+  unreadByPlaylist?: Record<string, number>;
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onFriendSelect: (friendId: string) => void;
@@ -38,6 +39,14 @@ interface ChatAreaProps {
   isFriendTyping?: boolean;
   onReact?: (message: Message, emoji: string) => void;
   onDelete?: (message: Message) => Promise<boolean | void> | boolean | void;
+  playlistRooms?: Array<{
+    id: number;
+    name: string;
+    coverUrl?: string | null;
+    ownerName?: string | null;
+    memberCount?: number; // Total members (owner + collaborators)
+  }>;
+  onOpenPlaylistChat?: (playlistId: number) => void;
 }
 
 const formatStreakTimestamp = (timestamp: number): string => {
@@ -88,13 +97,33 @@ export const ChatArea = ({
   loadingFriends,
   meId,
   unreadByFriend = {},
+  unreadByPlaylist = {},
   isFriendTyping = false,
   onReact,
   onDelete,
+  playlistRooms,
+  onOpenPlaylistChat,
 }: ChatAreaProps) => {
   const chatContentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedFriend = friends.find((f) => f.id === selectedChat);
+  // Tìm playlist room khi selectedChat là pl_{playlistId}
+  // playlistRooms đã được map với id là playlistId hoặc id từ object gốc
+  const selectedPlaylistRoom = useMemo(() => {
+    if (!selectedChat?.startsWith("pl_")) return null;
+    if (!playlistRooms || playlistRooms.length === 0) return null;
+    
+    const targetPlaylistId = selectedChat.replace("pl_", "");
+    
+    // playlistRooms đã được map với id là playlistId hoặc id từ object gốc
+    const found = playlistRooms.find((r) => {
+      // r.id đã là playlistId hoặc id từ object gốc (đã được map trong Social.tsx)
+      const playlistId = String(r.id ?? "");
+      return playlistId === targetPlaylistId;
+    });
+    
+    return found || null;
+  }, [selectedChat, playlistRooms]);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [optimisticHiddenMessages, setOptimisticHiddenMessages] = useState<Record<string, Record<string, boolean>>>({});
   const friendUserIdMap = useMemo(() => {
@@ -113,6 +142,13 @@ export const ChatArea = ({
     return selectedChat;
   }, [friendUserIdMap, selectedChat, selectedFriend]);
 
+  const streakManagerOptions = useMemo(
+    () => ({
+      friendName: selectedFriend?.name,
+    }),
+    [selectedFriend?.name],
+  );
+
   const {
     streak,
     isExpired,
@@ -121,9 +157,7 @@ export const ChatArea = ({
     isLoading: streakLoading,
     refreshFromServer,
     forceRefresh,
-  } = useStreakManager(selectedFriendUserKey ?? null, {
-    friendName: selectedFriend?.name,
-  });
+  } = useStreakManager(selectedFriendUserKey ?? null, streakManagerOptions);
   const handleForceRefresh = useCallback(() => {
     void forceRefresh();
   }, [forceRefresh]);
@@ -132,8 +166,11 @@ export const ChatArea = ({
 
   useEffect(() => {
     if (!selectedFriendUserKey) return;
+    // Only refresh if it's a friend chat (not playlist room)
+    if (selectedChat?.startsWith("pl_")) return;
     void refreshFromServer();
-  }, [refreshFromServer, selectedFriendUserKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFriendUserKey]);
 
   const visibleMessagesByFriend = useMemo(() => {
     const result: Record<string, Message[]> = {};
@@ -269,7 +306,7 @@ export const ChatArea = ({
     }
   }, [selectedChat, messages]);
 
-  const getLastMessagePreview = (friendId: string, fallbackHandle: string) => {
+  const getLastMessagePreview = useCallback((friendId: string, fallbackHandle: string) => {
     const friendMessages = getVisibleMessagesForFriend(friendId);
     if (!friendMessages.length) {
       return fallbackHandle || "Bắt đầu trò chuyện";
@@ -299,91 +336,189 @@ export const ChatArea = ({
         ? "Bạn: "
         : "";
     return trimmed ? `${prefix}${trimmed}` : `${prefix}Đã gửi tin nhắn`;
-  };
+  }, [getVisibleMessagesForFriend]);
 
-  const renderFriendsList = () => {
-    // Sắp xếp bạn bè theo tin nhắn mới nhất
-    const sortedFriends = [...friends].sort((a, b) => {
-      const messagesA = getVisibleMessagesForFriend(a.id);
-      const messagesB = getVisibleMessagesForFriend(b.id);
-      
-      // Lấy tin nhắn mới nhất của mỗi bạn
-      const lastMsgA = messagesA.length > 0 
-        ? messagesA[messagesA.length - 1] 
-        : null;
-      const lastMsgB = messagesB.length > 0 
-        ? messagesB[messagesB.length - 1] 
-        : null;
-      
-      if (!lastMsgA && !lastMsgB) return 0; // Không có tin nhắn thì giữ nguyên thứ tự
-      if (!lastMsgA) return 1; // A không có tin nhắn thì xuống cuối
-      if (!lastMsgB) return -1; // B không có tin nhắn thì xuống cuối
-      
-      // So sánh thời gian gửi tin nhắn
-      const timeA = typeof lastMsgA.sentAt === 'number' ? lastMsgA.sentAt : Number(lastMsgA.id) || 0;
-      const timeB = typeof lastMsgB.sentAt === 'number' ? lastMsgB.sentAt : Number(lastMsgB.id) || 0;
-      
-      return timeB - timeA; // Mới nhất lên đầu
+  const renderChatList = useCallback(() => {
+    type ChatListItem =
+      | {
+          kind: "friend";
+          friend: Friend;
+          lastActivity: number;
+        }
+      | {
+          kind: "playlist";
+          room: { id: number; name: string; coverUrl?: string | null; ownerName?: string | null; memberCount?: number };
+          lastActivity: number;
+        };
+
+    const items: ChatListItem[] = [];
+
+    // Bạn bè
+    friends.forEach((friend) => {
+      const messagesForFriend = getVisibleMessagesForFriend(friend.id);
+      let lastActivity = 0;
+      if (messagesForFriend.length > 0) {
+        const lastMsg = messagesForFriend[messagesForFriend.length - 1];
+        lastActivity =
+          typeof lastMsg.sentAt === "number" && Number.isFinite(lastMsg.sentAt)
+            ? lastMsg.sentAt
+            : Number(lastMsg.id) || 0;
+      }
+      items.push({ kind: "friend", friend, lastActivity });
     });
-    
+
+    // Playlist rooms (đã được map trong Social.tsx với id, name, coverUrl, ownerName)
+    if (playlistRooms && playlistRooms.length > 0) {
+      playlistRooms.forEach((room) => {
+        if (!room.id) {
+          return;
+        }
+        const roomKey = `pl_${room.id}`;
+        const roomMessages = messages[roomKey] || [];
+        let lastActivity = 0;
+        if (roomMessages.length > 0) {
+          const lastMsg = roomMessages[roomMessages.length - 1];
+          lastActivity =
+            typeof lastMsg.sentAt === "number" && Number.isFinite(lastMsg.sentAt)
+              ? lastMsg.sentAt
+              : Number(lastMsg.id) || 0;
+        }
+        items.push({
+          kind: "playlist",
+          room: { 
+            id: room.id, 
+            name: room.name, 
+            coverUrl: room.coverUrl ?? null, 
+            ownerName: room.ownerName ?? null,
+            memberCount: room.memberCount,
+          },
+          lastActivity,
+        });
+      });
+    }
+
+    // Sort theo lastActivity (mới nhất lên đầu)
+    items.sort((a, b) => b.lastActivity - a.lastActivity);
+
     return (
       <div className="space-y-0.5">
-        {sortedFriends.map((friend) => {
-          const friendUserKey = friendUserIdMap[friend.id];
-          const friendStreak = friendUserKey ? streaksByFriend[friendUserKey] : undefined;
-          const friendMessages = getVisibleMessagesForFriend(friend.id) || [];
-          const lastMessage = friendMessages.length > 0 ? friendMessages[friendMessages.length - 1] : null;
-          const lastMessageTime = lastMessage?.timestamp || '';
+        {items.map((item) => {
+          if (item.kind === "friend") {
+            const friend = item.friend;
+            const friendUserKey = friendUserIdMap[friend.id];
+            const friendStreak = friendUserKey ? streaksByFriend[friendUserKey] : undefined;
+            const friendMessages = getVisibleMessagesForFriend(friend.id) || [];
+            const lastMessage = friendMessages.length > 0 ? friendMessages[friendMessages.length - 1] : null;
+            const lastMessageTime = lastMessage?.timestamp || "";
+
+            return (
+              <div
+                key={`friend-${friend.id}`}
+                className={cn(
+                  "px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 flex items-center gap-3 hover:bg-muted/50 focus-visible:outline-none",
+                  selectedChat === friend.id && "bg-primary/10 hover:bg-primary/15 border-l-2 border-primary"
+                )}
+                onClick={() => onFriendSelect(friend.id)}
+              >
+                <div className="relative flex-shrink-0">
+                  <Avatar className="w-12 h-12">
+                    <AvatarImage src={friend.avatar} alt={friend.name} />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                      {friend.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  {friend.isOnline && (
+                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="font-semibold text-sm truncate text-foreground">{friend.name}</p>
+                      {friendStreak && friendStreak.streak > 0 && <StreakBadge streak={friendStreak.streak} size="sm" />}
+                    </div>
+                    {lastMessageTime && (
+                      <span className="text-[11px] text-muted-foreground flex-shrink-0">{lastMessageTime}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground truncate flex-1">
+                      {getLastMessagePreview(friend.id, friend.username)}
+                    </p>
+                    {unreadByFriend[friend.id] > 0 && (
+                      <div className="flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
+                        {unreadByFriend[friend.id] > 99 ? "99+" : unreadByFriend[friend.id]}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Playlist room item
+          const room = item.room;
+          const roomKey = `pl_${room.id}`;
+          const isSelected = selectedChat === roomKey;
+          const roomMessages = messages[roomKey] || [];
+          const lastMessage = roomMessages.length > 0 ? roomMessages[roomMessages.length - 1] : null;
+          const lastMessageTime = lastMessage?.timestamp || "";
           
           return (
-        <div
-          key={friend.id}
-          className={cn(
-            "px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 flex items-center gap-3 hover:bg-muted/50 focus-visible:outline-none",
-            selectedChat === friend.id && "bg-primary/10 hover:bg-primary/15 border-l-2 border-primary"
-          )}
-          onClick={() => onFriendSelect(friend.id)}
-        >
+            <div
+              key={`playlist-${room.id}`}
+              className={cn(
+                "px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 flex items-center gap-3 hover:bg-muted/50 focus-visible:outline-none",
+                isSelected && "bg-primary/10 hover:bg-primary/15 border-l-2 border-primary"
+              )}
+              onClick={() => {
+                if (onOpenPlaylistChat) {
+                  onOpenPlaylistChat(room.id);
+                }
+              }}
+            >
               <div className="relative flex-shrink-0">
-                <Avatar className="w-12 h-12">
-                  <AvatarImage src={friend.avatar} alt={friend.name} />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                    {friend.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
+                <Avatar className="w-10 h-10">
+                  {room.coverUrl ? (
+                    <AvatarImage src={room.coverUrl || undefined} alt={room.name} />
+                  ) : (
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                      {String(room.name).charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  )}
                 </Avatar>
-                {friend.isOnline && (
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
-                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 mb-0.5">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <p className="font-semibold text-sm truncate text-foreground">{friend.name}</p>
-                    {friendStreak && friendStreak.streak > 0 && (
-                      <StreakBadge streak={friendStreak.streak} size="sm" />
+                  <p className="font-semibold text-sm truncate text-foreground">{room.name}</p>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {lastMessageTime && (
+                      <span className="text-[11px] text-muted-foreground flex-shrink-0">{lastMessageTime}</span>
+                    )}
+                    {unreadByPlaylist[String(room.id)] > 0 && (
+                      <div className="flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
+                        {unreadByPlaylist[String(room.id)] > 99 ? "99+" : unreadByPlaylist[String(room.id)]}
+                      </div>
                     )}
                   </div>
-                  {lastMessageTime && (
-                    <span className="text-[11px] text-muted-foreground flex-shrink-0">{lastMessageTime}</span>
-                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <p className="text-xs text-muted-foreground truncate flex-1">
-                    {getLastMessagePreview(friend.id, friend.username)}
-                  </p>
-                  {unreadByFriend[friend.id] > 0 && (
-                    <div className="flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
-                      {unreadByFriend[friend.id] > 99 ? "99+" : unreadByFriend[friend.id]}
-                    </div>
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground truncate">
+                  {lastMessage
+                    ? getLastMessagePreview(roomKey, room.name)
+                    : room.ownerName
+                    ? `Collab playlist • ${room.ownerName}`
+                    : "Collab playlist"}
+                </p>
               </div>
             </div>
           );
         })}
       </div>
     );
-  };
+  }, [friends, playlistRooms, selectedChat, unreadByFriend, unreadByPlaylist, friendUserIdMap, streaksByFriend, getVisibleMessagesForFriend, getLastMessagePreview, onFriendSelect, onOpenPlaylistChat, messages]);
 
   const renderMessages = () => {
     if (!selectedChat) return null;
@@ -399,7 +534,16 @@ export const ChatArea = ({
     return (
       <>
         {sortedMessages.map((message, index) => {
-          const senderFriend = message.sender === "You" ? null : friends.find((f) => f.id === selectedChat);
+          // Xử lý playlist room chat: lấy senderAvatar từ message
+          let senderAvatar: string | null = null;
+          if (selectedChat.startsWith("pl_")) {
+            // Playlist room: lấy avatar từ message (senderAvatar từ Firebase)
+            senderAvatar = (message as any).senderAvatar || null;
+          } else {
+            // 1-1 chat: lấy avatar từ friend
+            const senderFriend = message.sender === "You" ? null : friends.find((f) => f.id === selectedChat);
+            senderAvatar = senderFriend?.avatar || null;
+          }
           const previousMessage = index > 0 ? sortedMessages[index - 1] : null;
           return (
             <MessageCard
@@ -408,7 +552,7 @@ export const ChatArea = ({
               playSong={playSong}
               onReact={onReact}
             onDelete={onDelete ? handleDeleteRequest : undefined}
-              senderAvatar={senderFriend?.avatar || null}
+              senderAvatar={senderAvatar}
               meId={meId}
               previousMessage={previousMessage}
             />
@@ -422,9 +566,9 @@ export const ChatArea = ({
   return (
     <div className="grid lg:grid-cols-[360px_1fr] gap-0 h-[calc(100vh-200px)] overflow-hidden text-foreground bg-background">
       {/* Left Panel */}
-      <div className="hidden lg:flex flex-col border-r border-border/50 bg-background dark:bg-background">
+      <div className="hidden lg:flex flex-col border-r border-border/50 bg-background dark:bg-background min-h-0">
         {/* Header with title and icons */}
-        <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-background">
+        <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between bg-background flex-shrink-0">
           <h2 className="text-xl font-semibold text-foreground">Đoạn chat</h2>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full">
@@ -434,7 +578,7 @@ export const ChatArea = ({
         </div>
         
         {/* Search bar */}
-        <div className="px-4 py-3 border-b border-border/50">
+        <div className="px-4 py-3 border-b border-border/50 flex-shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 text-muted-foreground/70 -translate-y-1/2" />
             <Input
@@ -447,20 +591,20 @@ export const ChatArea = ({
         </div>
         
         {/* Tabs */}
-        <div className="px-4 py-2 border-b border-border/50 flex items-center gap-1 bg-background">
+        <div className="px-4 py-2 border-b border-border/50 flex items-center gap-1 bg-background flex-shrink-0">
           <Button variant="ghost" size="sm" className="h-8 px-3 text-sm font-medium rounded-lg bg-primary/10 text-primary">
             Tất cả
           </Button>
         </div>
         
-        {/* Chat list */}
-        <div className="flex-1 overflow-y-auto scrollbar-custom p-2">
+        {/* Chat list (friends + playlist groups chung một list) */}
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-custom p-2">
           {loadingFriends ? (
             <p className="text-sm text-muted-foreground px-4 py-8 text-center">Loading friends...</p>
-          ) : friends.length === 0 ? (
+          ) : friends.length === 0 && (!playlistRooms || playlistRooms.length === 0) ? (
             <p className="text-sm text-muted-foreground px-4 py-8 text-center">{meId ? 'No friends yet.' : 'Login to see your friends.'}</p>
           ) : (
-            renderFriendsList()
+            renderChatList()
           )}
         </div>
       </div>
@@ -474,31 +618,49 @@ export const ChatArea = ({
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="relative flex-shrink-0">
                   <Avatar className="w-10 h-10">
-                    <AvatarImage 
-                      src={selectedFriend?.avatar}
-                      alt={selectedFriend?.name || 'Friend'}
-                    />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                      {selectedFriend?.name
-                        ?.split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
+                    {selectedPlaylistRoom ? (
+                      <>
+                        <AvatarImage 
+                          src={selectedPlaylistRoom.coverUrl || undefined}
+                          alt={selectedPlaylistRoom.name || 'Playlist'}
+                        />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                          {String(selectedPlaylistRoom.name || 'P').charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </>
+                    ) : (
+                      <>
+                        <AvatarImage 
+                          src={selectedFriend?.avatar}
+                          alt={selectedFriend?.name || 'Friend'}
+                        />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+                          {selectedFriend?.name
+                            ?.split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </AvatarFallback>
+                      </>
+                    )}
                   </Avatar>
-                  {selectedFriend?.isOnline && (
+                  {selectedFriend?.isOnline && !selectedPlaylistRoom && (
                     <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-[15px] font-semibold text-foreground truncate">
-                      {selectedFriend?.name}
+                      {selectedPlaylistRoom 
+                        ? selectedPlaylistRoom.name 
+                        : selectedFriend?.name}
                     </h3>
-                    {streak > 0 && <StreakBadge streak={streak} size="sm" />}
+                    {!selectedPlaylistRoom && streak > 0 && <StreakBadge streak={streak} size="sm" />}
                   </div>
                   <div className="space-y-0.5">
                     <p className="text-xs text-muted-foreground">
-                      {selectedFriend?.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
+                      {selectedPlaylistRoom 
+                        ? (selectedPlaylistRoom.ownerName ? `Collab playlist • ${selectedPlaylistRoom.ownerName}` : "Collab playlist")
+                        : (selectedFriend?.isOnline ? "Đang hoạt động" : "Ngoại tuyến")}
                     </p>
                   </div>
                 </div>
@@ -517,6 +679,17 @@ export const ChatArea = ({
             >
               <div className="flex flex-col min-h-full px-2.5 sm:px-3 py-3 pb-4 gap-2">
                 {renderMessages()}
+                {selectedChat && getVisibleMessagesForFriend(selectedChat).length === 0 && (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {selectedPlaylistRoom 
+                          ? `Chưa có tin nhắn nào trong ${selectedPlaylistRoom.name}. Hãy bắt đầu trò chuyện!`
+                          : "Chưa có tin nhắn nào. Hãy bắt đầu trò chuyện!"}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -556,7 +729,7 @@ export const ChatArea = ({
                 {/* Input field */}
                 <div className="flex-1 relative">
                   <Input
-                    placeholder="Nhập tin nhắn..."
+                    placeholder={selectedPlaylistRoom ? `Nhắn gì đó về ${selectedPlaylistRoom.name}…` : "Nhập tin nhắn..."}
                     value={newMessage}
                     onChange={(e) => onMessageChange(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && onSendMessage()}

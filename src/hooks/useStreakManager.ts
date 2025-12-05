@@ -134,17 +134,32 @@ export const useStreakManager = (
   const refreshFromServer = useCallback(
     async (silent = false) => {
       if (!friendId) return;
+      // Validate friendId is a valid number (not a playlist room like "pl_123")
+      const friendIdNum = Number(friendId);
+      if (!Number.isFinite(friendIdNum)) {
+        // Invalid friendId (e.g., playlist room), skip API call
+        return;
+      }
       if (isRefreshingRef.current) return;
       isRefreshingRef.current = true;
       if (!silent) setIsLoading(true);
       try {
-        const dto = await chatStreakApi.getBetween(Number(friendId));
+        const dto = await chatStreakApi.getBetween(friendIdNum);
         const next = mapDtoToStreakState(dto);
         applyState(next);
         saveCache(next.expireAt);
         emitEvent({ friendId, type: "updated", payload: next });
       } catch (error) {
-        console.error("[useStreakManager] Failed to refresh streak:", error);
+        // Don't log error if it's a 404 (no streak exists yet) - this is normal
+        // Also don't log "Invalid friend id" errors as they're expected for playlist rooms
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (
+          !errorMessage.includes("404") &&
+          !errorMessage.includes("Not Found") &&
+          !errorMessage.includes("Invalid friend id")
+        ) {
+          console.error("[useStreakManager] Failed to refresh streak:", error);
+        }
         const fallback = { ...emptyStreakState };
         applyState(fallback);
         clearStreakCache(friendId);
@@ -159,8 +174,14 @@ export const useStreakManager = (
 
   const notifyInteraction = useCallback(async () => {
     if (!friendId) return;
+    // Validate friendId is a valid number (not a playlist room like "pl_123")
+    const friendIdNum = Number(friendId);
+    if (!Number.isFinite(friendIdNum)) {
+      // Invalid friendId (e.g., playlist room), skip API call
+      return;
+    }
     try {
-      const dto = await chatStreakApi.increment(friendId);
+      const dto = await chatStreakApi.increment(friendIdNum);
       const next = mapDtoToStreakState(dto);
       applyState(next, "increment");
       saveCache(next.expireAt);
@@ -185,6 +206,15 @@ export const useStreakManager = (
       return;
     }
 
+    // Validate friendId is a valid number (not a playlist room like "pl_123")
+    const friendIdNum = Number(friendId);
+    if (!Number.isFinite(friendIdNum)) {
+      // Invalid friendId (e.g., playlist room), reset state and skip API call
+      setState({ ...emptyStreakState });
+      setCachedExpireAt(null);
+      return;
+    }
+
     const cache = readStreakCache(friendId);
     setCachedExpireAt(cache?.expireAt ?? null);
     if (isCacheStale(cache, CACHE_TTL_MS)) {
@@ -195,12 +225,20 @@ export const useStreakManager = (
   useEffect(() => {
     const handler = (event: Event) => {
       const custom = event as CustomEvent<StreakEventDetail>;
-      if (!custom.detail || custom.detail.friendId !== friendId) return;
+      if (!custom.detail) return;
+      
+      // Debug log to check if event is received
+      if (custom.detail.friendId === friendId) {
+        console.log("[useStreakManager] Received streak event for friendId:", friendId, "type:", custom.detail.type);
+      }
+      
+      if (custom.detail.friendId !== friendId) return;
       if (custom.detail.type === "invalidate") {
         refreshFromServer(true);
         return;
       }
       if (custom.detail.type === "updated" && custom.detail.payload) {
+        console.log("[useStreakManager] Updating streak state:", custom.detail.payload.streak);
         applyState(custom.detail.payload);
         saveCache(custom.detail.payload.expireAt ?? null);
       }
