@@ -85,8 +85,8 @@ const ArtistDetail = () => {
     navigate(`/artist/${artistId}`);
   };
 
-  const handleAlbumClick = (albumId: number, albumName?: string) => {
-    navigate(`/album/${createSlug(albumName || 'album', albumId)}`);
+  const handleAlbumClick = (albumId: number) => {
+    navigate(`/albums/${albumId}`);
   };
 
   const handlePlayAlbum = (e: React.MouseEvent, albumId: number) => {

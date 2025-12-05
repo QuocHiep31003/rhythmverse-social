@@ -119,6 +119,8 @@ const App = () => (
                     <Route path="/playlist" element={<Playlist />} />
                     <Route path="/playlists" element={<PlaylistLibrary />} />
                     <Route path="/playlist/:slug" element={<PlaylistDetail />} />
+                    <Route path="/album/:slug" element={<AlbumDetail />} />
+                    <Route path="/albums/:slug" element={<AlbumDetail />} />{/* backward compat */}
                     <Route path="/create-playlist" element={<Navigate to="/playlist/create" replace />} />
                     <Route path="/favorites/songs" element={<FavoriteSongs />} />
                     <Route path="/trending" element={<Top100 />} />

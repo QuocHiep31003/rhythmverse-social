@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { mapToPlayerSong } from "@/lib/utils";
-import { parseSlug, createSlug } from "@/utils/playlistUtils";
+import { createSlug } from "@/utils/playlistUtils";
 import { useFavoriteAlbum, useFavoriteSong } from "@/hooks/useFavorites";
 import { favoritesApi } from "@/services/api/favoritesApi";
 import { toast } from "@/hooks/use-toast";
@@ -224,7 +224,7 @@ const AlbumSongRow = ({
 
 /* ========== Component chính ========== */
 const AlbumDetail = () => {
-  const { slug } = useParams<{ slug: string }>();
+  const { id: albumIdParam } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { playSong, togglePlay, isPlaying, currentSong, setQueue } = useMusic();
 
@@ -267,18 +267,10 @@ const AlbumDetail = () => {
     return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
   }, [palette.primary, isDark]);
   const albumNumericId = useMemo(() => {
-    if (album?.id != null) {
-      const numeric = Number(album.id);
-      if (Number.isFinite(numeric)) return numeric;
-    }
-    if (slug) {
-      const parsed = parseSlug(slug);
-      if (parsed.id && Number.isFinite(parsed.id)) {
-        return Number(parsed.id);
-      }
-    }
-    return undefined;
-  }, [album?.id, slug]);
+    const candidate = album?.id ?? albumIdParam;
+    const numeric = Number(candidate);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }, [album?.id, albumIdParam]);
   const {
     isFavorite: isAlbumSaved,
     pending: albumFavoritePending,
@@ -293,12 +285,11 @@ const AlbumDetail = () => {
   /* ========== Fetch album ========== */
   useEffect(() => {
     (async () => {
-      if (!slug) return;
+      if (!albumIdParam) return;
       try {
         setLoading(true);
-        const parsed = parseSlug(slug);
-        const albumId = parsed.id || Number(slug);
-        if (!albumId || isNaN(albumId)) {
+        const albumId = Number(albumIdParam);
+        if (!Number.isFinite(albumId)) {
           navigate('/discover');
           return;
         }
@@ -355,7 +346,7 @@ const AlbumDetail = () => {
         setLoading(false);
       }
     })();
-  }, [slug, navigate]);
+  }, [albumIdParam, navigate]);
 
   /* ========== Play / Pause logic chuẩn ========== */
   const handlePlayAlbum = async () => {
@@ -621,7 +612,7 @@ const AlbumDetail = () => {
             {related.map((rel: any) => (
               <Card
                 key={rel.id}
-                onClick={() => navigate(`/album/${createSlug(rel.name || rel.title || 'album', rel.id)}`)}
+                onClick={() => navigate(`/albums/${rel.id}`)}
                 className="cursor-pointer border-border hover:border-primary/40 bg-card hover:bg-muted/30 transition-all overflow-hidden"
               >
                 <div className="aspect-square overflow-hidden">
@@ -685,11 +676,8 @@ const AlbumDetail = () => {
       <ShareButton
         title={album?.title || "Album"}
         type="album"
-        url={`${window.location.origin}/album/${createSlug(
-          album?.title || album?.name || "album",
-          album?.id ?? (slug ? parseSlug(slug).id : undefined)
-        )}`}
-        albumId={Number(album?.id ?? (slug ? parseSlug(slug).id : undefined))}
+        url={`${window.location.origin}/albums/${album?.id ?? albumIdParam ?? ""}`}
+        albumId={albumNumericId}
         open={shareAlbumOpen}
         onOpenChange={setShareAlbumOpen}
       />

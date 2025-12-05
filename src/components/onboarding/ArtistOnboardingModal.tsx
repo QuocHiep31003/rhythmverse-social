@@ -87,7 +87,7 @@ const ArtistOnboardingModal = ({ open, onCompleted }: ArtistOnboardingModalProps
           setArtistResults(res.content || []);
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Không tải được danh sách nghệ sĩ";
+        const message = error instanceof Error ? error.message : "Failed to load artists list";
         toast.error(message);
       } finally {
         if (!cancelled) {
@@ -129,7 +129,7 @@ const ArtistOnboardingModal = ({ open, onCompleted }: ArtistOnboardingModalProps
 
   const handleSubmit = async () => {
     if (!canSubmit) {
-      toast.error(`Chọn tối thiểu ${MIN_SELECTION} nghệ sĩ`);
+      toast.error(`Please select at least ${MIN_SELECTION} artists`);
       return;
     }
     setSaving(true);
@@ -138,10 +138,10 @@ const ArtistOnboardingModal = ({ open, onCompleted }: ArtistOnboardingModalProps
         artistIds: selectedArtists,
       });
       coldStartStorage.markCompleted();
-      toast.success("Hồ sơ âm nhạc đã được thiết lập! ✨");
+      toast.success("Music profile has been set up! ✨");
       onCompleted?.();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể lưu lựa chọn";
+      const message = error instanceof Error ? error.message : "Failed to save selection";
       toast.error(message);
     } finally {
       setSaving(false);
@@ -158,46 +158,46 @@ const ArtistOnboardingModal = ({ open, onCompleted }: ArtistOnboardingModalProps
         <div className="absolute inset-0 opacity-70 bg-[radial-gradient(circle_at_top,_rgba(147,51,234,0.25),_transparent_55%)]" />
         <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_bottom,_rgba(14,165,233,0.2),_transparent_40%)]" />
       </div>
-      <div className="relative z-10 w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-3xl bg-[#040308] text-white border border-white/10 shadow-2xl p-6 sm:p-10 space-y-8 max-h-[90vh] overflow-hidden">
+      <div className="relative z-10 w-full max-w-4xl px-4 sm:px-6">
+        <div className="rounded-2xl bg-[#040308] text-white border border-white/10 shadow-2xl p-4 sm:p-6 space-y-4 max-h-[85vh] overflow-hidden">
           {loadingSeed ? (
-            <div className="h-[60vh] flex items-center justify-center text-white/70">
-              Đang chuẩn bị trải nghiệm cá nhân hóa...
+            <div className="h-[40vh] flex items-center justify-center text-white/70 text-sm">
+              Preparing personalized experience...
             </div>
           ) : (
             <>
-              <header className="text-center space-y-4">
-                <Badge variant="secondary" className="bg-white/10 text-white border-white/20">
+              <header className="text-center space-y-2">
+                <Badge variant="secondary" className="bg-white/10 text-white border-white/20 text-xs">
                   Welcome to EchoVerse
                 </Badge>
-                <h1 className="text-4xl sm:text-5xl font-semibold">
-                  Hãy chọn tối thiểu {MIN_SELECTION} nghệ sĩ bạn yêu thích
+                <h1 className="text-2xl sm:text-3xl font-semibold">
+                  Select at least {MIN_SELECTION} artists you love
                 </h1>
-                <p className="text-base sm:text-lg text-white/70 max-w-3xl mx-auto">
-                  Chúng tôi sử dụng vector sở thích để đề xuất bài hát chuẩn gu ngay sau khi bạn hoàn tất.
-                  Càng chọn nhiều nghệ sĩ, đề xuất càng chính xác.
+                <p className="text-sm sm:text-base text-white/70 max-w-2xl mx-auto">
+                  We use preference vectors to recommend songs that match your taste right after you finish.
+                  The more artists you select, the more accurate the recommendations.
                 </p>
               </header>
 
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-5 sm:p-7 space-y-6">
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div className="text-sm font-medium tracking-wide text-white/80 flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      Đã chọn {totalSelected} nghệ sĩ
+              <div className="rounded-2xl bg-white/5 border border-white/10 p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="text-xs sm:text-sm font-medium tracking-wide text-white/80 flex items-center gap-2">
+                      <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
+                      {totalSelected} artists selected
                     </div>
                     <Button
                       disabled={!canSubmit}
                       onClick={handleSubmit}
-                      className="rounded-full px-8 text-base font-semibold"
+                      className="rounded-full px-6 text-sm font-semibold"
                     >
-                      {saving ? "Đang lưu..." : "Bắt đầu khám phá"}
+                      {saving ? "Saving..." : "Start Exploring"}
                     </Button>
                   </div>
-                  <Progress value={progressValue} className="h-2 bg-white/10" />
+                  <Progress value={progressValue} className="h-1.5 bg-white/10" />
                   {!canSubmit && (
                     <p className="text-xs text-red-300">
-                      Bạn cần chọn thêm {Math.max(0, MIN_SELECTION - totalSelected)} nghệ sĩ để tiếp tục.
+                      Please select {Math.max(0, MIN_SELECTION - totalSelected)} more artist{Math.max(0, MIN_SELECTION - totalSelected) !== 1 ? 's' : ''} to continue.
                     </p>
                   )}
                 </div>
@@ -241,20 +241,20 @@ const SelectionGrid = <T extends { id: number }>({
   renderCard,
 }: SelectionGridProps<T>) => (
   <div className="space-y-4">
-    <div className="relative max-w-xl">
-      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+    <div className="relative max-w-lg">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/50" />
       <Input
-        placeholder="Tìm kiếm nghệ sĩ, thể loại..."
+        placeholder="Search artists, genres..."
         value={searchValue}
         onChange={(e) => onSearchChange(e.target.value)}
-        className="pl-12 pr-4 py-6 rounded-full bg-white/10 border-white/20 text-white placeholder:text-white/50"
+        className="pl-10 pr-4 py-3 text-sm rounded-full bg-white/10 border-white/20 text-white placeholder:text-white/50"
       />
     </div>
     {loading ? (
       <GridSkeleton />
     ) : (
-      <ScrollArea className="h-[52vh] pr-2">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <ScrollArea className="h-[35vh] sm:h-[40vh] pr-2">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {items.map((item) => renderCard(item))}
         </div>
         {items.length === 0 && <EmptyState />}
@@ -276,27 +276,27 @@ const ArtistCard = ({
   return (
     <button
       onClick={onToggle}
-      className={`relative flex flex-col items-center rounded-3xl border border-white/10 bg-white/5 p-4 text-white transition-all hover:-translate-y-1 hover:border-white/40 ${
+      className={`relative flex flex-col items-center rounded-2xl border border-white/10 bg-white/5 p-3 text-white transition-all hover:-translate-y-1 hover:border-white/40 ${
         selected ? "ring-2 ring-primary ring-offset-2 ring-offset-[#040308]" : ""
       }`}
     >
-      <div className="relative mb-3">
+      <div className="relative mb-2">
         <img
           src={artist.avatar || fallback}
           alt={artist.name}
           onError={(e) => {
             e.currentTarget.src = fallback;
           }}
-          className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border border-white/20"
+          className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border border-white/20"
         />
         {selected && (
-          <span className="absolute -bottom-1 -right-1 bg-primary text-white rounded-full p-1.5">
-            <Check className="h-4 w-4" />
+          <span className="absolute -bottom-1 -right-1 bg-primary text-white rounded-full p-1">
+            <Check className="h-3 w-3" />
           </span>
         )}
       </div>
-      <div className="text-center space-y-1">
-        <p className="font-semibold text-sm sm:text-base leading-tight">{artist.name}</p>
+      <div className="text-center space-y-0.5">
+        <p className="font-semibold text-xs sm:text-sm leading-tight">{artist.name}</p>
         {artist.country && <p className="text-xs text-white/60">{artist.country}</p>}
       </div>
     </button>
@@ -304,19 +304,19 @@ const ArtistCard = ({
 };
 
 const GridSkeleton = () => (
-  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
     {Array.from({ length: 10 }).map((_, idx) => (
-      <div key={idx} className="rounded-3xl border border-white/10 bg-white/5 p-4 flex flex-col items-center gap-3">
-        <Skeleton className="w-20 h-20 rounded-full bg-white/10" />
-        <Skeleton className="h-4 w-24 bg-white/10" />
-        <Skeleton className="h-3 w-16 bg-white/10" />
+      <div key={idx} className="rounded-2xl border border-white/10 bg-white/5 p-3 flex flex-col items-center gap-2">
+        <Skeleton className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/10" />
+        <Skeleton className="h-3 w-20 bg-white/10" />
+        <Skeleton className="h-2 w-14 bg-white/10" />
       </div>
     ))}
   </div>
 );
 
 const EmptyState = () => (
-  <div className="text-center text-white/60 py-10">Không tìm thấy nghệ sĩ phù hợp với từ khóa của bạn</div>
+  <div className="text-center text-white/60 py-8 text-sm">No artists found matching your search</div>
 );
 
 const useDebounce = (value: string, delay: number) => {

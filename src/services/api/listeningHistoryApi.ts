@@ -1,5 +1,5 @@
 import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from './config';
-import { artistsApi } from './artistApi';
+import type { Song } from './songApi';
 
 export interface ListeningHistoryPayload {
   userId: number;
@@ -41,6 +41,15 @@ export interface ListeningHistoryDTO {
       name: string;
     };
   };
+}
+
+export interface ArtistTopSongsResponse {
+  artistId: number;
+  artistName: string;
+  listenCount: number;
+  songs: Song[];
+  fallbackUsed?: boolean;
+  fallbackReason?: string | null;
 }
 
 export const listeningHistoryApi = {
@@ -336,86 +345,50 @@ export const listeningHistoryApi = {
   /**
    * Get top artists from listening history (most listened artists)
    */
+  getTopArtistSongs: async (
+    userId: number,
+    params?: { artists?: number; songLimit?: number; lookbackDays?: number }
+  ): Promise<ArtistTopSongsResponse[]> => {
+    try {
+      const query = new URLSearchParams();
+      if (params?.artists) query.append("artists", params.artists.toString());
+      if (params?.songLimit) query.append("songLimit", params.songLimit.toString());
+      if (params?.lookbackDays) query.append("lookbackDays", params.lookbackDays.toString());
+      const qs = query.toString();
+      const url = `${API_BASE_URL}/listening-history/user/${userId}/top-artist-songs${qs ? `?${qs}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: buildJsonHeaders(),
+      });
+
+      if (!response.ok) {
+        const errorMessage = await parseErrorResponse(response);
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error("❌ Error fetching top artist songs:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Wrapper để giữ backward-compat: chỉ trả danh sách artist (không kèm songs)
+   * nhưng nguồn dữ liệu đã chuyển sang BE.
+   */
   getTopArtists: async (userId: number, limit: number = 3): Promise<Array<{
     artistId: number;
     artistName: string;
     listenCount: number;
   }>> => {
-    try {
-      // Lấy listening history của user
-      const history = await listeningHistoryApi.getByUser(userId, 0, 1000);
-
-      // Đếm số lần nghe theo artist name (vì có thể không có ID)
-      const artistCountsByName = new Map<string, number>();
-
-      history.content.forEach((entry) => {
-        const listenCount = entry.listenCount || 1;
-
-        // Ưu tiên lấy từ song.artists (có ID)
-        if (entry.song?.artists && Array.isArray(entry.song.artists)) {
-          entry.song.artists.forEach((artist: { id: number; name: string }) => {
-            if (artist.name) {
-              const existing = artistCountsByName.get(artist.name) || 0;
-              artistCountsByName.set(artist.name, existing + listenCount);
-            }
-          });
-        }
-
-        // Fallback: sử dụng artistNames nếu có
-        if (entry.artistNames && Array.isArray(entry.artistNames) && entry.artistNames.length > 0) {
-          entry.artistNames.forEach((artistName: string) => {
-            if (artistName && artistName.trim()) {
-              const existing = artistCountsByName.get(artistName.trim()) || 0;
-              artistCountsByName.set(artistName.trim(), existing + listenCount);
-            }
-          });
-        }
-      });
-
-      // Chuyển Map thành Array và sort theo listenCount
-      const topArtistsByName = Array.from(artistCountsByName.entries())
-        .map(([name, count]) => ({
-          artistName: name,
-          listenCount: count,
-        }))
-        .sort((a, b) => b.listenCount - a.listenCount)
-        .slice(0, limit);
-
-      // Tìm artist ID từ name (gọi API search)
-      const topArtists: Array<{
-        artistId: number;
-        artistName: string;
-        listenCount: number;
-      }> = [];
-
-      for (const artist of topArtistsByName) {
-        try {
-          // Tìm artist bằng tên
-          const searchResult = await artistsApi.searchPublicActive(artist.artistName, {
-            page: 0,
-            size: 1,
-          });
-
-          if (searchResult?.content && searchResult.content.length > 0) {
-            const foundArtist = searchResult.content[0];
-            topArtists.push({
-              artistId: foundArtist.id,
-              artistName: artist.artistName,
-              listenCount: artist.listenCount,
-            });
-          } else {
-            // Nếu không tìm thấy, bỏ qua artist này
-            console.warn(`Artist not found: ${artist.artistName}`);
-          }
-        } catch (error) {
-          console.error(`Error searching artist ${artist.artistName}:`, error);
-        }
-      }
-
-      return topArtists;
-    } catch (error) {
-      console.error("❌ Error fetching top artists:", error);
-      return [];
-    }
+    const data = await listeningHistoryApi.getTopArtistSongs(userId, { artists: limit, songLimit: 1 });
+    return (data || []).map((item) => ({
+      artistId: item.artistId,
+      artistName: item.artistName,
+      listenCount: item.listenCount ?? 0,
+    }));
   },
 };

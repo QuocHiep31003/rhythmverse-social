@@ -3,6 +3,7 @@ import { useMusic } from '@/contexts/MusicContext';
 import { mapToPlayerSong } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import type { Song } from '@/services/api/songApi';
+import { clearTokens } from '@/services/api/config';
 
 /**
  * Helper function để phát nhạc đơn giản - chỉ cần gọi /play-now và set song vào context
@@ -141,6 +142,19 @@ export const playSongWithStreamUrl = async (
         return; // KHÔNG phát nhạc ở tab khác
       } catch (error) {
         console.error('[playSongHelper] Lỗi khi gửi command từ tab khác:', error);
+        const errorResponse = error as { response?: { status?: number } };
+        
+        // ✅ Xử lý lỗi 403 (Access Denied) - chưa đăng nhập, redirect về login
+        if (errorResponse?.response?.status === 403) {
+          clearTokens();
+          setTimeout(() => {
+            const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+            const loginUrl = isAdminPage ? '/admin/login' : '/login';
+            window.location.href = `${loginUrl}?message=${encodeURIComponent('Must login to play songs')}`;
+          }, 100);
+          return;
+        }
+        
         toast({
           title: "Lỗi",
           description: "Không thể gửi yêu cầu phát nhạc. Vui lòng thử lại.",
@@ -253,8 +267,25 @@ export const playSongWithStreamUrl = async (
     }
   } catch (error: unknown) {
     console.error('Error playing song:', error);
-    const errorResponse = error as { response?: { data?: { error?: string; success?: boolean } }; message?: string };
+    const errorResponse = error as { response?: { status?: number; data?: { error?: string; success?: boolean; message?: string } }; message?: string };
+    
+    // ✅ Xử lý lỗi 403 (Access Denied) - chưa đăng nhập, redirect về login
+    if (errorResponse?.response?.status === 403) {
+      // Clear tokens và redirect về login với message "must login to play songs"
+      clearTokens();
+      
+      // Đợi một chút rồi redirect
+      setTimeout(() => {
+        const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+        const loginUrl = isAdminPage ? '/admin/login' : '/login';
+        // Thêm query param để hiển thị message
+        window.location.href = `${loginUrl}?message=${encodeURIComponent('Must login to play songs')}`;
+      }, 100);
+      return;
+    }
+    
     const errorMessage = errorResponse?.response?.data?.error 
+      || errorResponse?.response?.data?.message
       || (error instanceof Error ? error.message : 'Không thể phát bài hát');
     
     if (errorMessage.includes('HLS master playlist not found') || 

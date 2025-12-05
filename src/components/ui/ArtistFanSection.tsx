@@ -2,8 +2,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Music, Play, Heart, MoreHorizontal, ListPlus } from "lucide-react";
-import { songsApi, artistsApi } from "@/services/api";
-import { createSlug } from "@/utils/playlistUtils";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
 import type { Song } from "@/services/api/songApi";
@@ -183,94 +181,22 @@ const ArtistFanSection = () => {
       try {
         setLoading(true);
 
-        // Lấy top artists từ listening history
-        let topArtists = await listeningHistoryApi.getTopArtists(userId, 3);
-        
-        // Nếu không có data từ listening history, lấy random artists làm fallback
-        if (topArtists.length === 0) {
-          console.log("⚠️ No listening history, fetching random artists as fallback...");
-          try {
-            const randomArtistsResponse = await artistsApi.getAll({
-              page: 0,
-              size: 3,
-              sort: "id,desc", // Lấy artists mới nhất
-            });
-            if (randomArtistsResponse?.content && randomArtistsResponse.content.length > 0) {
-              const randomArtists = randomArtistsResponse.content.map((artist) => ({
-                artistId: artist.id,
-                artistName: artist.name,
-                listenCount: 0,
-              }));
-              topArtists = randomArtists;
-            }
-          } catch (fallbackError) {
-            console.error("Error fetching fallback artists:", fallbackError);
-          }
-        }
+        const response = await listeningHistoryApi.getTopArtistSongs(userId, {
+          artists: 1,
+          songLimit: 50,
+          lookbackDays: 30,
+        });
 
-        // Nếu vẫn không có artists, return empty
-        if (topArtists.length === 0) {
-          setSections([]);
-          setLoading(false);
-          return;
-        }
-
-        // Với mỗi artist, lấy các bài hát có playCount cao nhất
-        const sectionsData: ArtistFanSectionData[] = [];
-        
-        for (const artist of topArtists) {
-          try {
-            // Lấy 50 songs của artist, sort theo playCount desc
-            const songsResponse = await artistsApi.getSongs(artist.artistId, {
-              page: 0,
-              size: 50,
-              sort: "playCount,desc",
-            });
-
-            let songs = songsResponse?.content || [];
-            
-            // Nếu không có songs từ artist API, thử lấy từ songs API với artistId filter
-            if (songs.length === 0) {
-              const songsResponse2 = await songsApi.getAll({
-                page: 0,
-                size: 50,
-                sort: "playCount,desc",
-                artistId: artist.artistId,
-              });
-              
-              if (songsResponse2?.content && songsResponse2.content.length > 0) {
-                songs = songsResponse2.content;
-              }
-            }
-
-            // Nếu vẫn không có songs, lấy random songs làm fallback
-            if (songs.length === 0) {
-              console.log(`⚠️ No songs from artist ${artist.artistName}, fetching random songs as fallback...`);
-              try {
-                const randomSongsResponse = await songsApi.getPublic({
-                  page: 0,
-                  size: 50,
-                  sort: "playCount,desc",
-                });
-                if (randomSongsResponse?.content && randomSongsResponse.content.length > 0) {
-                  songs = randomSongsResponse.content;
-                }
-              } catch (fallbackError) {
-                console.error("Error fetching fallback songs:", fallbackError);
-              }
-            }
-
-            // Chỉ thêm section nếu có songs
-            if (songs.length > 0) {
-              sectionsData.push({
-                artist,
-                songs,
-              });
-            }
-          } catch (error) {
-            console.error(`Error fetching songs for artist ${artist.artistName}:`, error);
-          }
-        }
+        const sectionsData: ArtistFanSectionData[] = (response || [])
+          .map((item) => ({
+            artist: {
+              artistId: item.artistId,
+              artistName: item.artistName,
+              listenCount: item.listenCount ?? 0,
+            },
+            songs: item.songs || [],
+          }))
+          .filter((section) => section.artist && section.songs.length > 0);
 
         setSections(sectionsData);
       } catch (error) {
@@ -331,9 +257,9 @@ const ArtistFanSection = () => {
   const sectionsWithDisplayedSongs = useMemo(() => {
     return sections.map(section => {
       let displayedSongs = section.songs;
-      if (section.songs.length > 9) {
+      if (section.songs.length > 12) {
         const shuffled = [...section.songs].sort(() => Math.random() - 0.5);
-        displayedSongs = shuffled.slice(0, 9);
+        displayedSongs = shuffled.slice(0, 12);
       }
       return { ...section, displayedSongs };
     });
@@ -424,7 +350,7 @@ const ArtistFanSection = () => {
           </div>
 
           {/* Grid 3x3 */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {section.displayedSongs.length === 0 ? (
               <p className="text-muted-foreground text-sm py-8 col-span-3">
                 No songs available from {section.artist.artistName}

@@ -386,7 +386,16 @@ apiClient.interceptors.response.use(
     }
 
     // ✅ Xử lý lỗi 403 (Access Denied) - Yêu cầu đăng nhập để phát nhạc
+    // ✅ Bỏ qua xử lý cho API phát nhạc (/songs/*/play-now) để playSongHelper.ts xử lý riêng
     if (error.response?.status === 403) {
+      const requestUrl = error.config?.url || '';
+      const isPlayNowEndpoint = requestUrl.includes('/songs/') && requestUrl.includes('/play-now');
+      
+      // Nếu là API phát nhạc, để playSongHelper.ts xử lý riêng (không hiển thị toast ở đây)
+      if (isPlayNowEndpoint) {
+        return Promise.reject(error);
+      }
+      
       const message = error.response.data?.message ||
         error.response.data?.error ||
         'Access Denied';

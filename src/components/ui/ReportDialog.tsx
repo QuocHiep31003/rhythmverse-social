@@ -59,7 +59,7 @@ export const ReportDialog = ({
       if (typeof typeId === 'number') {
         numericTypeId = typeId;
       } else if (typeof typeId === 'string') {
-        const parsed = Number(typeId);
+        const parsed = parseInt(typeId, 10);
         if (isNaN(parsed) || !isFinite(parsed)) {
           toast({
             title: "Lỗi",
@@ -71,6 +71,7 @@ export const ReportDialog = ({
         }
         numericTypeId = parsed;
       } else {
+        console.error('[ReportDialog] Invalid typeId:', typeId, typeof typeId);
         toast({
           title: "Lỗi",
           description: "ID không hợp lệ. Vui lòng thử lại sau.",
@@ -82,6 +83,7 @@ export const ReportDialog = ({
       
       // Validate typeId phải là số nguyên dương
       if (!Number.isInteger(numericTypeId) || numericTypeId <= 0) {
+        console.error('[ReportDialog] Invalid typeId value:', numericTypeId);
         toast({
           title: "Lỗi",
           description: "ID phải là số nguyên dương hợp lệ.",
@@ -98,6 +100,13 @@ export const ReportDialog = ({
         description: description.trim(),
       };
       console.log('[ReportDialog] Submitting report:', reportData);
+      console.log('[ReportDialog] Report data validation:', {
+        type: typeof reportData.type,
+        typeId: typeof reportData.typeId,
+        typeIdValue: reportData.typeId,
+        descriptionLength: reportData.description.length,
+        descriptionPreview: reportData.description.substring(0, 50),
+      });
       
       await reportApi.create(reportData);
 
@@ -110,11 +119,22 @@ export const ReportDialog = ({
       setDescription("");
       onOpenChange(false);
     } catch (error) {
-      console.error("Error submitting report:", error);
+      console.error("[ReportDialog] Error submitting report:", error);
+      console.error("[ReportDialog] Error details:", {
+        error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : (typeof error === 'string' ? error : "Không thể gửi báo cáo. Vui lòng thử lại sau.");
+      
       toast({
         title: "Lỗi",
-        description: error instanceof Error ? error.message : "Không thể gửi báo cáo. Vui lòng thử lại sau.",
+        description: errorMessage,
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setSubmitting(false);

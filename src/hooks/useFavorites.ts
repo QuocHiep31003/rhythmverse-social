@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { favoritesApi, FavoriteError } from "@/services/api/favoritesApi";
 import { toast } from "@/hooks/use-toast";
+import { getAuthToken } from "@/services/api/config";
 
 type ResourceKey = "song" | "playlist" | "album";
 
@@ -74,6 +75,17 @@ const useFavorite = (
       setLoading(false);
       return;
     }
+    
+    // ✅ Nếu chưa đăng nhập, set isFavorite = false và không gọi API, không hiển thị lỗi
+    const token = getAuthToken();
+    if (!token) {
+      setIsFavorite(false);
+      setLoading(false);
+      setError(null);
+      // Không set vào cache để khi đăng nhập có thể check lại
+      return;
+    }
+    
     const cacheValue = caches[resource].get(resolvedId);
     if (cacheValue !== undefined) {
       setIsFavorite(cacheValue);
@@ -99,6 +111,15 @@ const useFavorite = (
           caches[resource].set(resolvedId, false);
           setIsFavorite(false);
           setError(null);
+          return;
+        }
+        // ✅ Lỗi 401 (Unauthorized) - chưa đăng nhập, không hiển thị toast
+        const isUnauthorized = err instanceof FavoriteError && err.status === 401;
+        if (isUnauthorized) {
+          caches[resource].set(resolvedId, false);
+          setIsFavorite(false);
+          setError(null);
+          // Không hiển thị toast cho lỗi 401
           return;
         }
         const message =
@@ -133,6 +154,14 @@ const useFavorite = (
 
   const toggleFavorite = useCallback(async () => {
     if (!resolvedId || pending) return false;
+    
+    // ✅ Nếu chưa đăng nhập, không làm gì cả (nút chỉ để hiển thị cho vui)
+    const token = getAuthToken();
+    if (!token) {
+      // Không hiển thị toast, chỉ return false
+      return false;
+    }
+    
     const next = !isFavorite;
     setIsFavorite(next);
     caches[resource].set(resolvedId, next);
@@ -152,6 +181,14 @@ const useFavorite = (
       return true;
     } catch (err) {
       const status = err instanceof FavoriteError ? err.status : undefined;
+      // ✅ Lỗi 401 (Unauthorized) - chưa đăng nhập, revert state và không hiển thị toast
+      if (status === 401) {
+        setIsFavorite(!next);
+        caches[resource].set(resolvedId, !next);
+        setError(null);
+        // Không hiển thị toast cho lỗi 401
+        return false;
+      }
       if (!next && status === 400) {
         // Treat 400 removal errors as already removed / inaccessible
         caches[resource].set(resolvedId, false);
@@ -191,6 +228,16 @@ const useFavorite = (
 
   const refreshStatus = useCallback(async () => {
     if (!resolvedId) return false;
+    
+    // ✅ Nếu chưa đăng nhập, set isFavorite = false và không gọi API
+    const token = getAuthToken();
+    if (!token) {
+      setIsFavorite(false);
+      setError(null);
+      // Không set vào cache để khi đăng nhập có thể check lại
+      return false;
+    }
+    
     setLoading(true);
     try {
       const value = await apiByResource[resource].status(resolvedId);
@@ -208,12 +255,21 @@ const useFavorite = (
         setError(null);
         return false;
       }
+      // ✅ Lỗi 401 (Unauthorized) - chưa đăng nhập, không hiển thị toast
+      const isUnauthorized = err instanceof FavoriteError && err.status === 401;
+      if (isUnauthorized) {
+        caches[resource].set(resolvedId, false);
+        setIsFavorite(false);
+        setError(null);
+        // Không hiển thị toast cho lỗi 401
+        return false;
+      }
       const message =
         err instanceof FavoriteError
           ? err.message || "Không thể tải trạng thái yêu thích"
           : (err as Error)?.message ?? "Không thể tải trạng thái yêu thích";
       setError(message);
-      // Chỉ hiển thị toast nếu không phải lỗi 400 (not found)
+      // Chỉ hiển thị toast nếu không phải lỗi 400 (not found) hoặc 401 (unauthorized)
       if (!options?.disableToast) {
         showToast("Không thể tải trạng thái yêu thích", message, "destructive");
       }
