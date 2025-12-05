@@ -13,6 +13,7 @@ import { watchNotifications, type NotificationDTO } from "@/services/firebase/no
 import { subscribeTempNotification } from "@/utils/notificationBus";
 import { BellRing, CheckCircle2, Share2, UserPlus, Users, AlertTriangle, Ban, Crown, Flame, AlarmClock } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { createSlug } from "@/utils/playlistUtils";
 
 const MAX_DROPDOWN_ITEMS = 5;
 
@@ -96,6 +97,11 @@ const typeMeta: Record<
     icon: Flame,
     badge: "border-rose-500/40 bg-rose-500/12 text-rose-700 dark:text-rose-100",
   },
+  COLLAB_ADDED: {
+    label: "Added to collaboration",
+    icon: Users,
+    badge: "border-blue-500/30 bg-blue-500/12 text-blue-700 dark:text-blue-100",
+  },
   DEFAULT: {
     label: "Notification",
     icon: BellRing,
@@ -170,6 +176,10 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
       const playlistName = meta?.playlistName || "a playlist";
       return `declined your collaboration invite on "${playlistName}"`;
     }
+    case "COLLAB_ADDED": {
+      const playlistName = meta?.playlistName || "a playlist";
+      return `added you collab on Playlist "${playlistName}"`;
+    }
     case "SHARE": {
       const title =
         meta?.playlistName ||
@@ -181,8 +191,8 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
     }
     case "PLAYLIST_WARNED": {
       const playlistName = meta?.playlistName || "a playlist";
-      const warningCount = (meta as any)?.warningCount || 0;
-      const warningReason = (meta as any)?.warningReason || "";
+      const warningCount = (meta as { warningCount?: number })?.warningCount || 0;
+      const warningReason = (meta as { warningReason?: string })?.warningReason || "";
       if (warningReason) {
         return `Playlist "${playlistName}" received a warning (${warningCount}/3): ${warningReason}`;
       }
@@ -190,7 +200,7 @@ const getNotificationDescription = (notification: NotificationDTO): string => {
     }
     case "PLAYLIST_BANNED": {
       const playlistName = meta?.playlistName || "a playlist";
-      const banReason = (meta as any)?.banReason || "";
+      const banReason = (meta as { banReason?: string })?.banReason || "";
       if (banReason) {
         return `Playlist "${playlistName}" was removed from the system. Reason: ${banReason}`;
       }
@@ -250,6 +260,7 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const navigate = useNavigate();
   const itemsRef = useRef<NotificationDTO[]>([]); // ✅ Ref để persist
+  const [unreadFriendRequests, setUnreadFriendRequests] = useState(0);
 
   const resolvedUserId = useMemo(() => {
     if (typeof userId === "number" && Number.isFinite(userId)) {
@@ -283,6 +294,9 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
       // ✅ Update cả state và ref để persist - HIỂN THỊ TẤT CẢ, KHÔNG DEDUPLICATE
       setItems(safe);
       itemsRef.current = safe;
+      setUnreadFriendRequests(
+        safe.filter((n) => n.type === "FRIEND_REQUEST" && n.read !== true).length
+      );
     });
     return () => {
       try {
@@ -386,6 +400,28 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
             Đã từ chối
           </Badge>
         );
+      case "COLLAB_ADDED":
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="rounded-full border-primary/50 text-primary hover:bg-primary/10 dark:hover:bg-primary/15 h-7 px-3"
+            onClick={withStop(() => {
+              const meta = (n.metadata || {}) as { playlistId?: number; playlistName?: string };
+              onClose?.();
+              if (meta?.playlistId && meta?.playlistName) {
+                const slug = createSlug(meta.playlistName, meta.playlistId);
+                navigate(`/playlist/${slug}`);
+              } else if (meta?.playlistId) {
+                navigate(`/playlists/${meta.playlistId}`);
+              } else {
+                navigate('/playlists');
+              }
+            })}
+          >
+            View playlist
+          </Button>
+        );
       case "SHARE":
         return (
           <Button
@@ -417,7 +453,17 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
   return (
     <DropdownMenuContent align="end" className="w-[420px] p-0 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-        <div className="text-sm font-semibold">Thông báo</div>
+        <div className="text-sm font-semibold flex items-center gap-2">
+          Thông báo
+          {unreadFriendRequests > 0 && (
+            <Badge
+              variant="secondary"
+              className="h-5 px-2 rounded-full bg-primary/10 text-primary border border-primary/30"
+            >
+              {unreadFriendRequests > 99 ? "99+" : unreadFriendRequests} lời mời mới
+            </Badge>
+          )}
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -464,6 +510,19 @@ const NotificationsDropdown = ({ userId, onClose }: Props) => {
                     if (t === 'INVITE' || t === 'INVITE_ACCEPTED' || t === 'INVITE_REJECTED') {
                       // Navigate đến social với tab friends, có thể thêm expand invite nếu cần
                       navigate('/social?tab=friends');
+                      return;
+                    }
+                    if (t === 'COLLAB_ADDED') {
+                      // Navigate đến playlist detail
+                      const playlistMeta = meta as { playlistId?: number; playlistName?: string };
+                      if (playlistMeta?.playlistId && playlistMeta?.playlistName) {
+                        const slug = createSlug(playlistMeta.playlistName, playlistMeta.playlistId);
+                        navigate(`/playlist/${slug}`);
+                      } else if (playlistMeta?.playlistId) {
+                        navigate(`/playlists/${playlistMeta.playlistId}`);
+                      } else {
+                        navigate('/playlists');
+                      }
                       return;
                     }
                     if (t === 'SHARE') {

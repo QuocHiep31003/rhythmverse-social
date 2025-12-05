@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Music, Play, MoreHorizontal, ListPlus, Sparkles, Heart } from "lucide-react";
+import { Music, Play, TrendingUp, MoreHorizontal, ListPlus, Heart } from "lucide-react";
 import { songsApi } from "@/services/api";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
 import { useFavoriteSong } from "@/hooks/useFavorites";
+
+interface TopTrendingSectionProps {
+  songs: Song[];
+}
 
 // Component for each song in grid - Horizontal layout
 const SongCard = ({ song, onPlay, onAddToPlaylist, onAddToQueue }: { 
@@ -113,7 +117,7 @@ const SongCard = ({ song, onPlay, onAddToPlaylist, onAddToQueue }: {
   );
 };
 
-const NewReleases = () => {
+const TopTrendingSection = ({ songs: initialSongs }: TopTrendingSectionProps) => {
   const navigate = useNavigate();
   const { playSong, setQueue, addToQueue } = useMusic();
   const [songs, setSongs] = useState<Song[]>([]);
@@ -123,28 +127,27 @@ const NewReleases = () => {
   const [selectedSongTitle, setSelectedSongTitle] = useState<string>("");
   const [selectedSongCover, setSelectedSongCover] = useState<string | undefined>(undefined);
 
-  const fetchNewSongs = useCallback(async () => {
-    try {
-      setLoading(true);
-      // Lấy 50 bài hát mới ra mắt (chỉ ACTIVE), sort theo ngày phát hành
-      const res = await songsApi.getPublic({
-        page: 0,
-        size: 50,
-        sort: "releaseAt,desc", // Ưu tiên sort theo ngày phát hành
-        status: "ACTIVE",
-      });
-      setSongs(res?.content || []);
-    } catch (error) {
-      console.error("Error fetching new releases:", error);
-      setSongs([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchNewSongs();
-  }, [fetchNewSongs]);
+    const fetchSongs = async () => {
+      try {
+        setLoading(true);
+        // Lấy 50 bài trending
+        const top100 = await songsApi.getTop100Trending();
+        setSongs(top100.slice(0, 50));
+      } catch (error) {
+        console.error("Error fetching trending songs:", error);
+        // Fallback về initialSongs nếu có
+        if (initialSongs.length > 0) {
+          setSongs(initialSongs.slice(0, 50));
+        } else {
+          setSongs([]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSongs();
+  }, [initialSongs]);
 
   const getArtistName = (artists: Song["artists"]): string => {
     if (typeof artists === 'string') return artists;
@@ -157,28 +160,18 @@ const NewReleases = () => {
   const handlePlaySong = async (song: Song) => {
     const playerSong = mapToPlayerSong(song);
     // Set queue với tất cả 50 bài
-    const allPlayerSongs = songs.map((s) =>
-      mapToPlayerSong({
-        ...s,
-        songName: getSongName(s),
-      })
-    );
+    const allPlayerSongs = songs.map(s => mapToPlayerSong(s));
     await setQueue(allPlayerSongs);
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
     await playSongWithStreamUrl(playerSong, playSong);
   };
 
   const handlePlayAll = async () => {
-    if (!songs.length) return;
-    const queue = songs.map((s) =>
-      mapToPlayerSong({
-        ...s,
-        songName: getSongName(s),
-      })
-    );
-    await setQueue(queue);
+    if (songs.length === 0) return;
+    const allPlayerSongs = songs.map(s => mapToPlayerSong(s));
+    await setQueue(allPlayerSongs);
     const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-    await playSongWithStreamUrl(queue[0], playSong);
+    await playSongWithStreamUrl(allPlayerSongs[0], playSong);
   };
 
   // Lấy 9 bài random từ danh sách để hiển thị
@@ -199,16 +192,20 @@ const NewReleases = () => {
     return song.songName || song.name || "Unknown Song";
   };
 
+  if (songs.length === 0 && !loading) {
+    return null;
+  }
+
   return (
     <section className="mb-12">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-6 h-6 text-primary" />
+          <TrendingUp className="w-6 h-6 text-primary" />
           <div>
-            <h2 className="text-2xl font-bold text-foreground">New Releases</h2>
+            <h2 className="text-2xl font-bold text-foreground">Nghe nhiều nhất gần đây</h2>
             <p className="text-xs text-muted-foreground">
-              Bài hát mới phát hành gần đây
+              Top bài hát đang hot trong tuần này
             </p>
           </div>
         </div>
@@ -242,7 +239,7 @@ const NewReleases = () => {
       ) : displayedSongs.length === 0 ? (
         <div className="text-center py-10">
           <p className="text-muted-foreground text-sm mb-3">
-            Hiện chưa có bài hát mới nào được phát hành.
+            Không có bài hát trending nào
           </p>
           <Button variant="outline" size="sm" onClick={() => navigate("/discover")}>
             Discover now
@@ -269,7 +266,7 @@ const NewReleases = () => {
           ))}
         </div>
       )}
-
+      
       {/* Add to Playlist Dialog */}
       {selectedSongId && (
         <AddToPlaylistDialog
@@ -284,5 +281,5 @@ const NewReleases = () => {
   );
 };
 
-export default NewReleases;
+export default TopTrendingSection;
 

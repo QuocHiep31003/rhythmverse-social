@@ -559,13 +559,7 @@ const AdminSongs = () => {
                           {currentPage * pageSize + index + 1}
                         </TableCell>
                         <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span>{song.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {song.releaseYear ? `Release year: ${song.releaseYear}` : "Unknown"}
-                              {song.duration ? ` • ${song.duration}` : ""}
-                            </span>
-                          </div>
+                          <span>{song.name || song.songName || song.title || "Unknown Song"}</span>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {getArtistsDisplay(song) || "—"}

@@ -316,9 +316,20 @@ export function parseIncomingContent(m: ChatMessageDTO, friends: Friend[]): Mess
   })();
   const timestamp = new Date(sentAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-  // System messages từ backend: sharedContentType = TEXT và senderId = 0 hoặc content được đánh dấu đặc biệt
-  // Ta map sang type = "system" để render khác trong UI.
-  if (m.sharedContentType === "TEXT" && (m.senderId === 0 || m.senderId == null)) {
+  const rawTypeLower = typeof (m as { type?: unknown }).type === "string" ? ((m as { type?: string }).type || "").toLowerCase() : "";
+  const senderNameLower = typeof (m as { senderName?: unknown }).senderName === "string" ? ((m as { senderName?: string }).senderName || "").toLowerCase() : "";
+  const sharedContentTypeUpper = typeof m.sharedContentType === "string" ? m.sharedContentType.toUpperCase() : undefined;
+  const contentTrimmed = content.trim();
+
+  // System messages từ backend hoặc Firebase: đánh dấu rõ bằng type/sharedContentType/senderId/senderName
+  if (
+    rawTypeLower === "system" ||
+    sharedContentTypeUpper === "SYSTEM" ||
+    (m.sharedContentType === "TEXT" && (m.senderId === 0 || m.senderId == null)) ||
+    senderNameLower === "system" ||
+    contentTrimmed.startsWith("[SYSTEM]") ||
+    contentTrimmed.toLowerCase().startsWith("system:")
+  ) {
     type = "system";
   }
 

@@ -5,13 +5,9 @@ import { Slider } from "@/components/ui/slider";
 import { Play, Pause, Volume2, VolumeX, MoreHorizontal, SkipForward, SkipBack, Repeat, Repeat1, Shuffle, GripVertical, X, List, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMusic, type Song } from "@/contexts/MusicContext";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { getSongDisplay } from "@/lib/songDisplay";
+import QueueSidebar from "@/components/QueueSidebar";
 
 // QueueItem component
 const QueueItem = memo(({ 
@@ -371,8 +367,8 @@ const VolumeControl = memo(({
 
 VolumeControl.displayName = 'VolumeControl';
 
-// QueueMenu component
-const QueueMenu = memo(({
+// Queue panel bên phải cho mini player
+const QueuePanel = memo(({
   queue,
   currentSongId,
   showQueue,
@@ -420,31 +416,31 @@ const QueueMenu = memo(({
   };
 
   return (
-    <DropdownMenu open={showQueue} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
+    <Sheet open={showQueue} onOpenChange={onOpenChange}>
+      <SheetTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
           className="h-9 w-9"
-          title="Danh sách chờ"
+          title="Danh sách phát"
         >
           <List className="w-5 h-5" />
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className="w-[30rem] max-w-[calc(100vw-2rem)] max-h-[700px] overflow-hidden flex flex-col z-[9999]"
+      </SheetTrigger>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-md p-0 flex flex-col border-l border-border bg-background z-[9999]"
       >
-        <div className="px-4 py-3 border-b">
-          <div className="text-sm font-semibold">Danh sách chờ</div>
-          <div className="text-xs text-muted-foreground mt-1">
-            {queue.length} {queue.length === 1 ? 'bài hát' : 'bài hát'}
-          </div>
-        </div>
+        <SheetHeader className="px-4 py-3 border-b border-border text-left">
+          <SheetTitle className="text-base font-semibold">Danh sách phát</SheetTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            {queue.length === 0 ? "Danh sách chờ trống" : `${queue.length} bài hát trong hàng chờ`}
+          </p>
+        </SheetHeader>
         <div className="overflow-y-auto flex-1">
           {queue.length === 0 ? (
             <div className="px-4 py-8 text-sm text-muted-foreground text-center">
-              Danh sách chờ trống
+              Thêm vài bài hát để bắt đầu nghe nhé.
             </div>
           ) : (
             <div className="py-2">
@@ -473,12 +469,12 @@ const QueueMenu = memo(({
             </div>
           )}
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </SheetContent>
+    </Sheet>
   );
 });
 
-QueueMenu.displayName = 'QueueMenu';
+QueuePanel.displayName = 'QueuePanel';
 
 interface PlayerState {
   songId: string | number | null;
@@ -646,13 +642,31 @@ const ControlMusicPlayer = () => {
           }));
         }
       } else if (data.type === "MAIN_TAB_CLOSED") {
-        // Tab chính đã đóng → set flag "no main tab"
-        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_CLOSED, không còn tab đang phát');
+        // Tab chính đã đóng → set flag "no main tab" và cập nhật state với thông tin từ tab chính
+        console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_CLOSED, không còn tab đang phát, cập nhật state với thông tin từ tab chính');
         noMainTabRef.current = true;
+        
+        // Cập nhật state với thông tin đầy đủ từ tab chính (bao gồm song, queue, currentTime, duration, isPlaying)
         setLocalState(prev => ({
           ...prev,
-          isPlaying: false,
+          songId: data.song?.id || prev.songId,
+          currentTime: (data.currentTime !== undefined && data.currentTime !== null && data.currentTime >= 0) 
+            ? data.currentTime 
+            : prev.currentTime,
+          duration: (data.duration !== undefined && data.duration !== null && data.duration > 0)
+            ? data.duration
+            : prev.duration,
+          isPlaying: false, // Luôn set false vì tab chính đã đóng
+          songTitle: data.song?.title || data.song?.name || data.song?.songName || prev.songTitle,
+          songArtist: data.song?.artist || prev.songArtist,
+          songCover: data.song?.cover || prev.songCover,
+          queue: data.queue || prev.queue,
         }));
+        
+        // Cập nhật songIdRef để track bài hát hiện tại
+        if (data.song?.id) {
+          songIdRef.current = data.song.id;
+        }
       } else if (data.type === "MAIN_TAB_ACTIVE") {
         // Tab chính mới đã bắt đầu phát nhạc → set flag
         console.log('[ControlMusicPlayer] Nhận được MAIN_TAB_ACTIVE, đã có tab đang phát mới');
@@ -1244,7 +1258,7 @@ const ControlMusicPlayer = () => {
             />
           </div>
 
-          {/* Volume, Lyrics và Queue - Bên phải */}
+          {/* Volume + Lyrics + Queue panel - Bên phải */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <VolumeControl
               volume={localState.volume || 1}
@@ -1253,17 +1267,17 @@ const ControlMusicPlayer = () => {
               onToggleMute={handleToggleMute}
             />
 
-            {/* Lyrics Button */}
+            {/* Nút mic lyrics dễ thương */}
             {currentSong && (
               <DropdownMenu open={showLyrics} onOpenChange={setShowLyrics}>
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9"
+                    className="h-9 w-9 rounded-full bg-gradient-to-br from-pink-500/25 via-fuchsia-500/20 to-purple-500/25 border border-pink-400/50 text-pink-100 shadow-[0_0_14px_rgba(236,72,153,0.7)] hover:bg-pink-500/35 hover:text-white transition-all"
                     title="Lời bài hát"
                   >
-                    <Mic className="w-5 h-5" />
+                    <Mic className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[420px] max-h-[500px] overflow-y-auto">
@@ -1284,18 +1298,37 @@ const ControlMusicPlayer = () => {
               </DropdownMenu>
             )}
 
-            <QueueMenu
-              queue={localState.queue || []}
-              currentSongId={localState.songId}
-              showQueue={showQueue}
-              onOpenChange={setShowQueue}
-              onPlaySong={handlePlaySong}
-              onRemoveFromQueue={handleRemoveFromQueue}
-              moveQueueItem={handleMoveQueueItem}
-            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              title="Danh sách chờ"
+              onClick={() => setShowQueue(!showQueue)}
+            >
+              <List className="w-5 h-5" />
+            </Button>
           </div>
         </div>
       </div>
+
+      {/* Queue Sidebar */}
+      <QueueSidebar 
+        isOpen={showQueue} 
+        onClose={() => setShowQueue(false)}
+        customQueue={localState.queue?.map(q => ({
+          id: String(q.id),
+          name: q.title || q.name || q.songName || "Unknown Song",
+          songName: q.title || q.name || q.songName || "Unknown Song",
+          title: q.title || q.name || q.songName || "Unknown Song",
+          artist: q.artist || "Unknown Artist",
+          album: "",
+          duration: 0,
+          cover: q.cover || "",
+        }))}
+        customCurrentSongId={localState.songId}
+        onPlaySong={handlePlaySong}
+        onRemoveFromQueue={handleRemoveFromQueue}
+      />
     </div>
   );
 };

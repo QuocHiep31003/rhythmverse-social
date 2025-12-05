@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Users, Music, ListMusic, TrendingUp, X, BarChart3 } from "lucide-react";
-import { mockSongs, mockUsers } from "@/data/mockData";
 import { dashboardApi } from "@/services/api/dashboardApi";
 import type { DashboardStatsResponse, DashboardMetricDTO, TimeSeriesPointDTO } from "@/types/dashboard";
 import { useCountUp } from "@/hooks/useCountUp";
@@ -412,53 +411,20 @@ const AdminHome = () => {
         <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
             <CardTitle>Popular Songs</CardTitle>
-            <CardDescription>Top 5 most played</CardDescription>
+            <CardDescription>Top 5 most played (data từ backend)</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {mockSongs.slice(0, 5).map((song, index) => (
-              <div key={song.id} className="flex items-center gap-4 p-2 hover:bg-[hsl(var(--admin-border))] rounded">
-                <span className="text-2xl font-bold text-[hsl(var(--admin-primary))] w-8">
-                  {index + 1}
-                </span>
-                <img
-                  src={song.cover}
-                  onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR_URL)}
-                  className="w-12 h-12 rounded object-cover"
-                />
-                <div className="flex-1">
-                  <p className="font-medium truncate">{song.title}</p>
-                  <p className="text-sm text-muted-foreground truncate">{song.artist}</p>
-                </div>
-                <span className="text-sm font-medium text-[hsl(var(--admin-accent))]">
-                  {song.plays}
-                </span>
-              </div>
-            ))}
+          <CardContent className="flex items-center justify-center h-[340px] text-sm text-muted-foreground">
+            <p>Popular songs sẽ hiển thị dựa trên dữ liệu thật từ backend (dashboard API).</p>
           </CardContent>
         </Card>
 
         <Card className="border-[hsl(var(--admin-border))] bg-[hsl(var(--admin-card))]">
           <CardHeader>
             <CardTitle>New Users</CardTitle>
-            <CardDescription>Recently registered users</CardDescription>
+            <CardDescription>Recently registered users (data từ backend)</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {mockUsers.map((user) => (
-              <div key={user.id} className="flex items-center gap-4 p-2 hover:bg-[hsl(var(--admin-border))] rounded">
-                <img
-                  src={user.avatar}
-                  onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR_URL)}
-                  className="w-10 h-10 rounded-full"
-                />
-                <div className="flex-1">
-                  <p className="font-medium truncate">{user.name}</p>
-                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-gradient-admin text-white">
-                  {user.role}
-                </span>
-              </div>
-            ))}
+          <CardContent className="flex items-center justify-center h-[340px] text-sm text-muted-foreground">
+            <p>Danh sách user mới sẽ hiển thị khi backend cung cấp dữ liệu tương ứng.</p>
           </CardContent>
         </Card>
       </div>

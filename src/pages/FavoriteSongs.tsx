@@ -417,9 +417,11 @@ const FavoriteSongs = () => {
     setSongs((prev) => prev.filter((item) => String(item.id) !== String(songId)));
   };
 
-  const handleOpenSongDetail = (song: FavoriteSongDTO) => {
-    const slug = createSlug(song.name ?? song.title ?? "song", song.id);
-    navigate(`/song/${slug}`);
+  const handleOpenSongDetail = async (song: FavoriteSongDTO) => {
+    const index = songs.findIndex(s => s.id === song.id);
+    if (index >= 0) {
+      handlePlaySong(index);
+    }
   };
 
   return (
@@ -836,15 +838,6 @@ const FavoriteSongRow = ({
             >
               <Share2 className="w-4 h-4 mr-2" />
               Share
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDetail();
-              }}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              View details
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

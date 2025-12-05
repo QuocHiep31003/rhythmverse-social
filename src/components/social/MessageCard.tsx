@@ -124,9 +124,9 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
           <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Xóa tin nhắn</AlertDialogTitle>
+                <AlertDialogTitle>Thu hồi tin nhắn</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Bạn có chắc muốn xóa tin nhắn này? Hành động này không thể hoàn tác.
+                  Bạn có chắc muốn thu hồi tin nhắn này? Tin nhắn sẽ biến mất khỏi cuộc trò chuyện của cả hai bên.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -138,7 +138,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
                   }}
                   className="bg-destructive hover:bg-destructive/90"
                 >
-                  Xóa
+                  Thu hồi
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -579,14 +579,26 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
     }
   };
 
-  // System messages: hiển thị trung tâm, không avatar/bubble trái phải
+  // System messages: hiển thị trung tâm, không avatar/bubble trái phải, KHÔNG reaction
   if (message.type === "system") {
     const text = decodeUnicodeEscapes(message.content);
     return (
-      <div className="flex justify-center my-3">
-        <span className="px-3 py-1.5 text-[12px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full">
-          {text}
-        </span>
+      <div 
+        className="flex justify-center items-center w-full my-3 -mx-2.5 sm:-mx-3 relative group"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          setEmojiPickerOpen(false);
+        }}
+      >
+        <div className="relative flex items-center gap-2">
+          {/* System message content */}
+          <div className="relative flex flex-col items-center">
+            <span className="px-3 py-1.5 text-[12px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full text-center inline-block">
+              {text}
+            </span>
+          </div>
+        </div>
       </div>
     );
   }

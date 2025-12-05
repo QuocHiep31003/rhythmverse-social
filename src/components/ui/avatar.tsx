@@ -18,9 +18,33 @@ Avatar.displayName = AvatarPrimitive.Root.displayName;
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
   React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image ref={ref} className={cn("aspect-square h-full w-full", className)} {...props} />
-));
+>(({ className, onError, src, ...props }, ref) => {
+  // Filter out invalid or expired Facebook CDN URLs to reduce 403 errors
+  const isValidSrc = src && typeof src === 'string' && src.trim() !== '';
+  
+  // If src is invalid, don't render the image (Radix will show fallback)
+  if (!isValidSrc) {
+    return null;
+  }
+
+  return (
+    <AvatarPrimitive.Image
+      ref={ref}
+      className={cn("aspect-square h-full w-full", className)}
+      src={src}
+      onError={(e) => {
+        // Silently handle image loading errors (e.g., 403 from Facebook CDN)
+        // Radix UI will automatically show AvatarFallback
+        // Note: Network errors (403, 404) will still appear in console
+        // but this is expected behavior and doesn't affect UX
+        if (onError) {
+          onError(e);
+        }
+      }}
+      {...props}
+    />
+  );
+});
 AvatarImage.displayName = AvatarPrimitive.Image.displayName;
 
 const AvatarFallback = React.forwardRef<

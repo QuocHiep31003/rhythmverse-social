@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useTheme } from "next-themes";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,9 @@ import { useFeatureLimit } from "@/hooks/useFeatureLimit";
 import { FeatureLimitType, FeatureName } from "@/services/api/featureUsageApi";
 import { FeatureLimitModal } from "@/components/FeatureLimitModal";
 import "./PlaylistDetail.css";
+import { PlaylistChatWindow } from "@/components/playlist/PlaylistChatWindow";
+import { PlaylistChatHead } from "@/components/playlist/PlaylistChatHead";
+import { chatApi } from "@/services/api/chatApi";
 
 const getTitleFontClass = (length: number) => {
   // Responsive font-size theo d? d�i t�n playlist
@@ -114,9 +118,14 @@ const useDebounceValue = (value: string, delay: number) => {
 const PlaylistDetail = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const { playSong, setQueue, isPlaying, currentSong, togglePlay } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PlaylistState | null>(null);
+  const [searching, setSearching] = useState(false);
+  const debouncedSearchQuery = useDebounceValue(searchQuery, 500);
   const [loading, setLoading] = useState<boolean>(true);
   const [playlist, setPlaylist] = useState<PlaylistState | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -176,6 +185,8 @@ const PlaylistDetail = () => {
   } | null>(null);
   const [playlistLikeCount, setPlaylistLikeCount] = useState<number | null>(null);
   const [sharePlaylistOpen, setSharePlaylistOpen] = useState(false);
+  const [playlistChatOpen, setPlaylistChatOpen] = useState(false);
+  const [playlistChatUnread, setPlaylistChatUnread] = useState(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const defaultTop = "rgb(43, 17, 96)";
   const defaultBottom = "rgb(5, 1, 15)";
@@ -199,6 +210,7 @@ const PlaylistDetail = () => {
   });
 
   const heroGradient = useMemo(() => {
+    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const top = palette?.surfaceTop ?? defaultTop;
     const bottom = palette?.surfaceBottom ?? defaultBottom;
     const glow = "rgba(167, 139, 250, 0.55)";
@@ -208,14 +220,15 @@ const PlaylistDetail = () => {
       radial-gradient(circle at 80% 15%, ${accent}, transparent 45%),
       linear-gradient(180deg, ${top} 0%, ${bottom} 70%, rgba(3,7,18,0.95) 100%)
     `;
-  }, [palette, defaultTop, defaultBottom]);
+  }, [palette, defaultTop, defaultBottom, isDark]);
 
   const pageGradient = useMemo(() => {
+    if (!isDark) return undefined; // Light mode: không dùng gradient từ ảnh
     const primary = palette?.primary ?? defaultPrimary;
     const match = primary.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/i);
     const [r, g, b] = match ? match.slice(1).map(Number) : [168, 85, 247];
     return `linear-gradient(180deg, rgba(${r},${g},${b},0.25) 0%, rgba(14,8,40,0.95) 55%, #030712 100%)`;
-  }, [palette?.primary, defaultPrimary]);
+  }, [palette?.primary, defaultPrimary, isDark]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const collabsLoadAttemptedRef = useRef(false);
   const collaboratorsFetchIdRef = useRef<number | null>(null);
@@ -440,6 +453,17 @@ const PlaylistDetail = () => {
 
     return entries;
   }, [playlist, collaborators, friends, collaboratorAvatars, toAbsoluteUrl, meId]);
+
+  const canOpenPlaylistChat = useMemo(() => {
+    return (
+      !isCreateMode &&
+      typeof playlistNumericId === "number" &&
+      Number.isFinite(playlistNumericId) &&
+      typeof meId === "number" &&
+      Number.isFinite(meId) &&
+      (permissions.isOwner || isCurrentCollaborator)
+    );
+  }, [isCreateMode, playlistNumericId, meId, permissions.isOwner, isCurrentCollaborator]);
 
   // Load recommended songs based on playlist content
   // Uu ti�n: Mood > Genre > Artist
@@ -993,6 +1017,64 @@ const PlaylistDetail = () => {
       unsubscribe();
     };
   }, [meId, playlist?.id, playlist?.title, isCreateMode, navigate]);
+
+  // Search songs trong playlist từ BE
+  useEffect(() => {
+    const searchSongs = async () => {
+      if (!playlistNumericId || !debouncedSearchQuery.trim()) {
+        setSearchResults(null);
+        return;
+      }
+      
+      try {
+        setSearching(true);
+        const data: PlaylistDTO = await playlistsApi.searchSongs(playlistNumericId, debouncedSearchQuery);
+        const extendedData = data as ExtendedPlaylistDTO;
+        const mappedSongs = mapSongsFromResponse(data.songs);
+        
+        const ownerId = data.ownerId ?? data.owner?.id;
+        const normalizeVisibility = (v: unknown): PlaylistVisibility => {
+          const raw = typeof v === 'string' ? v.toUpperCase() : '';
+          if (raw === 'FRIENDS_ONLY') return PlaylistVisibility.FRIENDS_ONLY;
+          if (raw === 'PRIVATE') return PlaylistVisibility.PRIVATE;
+          if (raw === 'PUBLIC') return PlaylistVisibility.PUBLIC;
+          return PlaylistVisibility.PUBLIC;
+        };
+        const visibility = normalizeVisibility((data as PlaylistDTO).visibility);
+        
+        const ownerName = extendedData?.owner?.name 
+          ?? (data.owner as { name?: string } | undefined)?.name 
+          ?? (data as { ownerName?: string }).ownerName
+          ?? undefined;
+        const ownerAvatar = extendedData?.owner?.avatar 
+          ?? (data.owner as { avatar?: string | null } | undefined)?.avatar 
+          ?? (data as { ownerAvatar?: string | null }).ownerAvatar
+          ?? null;
+        
+        const playlistCover = data.coverUrl || extendedData.urlImagePlaylist || null;
+        setSearchResults({
+          id: data.id,
+          title: data.name,
+          description: data.description || '',
+          cover: playlistCover,
+          ownerName,
+          ownerAvatar,
+          ownerId,
+          visibility,
+          totalSongs: Array.isArray(data.songs) ? data.songs.length : (Array.isArray(data.songIds) ? data.songIds.length : mappedSongs.length || null),
+          updatedAt: extendedData?.dateUpdate || null,
+          songs: mappedSongs,
+        });
+      } catch (error) {
+        console.error('Failed to search songs:', error);
+        setSearchResults(null);
+      } finally {
+        setSearching(false);
+      }
+    };
+    
+    searchSongs();
+  }, [debouncedSearchQuery, playlistNumericId]);
   
   useEffect(() => {
     const load = async () => {
@@ -1606,7 +1688,11 @@ const PlaylistDetail = () => {
     try {
       await playlistsApi.addSong(playlist.id, songId);
       toast({ title: 'Added', description: 'Song added to playlist' });
-      
+
+      // Reload playlist from backend to sync contributor info (avatar, name, etc.)
+      // This ensures the "added by" avatar/name matches what you see after a full reload.
+      await reloadPlaylist();
+
       // Remove the added song from recommended list immediately
       setRecommendedSongs((prev) => {
         const filtered = prev.filter((s) => String(s.id) !== String(songId));
@@ -1990,8 +2076,8 @@ const PlaylistDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen text-white playlist-page-background">
-        <section className="relative overflow-hidden border-b border-white/10">
+      <div className="min-h-screen text-foreground bg-background playlist-page-background">
+        <section className="relative overflow-hidden border-b border-border">
           <div className="absolute inset-0 playlist-hero-overlay" />
           <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col md:flex-row gap-8 md:gap-10 items-center md:items-end">
             <Skeleton className="w-52 h-52 md:w-64 md:h-64 rounded-3xl" />
@@ -2025,7 +2111,7 @@ const PlaylistDetail = () => {
                 <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className="bg-card/50 text-foreground border-border hover:bg-muted"
                     disabled={!permissions.canEdit}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2093,7 +2179,7 @@ const PlaylistDetail = () => {
               </Dialog>
               <Button
                 variant="outline"
-                className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                className="bg-card/50 text-foreground border-border hover:bg-muted"
                 onClick={() => {
                   if (!permissions.isOwner) {
                     toast({
@@ -2127,7 +2213,7 @@ const PlaylistDetail = () => {
         <div className="container mx-auto max-w-6xl px-4 md:px-8 py-8">
           <Card className="border-border/50 bg-card/50 backdrop-blur">
             <CardContent className="p-0">
-              <div className="px-6 py-3 border-b border-white/10">
+              <div className="px-6 py-3 border-b border-border">
                 <Skeleton className="h-4 w-full" />
               </div>
               <div className="space-y-2 px-6 py-4">
@@ -2143,9 +2229,15 @@ const PlaylistDetail = () => {
   }
 
   return (
-    <div className="min-h-screen text-white playlist-page-background" style={{ background: pageGradient }}>
-      <section className="relative overflow-hidden border-b border-white/10">
-        <div className="absolute inset-0 playlist-hero-overlay" style={{ backgroundImage: heroGradient }} />
+    <div 
+      className="min-h-screen text-foreground bg-background playlist-page-background" 
+      style={isDark && pageGradient ? { background: pageGradient } : undefined}
+    >
+      <section className="relative overflow-hidden border-b border-border">
+        <div 
+          className="absolute inset-0 playlist-hero-overlay" 
+          style={isDark ? { backgroundImage: heroGradient } : undefined} 
+        />
         <div className="relative container mx-auto max-w-6xl px-4 md:px-8 py-12 md:py-16 flex flex-col lg:flex-row gap-8 md:gap-10 items-center md:items-end">
           <div className="flex-shrink-0">
             <div
@@ -2198,7 +2290,7 @@ const PlaylistDetail = () => {
                 }
                 return (
                   <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center music-placeholder">
-                    <Music className="w-24 h-24 text-white/80" />
+                    <Music className="w-24 h-24 text-muted-foreground" />
                   </div>
                 );
               })()}
@@ -2778,7 +2870,7 @@ const PlaylistDetail = () => {
                 {permissions.canEdit && (
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className="bg-card/50 text-foreground border-border hover:bg-muted"
                     onClick={() => setAddDialogOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -2791,7 +2883,7 @@ const PlaylistDetail = () => {
                  (playlist as any)?.type !== "SYSTEM_PERSONALIZED" && (
                   <Button
                     variant="outline"
-                    className="bg-white/5 text-white border-white/20 hover:bg-white/10"
+                    className="bg-card/50 text-foreground border-border hover:bg-muted"
                     onClick={() => setCollabOpen(true)}
                   >
                     <Users className="w-4 h-4 mr-2" />
@@ -2862,35 +2954,63 @@ const PlaylistDetail = () => {
               className={`text-white/80 hover:text-white ${isPlaylistSaved ? "text-red-500" : ""}`}
               onClick={togglePlaylistFavorite}
               disabled={!playlistNumericId || playlistFavoritePending || playlistFavoriteLoading}
-              aria-label={isPlaylistSaved ? "�� luu playlist n�y" : "Luu playlist v�o thu vi?n"}
+              aria-label={isPlaylistSaved ? "Đã lưu playlist này" : "Lưu playlist vào thư viện"}
             >
               <Heart className={`w-5 h-5 ${isPlaylistSaved ? "fill-current" : ""}`} />
             </Button>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? 'opacity-50 cursor-not-allowed' : ''}`}
-              disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
-              onClick={() => {
-                if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
-                  toast({
-                    title: "Cannot share",
-                    description: "Your playlist is private",
-                    variant: "destructive",
-                  });
-                } else {
-                  setSharePlaylistOpen(true);
-                }
-              }}
-            >
-              <Share2 className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
-              <Download className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
-              <MoreHorizontal className="w-5 h-5" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`text-white/80 hover:text-white ${playlist?.visibility === PlaylistVisibility.PRIVATE ? "opacity-50 cursor-not-allowed" : ""}`}
+                    disabled={playlist?.visibility === PlaylistVisibility.PRIVATE}
+                    onClick={() => {
+                      if (playlist?.visibility === PlaylistVisibility.PRIVATE) {
+                        toast({
+                          title: "Cannot share",
+                          description: "Your playlist is private",
+                          variant: "destructive",
+                        });
+                      } else {
+                        setSharePlaylistOpen(true);
+                      }
+                    }}
+                  >
+                    <Share2 className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+                    <Download className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="text-white/80 hover:text-white" onClick={handlePlaylistActionComingSoon}>
+                    <MoreHorizontal className="w-5 h-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>More options</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            {/* Nút Open Collab Chat được thay bằng bong bóng chat nổi PlaylistChatHead */}
           </div>
         </div>
       </section>
@@ -2909,7 +3029,30 @@ const PlaylistDetail = () => {
             </div>
 
             <div className="space-y-2">
-              {(playlist?.songs || []).filter(s => !hiddenSongIds.includes(s.id)).map((song, index) => {
+              {(() => {
+                // Sử dụng searchResults nếu có search query, nếu không dùng playlist gốc
+                const currentPlaylist = debouncedSearchQuery.trim() ? searchResults : playlist;
+                const allSongs = (currentPlaylist?.songs || []).filter(s => !hiddenSongIds.includes(s.id));
+                
+                // Hiển thị loading khi đang search
+                if (searching && debouncedSearchQuery.trim()) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">Searching...</p>
+                    </div>
+                  );
+                }
+                
+                // Hiển thị message nếu không tìm thấy
+                if (debouncedSearchQuery.trim() && allSongs.length === 0 && !searching) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">No songs found matching "{debouncedSearchQuery}"</p>
+                    </div>
+                  );
+                }
+                
+                return allSongs.map((song, index) => {
                 // L?y avatar c?a ngu?i ThÃªm bÃ i hÃ¡t t? friends list
                 let addedByAvatar: string | null = null;
                 if ((song as { addedById?: number }).addedById && friends.length > 0) {
@@ -2941,7 +3084,8 @@ const PlaylistDetail = () => {
                     meId={meId}
                   />
                 );
-              })}
+              });
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -2971,9 +3115,24 @@ const PlaylistDetail = () => {
               
               <div className="space-y-2">
                 {loadingRecommended ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                  </div>
+                  <>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={`recommend-skeleton-${i}`}
+                        className="flex items-center gap-4 p-3 rounded-lg"
+                      >
+                        <Skeleton className="w-12 h-12 rounded-lg flex-shrink-0 bg-muted dark:bg-white/5" />
+                        <div className="flex-1 min-w-0">
+                          <Skeleton className="h-4 w-3/4 mb-2 bg-muted dark:bg-white/5" />
+                          <Skeleton className="h-3 w-1/2 bg-muted dark:bg-white/5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <Skeleton className="h-3 w-2/3 bg-muted dark:bg-white/5" />
+                        </div>
+                        <Skeleton className="h-9 w-16 rounded-md bg-muted dark:bg-white/5" />
+                      </div>
+                    ))}
+                  </>
                 ) : recommendedSongs.length === 0 ? (
                   <div className="flex items-center justify-center py-8 text-muted-foreground">
                     <p className="text-sm">No suggestions yet. Tap "Find more" to fetch fresh picks.</p>
@@ -3143,6 +3302,42 @@ const PlaylistDetail = () => {
       />
 
       <Footer />
+      {canOpenPlaylistChat && playlistNumericId && typeof meId === "number" && Number.isFinite(meId) && (
+        <>
+          {playlistChatOpen && (
+            <PlaylistChatWindow
+              playlistId={playlistNumericId}
+              playlistName={displayTitle}
+              coverUrl={playlist?.coverUrl}
+              ownerName={ownerDisplayName}
+              memberCount={collaboratorEntries.length || 1}
+              meId={meId}
+              onClose={() => {
+                setPlaylistChatOpen(false);
+              }}
+              onNewMessage={() => {
+                setPlaylistChatUnread((prev) => (playlistChatOpen ? 0 : prev + 1));
+              }}
+              onReact={async (messageId, emoji) => {
+                try {
+                  await chatApi.toggleReaction(messageId, emoji, meId);
+                } catch (e) {
+                  console.error("[PlaylistDetail] Failed to react:", e);
+                }
+              }}
+            />
+          )}
+          <PlaylistChatHead
+            name={displayTitle}
+            coverUrl={playlist?.coverUrl}
+            unreadCount={playlistChatOpen ? 0 : playlistChatUnread}
+            onClick={() => {
+              setPlaylistChatOpen((open) => !open);
+              setPlaylistChatUnread(0);
+            }}
+          />
+        </>
+      )}
       
       {selectedSongForPlaylist && (
         <AddToPlaylistDialog

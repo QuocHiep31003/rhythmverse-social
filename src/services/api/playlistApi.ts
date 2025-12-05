@@ -123,11 +123,12 @@ export const playlistsApi = {
 
   // Lấy tất cả playlists của user (owned + collaborated)
   // GET /api/playlists/library
-  // ĐÃ MỞ RỘNG: hỗ trợ search/visibility (khi backend implement)
-  library: async (params?: { search?: string; visibility?: string }) => {
+  // ĐÃ MỞ RỘNG: hỗ trợ search/visibility/sort (khi backend implement)
+  library: async (params?: { search?: string; visibility?: string; sort?: string }) => {
     const qp = new URLSearchParams();
     if (params?.search) qp.append("search", params.search);
     if (params?.visibility) qp.append("visibility", params.visibility);
+    if (params?.sort) qp.append("sort", params.sort);
 
     const qs = qp.toString();
     const url = qs
@@ -399,6 +400,17 @@ export const playlistsApi = {
     });
     if (!res.ok) throw new Error(await parseErrorResponse(res));
     try { return await res.text(); } catch { return "Imported"; }
+  },
+
+  // Search songs trong playlist
+  searchSongs: async (playlistId: number | string, searchQuery: string) => {
+    const qs = new URLSearchParams({ search: searchQuery });
+    const res = await fetch(`${API_BASE_URL}/playlists/${playlistId}/songs/search?${qs.toString()}`, {
+      method: "GET",
+      headers: buildJsonHeaders(),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    return (await res.json()) as PlaylistDTO;
   },
 };
 

@@ -5,6 +5,7 @@ export interface SearchSongResult {
   id: number;
   name: string;
   artists?: Array<{ id?: number; name: string }>;
+  artistNames?: string[];
   album?: { id?: number; name: string } | null;
   urlImageAlbum?: string;
   audioUrl?: string;
