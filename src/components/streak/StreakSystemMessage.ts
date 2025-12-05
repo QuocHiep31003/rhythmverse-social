@@ -18,7 +18,7 @@ export const StreakWarningMessage = ({
     content: `⏳ Your streak with ${friendName} is about to expire. Just send a message to keep your connection active 💬`,
     timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     sentAt: Date.now(),
-    type: 'text',
+    type: 'system',
     reactions: [],
   } as Message;
 };
@@ -30,7 +30,7 @@ export const StreakExpiredMessage = (friendName: string) => {
     content: `Your streak with ${friendName} has ended. Start messaging to build a new one! 🔄`,
     timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     sentAt: Date.now(),
-    type: 'text',
+    type: 'system',
     reactions: [],
   } as Message;
 };
@@ -42,7 +42,7 @@ export const StreakStartedMessage = (friendName: string, currentStreak: number) 
     content: `🔥 New streak started with ${friendName}! ${currentStreak === 1 ? "Let's keep it going!" : `You're on day ${currentStreak} now!`}`,
     timestamp: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     sentAt: Date.now(),
-    type: 'text',
+    type: 'system',
     reactions: [],
   } as Message;
 };

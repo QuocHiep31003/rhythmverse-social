@@ -27,23 +27,23 @@ export const PlaylistChatHead = ({
       onClick={onClick}
       className={cn(
         "fixed bottom-28 right-6 z-40 flex items-center justify-center",
-        "h-14 w-14 rounded-full shadow-2xl border border-border/60",
+        "h-12 w-12 rounded-full shadow-2xl border border-border/60",
         "bg-background/90 backdrop-blur-md hover:bg-background/100 transition-colors"
       )}
       aria-label={`Open chat for playlist ${name}`}
     >
       <div className="relative">
-        <Avatar className="h-12 w-12 border border-border/70 shadow-md">
+        <Avatar className="h-10 w-10 border border-border/70 shadow-md">
           {coverUrl ? (
             <AvatarImage src={coverUrl || undefined} alt={name} />
           ) : (
-            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
               {name.charAt(0).toUpperCase()}
             </AvatarFallback>
           )}
         </Avatar>
         {badge && (
-          <div className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold flex items-center justify-center shadow-lg">
+          <div className="absolute -top-0.5 -right-0.5 min-w-[18px] h-4 px-1 rounded-full bg-destructive text-destructive-foreground text-[9px] font-semibold flex items-center justify-center shadow-lg">
             {badge}
           </div>
         )}

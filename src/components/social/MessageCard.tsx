@@ -582,6 +582,7 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
   // System messages: hiển thị trung tâm, không avatar/bubble trái phải, KHÔNG reaction
   if (message.type === "system") {
     const text = decodeUnicodeEscapes(message.content);
+    const timestamp = message.timestamp || (message.sentAt ? new Date(message.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '');
     return (
       <div 
         className="flex justify-center items-center w-full my-3 -mx-2.5 sm:-mx-3 relative group"
@@ -591,7 +592,15 @@ export const MessageCard = ({ message, playSong, onReact, onDelete, reactionOpti
           setEmojiPickerOpen(false);
         }}
       >
-        <div className="relative flex items-center gap-2">
+        <div className="relative flex flex-col items-center gap-1">
+          {/* Timestamp above system message - chỉ hiển thị khi hover */}
+          {timestamp && (
+            <span className={`text-[10px] text-muted-foreground/70 transition-opacity duration-200 ${
+              isHovered ? "opacity-100" : "opacity-0"
+            }`}>
+              {timestamp}
+            </span>
+          )}
           {/* System message content */}
           <div className="relative flex flex-col items-center">
             <span className="px-3 py-1.5 text-[12px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full text-center inline-block">

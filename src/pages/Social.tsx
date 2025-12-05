@@ -2898,28 +2898,34 @@ const Social = () => {
   // ✅ Removed debug typing status useEffect - gây spam log
 
   // Memoize mapped playlist rooms to prevent infinite re-renders
+  // Chỉ hiển thị group chat khi có >=2 thành viên
   const mappedPlaylistRooms = useMemo(() => {
-    return playlistRooms.map(
-      (
-        p: PlaylistLibraryItemDTO & {
-          playlistId?: number;
-          title?: string;
-          ownerName?: string;
-          owner?: string;
-          id?: number;
+    return playlistRooms
+      .map(
+        (
+          p: PlaylistLibraryItemDTO & {
+            playlistId?: number;
+            title?: string;
+            ownerName?: string;
+            owner?: string;
+            id?: number;
+          }
+        ) => {
+          const playlistId = typeof p.playlistId === "number" ? p.playlistId : (typeof p.id === "number" ? p.id : 0);
+          const memberCount = playlistCollaboratorCounts[playlistId] ?? 1; // Default to 1 if not loaded yet
+          return {
+            id: playlistId,
+            name: p.name ?? p.title ?? `Playlist ${playlistId}`,
+            coverUrl: p.coverUrl ?? null,
+            ownerName: p.ownerName ?? p.owner ?? null,
+            memberCount, // Total members (owner + collaborators)
+          };
         }
-      ) => {
-        const playlistId = typeof p.playlistId === "number" ? p.playlistId : (typeof p.id === "number" ? p.id : 0);
-        const memberCount = playlistCollaboratorCounts[playlistId] ?? 1; // Default to 1 if not loaded yet
-        return {
-          id: playlistId,
-          name: p.name ?? p.title ?? `Playlist ${playlistId}`,
-          coverUrl: p.coverUrl ?? null,
-          ownerName: p.ownerName ?? p.owner ?? null,
-          memberCount, // Total members (owner + collaborators)
-        };
-      }
-    );
+      )
+      .filter((room) => {
+        // Chỉ hiển thị group chat khi có >=2 thành viên
+        return room.memberCount >= 2;
+      });
   }, [playlistRooms, playlistCollaboratorCounts]);
 
   // ✅ Merge reactions into messages for selected chat - chỉ merge khi reactionsByMessage thay đổi
@@ -2967,6 +2973,30 @@ const Social = () => {
 
     if (!currentSong || !selectedChat || !meId) return;
 
+    // Xử lý share song vào playlist group chat
+    if (selectedChat.startsWith("pl_")) {
+      const playlistId = Number(selectedChat.replace("pl_", ""));
+      if (!Number.isFinite(playlistId)) {
+        console.warn("[Social] Cannot resolve playlist id for share:", selectedChat);
+        return;
+      }
+      const numericSongId = resolveSongNumericId(currentSong);
+      if (!numericSongId || !Number.isFinite(numericSongId)) {
+        console.warn("[Social] Cannot share song - invalid id:", currentSong.id);
+        pushBubble("Không thể chia sẻ bài hát này", "error");
+        return;
+      }
+      try {
+        await playlistChatApi.shareSong(playlistId, meId, numericSongId);
+        console.log("[Social] Song shared to playlist group chat successfully");
+      } catch (e) {
+        console.error("[Social] Failed to share song to playlist group:", e);
+        pushBubble("Không thể chia sẻ bài hát vào group chat", "error");
+      }
+      return;
+    }
+
+    // Xử lý share song vào 1-1 chat
     const receiverId = Number(selectedChat);
     const now = Date.now();
     const tempId = `temp-share-${now}`;
