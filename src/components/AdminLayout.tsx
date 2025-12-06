@@ -26,8 +26,20 @@ const AdminLayout = ({ children }: AdminLayoutProps) => {
     }
 
     const isAuthenticated = localStorage.getItem("adminAuth");
+    
+    // Handle /admin path (redirect to home or login)
+    if (location.pathname === "/admin") {
+      if (isAuthenticated) {
+        navigate("/admin/home", { replace: true });
+      } else {
+        navigate("/admin/login", { replace: true });
+      }
+      return;
+    }
+    
+    // Redirect to login if not authenticated (except login page)
     if (!isAuthenticated && location.pathname !== "/admin/login") {
-      navigate("/admin/login");
+      navigate("/admin/login", { replace: true });
     }
   }, [navigate, location]);
 

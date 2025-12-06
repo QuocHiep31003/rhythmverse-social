@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -677,10 +677,14 @@ const Login = () => {
                 By signing in, you agree to our{" "}
                 <Button variant="link" className="p-0 h-auto text-sm" asChild>
                   <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a>
-                </Button>{" "}
-                and{" "}
+                </Button>
+                {", "}
                 <Button variant="link" className="p-0 h-auto text-sm" asChild>
                   <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                </Button>
+                {" and "}
+                <Button variant="link" className="p-0 h-auto text-sm" asChild>
+                  <Link to="/data-deletion" target="_blank" rel="noopener noreferrer">Data Deletion Policy</Link>
                 </Button>
               </p>
             </div>

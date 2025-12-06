@@ -107,6 +107,15 @@ const PrivacyPolicy = () => {
               <li>Withdraw consent at any time</li>
               <li>Opt-out of marketing communications</li>
             </ul>
+            <p className="text-muted-foreground leading-relaxed mt-4">
+              For detailed information about how to request data deletion, please visit our{" "}
+              <Link 
+                to="/data-deletion"
+                className="text-primary hover:underline"
+              >
+                Data Deletion Policy
+              </Link>.
+            </p>
           </section>
 
           <section>
