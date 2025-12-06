@@ -246,11 +246,54 @@ export const playlistChatApi = {
       throw new Error(errorMsg);
     }
   },
-  startListening: async (playlistId: number, hostId: number, songId: number, positionMs: number, playing: boolean): Promise<void> => {
-    try {
-      await apiClient.post('/playlist-chat/listening/start', { playlistId, hostId, songId, positionMs, playing });
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to start listening';
+  shareAlbum: async (playlistId: number, senderId: number, albumId: number): Promise<void> => {
+    const payload = {
+      playlistId,
+      senderId,
+      sharedType: "ALBUM",
+      sharedContentId: albumId,
+    };
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/send`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error("[playlistChatApi] shareAlbum error:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  sharePlaylist: async (playlistId: number, senderId: number, sharedPlaylistId: number): Promise<void> => {
+    const payload = {
+      playlistId,
+      senderId,
+      sharedType: "PLAYLIST",
+      sharedContentId: sharedPlaylistId,
+    };
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/send`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error("[playlistChatApi] sharePlaylist error:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  startListening: async (playlistId: number, hostId: number, songId: number, positionMs: number, playing: boolean, initialQueue?: number[]): Promise<void> => {
+    const payload: any = { playlistId, hostId, songId, positionMs, playing };
+    if (initialQueue && initialQueue.length > 0) {
+      payload.initialQueue = initialQueue;
+    }
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/start`, {
+      method: "POST",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
       console.error("[playlistChatApi] startListening error:", errorMsg);
       throw new Error(errorMsg);
     }
@@ -297,6 +340,19 @@ export const playlistChatApi = {
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to mark room as read';
       console.error("[playlistChatApi] markRoomAsRead error:", errorMsg);
+      throw new Error(errorMsg);
+    }
+  },
+  removeFromQueue: async (playlistId: number, songId: number): Promise<void> => {
+    const payload = { playlistId, songId };
+    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/queue/${songId}`, {
+      method: "DELETE",
+      headers: buildJsonHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const errorMsg = await parseErrorResponse(res);
+      console.error("[playlistChatApi] removeFromQueue error:", errorMsg);
       throw new Error(errorMsg);
     }
   },

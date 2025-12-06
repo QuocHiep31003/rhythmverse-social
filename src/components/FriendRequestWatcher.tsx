@@ -8,6 +8,7 @@ const FriendRequestWatcher = () => {
   const [enabled, setEnabled] = useState(false);
   const lastCountRef = useRef<number>(0);
   const lastRequestIdsRef = useRef<Set<number>>(new Set());
+  const initializedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -43,7 +44,8 @@ const FriendRequestWatcher = () => {
           return typeof id === 'number' && Number.isFinite(id) && !lastRequestIdsRef.current.has(id);
         });
         
-        if (newRequests.length > 0 && lastRequestIdsRef.current.size > 0) {
+        const shouldAnnounce = initializedRef.current;
+        if (newRequests.length > 0 && shouldAnnounce) {
           // Có friend request mới - tạo notification tạm thời cho mỗi request mới
           newRequests.forEach((request: any) => {
             const senderId = typeof request.senderId === 'number' ? request.senderId : 0;
@@ -77,6 +79,7 @@ const FriendRequestWatcher = () => {
         // Cập nhật lastCountRef và lastRequestIdsRef
         lastCountRef.current = count;
         lastRequestIdsRef.current = currentRequestIds;
+        initializedRef.current = true;
       } catch {
         // bỏ qua lỗi lặp
       }

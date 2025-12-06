@@ -224,7 +224,10 @@ const sortedFeatures = useMemo(() => {
                       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left">
                         <p className="text-xs uppercase tracking-wide text-white/50 mb-1">Amount paid</p>
                         <p className="text-2xl font-semibold text-white">
-                          {formatCurrency(orderDetail.planPriceSnapshot ?? orderDetail.amount)}
+                          {formatCurrency(
+                            orderDetail.planPriceSnapshot ?? orderDetail.amount,
+                            orderDetail.planCurrencySnapshot ?? orderDetail.currency
+                          )}
                         </p>
                       </div>
 

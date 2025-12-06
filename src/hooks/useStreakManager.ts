@@ -72,30 +72,39 @@ export const useStreakManager = (
   const applyState = useCallback(
     (next: StreakState, source: "fetch" | "increment" = "fetch") => {
       const prev = previousStateRef.current;
+      
+      // Nếu đây là lần đầu load (prev chưa được khởi tạo), chỉ cập nhật state, không trigger events
+      const isInitialLoad = prev.streak === 0 && prev.expireAt === null && prev.lastInteraction === null && !prev.isActive;
+      
       previousStateRef.current = next;
       setState(next);
 
-      const streakIncreased = next.streak > prev.streak;
-      // Chỉ coi là "bắt đầu chuỗi" khi trước đó chưa có streak (0) và bây giờ > 0
-      if (options?.onStreakStarted && streakIncreased && prev.streak === 0 && next.streak > 0) {
-        options.onStreakStarted(friendLabel, next.streak);
-      }
-
-      // Nếu trước đó đang có streak và bây giờ mất (streak về 0 hoặc isActive false) -> coi như expired
-      if (
-        options?.onStreakExpired &&
-        !expiredRef.current &&
-        prev.streak > 0 &&
-        (next.streak === 0 || !next.isActive)
-      ) {
-        expiredRef.current = true;
-        options.onStreakExpired(friendLabel);
+      // Bỏ qua tất cả events nếu đây là lần đầu load (tránh hiển thị messages không mong muốn)
+      if (isInitialLoad && source === "fetch") {
+        // Chỉ cập nhật refs để track state, không trigger callbacks
+        if (next.streak > 0 && next.isActive) {
+          expiredRef.current = false;
+          const expireAt = next.expireAt;
+          if (expireAt) {
+            const now = Date.now();
+            const hoursRemaining = Math.ceil((expireAt - now) / (1000 * 60 * 60));
+            if (hoursRemaining > 0 && hoursRemaining <= 4) {
+              const key = `${friendId ?? "friend"}:${next.lastInteraction ?? "none"}:${expireAt}`;
+              warningKeyRef.current = key;
+            } else {
+              warningKeyRef.current = null;
+            }
+          }
+        }
+        return;
       }
 
       const expireAt = next.expireAt;
       const now = Date.now();
+      
+      // Kiểm tra expired trước (khi expireAt <= now hoặc streak về 0)
       if (expireAt !== null && expireAt <= now) {
-        if (!expiredRef.current) {
+        if (!expiredRef.current && prev.streak > 0) {
           expiredRef.current = true;
           options?.onStreakExpired?.(friendLabel);
         }
@@ -103,14 +112,45 @@ export const useStreakManager = (
         return;
       }
 
-      expiredRef.current = false;
-      if (expireAt) {
+      // Kiểm tra streak về 0 hoặc isActive = false (chỉ khi trước đó có streak)
+      // KHÔNG trigger nếu đây là lần đầu load và streak = 0 (có thể do chưa có streak hoặc đã unfriend)
+      if (
+        options?.onStreakExpired &&
+        !expiredRef.current &&
+        prev.streak > 0 &&
+        (next.streak === 0 || !next.isActive) &&
+        !isInitialLoad // Không trigger expired khi load lần đầu
+      ) {
+        expiredRef.current = true;
+        options.onStreakExpired(friendLabel);
+        warningKeyRef.current = null;
+        return;
+      }
+
+      // Reset expired flag nếu streak đang active và chưa hết hạn
+      if (next.streak > 0 && next.isActive && (expireAt === null || expireAt > now)) {
+        expiredRef.current = false;
+      }
+
+      // Kiểm tra streak started: chỉ khi từ 0 -> >0 và không phải lần đầu load
+      const streakIncreased = next.streak > prev.streak;
+      if (options?.onStreakStarted && streakIncreased && prev.streak === 0 && next.streak > 0 && !isInitialLoad) {
+        options.onStreakStarted(friendLabel, next.streak);
+      }
+
+      // Kiểm tra warning: chỉ khi streak > 0, isActive = true, và còn <= 4 giờ
+      // Chỉ trigger warning khi có thay đổi về expireAt hoặc lastInteraction
+      if (next.streak > 0 && next.isActive && expireAt && expireAt > now) {
         const hoursRemaining = Math.ceil((expireAt - now) / (1000 * 60 * 60));
         if (hoursRemaining > 0 && hoursRemaining <= 4) {
-          const key = `${friendId ?? "friend"}:${next.lastInteraction ?? "none"}`;
+          const key = `${friendId ?? "friend"}:${next.lastInteraction ?? "none"}:${expireAt}`;
+          // Chỉ trigger warning nếu key thay đổi (tránh trigger lại khi refresh)
           if (warningKeyRef.current !== key) {
             warningKeyRef.current = key;
-            options?.onStreakWarning?.(friendLabel, hoursRemaining);
+            // Chỉ trigger warning nếu không phải lần đầu load hoặc có thay đổi thực sự
+            if (!isInitialLoad || prev.expireAt !== expireAt) {
+              options?.onStreakWarning?.(friendLabel, hoursRemaining);
+            }
           }
         } else {
           warningKeyRef.current = null;

@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useMemo, useState, KeyboardEventHandler, useRef } from "react";
-import { X, Music, SendHorizonal, Radio } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  KeyboardEventHandler,
+} from "react";
+import { X, Music, SendHorizonal, Smile, Disc, ListMusic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { watchChatMessagesForRoom, getPlaylistRoomId, type FirebaseMessage, watchListeningSession, type ListeningSession, watchTyping, watchReactions } from "@/services/firebase/chat";
+import {
+  watchChatMessagesForRoom,
+  getPlaylistRoomId,
+  type FirebaseMessage,
+  watchTyping,
+  watchReactions,
+} from "@/services/firebase/chat";
 import { playlistChatApi, chatApi } from "@/services/api/chatApi";
-import { songsApi } from "@/services/api/songApi";
-import { mapToPlayerSong } from "@/lib/utils";
 import { SharedPlaylistCard, SharedAlbumCard, SharedSongCard } from "@/components/social/SharedContentCards";
 import { useMusic, type Song } from "@/contexts/MusicContext";
 
@@ -21,9 +31,11 @@ type PlaylistChatWindowProps = {
   onClose: () => void;
   onNewMessage?: (msg: FirebaseMessage) => void;
   onReact?: (messageId: number, emoji: string) => Promise<void>;
+  currentAlbumId?: number; // For sharing current album
+  currentPlaylistId?: number; // For sharing current playlist (other than this one)
 };
 
-export const PlaylistChatWindow = ({
+export const PlaylistChatWindow: React.FC<PlaylistChatWindowProps> = ({
   playlistId,
   playlistName,
   coverUrl,
@@ -33,19 +45,21 @@ export const PlaylistChatWindow = ({
   onClose,
   onNewMessage,
   onReact,
-}: PlaylistChatWindowProps) => {
+  currentAlbumId,
+  currentPlaylistId,
+}) => {
   const [messages, setMessages] = useState<FirebaseMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const { playSong, currentSong, isPlaying, updatePosition, position } = useMusic();
+  const { playSong, currentSong } = useMusic();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const [listeningSession, setListeningSession] = useState<ListeningSession | null>(null);
   const [typingUsers, setTypingUsers] = useState<Record<number, boolean>>({});
   const [reactions, setReactions] = useState<Record<string, Record<string, { emoji: string; userId: number }>>>({});
 
   const roomId = useMemo(() => getPlaylistRoomId(playlistId), [playlistId]);
 
+  // Subscribe messages
   useEffect(() => {
     let lastMessageKey: string | undefined;
     const unsubscribe = watchChatMessagesForRoom(roomId, (msgs) => {
@@ -61,20 +75,12 @@ export const PlaylistChatWindow = ({
     return () => unsubscribe();
   }, [roomId, onNewMessage]);
 
-  // Watch listening session state for this playlist room
-  useEffect(() => {
-    const unsubscribe = watchListeningSession(roomId, setListeningSession);
-    return () => unsubscribe();
-  }, [roomId]);
-
-  // Scroll luôn xuống cuối khi mở cửa sổ hoặc khi có tin nhắn mới
+  // Auto scroll
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ block: "end" });
-    }
+    messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length]);
 
   const handleSend = useCallback(async () => {
@@ -108,216 +114,39 @@ export const PlaylistChatWindow = ({
     }
   }, [currentSong, sending, playlistId, meId]);
 
-  const handleSuggestCurrentSong = useCallback(async () => {
-    if (!currentSong || sending) return;
-    if (!listeningSession) return;
-    const isHost = Number(meId) === Number(listeningSession.hostId);
-    if (isHost) {
-      // Host không suggest, host tự control
-      return;
-    }
-    const songIdNum = Number(currentSong.id);
-    if (!Number.isFinite(songIdNum)) {
-      console.warn("[PlaylistChatWindow] Cannot suggest current song - invalid id:", currentSong.id);
-      return;
-    }
+  const handleShareCurrentAlbum = useCallback(async () => {
+    if (!currentAlbumId || sending) return;
     setSending(true);
     try {
-      await playlistChatApi.suggestSong(playlistId, meId, songIdNum);
+      await playlistChatApi.shareAlbum(playlistId, meId, currentAlbumId);
     } catch (e) {
-      console.error("[PlaylistChatWindow] Failed to suggest current song:", e);
+      console.error("[PlaylistChatWindow] Failed to share current album:", e);
     } finally {
       setSending(false);
     }
-  }, [currentSong, sending, playlistId, meId, listeningSession]);
+  }, [currentAlbumId, sending, playlistId, meId]);
 
-  const handleStartListening = useCallback(async () => {
-    if (!currentSong) {
-      console.warn("[PlaylistChatWindow] Cannot start listening session - no currentSong");
-      return;
-    }
-    const numericSongId = Number(currentSong.id);
-    if (!Number.isFinite(numericSongId)) {
-      console.warn("[PlaylistChatWindow] Invalid currentSong id for listening session:", currentSong.id);
-      return;
-    }
-    try {
-      const posMs = typeof position === "number" && Number.isFinite(position) ? position : 0;
-      await playlistChatApi.startListening(playlistId, meId, numericSongId, posMs, true);
-    } catch (e) {
-      console.error("[PlaylistChatWindow] Failed to start listening session:", e);
-    }
-  }, [playlistId, meId, currentSong, position]);
-
-  const handleJoinListening = useCallback(async () => {
-    if (!listeningSession) return;
-    try {
-      await playlistChatApi.joinListening(playlistId, meId);
-    } catch (e) {
-      console.error("[PlaylistChatWindow] Failed to join listening session:", e);
-    }
-  }, [playlistId, meId, listeningSession]);
-
-  const handleLeaveListening = useCallback(async () => {
-    if (!listeningSession) return;
-    try {
-      await playlistChatApi.leaveListening(playlistId, meId);
-    } catch (e) {
-      console.error("[PlaylistChatWindow] Failed to leave listening session:", e);
-    }
-  }, [playlistId, meId, listeningSession]);
-
-  const handleStopListening = useCallback(async () => {
-    if (!listeningSession) return;
-    try {
-      await playlistChatApi.stopListening(playlistId, meId);
-    } catch (e) {
-      console.error("[PlaylistChatWindow] Failed to stop listening session:", e);
-    }
-  }, [playlistId, meId, listeningSession]);
-
-  // Nếu đang là host của session, tự broadcast state mới mỗi khi đổi bài / play-pause / position
-  useEffect(() => {
-    const syncAsHost = async () => {
-      if (!listeningSession) return;
-      const isHost = Number(meId) === Number(listeningSession.hostId);
-      if (!isHost) return;
-
-      if (!currentSong) return;
-
-      const songId = Number(currentSong.id);
-      if (!Number.isFinite(songId)) return;
-
-      const currentSongIdInSession = typeof listeningSession.songId === "number"
-        ? listeningSession.songId
-        : Number(listeningSession.songId || 0);
-      const changedSong = !Number.isFinite(currentSongIdInSession) || currentSongIdInSession !== songId;
-      const changedPlaying = Boolean(listeningSession.isPlaying) !== Boolean(isPlaying);
-      
-      // Broadcast position mỗi 1 giây khi đang phát
-      const posMs = typeof position === "number" && Number.isFinite(position) ? position : 0;
-      const positionChanged = Math.abs((listeningSession.positionMs ?? 0) - posMs) > 1000; // Chỉ update nếu khác > 1s
-
-      if (!changedSong && !changedPlaying && !positionChanged) return;
-
+  const handleShareCurrentPlaylist = useCallback(async () => {
+    if (!currentPlaylistId || sending || currentPlaylistId === playlistId) return;
+    setSending(true);
       try {
-        await playlistChatApi.startListening(playlistId, meId, songId, posMs, Boolean(isPlaying));
-      } catch (e) {
-        console.error("[PlaylistChatWindow] Failed to sync listening state as host:", e);
-      }
-    };
-
-    void syncAsHost();
-  }, [currentSong, isPlaying, listeningSession, meId, playlistId, position]);
-
-  // Broadcast position realtime mỗi 1 giây khi host đang phát
-  useEffect(() => {
-    if (!listeningSession) return;
-    const isHost = Number(meId) === Number(listeningSession.hostId);
-    if (!isHost || !isPlaying || !currentSong) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const songId = Number(currentSong.id);
-        if (!Number.isFinite(songId)) return;
-        const posMs = typeof position === "number" && Number.isFinite(position) ? position : 0;
-        await playlistChatApi.startListening(playlistId, meId, songId, posMs, true);
-      } catch (e) {
-        console.error("[PlaylistChatWindow] Failed to broadcast position:", e);
-      }
-    }, 1000); // Broadcast mỗi 1 giây
-
-    return () => clearInterval(interval);
-  }, [listeningSession, meId, isPlaying, currentSong, playlistId, position]);
-
-  // Sync player with listening session for non-host participants (realtime)
-  useEffect(() => {
-    const sync = async () => {
-      if (!listeningSession) return;
-      if (!listeningSession.hostId || !listeningSession.songId) return;
-      const isHost = Number(meId) === Number(listeningSession.hostId);
-      if (isHost) return; // Host tự control, không sync
-
-      // Chỉ sync cho user đã join (có trong participants)
-      if (!listeningSession.participants || !listeningSession.participants[String(meId)]) {
-        return;
-      }
-
-      const songId = listeningSession.songId;
-      const positionMs = listeningSession.positionMs ?? 0;
-      const targetPlaying = Boolean(listeningSession.isPlaying);
-
-      // Load bài hát nếu khác bài hiện tại
-      const needLoadSong = !currentSong || Number(currentSong.id) !== Number(songId);
-      if (needLoadSong) {
-        try {
-          const apiSong = await songsApi.getById(String(songId));
-          const mapped = mapToPlayerSong(apiSong as unknown as { [key: string]: unknown });
-          const songToPlay: Song = {
-            id: mapped.id,
-            name: mapped.songName,
-            songName: mapped.songName,
-            artist: mapped.artist,
-            album: mapped.album,
-            duration: mapped.duration,
-            cover: mapped.cover,
-            audioUrl: mapped.audioUrl,
-          };
-          await playSong(songToPlay, true);
-        } catch (e) {
-          console.error("[PlaylistChatWindow] Failed to sync song for listening session:", e);
-          return;
-        }
-      }
-
-      // Sync position realtime (chỉ khi đã có bài hát)
-      if (currentSong && Math.abs(position - positionMs) > 500) {
-        try {
-          await updatePosition(positionMs);
-        } catch {
-          // ignore
-        }
-      }
-
-      // Sync play/pause state
-      if (targetPlaying !== isPlaying) {
-        try {
-          if (targetPlaying && !isPlaying) {
-            // Host đang play, participant phải play
-            if (currentSong) {
-              await playSong(currentSong, true);
-            }
-          } else if (!targetPlaying && isPlaying) {
-            // Host đã pause, participant phải pause
-            // Note: MusicContext không có pause trực tiếp, nhưng playSong với skipApiCall sẽ không tự động play
-            // Tạm thời để MusicContext tự xử lý
-          }
-        } catch (e) {
-          console.error("[PlaylistChatWindow] Failed to adjust playing state:", e);
-        }
-      }
-    };
-
-    void sync();
-  }, [listeningSession, meId, currentSong, isPlaying, playSong, updatePosition, position]);
-
-  const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
+      await playlistChatApi.sharePlaylist(playlistId, meId, currentPlaylistId);
+            } catch (e) {
+      console.error("[PlaylistChatWindow] Failed to share current playlist:", e);
+      } finally {
+      setSending(false);
     }
-  };
+  }, [currentPlaylistId, sending, playlistId, meId]);
 
-  // Typing indicator handlers
+  // Typing indicator
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
-    // Start typing indicator
-    if (e.target.value.trim()) {
+      const value = e.target.value.trim();
+      if (value) {
       chatApi.typingStart(roomId, meId).catch(() => {});
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         chatApi.typingStop(roomId, meId).catch(() => {});
       }, 3000);
@@ -328,39 +157,66 @@ export const PlaylistChatWindow = ({
         typingTimeoutRef.current = null;
       }
     }
-  }, [roomId, meId]);
+    },
+    [roomId, meId]
+  );
 
   useEffect(() => {
     return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         chatApi.typingStop(roomId, meId).catch(() => {});
-      }
     };
   }, [roomId, meId]);
 
+  useEffect(() => {
+    const unsubscribe = watchTyping(roomId, meId, (data) => {
+      if (!data) {
+        setTypingUsers({});
+        return;
+      }
+      setTypingUsers((prev) => ({ ...prev, [data.userId]: !!data.isTyping }));
+    });
+    return () => {
+      unsubscribe();
+      setTypingUsers({});
+    };
+  }, [roomId, meId]);
+
+  useEffect(() => {
+    const unsubscribe = watchReactions(roomId, (reactMap) => {
+      setReactions(reactMap);
+    });
+    return () => {
+      unsubscribe();
+      setReactions({});
+    };
+  }, [roomId]);
+
   const renderMessage = (msg: FirebaseMessage, index: number) => {
     const isMe = Number(msg.senderId) === Number(meId);
-    const raw = (msg as unknown) as { type?: string; sharedContentType?: string; sharedContent?: unknown };
-    const rawType = raw.type ?? raw.sharedContentType ?? "text";
+    const rawType =
+      (msg as { type?: string; sharedContentType?: string }).type ??
+      (msg as { sharedContentType?: string }).sharedContentType ??
+      "text";
     const type = typeof rawType === "string" ? rawType.toLowerCase() : "text";
     const content = msg.contentPlain ?? msg.content ?? "";
-    const shared = (raw.sharedContent ?? null) as
-      | {
-          type?: string;
-          id?: number;
-          playlist?: unknown;
-          album?: unknown;
-          song?: unknown;
-          title?: string;
-          coverUrl?: string | null;
-        }
-      | null;
+    const shared = (msg as any).sharedContent as
+      | { type?: string; id?: number; playlist?: any; album?: any; song?: any; title?: string; coverUrl?: string | null }
+      | null
+      | undefined;
 
-    if (type === "system") {
+    // System messages: senderId = 0 hoặc type = "system" hoặc senderName = "system"
+    const isSystemMessage = 
+      type === "system" ||
+      Number(msg.senderId) === 0 ||
+      (msg as { senderName?: string }).senderName?.toLowerCase() === "system" ||
+      content.trim().toLowerCase().startsWith("[system]") ||
+      content.trim().toLowerCase().startsWith("system:");
+
+    if (isSystemMessage) {
       return (
-        <div key={msg.id ?? index} className="flex justify-center my-3">
-          <span className="px-3 py-1.5 text-[12px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full">
+        <div key={msg.id ?? index} className="flex justify-center my-2">
+          <span className="px-2.5 py-1 text-[11px] text-muted-foreground bg-muted/30 dark:bg-muted/20 rounded-full">
             {content}
           </span>
         </div>
@@ -410,11 +266,6 @@ export const PlaylistChatWindow = ({
           duration: 0,
           cover: songData.coverUrl ?? "",
           audioUrl: songData.audioUrl ?? undefined,
-          url: undefined,
-          audio: undefined,
-          genre: undefined,
-          plays: undefined,
-          uuid: undefined,
         };
         playSong(fakeSong);
       };
@@ -458,26 +309,22 @@ export const PlaylistChatWindow = ({
         className={`group flex items-end gap-2 my-1 ${isMe ? "justify-end" : "justify-start"}`}
       >
         {!isMe && (
-          <Avatar className="w-8 h-8 flex-shrink-0 self-start">
+          <Avatar className="w-7 h-7 flex-shrink-0 self-start">
             {avatarUrl ? (
               <AvatarImage src={avatarUrl} alt={displayName} />
             ) : (
-              <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+              <AvatarFallback className="bg-muted text-muted-foreground text-[10px]">
                 {displayName.charAt(0).toUpperCase()}
               </AvatarFallback>
             )}
           </Avatar>
         )}
-        <div className="max-w-[80%] sm:max-w-lg space-y-0.5">
-          {/* Tên người gửi: chỉ hiện khi hover, giống logic timestamp trong MessageCard */}
-          {!isMe && (
-            <div className="text-[11px] font-medium text-muted-foreground/80 mb-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-              {displayName}
+        <div className="max-w-[75%] space-y-0.5">
+          <div className="text-[10px] font-medium text-muted-foreground/80 mb-0.5">
+            {displayName} • {timestampLabel}
             </div>
-          )}
-          <div className={`px-4 py-2 rounded-2xl break-words whitespace-pre-wrap text-sm leading-relaxed ${bubbleCls} relative group/message`}>
+          <div className={`px-3 py-1.5 rounded-xl break-words whitespace-pre-wrap text-xs leading-relaxed ${bubbleCls} relative group/message`}>
             {content}
-            {/* Reactions */}
             {msg.id && reactions[String(msg.id)] && Object.keys(reactions[String(msg.id)]).length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {Object.entries(reactions[String(msg.id)]).map(([userIdStr, reaction]) => (
@@ -491,187 +338,139 @@ export const PlaylistChatWindow = ({
                 ))}
               </div>
             )}
-            {/* Reaction button (hover) */}
-            {msg.id && onReact && (
+            {msg.id && onReact && type !== "system" && (
               <button
                 type="button"
-                className="absolute -bottom-1 right-1 opacity-0 group-hover/message:opacity-100 transition-opacity w-6 h-6 rounded-full bg-background/90 border border-border/60 flex items-center justify-center hover:bg-background"
-                onClick={() => {
+                className="absolute -bottom-0.5 right-0.5 opacity-0 group-hover/message:opacity-100 transition-opacity w-5 h-5 rounded-full bg-background/90 border border-border/60 flex items-center justify-center hover:bg-background"
+                onClick={async () => {
                   const messageIdNum = typeof msg.id === "string" ? Number(msg.id) : (typeof msg.id === "number" ? msg.id : 0);
-                  if (messageIdNum > 0) {
-                    onReact(messageIdNum, "👍");
+                  if (messageIdNum > 0 && onReact) {
+                    await onReact(messageIdNum, "👍");
                   }
                 }}
                 title="Thêm reaction"
               >
-                <span className="text-xs">👍</span>
+                <span className="text-[10px]">👍</span>
               </button>
             )}
           </div>
-          <p className="text-[10px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            {timestampLabel}
-          </p>
         </div>
       </div>
     );
   };
 
+  const handleKeyDown: KeyboardEventHandler<HTMLInputElement> = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend();
+    }
+  };
+
+  const someoneTyping = Object.entries(typingUsers).some(([uid, active]) => Number(uid) !== meId && active);
+
   return (
-    <div className="fixed bottom-28 right-24 z-50 w-full max-w-md">
-      <Card className="bg-background/95 border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col h-[480px]">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-3 py-2 border-b border-border bg-gradient-to-r from-primary/10 via-background to-background">
-          <Avatar className="h-9 w-9">
-            {coverUrl ? (
-              <AvatarImage src={coverUrl || undefined} alt={playlistName} />
-            ) : (
-              <AvatarFallback>
-                <Music className="w-4 h-4" />
-              </AvatarFallback>
-            )}
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm truncate">{playlistName}</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30">
-                Collab room
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground truncate">
-              Owner: {ownerName} · {memberCount} collaborator{memberCount === 1 ? "" : "s"}
-            </p>
-          </div>
-          <div className="flex items-center gap-1">
-            {/* Nút tạo/dừng phòng nghe chung (chỉ host) */}
-            {(!listeningSession || Number(listeningSession.hostId) === Number(meId)) && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleStartListening}
-                title={
-                  currentSong
-                    ? "Tạo/đồng bộ phòng nghe nhạc chung cho playlist này (bạn là host)"
-                    : "Chọn bài hát rồi bấm để bắt đầu nghe chung"
-                }
-                disabled={!currentSong}
-              >
-                <Radio className="w-4 h-4" />
-              </Button>
-            )}
-            {/* Nút đề xuất bài hát (chỉ participants) */}
-            {listeningSession && Number(listeningSession.hostId) !== Number(meId) && currentSong && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleSuggestCurrentSong}
-                title="Đề xuất bài hát này vào queue"
-                disabled={sending}
-              >
-                <Music className="w-4 h-4" />
-              </Button>
-            )}
-            {listeningSession && listeningSession.hostId && Number(listeningSession.hostId) !== Number(meId) && (
-              listeningSession.participants && listeningSession.participants[String(meId)] ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-[11px]"
-                  onClick={handleLeaveListening}
-                >
-                  Rời phòng
-                </Button>
+    <div className="fixed bottom-28 right-24 z-40 w-[380px] h-[500px] flex flex-col overflow-hidden bg-card border border-border rounded-2xl shadow-2xl backdrop-blur-md">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-background/95 backdrop-blur-sm">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Avatar className="w-8 h-8 flex-shrink-0">
+              {coverUrl ? (
+                <AvatarImage src={coverUrl || undefined} alt={playlistName} />
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-[11px]"
-                  onClick={handleJoinListening}
-                >
-                  Tham gia nghe chung
-                </Button>
-              )
-            )}
-            {listeningSession && listeningSession.hostId && Number(listeningSession.hostId) === Number(meId) && (
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                  {String(playlistName || "P").charAt(0).toUpperCase()}
+                </AvatarFallback>
+              )}
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-sm text-foreground truncate">{playlistName}</div>
+              <div className="text-[10px] text-muted-foreground truncate">
+                {memberCount} thành viên
+                        </div>
+                    </div>
+                    </div>
+          <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={onClose}>
+            <X className="w-4 h-4" />
+                    </Button>
+          </div>
+
+        <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1 bg-background scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+          {messages.length === 0 ? (
+            <div className="text-center text-xs text-muted-foreground py-6">Chưa có tin nhắn nào</div>
+          ) : (
+            messages.map((m, idx) => renderMessage(m, idx))
+          )}
+          <div ref={messagesEndRef} />
+            </div>
+
+        {someoneTyping && (
+          <div className="px-3 py-1 text-[10px] text-primary">Đang nhập...</div>
+        )}
+
+        <div className="border-t border-border px-2 py-2 bg-background/95 backdrop-blur-sm">
+          <div className="flex items-center gap-1.5">
+            {currentSong && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-[11px]"
-                onClick={handleStopListening}
+                size="icon"
+                className="h-7 w-7 rounded-full hover:bg-muted/50 flex-shrink-0"
+                onClick={handleShareCurrentSong}
+                title="Chia sẻ bài hát đang phát"
               >
-                Tắt phòng
+                <Music className="w-4 h-4" />
               </Button>
             )}
-            {listeningSession && (
-              <span className="ml-1 text-[10px] text-muted-foreground/80 hidden sm:inline">
-                Đang nghe chung
-                {listeningSession.participants
-                  ? ` • ${Object.keys(listeningSession.participants).length} người`
-                  : ""}
-              </span>
+            {currentAlbumId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full hover:bg-muted/50 flex-shrink-0"
+                onClick={handleShareCurrentAlbum}
+                title="Chia sẻ album đang xem"
+              >
+                <Disc className="w-4 h-4" />
+              </Button>
             )}
+            {currentPlaylistId && currentPlaylistId !== playlistId && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
-              onClick={onClose}
+                className="h-7 w-7 rounded-full hover:bg-muted/50 flex-shrink-0"
+                onClick={handleShareCurrentPlaylist}
+                title="Chia sẻ playlist đang xem"
             >
-              <X className="w-4 h-4" />
+                <ListMusic className="w-4 h-4" />
             </Button>
-          </div>
-        </div>
-
-        {/* Messages */}
-        <div
-          ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto px-3 py-2 space-y-1 bg-gradient-to-b from-background via-background/95 to-background"
-        >
-          {messages.map((m, idx) => renderMessage(m, idx))}
-          <div ref={messagesEndRef} className="h-0 w-full shrink-0" />
-        </div>
-
-        {/* Typing indicator */}
-        {Object.keys(typingUsers).length > 0 && Object.values(typingUsers).some(Boolean) && (
-          <div className="px-3 py-2 border-t border-border/50 bg-background/95 backdrop-blur-sm">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-typing" style={{ animationDelay: '0ms' }} />
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-typing" style={{ animationDelay: '200ms' }} />
-                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-primary animate-typing" style={{ animationDelay: '400ms' }} />
-              </div>
-              <span className="text-primary font-medium">
-                {Object.entries(typingUsers)
-                  .filter(([_, isTyping]) => isTyping)
-                  .map(([userId]) => {
-                    const msg = messages.find(m => Number(m.senderId) === Number(userId));
-                    return msg?.senderName || `User ${userId}`;
-                  })
-                  .join(", ")} đang nhập...
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Input */}
-        <div className="border-t border-border px-3 py-2 flex items-center gap-2 bg-background/95">
+            )}
+            <div className="flex-1 relative min-w-0">
           <Input
+                placeholder="Nhắn..."
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Nhắn gì đó về playlist này…"
-            className="text-sm"
+                className="w-full pl-3 pr-9 h-8 rounded-full bg-muted/50 dark:bg-muted/30 border-0 text-xs text-foreground placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary/40"
           />
+              {input.trim() && (
           <Button
+                  variant="default"
             size="icon"
-            variant="ghost"
             onClick={handleSend}
-            disabled={!input.trim() || sending}
+                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 flex-shrink-0"
           >
-            <SendHorizonal className="w-5 h-5" />
+                  <SendHorizonal className="w-3.5 h-3.5" />
           </Button>
+              )}
         </div>
-      </Card>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-full hover:bg-muted/50 flex-shrink-0"
+              onClick={() => setInput((prev) => `${prev}😊`)}
+              aria-label="Chèn emoji"
+            >
+              <Smile className="w-4 h-4" />
+            </Button>
+    </div>
+        </div>
     </div>
   );
 };

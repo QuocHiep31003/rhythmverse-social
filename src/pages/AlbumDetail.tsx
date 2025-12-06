@@ -227,6 +227,8 @@ const AlbumDetail = () => {
   const { id: albumIdParam } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { playSong, togglePlay, isPlaying, currentSong, setQueue } = useMusic();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   const [album, setAlbum] = useState<any>(null);
   const [songs, setSongs] = useState<any[]>([]);

@@ -978,7 +978,11 @@ const Social = () => {
 
   useEffect(() => {
     if (activeTab !== "chat" || !selectedChat) return;
-    emitChatTabOpened({ friendId: selectedChat });
+    const payload =
+      selectedChat.startsWith("pl_")
+        ? { roomId: selectedChat, friendId: null }
+        : { friendId: selectedChat, roomId: null };
+    emitChatTabOpened(payload);
   }, [activeTab, selectedChat]);
 
   // ✅ Mark conversation as read ngay khi user vào chat (không delay để tránh unread tăng)
@@ -990,6 +994,23 @@ const Social = () => {
     // Sử dụng setTimeout để đảm bảo mark as read được gọi sau khi component đã render xong
     const timeoutId = setTimeout(() => {
       markConversationAsRead(selectedChat);
+      // Clear local unread state ngay lập tức cho UX mượt
+      if (selectedChat.startsWith("pl_")) {
+        const playlistId = selectedChat.replace("pl_", "");
+        setUnreadByPlaylist((prev) => {
+          if (!prev[playlistId]) return prev;
+          const next = { ...prev };
+          delete next[playlistId];
+          return next;
+        });
+      } else {
+        setUnreadByFriend((prev) => {
+          if (!prev[selectedChat]) return prev;
+          const next = { ...prev };
+          delete next[selectedChat];
+          return next;
+        });
+      }
     }, 100);
     
     return () => {
@@ -1884,7 +1905,7 @@ const Social = () => {
       Object.values(chatWatchersRef.current).forEach((unsubscribe) => unsubscribe());
       chatWatchersRef.current = {};
     };
-  }, [meId, firebaseReady, friendsIdsString]); // ✅ Removed mergeFirebaseMessages from dependencies
+  }, [meId, firebaseReady, friendsIdsString, mergeFirebaseMessages]); // include mergeFirebaseMessages to ensure watcher callbacks active
 
   // Watch messages for playlist rooms when selectedChat is a playlist room
   useEffect(() => {
@@ -1914,7 +1935,7 @@ const Social = () => {
         delete chatWatchersRef.current[roomId];
       }
     };
-  }, [meId, firebaseReady, selectedChat]);
+  }, [meId, firebaseReady, selectedChat, mergeFirebaseMessages]);
 
   useEffect(() => {
     if (!meId || !firebaseReady) {
@@ -2344,8 +2365,7 @@ const Social = () => {
   const handleReact = useCallback(
     async (message: Message, emoji: string) => {
       if (!meId || !selectedChat) return;
-      const friendNumericId = Number(selectedChat);
-      if (!Number.isFinite(friendNumericId)) return;
+      if (message.type === "system") return;
 
       // Find messageId from message (could be in id or firebaseKey)
       const messageIdFromBackend = message.backendId;
@@ -2878,28 +2898,34 @@ const Social = () => {
   // ✅ Removed debug typing status useEffect - gây spam log
 
   // Memoize mapped playlist rooms to prevent infinite re-renders
+  // Chỉ hiển thị group chat khi có >=2 thành viên
   const mappedPlaylistRooms = useMemo(() => {
-    return playlistRooms.map(
-      (
-        p: PlaylistLibraryItemDTO & {
-          playlistId?: number;
-          title?: string;
-          ownerName?: string;
-          owner?: string;
-          id?: number;
+    return playlistRooms
+      .map(
+        (
+          p: PlaylistLibraryItemDTO & {
+            playlistId?: number;
+            title?: string;
+            ownerName?: string;
+            owner?: string;
+            id?: number;
+          }
+        ) => {
+          const playlistId = typeof p.playlistId === "number" ? p.playlistId : (typeof p.id === "number" ? p.id : 0);
+          const memberCount = playlistCollaboratorCounts[playlistId] ?? 1; // Default to 1 if not loaded yet
+          return {
+            id: playlistId,
+            name: p.name ?? p.title ?? `Playlist ${playlistId}`,
+            coverUrl: p.coverUrl ?? null,
+            ownerName: p.ownerName ?? p.owner ?? null,
+            memberCount, // Total members (owner + collaborators)
+          };
         }
-      ) => {
-        const playlistId = typeof p.playlistId === "number" ? p.playlistId : (typeof p.id === "number" ? p.id : 0);
-        const memberCount = playlistCollaboratorCounts[playlistId] ?? 1; // Default to 1 if not loaded yet
-        return {
-          id: playlistId,
-          name: p.name ?? p.title ?? `Playlist ${playlistId}`,
-          coverUrl: p.coverUrl ?? null,
-          ownerName: p.ownerName ?? p.owner ?? null,
-          memberCount, // Total members (owner + collaborators)
-        };
-      }
-    );
+      )
+      .filter((room) => {
+        // Chỉ hiển thị group chat khi có >=2 thành viên
+        return room.memberCount >= 2;
+      });
   }, [playlistRooms, playlistCollaboratorCounts]);
 
   // ✅ Merge reactions into messages for selected chat - chỉ merge khi reactionsByMessage thay đổi
@@ -2947,6 +2973,30 @@ const Social = () => {
 
     if (!currentSong || !selectedChat || !meId) return;
 
+    // Xử lý share song vào playlist group chat
+    if (selectedChat.startsWith("pl_")) {
+      const playlistId = Number(selectedChat.replace("pl_", ""));
+      if (!Number.isFinite(playlistId)) {
+        console.warn("[Social] Cannot resolve playlist id for share:", selectedChat);
+        return;
+      }
+      const numericSongId = resolveSongNumericId(currentSong);
+      if (!numericSongId || !Number.isFinite(numericSongId)) {
+        console.warn("[Social] Cannot share song - invalid id:", currentSong.id);
+        pushBubble("Không thể chia sẻ bài hát này", "error");
+        return;
+      }
+      try {
+        await playlistChatApi.shareSong(playlistId, meId, numericSongId);
+        console.log("[Social] Song shared to playlist group chat successfully");
+      } catch (e) {
+        console.error("[Social] Failed to share song to playlist group:", e);
+        pushBubble("Không thể chia sẻ bài hát vào group chat", "error");
+      }
+      return;
+    }
+
+    // Xử lý share song vào 1-1 chat
     const receiverId = Number(selectedChat);
     const now = Date.now();
     const tempId = `temp-share-${now}`;
