@@ -51,6 +51,7 @@ import AdminSnapshots from "./pages/admin/AdminSnapshots";
 import AdminPremiumSubscriptions from "./pages/admin/AdminPremiumSubscriptions";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import DataDeletion from "./pages/DataDeletion";
 import AdminSubscriptionPlans from "./pages/admin/AdminSubscriptionPlans";
 import AdminPremiumDashboard from "./pages/admin/AdminPremiumDashboard";
 import AdminPlanSubscriptions from "./pages/admin/AdminPlanSubscriptions";
@@ -86,11 +87,13 @@ const App = () => (
               <Route path="/oauth2/callback" element={<OAuthCallback />} />
               <Route path="/terms" element={<TermsOfService />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
+              <Route path="/data-deletion" element={<DataDeletion />} />
 
               {/* Admin Routes */}
               <Route path="/admin/*" element={
                 <AdminLayout>
                   <Routes>
+                    <Route index element={<Navigate to="/admin/home" replace />} />
                     <Route path="login" element={<AdminLogin />} />
                     <Route path="home" element={<AdminHome />} />
                     <Route path="songs" element={<AdminSongs />} />
