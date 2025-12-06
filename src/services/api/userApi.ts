@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, createFormDataHeaders } from './config';
+import { apiClient } from './config';
 import { authApi } from './authApi';
 
 export interface UserDTO {
@@ -37,24 +37,15 @@ export const userApi = {
      */
     updateProfile: async (payload: UpdateProfilePayload): Promise<UserDTO> => {
         try {
-            const headers = buildJsonHeaders();
             const { name, phone, address, avatar } = payload;
             const body: Record<string, any> = { name, phone, address };
             if (avatar) body.avatar = avatar;
-            const response = await fetch(`${API_BASE_URL}/user/profile`, {
-                method: 'PUT',
-                headers,
-                body: JSON.stringify(body)
-            });
-            if (!response.ok) {
-                const errorMessage = await parseErrorResponse(response);
-                throw new Error(errorMessage);
-            }
-            const updatedUser = await response.json();
-            return updatedUser;
-        } catch (error) {
+            const response = await apiClient.put<UserDTO>('/user/profile', body);
+            return response.data;
+        } catch (error: any) {
             console.error('Error updating profile:', error);
-            throw error instanceof Error ? error : new Error('Failed to update profile');
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update profile';
+            throw new Error(errorMsg);
         }
     },
 
@@ -62,15 +53,13 @@ export const userApi = {
      * Admin: Trigger subscription expiry reminders (check & send email/notification ngay lập tức)
      */
     triggerSubscriptionReminders: async (): Promise<string> => {
-        const response = await fetch(`${API_BASE_URL}/user/trigger-subscription-reminders`, {
-            method: "POST",
-            headers: buildJsonHeaders(),
-        });
-        const text = await response.text();
-        if (!response.ok) {
-            throw new Error(text || "Failed to trigger subscription reminders");
+        try {
+            const response = await apiClient.post('/user/trigger-subscription-reminders');
+            return response.data || "Subscription reminders triggered";
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || "Failed to trigger subscription reminders";
+            throw new Error(errorMsg);
         }
-        return text;
     },
 
     /**
@@ -91,20 +80,12 @@ export const userApi = {
      */
     getById: async (userId: number): Promise<UserDTO> => {
         try {
-            const response = await fetch(`${API_BASE_URL}/user/${userId}`, {
-                method: 'GET',
-                headers: buildJsonHeaders(),
-            });
-
-            if (!response.ok) {
-                const errorMessage = await parseErrorResponse(response);
-                throw new Error(errorMessage);
-            }
-
-            return await response.json();
-        } catch (error) {
+            const response = await apiClient.get<UserDTO>(`/user/${userId}`);
+            return response.data;
+        } catch (error: any) {
             console.error('Error getting user:', error);
-            throw error instanceof Error ? error : new Error('Failed to get user');
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get user';
+            throw new Error(errorMsg);
         }
     },
 
@@ -113,19 +94,12 @@ export const userApi = {
      */
     changePassword: async (oldPassword: string, newPassword: string): Promise<string> => {
         try {
-            const response = await fetch(`${API_BASE_URL}/user/change-password`, {
-                method: 'POST',
-                headers: buildJsonHeaders(),
-                body: JSON.stringify({ oldPassword, newPassword })
-            });
-            const text = await response.text();
-            if (!response.ok) {
-                throw new Error(text || 'Failed to change password');
-            }
-            return text;
-        } catch (error) {
+            const response = await apiClient.post('/user/change-password', { oldPassword, newPassword });
+            return response.data || 'Password changed successfully';
+        } catch (error: any) {
             console.error('Error changing password:', error);
-            throw error instanceof Error ? error : new Error('Failed to change password');
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to change password';
+            throw new Error(errorMsg);
         }
     },
 
@@ -148,24 +122,12 @@ export const userApi = {
             const formData = new FormData();
             formData.append('file', file);
 
-            const response = await fetch(`${API_BASE_URL}/user/profile/avatar`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                },
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorMessage = await parseErrorResponse(response);
-                throw new Error(errorMessage);
-            }
-
-            const updatedUser = await response.json();
-            return updatedUser;
-        } catch (error) {
+            const response = await apiClient.post<UserDTO>('/user/profile/avatar', formData);
+            return response.data;
+        } catch (error: any) {
             console.error('Error uploading avatar:', error);
-            throw error instanceof Error ? error : new Error('Failed to upload avatar');
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to upload avatar';
+            throw new Error(errorMsg);
         }
     },
 };

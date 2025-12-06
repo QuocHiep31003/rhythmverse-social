@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/select";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { useEffect } from "react";
-import { getAuthToken, buildJsonHeaders, API_BASE_URL } from "@/services/api/config";
+import { getAuthToken } from "@/services/api/config";
+import { playlistsApi } from "@/services/api/playlistApi";
 import { authApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -406,34 +407,7 @@ const QueueSidebar = ({
 
       if (ownerId) body.ownerId = ownerId;
 
-      const headers = buildJsonHeaders();
-
-      const res = await fetch(`${API_BASE_URL}/playlists`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        let errorMessage = "Failed to create playlist";
-        const status = res.status;
-        try {
-          const errorText = await res.text();
-          if (errorText) {
-            try {
-              const errorJson = JSON.parse(errorText);
-              errorMessage = errorJson.message || errorJson.error || errorMessage;
-            } catch {
-              errorMessage = errorText || errorMessage;
-            }
-          }
-        } catch {}
-        const error = new Error(errorMessage);
-        (error as any).status = status;
-        throw error;
-      }
-
-      const data = await res.json();
+      const data = await playlistsApi.create(body);
 
       // Đồng bộ lại usage sau khi backend đã tự tăng count
       await refresh();

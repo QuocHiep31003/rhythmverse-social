@@ -1,4 +1,4 @@
-import { API_BASE_URL, fetchWithAuth, parseErrorResponse } from "./config";
+import { apiClient } from "./config";
 
 export enum FeatureName {
   PLAYLIST_CREATE = "PLAYLIST_CREATE",
@@ -37,20 +37,14 @@ export interface FeatureUsageDTO {
   periodValue?: number;
 }
 
-const parseResponse = async (response: Response): Promise<any> => {
-  if (response.status === 204 || response.status === 404) {
+const parseResponse = (data: any): any => {
+  if (data === null || data === undefined) {
     return null;
   }
-
-  if (!response.ok) {
-    throw new Error(await parseErrorResponse(response));
+  if (data.success && data.data !== undefined) {
+    return data.data;
   }
-
-  const payload = await response.json();
-  if (payload.success && payload.data !== undefined) {
-    return payload.data;
-  }
-  return payload;
+  return data;
 };
 
 export const featureUsageApi = {
@@ -58,24 +52,16 @@ export const featureUsageApi = {
    * Lấy thông tin usage của một feature cho user hiện tại
    */
   getFeatureUsage: async (featureName: FeatureName): Promise<FeatureUsageDTO> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/feature-usage/${featureName}`,
-      { method: "GET" }
-    );
-
-    return parseResponse(response);
+    const response = await apiClient.get(`/feature-usage/${featureName}`);
+    return parseResponse(response.data);
   },
 
   /**
    * Kiểm tra user có thể sử dụng feature không
    */
   canUseFeature: async (featureName: FeatureName): Promise<boolean> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/feature-usage/check/${featureName}`,
-      { method: "GET" }
-    );
-
-    const result = await parseResponse(response);
+    const response = await apiClient.get(`/feature-usage/check/${featureName}`);
+    const result = parseResponse(response.data);
     return Boolean(result);
   },
 
@@ -83,24 +69,16 @@ export const featureUsageApi = {
    * Sử dụng feature (tăng usage count)
    */
   useFeature: async (featureName: FeatureName): Promise<FeatureUsageDTO> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/feature-usage/use/${featureName}`,
-      { method: "POST" }
-    );
-
-    return parseResponse(response);
+    const response = await apiClient.post(`/feature-usage/use/${featureName}`);
+    return parseResponse(response.data);
   },
 
   /**
    * Kiểm tra user có phải premium không
    */
   isPremiumUser: async (): Promise<boolean> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/feature-usage/premium-status`,
-      { method: "GET" }
-    );
-
-    const result = await parseResponse(response);
+    const response = await apiClient.get('/feature-usage/premium-status');
+    const result = parseResponse(response.data);
     return Boolean(result);
   },
 };

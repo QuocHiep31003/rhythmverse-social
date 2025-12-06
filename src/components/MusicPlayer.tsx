@@ -6,7 +6,7 @@ import { Play, Pause, Volume2, VolumeX, MoreHorizontal, X, SkipForward, SkipBack
 import { cn } from "@/lib/utils";
 import { useMusic, type Song } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
-import { apiClient } from "@/services/api/config";
+import { songsApi } from "@/services/api/songApi";
 import { getAuthToken, decodeToken } from "@/services/api";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import Hls from "hls.js";
@@ -1678,7 +1678,8 @@ const MusicPlayer = () => {
         if (!streamUrl) {
           // Chưa có uuid/streamUrl → gọi /play-now
           try {
-            response = await apiClient.post(`/songs/${songId}/play-now`, {});
+            const playNowResponse = await songsApi.playNow(songId);
+            response = { data: playNowResponse };
           } catch (error: unknown) {
             // Xử lý lỗi 404 - không có UUID trên S3
             const err = error as {

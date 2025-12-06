@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "./config";
+import { apiClient } from "./config";
 import type { PlaylistDTO, PageResponse } from "./playlistApi";
 
 export class FavoriteError extends Error {
@@ -65,201 +65,180 @@ const buildQuery = (params?: FavoriteListParams) => {
   return qs ? `?${qs}` : "";
 };
 
-const parseStatusPayload = async (res: Response): Promise<boolean> => {
-  // 404 hoặc 400 đều có nghĩa là không phải favorite
-  if (res.status === 404 || res.status === 400) {
-    return false;
+const parseStatusPayload = (data: any): boolean => {
+  if (typeof data === "boolean") return data;
+  if (typeof data?.favorite === "boolean") return data.favorite;
+  if (typeof data?.isFavorite === "boolean") return data.isFavorite;
+  if (typeof data?.saved === "boolean") return data.saved;
+  if (typeof data?.status === "string") {
+    return data.status.toLowerCase() === "favorite";
   }
-  if (!res.ok) {
-    throw new FavoriteError(await parseErrorResponse(res), res.status);
-  }
-  const text = await res.text();
-  if (!text) return true;
-  try {
-    const payload = JSON.parse(text);
-    if (typeof payload === "boolean") return payload;
-    if (typeof payload?.favorite === "boolean") return payload.favorite;
-    if (typeof payload?.isFavorite === "boolean") return payload.isFavorite;
-    if (typeof payload?.saved === "boolean") return payload.saved;
-    if (typeof payload?.status === "string") {
-      return payload.status.toLowerCase() === "favorite";
-    }
-    return !!payload;
-  } catch {
-    const normalized = text.trim().toLowerCase();
-    if (normalized === "true") return true;
-    if (normalized === "false") return false;
-    return !!text;
-  }
+  return !!data;
 };
-
-const handleMutation = async (res: Response) => {
-  if (!res.ok) {
-    throw new FavoriteError(await parseErrorResponse(res), res.status);
-  }
-  try {
-    return await res.json();
-  } catch {
-    return true;
-  }
-};
-
-const statusEndpoint = (resource: Resource, id: number | string) =>
-  `${API_BASE_URL}/favorites/${resource}/${id}/status`;
-
-const mutationEndpoint = (resource: Resource, id: number | string) =>
-  `${API_BASE_URL}/favorites/${resource}/${id}`;
 
 export const favoritesApi = {
   // SONGS
   getSongStatus: async (songId: number | string) => {
-    const res = await fetch(statusEndpoint("songs", songId), {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    return parseStatusPayload(res);
+    try {
+      const response = await apiClient.get(`/favorites/songs/${songId}/status`);
+      return parseStatusPayload(response.data);
+    } catch (error: any) {
+      // 404 hoặc 400 đều có nghĩa là không phải favorite
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        return false;
+      }
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get song status';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   addSong: async (songId: number | string) => {
-    const res = await fetch(mutationEndpoint("songs", songId), {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    return handleMutation(res);
+    try {
+      const response = await apiClient.post(`/favorites/songs/${songId}`);
+      return response.data || true;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to add song to favorites';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   removeSong: async (songId: number | string) => {
-    const res = await fetch(mutationEndpoint("songs", songId), {
-      method: "DELETE",
-      headers: buildJsonHeaders(),
-    });
-    return handleMutation(res);
+    try {
+      const response = await apiClient.delete(`/favorites/songs/${songId}`);
+      return response.data || true;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to remove song from favorites';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   listSongs: async (params?: FavoriteListParams) => {
-    const res = await fetch(
-      `${API_BASE_URL}/favorites/songs${buildQuery(params)}`,
-      {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      }
-    );
-    if (!res.ok) {
-      throw new FavoriteError(await parseErrorResponse(res), res.status);
+    try {
+      const response = await apiClient.get<PageResponse<FavoriteSongDTO>>(`/favorites/songs${buildQuery(params)}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to list favorite songs';
+      throw new FavoriteError(errorMsg, error.response?.status);
     }
-    return (await res.json()) as PageResponse<FavoriteSongDTO>;
   },
 
   // PLAYLISTS
   getPlaylistStatus: async (playlistId: number | string) => {
-    const res = await fetch(statusEndpoint("playlists", playlistId), {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    return parseStatusPayload(res);
+    try {
+      const response = await apiClient.get(`/favorites/playlists/${playlistId}/status`);
+      return parseStatusPayload(response.data);
+    } catch (error: any) {
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        return false;
+      }
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get playlist status';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   savePlaylist: async (playlistId: number | string) => {
-    const res = await fetch(mutationEndpoint("playlists", playlistId), {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    return handleMutation(res);
+    try {
+      const response = await apiClient.post(`/favorites/playlists/${playlistId}`);
+      return response.data || true;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to save playlist';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   removePlaylist: async (playlistId: number | string) => {
-    const res = await fetch(mutationEndpoint("playlists", playlistId), {
-      method: "DELETE",
-      headers: buildJsonHeaders(),
-    });
-    return handleMutation(res);
+    try {
+      const response = await apiClient.delete(`/favorites/playlists/${playlistId}`);
+      return response.data || true;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to remove playlist from favorites';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   listPlaylists: async (params?: FavoriteListParams) => {
-    const res = await fetch(
-      `${API_BASE_URL}/favorites/playlists${buildQuery(params)}`,
-      {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      }
-    );
-    if (!res.ok) {
-      throw new FavoriteError(await parseErrorResponse(res), res.status);
+    try {
+      const response = await apiClient.get<PageResponse<FavoritePlaylistDTO>>(`/favorites/playlists${buildQuery(params)}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to list favorite playlists';
+      throw new FavoriteError(errorMsg, error.response?.status);
     }
-    return (await res.json()) as PageResponse<FavoritePlaylistDTO>;
   },
 
   // ALBUMS
   getAlbumStatus: async (albumId: number | string) => {
-    const res = await fetch(statusEndpoint("albums", albumId), {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    return parseStatusPayload(res);
+    try {
+      const response = await apiClient.get(`/favorites/albums/${albumId}/status`);
+      return parseStatusPayload(response.data);
+    } catch (error: any) {
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        return false;
+      }
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get album status';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   saveAlbum: async (albumId: number | string) => {
-    const res = await fetch(mutationEndpoint("albums", albumId), {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    return handleMutation(res);
+    try {
+      const response = await apiClient.post(`/favorites/albums/${albumId}`);
+      return response.data || true;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to save album';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   removeAlbum: async (albumId: number | string) => {
-    const res = await fetch(mutationEndpoint("albums", albumId), {
-      method: "DELETE",
-      headers: buildJsonHeaders(),
-    });
-    return handleMutation(res);
+    try {
+      const response = await apiClient.delete(`/favorites/albums/${albumId}`);
+      return response.data || true;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to remove album from favorites';
+      throw new FavoriteError(errorMsg, error.response?.status);
+    }
   },
 
   listAlbums: async (params?: FavoriteListParams) => {
-    const res = await fetch(
-      `${API_BASE_URL}/favorites/albums${buildQuery(params)}`,
-      {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      }
-    );
-    if (!res.ok) {
-      throw new FavoriteError(await parseErrorResponse(res), res.status);
+    try {
+      const response = await apiClient.get<PageResponse<FavoriteAlbumDTO>>(`/favorites/albums${buildQuery(params)}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to list favorite albums';
+      throw new FavoriteError(errorMsg, error.response?.status);
     }
-    return (await res.json()) as PageResponse<FavoriteAlbumDTO>;
   },
 
   // GET COUNT APIs
   getSongLikeCount: async (songId: number | string): Promise<{ songId: number; count: number }> => {
-    const res = await fetch(`${API_BASE_URL}/favorites/songs/${songId}/count`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      throw new FavoriteError(await parseErrorResponse(res), res.status);
+    try {
+      const response = await apiClient.get<{ songId: number; count: number }>(`/favorites/songs/${songId}/count`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get song like count';
+      throw new FavoriteError(errorMsg, error.response?.status);
     }
-    return await res.json();
   },
 
   getPlaylistLikeCount: async (playlistId: number | string): Promise<{ playlistId: number; count: number }> => {
-    const res = await fetch(`${API_BASE_URL}/favorites/playlists/${playlistId}/count`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      throw new FavoriteError(await parseErrorResponse(res), res.status);
+    try {
+      const response = await apiClient.get<{ playlistId: number; count: number }>(`/favorites/playlists/${playlistId}/count`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get playlist like count';
+      throw new FavoriteError(errorMsg, error.response?.status);
     }
-    return await res.json();
   },
 
   getAlbumLikeCount: async (albumId: number | string): Promise<{ albumId: number; count: number }> => {
-    const res = await fetch(`${API_BASE_URL}/favorites/albums/${albumId}/count`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      throw new FavoriteError(await parseErrorResponse(res), res.status);
+    try {
+      const response = await apiClient.get<{ albumId: number; count: number }>(`/favorites/albums/${albumId}/count`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get album like count';
+      throw new FavoriteError(errorMsg, error.response?.status);
     }
-    return await res.json();
   },
 };
 

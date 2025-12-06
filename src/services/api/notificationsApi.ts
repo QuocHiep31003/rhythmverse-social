@@ -1,21 +1,17 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
+import { apiClient } from "./config";
 
 /**
  * Mark a single notification as read via backend API
  * Backend will update Firebase after marking as read
  */
 export const markNotificationAsRead = async (userId: number, notificationId: string): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/notifications/${userId}/${notificationId}/read`, {
-    method: 'PUT',
-    headers: buildJsonHeaders(),
-  });
-  
-  if (!response.ok) {
-    const error = await parseErrorResponse(response);
-    throw new Error(error || 'Failed to mark notification as read');
+  try {
+    await apiClient.put(`/notifications/${userId}/${notificationId}/read`);
+    console.log('✅ [Notifications API] Notification marked as read:', { userId, notificationId });
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to mark notification as read';
+    throw new Error(errorMsg);
   }
-  
-  console.log('✅ [Notifications API] Notification marked as read:', { userId, notificationId });
 };
 
 /**
@@ -43,17 +39,13 @@ export const markNotificationsAsRead = async (userId: number, notificationIds: s
  * Backend will update Firebase after marking all as read
  */
 export const markAllNotificationsAsRead = async (userId: number): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/notifications/${userId}/read-all`, {
-    method: 'PUT',
-    headers: buildJsonHeaders(),
-  });
-  
-  if (!response.ok) {
-    const error = await parseErrorResponse(response);
-    throw new Error(error || 'Failed to mark all notifications as read');
+  try {
+    await apiClient.put(`/notifications/${userId}/read-all`);
+    console.log('✅ [Notifications API] All notifications marked as read:', { userId });
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to mark all notifications as read';
+    throw new Error(errorMsg);
   }
-  
-  console.log('✅ [Notifications API] All notifications marked as read:', { userId });
 };
 
 

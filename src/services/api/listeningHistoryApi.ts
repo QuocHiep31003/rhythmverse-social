@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from './config';
+import { apiClient } from './config';
 import type { Song } from './songApi';
 
 export interface ListeningHistoryPayload {
@@ -56,23 +56,13 @@ export const listeningHistoryApi = {
 
   recordListen: async (payload: ListeningHistoryPayload): Promise<ListeningHistoryDTO> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history`, {
-        method: "POST",
-        headers: buildJsonHeaders(),
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      console.log("✅ Listening history recorded successfully, ID:", data.id);
-      return data;
-    } catch (error) {
+      const response = await apiClient.post<ListeningHistoryDTO>('/listening-history', payload);
+      console.log("✅ Listening history recorded successfully, ID:", response.data.id);
+      return response.data;
+    } catch (error: any) {
       console.error("❌ Error recording listening history:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to record listening history';
+      throw new Error(errorMessage);
     }
   },
 
@@ -90,22 +80,9 @@ export const listeningHistoryApi = {
     empty: boolean;
   }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history/user/${userId}?page=${page}&size=${size}&sort=listenedAt,desc`, {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        // Gracefully handle not found as empty history
-        if (response.status === 404) {
-          console.warn(`⚠️ Listening history not found for user ${userId}. Returning empty list.`);
-          return [];
-        }
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
+      const response = await apiClient.get(`/listening-history/user/${userId}?page=${page}&size=${size}&sort=listenedAt,desc`);
+      const data = response.data;
+      
       // Backend trả về Page object với structure: { content: [], totalElements: number, ... }
       if (Array.isArray(data)) {
         // Fallback nếu backend trả về array thay vì Page object
@@ -122,9 +99,24 @@ export const listeningHistoryApi = {
       }
       console.log("✅ Listening history fetched successfully:", data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
+      // Gracefully handle not found as empty history
+      if (error.response?.status === 404) {
+        console.warn(`⚠️ Listening history not found for user ${userId}. Returning empty list.`);
+        return {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+          size,
+          number: page,
+          first: true,
+          last: true,
+          empty: true,
+        };
+      }
       console.error("❌ Error fetching listening history:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch listening history';
+      throw new Error(errorMessage);
     }
   },
 
@@ -142,30 +134,9 @@ export const listeningHistoryApi = {
     empty: boolean;
   }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history/me?page=${page}&size=${size}&sort=listenedAt,desc`, {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          console.warn(`⚠️ Listening history not found for current user. Returning empty list.`);
-          return {
-            content: [],
-            totalElements: 0,
-            totalPages: 0,
-            size,
-            number: page,
-            first: true,
-            last: true,
-            empty: true,
-          };
-        }
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
+      const response = await apiClient.get(`/listening-history/me?page=${page}&size=${size}&sort=listenedAt,desc`);
+      const data = response.data;
+      
       if (Array.isArray(data)) {
         return {
           content: data,
@@ -180,9 +151,23 @@ export const listeningHistoryApi = {
       }
       console.log("✅ My listening history fetched successfully:", data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        console.warn(`⚠️ Listening history not found for current user. Returning empty list.`);
+        return {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+          size,
+          number: page,
+          first: true,
+          last: true,
+          empty: true,
+        };
+      }
       console.error("❌ Error fetching my listening history:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch my listening history';
+      throw new Error(errorMessage);
     }
   },
 
@@ -191,34 +176,27 @@ export const listeningHistoryApi = {
    * from/to là ISO string (optional).
    */
   getOverview: async (userId: number, params?: { from?: string; to?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.from) query.append("from", params.from);
-    if (params?.to) query.append("to", params.to);
-
-    const qs = query.toString();
-    const url = `${API_BASE_URL}/listening-history/user/${userId}/overview${qs ? `?${qs}` : ""}`;
-
     try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      });
+      const query = new URLSearchParams();
+      if (params?.from) query.append("from", params.from);
+      if (params?.to) query.append("to", params.to);
 
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
+      const qs = query.toString();
+      const url = `/listening-history/user/${userId}/overview${qs ? `?${qs}` : ""}`;
 
-      return response.json() as Promise<{
+      const response = await apiClient.get<{
         totalListeningSeconds: number;
         songsPlayed: number;
         playlistsCreated: number;
         genres: { id: number; name: string; percentage: number }[];
         moods: { id: number; name: string; percentage: number }[];
-      }>;
-    } catch (error) {
+      }>(url);
+
+      return response.data;
+    } catch (error: any) {
       console.error("❌ Error fetching listening overview:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch listening overview';
+      throw new Error(errorMessage);
     }
   },
 
@@ -227,34 +205,27 @@ export const listeningHistoryApi = {
    * from/to là ISO string (optional).
    */
   getMyOverview: async (params?: { from?: string; to?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.from) query.append("from", params.from);
-    if (params?.to) query.append("to", params.to);
-
-    const qs = query.toString();
-    const url = `${API_BASE_URL}/listening-history/me/overview${qs ? `?${qs}` : ""}`;
-
     try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      });
+      const query = new URLSearchParams();
+      if (params?.from) query.append("from", params.from);
+      if (params?.to) query.append("to", params.to);
 
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
+      const qs = query.toString();
+      const url = `/listening-history/me/overview${qs ? `?${qs}` : ""}`;
 
-      return response.json() as Promise<{
+      const response = await apiClient.get<{
         totalListeningSeconds: number;
         songsPlayed: number;
         playlistsCreated: number;
         genres: { id: number; name: string; percentage: number }[];
         moods: { id: number; name: string; percentage: number }[];
-      }>;
-    } catch (error) {
+      }>(url);
+
+      return response.data;
+    } catch (error: any) {
       console.error("❌ Error fetching my listening overview:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch my listening overview';
+      throw new Error(errorMessage);
     }
   },
 
@@ -264,26 +235,16 @@ export const listeningHistoryApi = {
    */
   updateDuration: async (id: number, listenedDuration: number, songDuration?: number): Promise<ListeningHistoryDTO> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history/${id}/duration`, {
-        method: "PATCH",
-        headers: buildJsonHeaders(),
-        body: JSON.stringify({
-          listenedDuration,
-          songDuration,
-        }),
+      const response = await apiClient.patch<ListeningHistoryDTO>(`/listening-history/${id}/duration`, {
+        listenedDuration,
+        songDuration,
       });
-
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
       console.log("✅ Listening history duration updated successfully");
-      return data;
-    } catch (error) {
+      return response.data;
+    } catch (error: any) {
       console.error("❌ Error updating listening history duration:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update listening history duration';
+      throw new Error(errorMessage);
     }
   },
 
@@ -292,20 +253,12 @@ export const listeningHistoryApi = {
    */
   delete: async (id: number): Promise<void> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history/${id}`, {
-        method: "DELETE",
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
+      await apiClient.delete(`/listening-history/${id}`);
       console.log("✅ Listening history deleted successfully");
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error deleting listening history:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to delete listening history';
+      throw new Error(errorMessage);
     }
   },
 
@@ -323,22 +276,14 @@ export const listeningHistoryApi = {
     empty: boolean;
   }> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/listening-history?page=${page}&size=${size}`, {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
+      const response = await apiClient.get(`/listening-history?page=${page}&size=${size}`);
+      const data = response.data;
       console.log("✅ Listening history fetched successfully:", data);
       return data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error fetching listening history:", error);
-      throw error;
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch listening history';
+      throw new Error(errorMessage);
     }
   },
 
@@ -355,20 +300,10 @@ export const listeningHistoryApi = {
       if (params?.songLimit) query.append("songLimit", params.songLimit.toString());
       if (params?.lookbackDays) query.append("lookbackDays", params.lookbackDays.toString());
       const qs = query.toString();
-      const url = `${API_BASE_URL}/listening-history/user/${userId}/top-artist-songs${qs ? `?${qs}` : ""}`;
+      const url = `/listening-history/user/${userId}/top-artist-songs${qs ? `?${qs}` : ""}`;
 
-      const response = await fetch(url, {
-        method: "GET",
-        headers: buildJsonHeaders(),
-      });
-
-      if (!response.ok) {
-        const errorMessage = await parseErrorResponse(response);
-        throw new Error(errorMessage);
-      }
-
-      const data = await response.json();
-      return Array.isArray(data) ? data : [];
+      const response = await apiClient.get<ArtistTopSongsResponse[]>(url);
+      return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error("❌ Error fetching top artist songs:", error);
       return [];

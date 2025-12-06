@@ -1,4 +1,4 @@
-import { apiClient } from '@/services/api/config';
+import { songsApi } from '@/services/api/songApi';
 import { useMusic } from '@/contexts/MusicContext';
 import { mapToPlayerSong } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -79,10 +79,10 @@ export const playSongWithStreamUrl = async (
           return;
         }
 
-        const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+        const response = await songsApi.playNow(songId);
         
-        if (response.data?.success === false) {
-          const errorMsg = response.data?.error || 'Không thể phát bài hát';
+        if (response.success === false) {
+          const errorMsg = response.error || 'Không thể phát bài hát';
           toast({
             title: "Lỗi",
             description: errorMsg,
@@ -92,8 +92,8 @@ export const playSongWithStreamUrl = async (
         }
 
         // Format bài hát
-        const formattedSong = response.data?.song 
-          ? mapToPlayerSong(response.data.song)
+        const formattedSong = response.song 
+          ? mapToPlayerSong(response.song)
           : mapToPlayerSong(song);
 
         // Tab phụ: Cập nhật queue trước (nếu có setQueue)
@@ -189,11 +189,11 @@ export const playSongWithStreamUrl = async (
     }
 
     // Gọi /play-now endpoint để lấy streamUrl
-    const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+    const response = await songsApi.playNow(songId);
     
     // Kiểm tra lỗi từ response
-    if (response.data?.success === false) {
-      const errorMsg = response.data?.error || 'Không thể phát bài hát';
+    if (response.success === false) {
+      const errorMsg = response.error || 'Không thể phát bài hát';
       if (errorMsg.includes('HLS master playlist not found')) {
         toast({
           title: "Bài hát chưa sẵn sàng",
@@ -219,11 +219,11 @@ export const playSongWithStreamUrl = async (
     }
     
     // Nếu thành công, set song vào context và phát nhạc
-    if (response.data?.song) {
-      const formattedSong = mapToPlayerSong(response.data.song);
+    if (response.song) {
+      const formattedSong = mapToPlayerSong(response.song);
       // Đảm bảo UUID được set từ response
-      if (response.data.song.uuid) {
-        formattedSong.uuid = response.data.song.uuid;
+      if (response.song.uuid) {
+        formattedSong.uuid = response.song.uuid;
       }
       
       // QUAN TRỌNG: Chỉ set queue nếu không có queue được truyền vào hoặc queue rỗng

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Save, X, Loader2 } from "lucide-react";
-import { apiClient } from "@/services/api/config";
+import { songsApi } from "@/services/api/songApi";
 import { songGenreApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 
@@ -55,8 +55,8 @@ export const GenreSongsDialog = ({ open, onOpenChange, genreId, genreName }: Gen
     if (!genreId) return;
     try {
       setLoading(true);
-      const response = await apiClient.get(`/songs/by-genre/${genreId}/with-score`);
-      setSongs(response.data || []);
+      const songs = await songsApi.getSongsByGenreWithScore(genreId);
+      setSongs(songs);
     } catch (error) {
       console.error("Error loading songs:", error);
       toast({

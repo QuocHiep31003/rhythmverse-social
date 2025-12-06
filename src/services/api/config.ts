@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 // Base URL cho API
-export const API_BASE_URL = "http://localhost:8080/api";
-
+// export const API_BASE_URL = "http://localhost:8080/api";
+export const API_BASE_URL = "https://coral-app-jtjsq.ondigitalocean.app/api";
 // Base URL cho các endpoint auth (OAuth2, login external, ...) – dùng origin của API
 export const AUTH_SERVER_URL = (() => {
   try {
@@ -80,90 +80,86 @@ export const getTimeUntilExpiration = (token: string | null): number => {
 };
 
 // Auth helpers for API requests - CHỈ DÙNG sessionStorage
+// ✅ User token - chỉ lấy từ sessionStorage 'token' (không lấy adminToken)
 export const getAuthToken = (): string | null => {
   try {
     if (typeof window !== 'undefined') {
-      // Ưu tiên adminToken nếu đang ở trang admin
-      const isAdminPage = window.location.pathname.startsWith('/admin');
-      if (isAdminPage) {
-        return sessionStorage.getItem('adminToken') || sessionStorage.getItem('token');
-      }
-      return sessionStorage.getItem('token') || sessionStorage.getItem('adminToken');
+      return sessionStorage.getItem('token');
     }
     return null;
   } catch {
     try {
-      const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
-      if (isAdminPage) {
-        return sessionStorage.getItem('adminToken') || sessionStorage.getItem('token');
-      }
-      return sessionStorage.getItem('token') || sessionStorage.getItem('adminToken');
+      return sessionStorage.getItem('token');
     } catch {
       return null;
     }
   }
 };
 
-// Helper để lấy admin token (ưu tiên adminToken) - CHỈ DÙNG sessionStorage
+// ✅ Admin token - chỉ lấy từ sessionStorage 'adminToken' (không lấy user token)
 export const getAdminToken = (): string | null => {
   try {
-    return typeof window !== 'undefined'
-      ? (sessionStorage.getItem('adminToken') || sessionStorage.getItem('token'))
-      : null;
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('adminToken');
+    }
+    return null;
   } catch {
     try {
-      return sessionStorage.getItem('adminToken') || sessionStorage.getItem('token');
+      return sessionStorage.getItem('adminToken');
     } catch {
       return null;
     }
   }
 };
 
-// Get refresh token from storage - CHỈ DÙNG sessionStorage
+// ✅ User refresh token - chỉ lấy từ sessionStorage 'refreshToken'
 export const getRefreshToken = (): string | null => {
   try {
-    return typeof window !== 'undefined'
-      ? (sessionStorage.getItem('refreshToken') || sessionStorage.getItem('adminRefreshToken'))
-      : null;
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('refreshToken');
+    }
+    return null;
   } catch {
     try {
-      return sessionStorage.getItem('refreshToken') || sessionStorage.getItem('adminRefreshToken');
+      return sessionStorage.getItem('refreshToken');
     } catch {
       return null;
     }
   }
 };
 
-// Set tokens in storage - CHỈ DÙNG sessionStorage
-export const setTokens = (token: string, refreshToken?: string) => {
+// ✅ Admin refresh token - chỉ lấy từ sessionStorage 'adminRefreshToken'
+export const getAdminRefreshToken = (): string | null => {
+  try {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('adminRefreshToken');
+    }
+    return null;
+  } catch {
+    try {
+      return sessionStorage.getItem('adminRefreshToken');
+    } catch {
+      return null;
+    }
+  }
+};
+
+// ✅ Set user tokens - CHỈ lưu vào 'token' và 'refreshToken'
+export const setUserTokens = (token: string, refreshToken?: string) => {
   try {
     if (typeof window === 'undefined') return;
 
-    // Kiểm tra xem đang ở admin page hay không
-    const isAdminPage = window.location.pathname.startsWith('/admin');
-
-    if (isAdminPage) {
-      // Lưu vào adminToken và adminRefreshToken nếu đang ở admin page
-      sessionStorage.setItem('adminToken', token);
-      if (refreshToken) {
-        sessionStorage.setItem('adminRefreshToken', refreshToken);
-      }
-    } else {
-      // Lưu vào token và refreshToken cho user thường
-      sessionStorage.setItem('token', token);
-      if (refreshToken) {
-        sessionStorage.setItem('refreshToken', refreshToken);
-      }
+    sessionStorage.setItem('token', token);
+    if (refreshToken) {
+      sessionStorage.setItem('refreshToken', refreshToken);
     }
 
-    console.log('[setTokens] Tokens saved to sessionStorage:', {
-      isAdminPage,
+    console.log('[setUserTokens] User tokens saved to sessionStorage:', {
       hasToken: !!token,
       hasRefreshToken: !!refreshToken
     });
 
-    // Gửi broadcast message đến các tab khác để chúng check auth lại
-    // QUAN TRỌNG: sessionStorage không share giữa các tab, nên cần broadcast
+    // Broadcast token update
     if (typeof window !== 'undefined' && window.BroadcastChannel) {
       try {
         const authChannel = new BroadcastChannel('auth_channel');
@@ -172,15 +168,33 @@ export const setTokens = (token: string, refreshToken?: string) => {
           timestamp: Date.now()
         });
         authChannel.close();
-        console.log('[setTokens] Broadcasted TOKEN_UPDATED to other tabs');
+        console.log('[setUserTokens] Broadcasted TOKEN_UPDATED to other tabs');
       } catch (error) {
-        console.warn('[setTokens] Failed to broadcast token update:', error);
+        console.warn('[setUserTokens] Failed to broadcast token update:', error);
       }
     }
 
-    // Dispatch custom event để các component trong cùng tab có thể listen
+    // Dispatch custom event
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tokenUpdated'));
+    }
+  } catch (error) {
+    console.error('[setUserTokens] Failed to save tokens:', error);
+  }
+};
+
+// ✅ Legacy function - tự động detect admin page (giữ lại để backward compatibility)
+export const setTokens = (token: string, refreshToken?: string) => {
+  try {
+    if (typeof window === 'undefined') return;
+
+    // Kiểm tra xem đang ở admin page hay không
+    const isAdminPage = window.location.pathname.startsWith('/admin');
+
+    if (isAdminPage) {
+      setAdminTokens(token, refreshToken);
+    } else {
+      setUserTokens(token, refreshToken);
     }
   } catch (error) {
     console.error('[setTokens] Failed to save tokens:', error);
@@ -246,6 +260,11 @@ export const apiClient = axios.create({
 // Request interceptor để thêm token vào headers và check expiration trước khi gửi
 apiClient.interceptors.request.use(
   async (config) => {
+    // ✅ Nếu data là FormData, xóa Content-Type để axios tự set boundary đúng
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     const token = getAuthToken();
 
     // Check if token is expiring soon before sending request (refresh nếu còn 5 phút)
@@ -345,8 +364,8 @@ apiClient.interceptors.response.use(
 
         if (response.token && response.refreshToken) {
           console.log('[apiClient] Token refreshed successfully');
-          // Lưu tokens mới
-          setTokens(response.token, response.refreshToken);
+          // Lưu user tokens mới
+          setUserTokens(response.token, response.refreshToken);
 
           // Update token trong original request
           originalRequest.headers.Authorization = `Bearer ${response.token}`;
@@ -371,8 +390,8 @@ apiClient.interceptors.response.use(
         const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
 
         if (!isNoTokenError) {
-          // Chỉ clear tokens nếu refresh thực sự fail (token invalid, expired, etc.)
-          clearTokens();
+          // Chỉ clear user tokens nếu refresh thực sự fail (token invalid, expired, etc.)
+          clearUserTokens();
         }
 
         processQueue(refreshError, null);
@@ -390,12 +409,12 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 403) {
       const requestUrl = error.config?.url || '';
       const isPlayNowEndpoint = requestUrl.includes('/songs/') && requestUrl.includes('/play-now');
-      
+
       // Nếu là API phát nhạc, để playSongHelper.ts xử lý riêng (không hiển thị toast ở đây)
       if (isPlayNowEndpoint) {
         return Promise.reject(error);
       }
-      
+
       const message = error.response.data?.message ||
         error.response.data?.error ||
         'Access Denied';
@@ -421,8 +440,8 @@ apiClient.interceptors.response.use(
           alert('Yêu cầu đăng nhập\nVui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.');
         }
 
-        // Clear tokens và redirect về login
-        clearTokens();
+        // Clear user tokens và redirect về login
+        clearUserTokens();
 
         // Đợi một chút để toast hiển thị trước khi redirect
         setTimeout(() => {
@@ -511,173 +530,6 @@ export const parseErrorResponse = async (response: Response): Promise<string> =>
   }
 };
 
-// Fetch wrapper với auto refresh token
-let isRefreshingFetch = false;
-let failedQueueFetch: Array<{
-  resolve: (value?: any) => void;
-  reject: (reason?: any) => void;
-}> = [];
-
-const processQueueFetch = (error: any, token: string | null = null) => {
-  failedQueueFetch.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueueFetch = [];
-};
-
-export const fetchWithAuth = async (
-  url: string,
-  options: RequestInit = {}
-): Promise<Response> => {
-  // Thêm token vào headers
-  const token = getAuthToken();
-  const headers = new Headers(options.headers);
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  const fetchOptions: RequestInit = {
-    ...options,
-    headers,
-  };
-
-  try {
-    let response = await fetch(url, fetchOptions);
-
-    // Nếu lỗi 401, thử refresh token
-    if (response.status === 401 && !(fetchOptions as any)._retry) {
-      if (isRefreshingFetch) {
-        // Nếu đang refresh, đợi kết quả
-        return new Promise((resolve, reject) => {
-          failedQueueFetch.push({ resolve, reject });
-        })
-          .then((newToken) => {
-            headers.set('Authorization', `Bearer ${newToken}`);
-            (fetchOptions as any)._retry = true;
-            return fetch(url, { ...fetchOptions, headers });
-          })
-          .catch((err) => {
-            return Promise.reject(err);
-          });
-      }
-
-      (fetchOptions as any)._retry = true;
-      isRefreshingFetch = true;
-
-      const refreshToken = getRefreshToken();
-      if (!refreshToken) {
-        isRefreshingFetch = false;
-        // ✅ Không clear tokens ngay - có thể đang đợi token từ tab khác
-        // ✅ Không redirect ngay - để các component có cơ hội retry hoặc đợi token
-        processQueueFetch(new Error('No refresh token available'), null);
-        console.warn('[fetchWithAuth] No refresh token available. Tab may be waiting for token from other tabs.');
-        return Promise.reject(new Error('No refresh token available'));
-      }
-
-      try {
-        // Import authApi dynamically to avoid circular dependency
-        const { authApi } = await import('./authApi');
-        const refreshResponse = await authApi.refreshToken(refreshToken);
-
-        if (refreshResponse.token && refreshResponse.refreshToken) {
-          // Lưu tokens mới
-          setTokens(refreshResponse.token, refreshResponse.refreshToken);
-
-          // Update headers với token mới
-          headers.set('Authorization', `Bearer ${refreshResponse.token}`);
-
-          // Process queue với token mới
-          processQueueFetch(null, refreshResponse.token);
-          isRefreshingFetch = false;
-
-          // Retry original request với token mới
-          return fetch(url, { ...fetchOptions, headers });
-        } else {
-          throw new Error('Invalid response from refresh token endpoint');
-        }
-      } catch (refreshError) {
-        isRefreshingFetch = false;
-
-        // ✅ Chỉ clear tokens nếu refresh thực sự fail (không phải do chưa có token)
-        const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
-        const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
-
-        if (!isNoTokenError) {
-          // Chỉ clear tokens nếu refresh thực sự fail (token invalid, expired, etc.)
-          clearTokens();
-        }
-
-        processQueueFetch(refreshError, null);
-
-        // ✅ Không redirect ngay - để component có cơ hội retry hoặc đợi token từ tab khác
-        console.warn('[fetchWithAuth] Refresh token failed. Component will handle retry or wait for token from other tabs.');
-
-        return Promise.reject(refreshError);
-      }
-    }
-
-    // ✅ Xử lý lỗi 403 (Access Denied) - Yêu cầu đăng nhập để phát nhạc
-    if (response.status === 403) {
-      // Clone response để đọc body mà không consume response gốc
-      const clonedResponse = response.clone();
-      let errorData: any = {};
-      try {
-        errorData = await clonedResponse.json();
-      } catch {
-        try {
-          const clonedResponse2 = response.clone();
-          const text = await clonedResponse2.text();
-          errorData = { message: text || 'Access Denied', error: 'Access Denied' };
-        } catch {
-          errorData = { message: 'Access Denied', error: 'Access Denied' };
-        }
-      }
-
-      const message = errorData.message || errorData.error || 'Access Denied';
-
-      console.error("[fetchWithAuth] Access Denied (403):", {
-        status: response.status,
-        data: errorData,
-        message
-      });
-
-      // Hiển thị thông báo cho người dùng
-      if (typeof window !== 'undefined') {
-        // Sử dụng sonner toast nếu có, hoặc alert
-        try {
-          // Thử import sonner dynamically
-          const { toast } = await import('sonner');
-          toast.error('Yêu cầu đăng nhập', {
-            description: 'Vui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.',
-            duration: 5000,
-          });
-        } catch {
-          // Fallback nếu sonner không có
-          alert('Yêu cầu đăng nhập\nVui lòng đăng nhập để tiếp tục phát nhạc và sử dụng các tính năng.');
-        }
-
-        // Clear tokens và redirect về login
-        clearTokens();
-
-        // Đợi một chút để toast hiển thị trước khi redirect
-        setTimeout(() => {
-          const isAdminPage = window.location.pathname.startsWith('/admin');
-          window.location.href = isAdminPage ? '/admin/login' : '/login';
-        }, 1000);
-      }
-
-      return Promise.reject(new Error(message));
-    }
-
-    return response;
-  } catch (error) {
-    return Promise.reject(error);
-  }
-};
 
 // Interface cho pagination params
 export interface PaginationParams {
@@ -767,7 +619,7 @@ export const refreshTokenIfNeeded = async (): Promise<boolean> => {
 
     if (response.token && response.refreshToken) {
       console.log('[refreshTokenIfNeeded] ✅ Token refreshed successfully');
-      setTokens(response.token, response.refreshToken);
+      setUserTokens(response.token, response.refreshToken);
       isRefreshingProactively = false;
       return true;
     } else {
@@ -796,7 +648,7 @@ export const forceRefreshAccessToken = async (): Promise<string | null> => {
 
   const refreshToken = getRefreshToken();
   if (!refreshToken) {
-    clearTokens();
+    clearUserTokens();
     return null;
   }
 
@@ -806,13 +658,13 @@ export const forceRefreshAccessToken = async (): Promise<string | null> => {
       const response = await authApi.refreshToken(refreshToken);
 
       if (response.token) {
-        setTokens(response.token, response.refreshToken || refreshToken);
+        setUserTokens(response.token, response.refreshToken || refreshToken);
         return response.token;
       }
 
       throw new Error('Invalid response from refresh token endpoint');
     } catch (error) {
-      clearTokens();
+      clearUserTokens();
       throw error;
     } finally {
       manualRefreshPromise = null;
@@ -864,5 +716,313 @@ if (typeof window !== 'undefined') {
     }
   }, 500);
 }
+
+// ========================================
+// ADMIN CLIENT - Dùng adminToken riêng
+// ========================================
+
+// Tạo axios instance cho admin với config cơ bản
+export const adminClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Helper để set admin tokens riêng
+export const setAdminTokens = (token: string, refreshToken?: string) => {
+  try {
+    if (typeof window === 'undefined') return;
+
+    sessionStorage.setItem('adminToken', token);
+    if (refreshToken) {
+      sessionStorage.setItem('adminRefreshToken', refreshToken);
+    }
+
+    console.log('[setAdminTokens] Admin tokens saved to sessionStorage:', {
+      hasToken: !!token,
+      hasRefreshToken: !!refreshToken
+    });
+
+    // Broadcast token update
+    if (typeof window !== 'undefined' && window.BroadcastChannel) {
+      try {
+        const authChannel = new BroadcastChannel('auth_channel');
+        authChannel.postMessage({
+          type: 'TOKEN_UPDATED',
+          timestamp: Date.now()
+        });
+        authChannel.close();
+        console.log('[setAdminTokens] Broadcasted TOKEN_UPDATED to other tabs');
+      } catch (error) {
+        console.warn('[setAdminTokens] Failed to broadcast token update:', error);
+      }
+    }
+
+    // Dispatch custom event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tokenUpdated'));
+    }
+  } catch (error) {
+    console.error('[setAdminTokens] Failed to save tokens:', error);
+  }
+};
+
+// Helper để clear admin tokens
+export const clearAdminTokens = () => {
+  try {
+    if (typeof window === 'undefined') return;
+    sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminRefreshToken');
+    console.log('[clearAdminTokens] Admin tokens cleared from sessionStorage');
+  } catch (error) {
+    console.error('[clearAdminTokens] Failed to clear tokens:', error);
+  }
+};
+
+// Admin refresh token helper
+let isRefreshingAdmin = false;
+let failedQueueAdmin: Array<{
+  resolve: (value?: any) => void;
+  reject: (reason?: any) => void;
+}> = [];
+
+const processQueueAdmin = (error: any, token: string | null = null) => {
+  failedQueueAdmin.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueueAdmin = [];
+};
+
+// Request interceptor cho adminClient
+adminClient.interceptors.request.use(
+  async (config) => {
+    // ✅ Nếu data là FormData, xóa Content-Type để axios tự set boundary đúng
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
+    const adminToken = getAdminToken();
+
+    // Check if token is expiring soon before sending request
+    if (adminToken && isTokenExpiringSoon(adminToken, 5)) {
+      console.log('[adminClient] Token expiring soon (within 5 min), refreshing before request...');
+      try {
+        const refreshed = await refreshAdminTokenIfNeeded();
+        if (refreshed) {
+          const newToken = getAdminToken();
+          if (newToken) {
+            config.headers.Authorization = `Bearer ${newToken}`;
+            console.log('[adminClient] Using refreshed token');
+            return config;
+          }
+        }
+      } catch (error) {
+        console.error('[adminClient] Failed to refresh token before request:', error);
+      }
+    }
+
+    if (adminToken) {
+      config.headers.Authorization = `Bearer ${adminToken}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor cho adminClient
+adminClient.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Nếu lỗi 401 (Unauthorized) và chưa retry
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshingAdmin) {
+        return new Promise((resolve, reject) => {
+          failedQueueAdmin.push({ resolve, reject });
+        })
+          .then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return adminClient(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshingAdmin = true;
+
+      const adminRefreshToken = getAdminRefreshToken();
+      if (!adminRefreshToken) {
+        isRefreshingAdmin = false;
+        processQueueAdmin(new Error('No admin refresh token available'), null);
+        console.warn('[adminClient] No admin refresh token available.');
+        return Promise.reject(new Error('No admin refresh token available'));
+      }
+
+      try {
+        console.log('[adminClient] Token expired, refreshing admin token...');
+        const { authApi } = await import('./authApi');
+        const response = await authApi.refreshToken(adminRefreshToken);
+
+        if (response.token && response.refreshToken) {
+          console.log('[adminClient] Admin token refreshed successfully');
+          setAdminTokens(response.token, response.refreshToken);
+
+          originalRequest.headers.Authorization = `Bearer ${response.token}`;
+          processQueueAdmin(null, response.token);
+          isRefreshingAdmin = false;
+
+          console.log('[adminClient] Retrying original request with new token');
+          return adminClient(originalRequest);
+        } else {
+          console.error('[adminClient] Invalid refresh response:', response);
+          throw new Error('Invalid response from refresh token endpoint');
+        }
+      } catch (refreshError) {
+        console.error('[adminClient] Refresh token failed:', refreshError);
+        isRefreshingAdmin = false;
+
+        const errorMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
+        const isNoTokenError = errorMessage.includes('No refresh token') || errorMessage.includes('refresh token');
+
+        if (!isNoTokenError) {
+          clearAdminTokens();
+        }
+
+        processQueueAdmin(refreshError, null);
+        console.warn('[adminClient] Refresh token failed.');
+
+        return Promise.reject(refreshError);
+      }
+    }
+
+    // Xử lý lỗi 403 (Access Denied)
+    if (error.response?.status === 403) {
+      const message = error.response.data?.message ||
+        error.response.data?.error ||
+        'Access Denied';
+
+      console.error("[adminClient] Access Denied (403):", {
+        status: error.response.status,
+        data: error.response.data,
+        message
+      });
+
+      if (typeof window !== 'undefined') {
+        try {
+          const { toast } = await import('sonner');
+          toast.error('Không có quyền truy cập', {
+            description: 'Bạn không có quyền thực hiện thao tác này.',
+            duration: 5000,
+          });
+        } catch {
+          alert('Không có quyền truy cập\nBạn không có quyền thực hiện thao tác này.');
+        }
+
+        clearAdminTokens();
+
+        setTimeout(() => {
+          window.location.href = '/admin/login';
+        }, 1000);
+      }
+
+      return Promise.reject(new Error(message));
+    }
+
+    // Xử lý lỗi chung
+    if (error.response) {
+      const message = error.response.data?.message ||
+        error.response.data?.error ||
+        error.response.data?.details ||
+        (typeof error.response.data === 'string' ? error.response.data : null) ||
+        `${error.response.status} ${error.response.statusText}`;
+      console.error("[adminClient] Server error response:", {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+        message
+      });
+      throw new Error(message);
+    } else if (error.request) {
+      console.error("[adminClient] Network error - no response received:", {
+        code: error.code,
+        message: error.message,
+        timeout: error.config?.timeout,
+        url: error.config?.url
+      });
+
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        throw new Error('Request timeout - the server is taking too long to respond. Please try again.');
+      }
+
+      throw new Error('Network error - please check your connection and ensure the backend server is running');
+    } else {
+      console.error("[adminClient] Request setup error:", error.message);
+      throw new Error(error.message || 'An unexpected error occurred');
+    }
+  }
+);
+
+// Helper để refresh admin token nếu cần
+export const refreshAdminTokenIfNeeded = async (): Promise<boolean> => {
+  const adminToken = getAdminToken();
+  const adminRefreshToken = getAdminRefreshToken();
+
+  if (!adminToken || !adminRefreshToken) {
+    console.log('[refreshAdminTokenIfNeeded] No admin token or refresh token available');
+    return false;
+  }
+
+  if (!isTokenExpiringSoon(adminToken, 5)) {
+    return false;
+  }
+
+  if (isRefreshingAdmin) {
+    console.log('[refreshAdminTokenIfNeeded] Refresh already in progress, waiting...');
+    let waitCount = 0;
+    while (isRefreshingAdmin && waitCount < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      waitCount++;
+    }
+    const newToken = getAdminToken();
+    return newToken !== adminToken;
+  }
+
+  isRefreshingAdmin = true;
+
+  try {
+    console.log('[refreshAdminTokenIfNeeded] Admin token expiring soon, refreshing proactively...');
+    const { authApi } = await import('./authApi');
+    const response = await authApi.refreshToken(adminRefreshToken);
+
+    if (response.token && response.refreshToken) {
+      console.log('[refreshAdminTokenIfNeeded] ✅ Admin token refreshed successfully');
+      setAdminTokens(response.token, response.refreshToken);
+      isRefreshingAdmin = false;
+      return true;
+    } else {
+      console.error('[refreshAdminTokenIfNeeded] ❌ Invalid refresh response:', response);
+      isRefreshingAdmin = false;
+      return false;
+    }
+  } catch (error) {
+    console.error('[refreshAdminTokenIfNeeded] ❌ Failed to refresh admin token:', error);
+    isRefreshingAdmin = false;
+    return false;
+  }
+};
 
 export default apiClient;

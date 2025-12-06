@@ -1,4 +1,4 @@
-import { API_BASE_URL, fetchWithAuth, parseErrorResponse } from "./config";
+import { apiClient } from "./config";
 
 export interface PremiumSubscriptionDTO {
   id?: string;
@@ -66,23 +66,20 @@ export const premiumSubscriptionApi = {
    * @param userId optional - nếu truyền sẽ lấy theo userId (admin view), nếu không sẽ lấy /me
    */
   getMySubscription: async (userId?: number | string): Promise<PremiumSubscriptionDTO | null> => {
-    const query = typeof userId !== "undefined" ? `?userId=${userId}&page=0&size=1` : "";
-    const endpoint = userId
-      ? `${API_BASE_URL}/premium-subscriptions${query}`
-      : `${API_BASE_URL}/premium-subscriptions/me?page=0&size=1`;
+    try {
+      const query = typeof userId !== "undefined" ? `?userId=${userId}&page=0&size=1` : "";
+      const endpoint = userId
+        ? `/premium-subscriptions${query}`
+        : `/premium-subscriptions/me?page=0&size=1`;
 
-    const response = await fetchWithAuth(endpoint, { method: "GET" });
-
-    if (response.status === 204 || response.status === 404) {
-      return null;
+      const response = await apiClient.get(endpoint);
+      return extractLatestSubscription(response.data);
+    } catch (error: any) {
+      if (error.response?.status === 204 || error.response?.status === 404) {
+        return null;
+      }
+      throw error;
     }
-
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
-
-    const payload = await response.json();
-    return extractLatestSubscription(payload);
   },
 
   /**
@@ -100,20 +97,13 @@ export const premiumSubscriptionApi = {
     params.append("page", page.toString());
     params.append("size", size.toString());
 
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/premium-subscriptions?${params.toString()}`,
-      { method: "GET" }
-    );
-
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
-
-    const payload = await response.json();
+    const response = await apiClient.get(`/premium-subscriptions?${params.toString()}`);
+    const payload = response.data;
+    
     if (payload.success && payload.data) {
       return payload.data;
     }
-    throw new Error("Invalid response format");
+    return payload;
   },
 };
 

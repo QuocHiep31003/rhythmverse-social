@@ -57,7 +57,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { songsApi, artistsApi, genresApi, moodsApi, songContributorApi, songGenreApi, songMoodApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
-import { API_BASE_URL, fetchWithAuth } from "@/services/api/config";
+import { API_BASE_URL } from "@/services/api/config";
 import type { SongContributor } from "@/services/api/songContributorApi";
 import type { SongGenre } from "@/services/api/songGenreApi";
 import type { SongMood } from "@/services/api/songMoodApi";
@@ -892,20 +892,8 @@ export const SongEditDialog = ({
                               if (!songData?.acrId) return;
                               setCheckingFingerprint(true);
                               try {
-                                const url = `${API_BASE_URL}/songs/test/acr/check?acr_id=${encodeURIComponent(songData.acrId)}`;
-                                const response = await fetchWithAuth(url, {
-                                  method: 'GET',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                  },
-                                });
+                                const data = await songsApi.checkAcrFingerprint(songData.acrId);
                                 
-                                if (!response.ok) {
-                                  const errorText = await response.text();
-                                  throw new Error(errorText || `HTTP ${response.status}`);
-                                }
-                                
-                                const data = await response.json();
                                 if (data.success) {
                                   setFingerprintStatus(data.state);
                                   if (data.state === 1) {

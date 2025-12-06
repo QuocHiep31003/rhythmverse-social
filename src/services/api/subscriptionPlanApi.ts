@@ -1,4 +1,4 @@
-import { API_BASE_URL, fetchWithAuth, parseErrorResponse } from "./config";
+import { apiClient } from "./config";
 
 export interface PlanFeatureDTO {
   id?: number;
@@ -46,20 +46,14 @@ export interface SubscriptionPlanDTO {
   updatedAt?: string;
 }
 
-const parseResponse = async (response: Response): Promise<any> => {
-  if (response.status === 204 || response.status === 404) {
+const parseResponse = (data: any): any => {
+  if (data === null || data === undefined) {
     return null;
   }
-
-  if (!response.ok) {
-    throw new Error(await parseErrorResponse(response));
+  if (data.success && data.data !== undefined) {
+    return data.data;
   }
-
-  const payload = await response.json();
-  if (payload.success && payload.data !== undefined) {
-    return payload.data;
-  }
-  return payload;
+  return data;
 };
 
 export const subscriptionPlanApi = {
@@ -67,105 +61,64 @@ export const subscriptionPlanApi = {
    * Lấy tất cả các gói đang active (Public)
    */
   getActivePlans: async (): Promise<SubscriptionPlanDTO[]> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans`,
-      { method: "GET" }
-    );
-    return parseResponse(response);
+    const response = await apiClient.get('/subscription-plans');
+    return parseResponse(response.data);
   },
 
   /**
    * Lấy tất cả các gói (Admin only)
    */
   getAllPlans: async (): Promise<SubscriptionPlanDTO[]> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans/all`,
-      { method: "GET" }
-    );
-    return parseResponse(response);
+    const response = await apiClient.get('/subscription-plans/all');
+    return parseResponse(response.data);
   },
 
   /**
    * Lấy gói theo ID
    */
   getPlanById: async (id: number): Promise<SubscriptionPlanDTO> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans/${id}`,
-      { method: "GET" }
-    );
-    return parseResponse(response);
+    const response = await apiClient.get(`/subscription-plans/${id}`);
+    return parseResponse(response.data);
   },
 
   /**
    * Lấy gói theo plan code
    */
   getPlanByCode: async (planCode: string): Promise<SubscriptionPlanDTO> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans/code/${planCode}`,
-      { method: "GET" }
-    );
-    return parseResponse(response);
+    const response = await apiClient.get(`/subscription-plans/code/${planCode}`);
+    return parseResponse(response.data);
   },
 
   /**
    * Tạo gói mới (Admin only)
    */
   createPlan: async (plan: SubscriptionPlanDTO): Promise<SubscriptionPlanDTO> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(plan),
-      }
-    );
-    return parseResponse(response);
+    const response = await apiClient.post('/subscription-plans', plan);
+    return parseResponse(response.data);
   },
 
   /**
    * Cập nhật gói (Admin only)
    */
   updatePlan: async (id: number, plan: SubscriptionPlanDTO): Promise<SubscriptionPlanDTO> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans/${id}`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(plan),
-      }
-    );
-    return parseResponse(response);
+    const response = await apiClient.put(`/subscription-plans/${id}`, plan);
+    return parseResponse(response.data);
   },
 
   /**
    * Xóa gói (Admin only)
    */
   deletePlan: async (id: number): Promise<string> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans/${id}`,
-      { method: "DELETE" }
-    );
-    return parseResponse(response);
+    const response = await apiClient.delete(`/subscription-plans/${id}`);
+    return parseResponse(response.data);
   },
 
   /**
    * Seed các gói mặc định (FREE và PREMIUM) - Admin only
    */
   seedDefaultPlans: async (): Promise<string> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/subscription-plans/seed`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    return parseResponse(response);
+    const response = await apiClient.post('/subscription-plans/seed');
+    return parseResponse(response.data);
   },
 };
 

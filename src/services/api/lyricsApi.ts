@@ -1,4 +1,5 @@
-import { API_BASE_URL, buildJsonHeaders } from './config';
+import { apiClient } from './config';
+import { guestClient } from './guestApi';
 
 // Mock lyrics data for demonstration
 const mockLyricsData: Record<string, Array<{ time: number; text: string }>> = {
@@ -135,17 +136,11 @@ export const lyricsApi = {
      */
     getLyrics: async (songId: string): Promise<Array<{ time: number; text: string }>> => {
         try {
-            // Try to fetch from backend
-            const response = await fetch(`${API_BASE_URL}/songs/${songId}/lyrics`, {
-                method: 'GET',
-                headers: buildJsonHeaders(),
-            });
-
-            if (response.ok) {
-                return await response.json();
-            }
-
-            // Fallback to mock data
+            // Try to fetch from backend (public - không cần token)
+            const response = await guestClient.get<Array<{ time: number; text: string }>>(`/songs/${songId}/lyrics`);
+            return response.data;
+        } catch (error: any) {
+            // Fallback to mock data if API fails
             console.log(`Lyrics not found for song ${songId}, using mock data`);
 
             // Return mock data (if exists) or generic mock lyrics for any song
@@ -154,66 +149,6 @@ export const lyricsApi = {
             }
 
             // Generic mock lyrics for any song ID (3+ minutes)
-            return [
-                { time: 0, text: "♪ Music starts playing..." },
-                { time: 4, text: "Feel the rhythm and the beat..." },
-                { time: 8, text: "Let the melody take control..." },
-                { time: 12, text: "Dancing through the night..." },
-                { time: 16, text: "Every note tells a story..." },
-                { time: 20, text: "Lost in the sound..." },
-                { time: 24, text: "Feel the music in your soul..." },
-                { time: 28, text: "Let it guide you home..." },
-                { time: 32, text: "♪ Enjoying the moment..." },
-                { time: 36, text: "Music brings us together..." },
-                { time: 40, text: "Never let the music stop..." },
-                { time: 44, text: "Raising our hands up high..." },
-                { time: 48, text: "Feel the energy rise..." },
-                { time: 52, text: "In this moment we're alive..." },
-                { time: 56, text: "Every beat makes us move..." },
-                { time: 60, text: "Nothing can break this groove..." },
-                { time: 64, text: "♪ The chorus comes again..." },
-                { time: 68, text: "Singing at the top of our lungs..." },
-                { time: 72, text: "This is where we belong..." },
-                { time: 76, text: "In the rhythm, in the song..." },
-                { time: 80, text: "Feel the bass, feel the drop..." },
-                { time: 84, text: "Nothing's gonna make us stop..." },
-                { time: 88, text: "♪ Instrumental solo..." },
-                { time: 92, text: "Losing ourselves in the sound..." },
-                { time: 96, text: "World disappears all around..." },
-                { time: 100, text: "Just the beat and the melody..." },
-                { time: 104, text: "Setting our hearts free..." },
-                { time: 108, text: "Every beat is a heartbeat..." },
-                { time: 112, text: "Moving our hands and our feet..." },
-                { time: 116, text: "♪ Energy builds up..." },
-                { time: 120, text: "Crowd starts jumping up..." },
-                { time: 124, text: "This is what we came for..." },
-                { time: 128, text: "Can't ask for any more..." },
-                { time: 132, text: "Music runs through our veins..." },
-                { time: 136, text: "Breaking all the chains..." },
-                { time: 140, text: "Dancing like there's no tomorrow..." },
-                { time: 144, text: "Leave behind the sorrow..." },
-                { time: 148, text: "♪ Bridge section starts..." },
-                { time: 152, text: "Take a breath, slow it down..." },
-                { time: 156, text: "Feel the vibe all around..." },
-                { time: 160, text: "This is more than just a song..." },
-                { time: 164, text: "It's where we feel we belong..." },
-                { time: 168, text: "Every lyric means something..." },
-                { time: 172, text: "To the rhythm we're singing..." },
-                { time: 176, text: "♪ Final chorus begins..." },
-                { time: 180, text: "Raising our voices high..." },
-                { time: 184, text: "Until we touch the sky..." },
-                { time: 188, text: "This moment we'll remember..." },
-                { time: 192, text: "Long after December..." },
-                { time: 196, text: "Music stays in our heart..." },
-                { time: 200, text: "Even when we're apart..." },
-                { time: 204, text: "♪ Outro fading away..." },
-                { time: 208, text: "Taking the beat with us..." },
-                { time: 212, text: "Until we meet again..." },
-            ];
-        } catch (error) {
-            console.error("Error fetching lyrics:", error);
-
-            // Return generic mock lyrics (3+ minutes)
             return [
                 { time: 0, text: "♪ Music starts playing..." },
                 { time: 4, text: "Feel the rhythm and the beat..." },
@@ -283,18 +218,11 @@ export const lyricsApi = {
         lyrics: Array<{ time: number; text: string }>
     ): Promise<void> => {
         try {
-            const response = await fetch(`${API_BASE_URL}/songs/${songId}/lyrics`, {
-                method: 'POST',
-                headers: buildJsonHeaders(),
-                body: JSON.stringify(lyrics),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to save lyrics');
-            }
-        } catch (error) {
+            await apiClient.post(`/songs/${songId}/lyrics`, lyrics);
+        } catch (error: any) {
             console.error("Error saving lyrics:", error);
-            throw error;
+            const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to save lyrics';
+            throw new Error(errorMsg);
         }
     },
 

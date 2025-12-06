@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, apiClient } from './config';
+import { apiClient } from './config';
 
 export enum ReportType {
   SONG = 'SONG',
@@ -162,6 +162,7 @@ export const reportApi = {
     status?: ReportStatus;
     type?: ReportType;
   }): Promise<any> => {
+    try {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.append('page', params.page.toString());
     if (params?.size !== undefined) queryParams.append('size', params.size.toString());
@@ -170,34 +171,25 @@ export const reportApi = {
     if (params?.status) queryParams.append('status', params.status);
     if (params?.type) queryParams.append('type', params.type);
 
-    const response = await fetch(`${API_BASE_URL}/reports?${queryParams.toString()}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to fetch reports');
+      const response = await apiClient.get(`/reports?${queryParams.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch reports';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 
   /**
    * Lấy báo cáo theo ID
    */
   getById: async (id: number): Promise<ReportDTO> => {
-    const response = await fetch(`${API_BASE_URL}/reports/${id}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to fetch report');
+    try {
+      const response = await apiClient.get(`/reports/${id}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch report';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 
   /**
@@ -208,40 +200,33 @@ export const reportApi = {
     size?: number;
     sort?: string;
   }): Promise<any> => {
+    try {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.append('page', params.page.toString());
     if (params?.size !== undefined) queryParams.append('size', params.size.toString());
     if (params?.sort) queryParams.append('sort', params.sort);
 
-    const response = await fetch(`${API_BASE_URL}/reports/my-reports?${queryParams.toString()}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to fetch my reports');
+      const response = await apiClient.get(`/reports/my-reports?${queryParams.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch my reports';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 
   /**
    * Cập nhật status của báo cáo (Admin only)
    */
   updateStatus: async (id: number, status: ReportStatus): Promise<ReportDTO> => {
-    const response = await fetch(`${API_BASE_URL}/reports/${id}/status?status=${status}`, {
-      method: 'PUT',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to update report status');
+    try {
+      const response = await apiClient.put(`/reports/${id}/status?status=${status}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update report status';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 };
+
 
 

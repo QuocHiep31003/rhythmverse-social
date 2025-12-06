@@ -1,4 +1,4 @@
-import { API_BASE_URL, PaginationParams } from './config';
+import { apiClient, PaginationParams } from './config';
 
 export const moodsApi = {
     getAll: async ({ page = 0, size = 10, sort = "name,asc", search }: PaginationParams = {}) => {
@@ -9,11 +9,8 @@ export const moodsApi = {
                 sort,
                 ...(search && { search }),
             });
-            const response = await fetch(`${API_BASE_URL}/moods?${queryParams}`);
-            if (!response.ok) {
-                throw new Error("Failed to fetch moods");
-            }
-            return await response.json();
+            const response = await apiClient.get(`/moods?${queryParams}`);
+            return response.data;
         } catch (error) {
             console.error("Error fetching moods:", error);
             throw error;
@@ -32,11 +29,8 @@ export const moodsApi = {
                 sort,
                 ...(search && { search }),
             });
-            const response = await fetch(`${API_BASE_URL}/moods/public?${queryParams}`);
-            if (!response.ok) {
-                throw new Error("Failed to fetch public moods");
-            }
-            return await response.json();
+            const response = await apiClient.get(`/moods/public?${queryParams}`);
+            return response.data;
         } catch (error) {
             console.error("Error fetching public moods:", error);
             return {
@@ -54,11 +48,8 @@ export const moodsApi = {
 
     getById: async (id: number) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/moods/${id}`);
-            if (!response.ok) {
-                throw new Error("Failed to fetch mood");
-            }
-            return await response.json();
+            const response = await apiClient.get(`/moods/${id}`);
+            return response.data;
         } catch (error) {
             console.error("Error fetching mood:", error);
             throw error;
@@ -67,16 +58,8 @@ export const moodsApi = {
 
     create: async (data: { name: string; iconUrl?: string; gradient?: string; status?: string }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/moods`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || "Failed to create mood");
-            }
-            return await response.json();
+            const response = await apiClient.post('/moods', data);
+            return response.data;
         } catch (error) {
             console.error("Error creating mood:", error);
             throw error;
@@ -85,16 +68,8 @@ export const moodsApi = {
 
     update: async (id: number, data: { name: string; iconUrl?: string; gradient?: string; status?: string }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/moods/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || "Failed to update mood");
-            }
-            return await response.json();
+            const response = await apiClient.put(`/moods/${id}`, data);
+            return response.data;
         } catch (error) {
             console.error("Error updating mood:", error);
             throw error;
@@ -103,14 +78,8 @@ export const moodsApi = {
 
     getDeactivationWarning: async (id: number) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/moods/${id}/deactivation-warning`, {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            if (!response.ok) {
-                throw new Error("Failed to fetch deactivation warning");
-            }
-            return await response.json();
+            const response = await apiClient.get(`/moods/${id}/deactivation-warning`);
+            return response.data;
         } catch (error) {
             console.error("Error fetching deactivation warning:", error);
             throw error;
@@ -119,9 +88,7 @@ export const moodsApi = {
 
     delete: async (id: number) => {
         try {
-            await fetch(`${API_BASE_URL}/moods/${id}`, {
-                method: 'DELETE'
-            });
+            await apiClient.delete(`/moods/${id}`);
             return { success: true };
         } catch (error) {
             console.error("Error deleting mood:", error);
@@ -131,11 +98,10 @@ export const moodsApi = {
 
     exportExcel: async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/moods/export`);
-            if (!response.ok) {
-                throw new Error("Failed to export moods");
-            }
-            const blob = await response.blob();
+            const response = await apiClient.get('/moods/export', {
+                responseType: 'blob'
+            });
+            const blob = new Blob([response.data]);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -155,17 +121,8 @@ export const moodsApi = {
             const formData = new FormData();
             formData.append('file', file);
 
-            const response = await fetch(`${API_BASE_URL}/moods/import`, {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || "Failed to import moods");
-            }
-
-            return await response.text();
+            const response = await apiClient.post('/moods/import', formData);
+            return response.data;
         } catch (error) {
             console.error("Error importing moods:", error);
             throw error;
