@@ -104,7 +104,7 @@ const QueueItem = memo(({
       {isCurrent ? (
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-xs text-primary font-medium">Đang phát</span>
+          <span className="text-xs text-primary font-medium">Playing</span>
         </div>
       ) : (
         <DropdownMenu>
@@ -125,7 +125,7 @@ const QueueItem = memo(({
                 // TODO: Thêm vào danh sách yêu thích theo logic của bạn
               }}
             >
-              Thêm vào danh sách yêu thích
+              Add to Favorites
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
@@ -133,7 +133,7 @@ const QueueItem = memo(({
                 onRemove();
               }}
             >
-              Xóa khỏi danh sách chờ
+              Remove from queue
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -210,7 +210,7 @@ const Controls = memo(({
             ? "text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30" 
             : "hover:bg-accent"
         )}
-        title={isShuffled ? "Tắt phát ngẫu nhiên" : "Bật phát ngẫu nhiên"}
+        title={isShuffled ? "Disable shuffle" : "Enable shuffle"}
       >
         <Shuffle className={cn(
           "w-5 h-5 transition-all",
@@ -224,7 +224,7 @@ const Controls = memo(({
         onClick={onPrevious}
         disabled={isLoading || !canGoPrevious}
         className={cn("rounded-full", !canGoPrevious && "opacity-50 cursor-not-allowed")}
-        title={!canGoPrevious ? "Chế độ lặp đang tắt" : "Bài trước"}
+        title={!canGoPrevious ? "Repeat is off" : "Previous"}
       >
         <SkipBack className="w-5 h-5" />
       </Button>
@@ -251,7 +251,7 @@ const Controls = memo(({
         onClick={onNext}
         disabled={isLoading}
         className="rounded-full"
-        title="Bài tiếp theo"
+        title="Next"
       >
         <SkipForward className="w-5 h-5" />
       </Button>
@@ -269,10 +269,10 @@ const Controls = memo(({
         )}
         title={
           repeatMode === "off"
-            ? "Bật lặp lại"
+            ? "Enable repeat"
             : repeatMode === "all"
-            ? "Lặp lại tất cả"
-            : "Lặp lại một bài"
+            ? "Repeat all"
+            : "Repeat one"
         }
       >
         {repeatMode === "one" ? (
@@ -422,7 +422,7 @@ const QueuePanel = memo(({
           variant="ghost"
           size="icon"
           className="h-9 w-9"
-          title="Danh sách phát"
+          title="Queue"
         >
           <List className="w-5 h-5" />
         </Button>
@@ -432,15 +432,15 @@ const QueuePanel = memo(({
         className="w-full sm:max-w-md p-0 flex flex-col border-l border-border bg-background z-[9999]"
       >
         <SheetHeader className="px-4 py-3 border-b border-border text-left">
-          <SheetTitle className="text-base font-semibold">Danh sách phát</SheetTitle>
+          <SheetTitle className="text-base font-semibold">Queue</SheetTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            {queue.length === 0 ? "Danh sách chờ trống" : `${queue.length} bài hát trong hàng chờ`}
+            {queue.length === 0 ? "Queue is empty" : `${queue.length} songs in queue`}
           </p>
         </SheetHeader>
         <div className="overflow-y-auto flex-1">
           {queue.length === 0 ? (
             <div className="px-4 py-8 text-sm text-muted-foreground text-center">
-              Thêm vài bài hát để bắt đầu nghe nhé.
+              Add some songs to start listening.
             </div>
           ) : (
             <div className="py-2">
@@ -1275,7 +1275,7 @@ const ControlMusicPlayer = () => {
                     variant="ghost"
                     size="icon"
                     className="h-9 w-9 rounded-full bg-gradient-to-br from-pink-500/25 via-fuchsia-500/20 to-purple-500/25 border border-pink-400/50 text-pink-100 shadow-[0_0_14px_rgba(236,72,153,0.7)] hover:bg-pink-500/35 hover:text-white transition-all"
-                    title="Lời bài hát"
+                    title="Lyrics"
                   >
                     <Mic className="w-4 h-4" />
                   </Button>
@@ -1290,7 +1290,7 @@ const ControlMusicPlayer = () => {
                       ))
                     ) : (
                       <p className="text-muted-foreground text-center py-6">
-                        Chưa có lời bài hát cho bài này.
+                        Lyrics not available for this song.
                       </p>
                     )}
                   </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -41,8 +42,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { premiumSubscriptionApi, PremiumSubscriptionDTO } from "@/services/api/premiumSubscriptionApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { featureUsageApi, FeatureUsageDTO, FeatureName } from "@/services/api/featureUsageApi";
+import { getAuthToken } from "@/services/api/config";
 
 const Profile = () => {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [listeningHistory, setListeningHistory] = useState<ListeningHistoryDTO[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,9 +135,17 @@ const Profile = () => {
   };
 
   useEffect(() => {
+    // ✅ Kiểm tra authentication trước khi fetch data
+    const token = getAuthToken();
+    if (!token) {
+      // Redirect về login nếu chưa đăng nhập
+      navigate('/login?message=' + encodeURIComponent('Please login to view your profile'));
+      return;
+    }
+    
     fetchProfile();
     fetchFeatureUsages();
-  }, []);
+  }, [navigate]);
 
   const fetchFeatureUsages = async () => {
     try {
@@ -329,6 +340,12 @@ const Profile = () => {
       }
     } catch (error) {
       console.error("Failed to fetch profile:", error);
+      // ✅ Nếu lỗi do chưa đăng nhập (401/403), redirect về login
+      const errorResponse = error as { response?: { status?: number } };
+      if (errorResponse?.response?.status === 401 || errorResponse?.response?.status === 403) {
+        navigate('/login?message=' + encodeURIComponent('Please login to view your profile'));
+        return;
+      }
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to load profile",
@@ -753,17 +770,17 @@ const Profile = () => {
   };
 
   const [profileData, setProfileData] = useState({
-    name: "Alex Johnson",
-    username: "@alexjohnson",
-    email: "alex@example.com",
-    bio: "Music enthusiast | Always discovering new sounds | Premium member since 2023",
+    name: "",
+    username: "",
+    email: "",
+    bio: "",
     phone: "",
     address: "",
     avatar: "",
-    premium: true,
+    premium: false,
     premiumStart: "",
     premiumEnd: "",
-    planLabel: "Premium"
+    planLabel: "Free"
   });
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -882,6 +899,13 @@ const Profile = () => {
   };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // ✅ Kiểm tra authentication trước khi render
+  const token = getAuthToken();
+  if (!token) {
+    // Không render gì cả, useEffect sẽ redirect
+    return null;
+  }
 
   if (profileLoading) {
     return (

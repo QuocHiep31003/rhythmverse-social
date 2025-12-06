@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Music, Play, Disc } from "lucide-react";
+import { Music, Disc } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
 import { createSlug } from "@/utils/playlistUtils";
-import { useMusic } from "@/contexts/MusicContext";
-import { mapToPlayerSong } from "@/lib/utils";
 
 interface Album {
   id: number | string;
@@ -24,7 +22,6 @@ interface Album {
 
 const NewAlbums = () => {
   const navigate = useNavigate();
-  const { playSong, setQueue } = useMusic();
   const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,23 +39,6 @@ const NewAlbums = () => {
     };
     fetchAlbums();
   }, []);
-
-  const handlePlayAlbum = async (album: Album) => {
-    try {
-      // Lấy songs của album
-      const albumDetail = await albumsApi.getById(album.id);
-      if (albumDetail?.songs && albumDetail.songs.length > 0) {
-        const songs = albumDetail.songs.map((s: { id: number | string; [key: string]: unknown }) => mapToPlayerSong(s));
-        await setQueue(songs);
-        if (songs.length > 0) {
-          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-          await playSongWithStreamUrl(songs[0], playSong);
-        }
-      }
-    } catch (error) {
-      console.error("Error playing album:", error);
-    }
-  };
 
   const getArtistName = (artist: { id?: number | string; name?: string } | string | undefined): string => {
     if (typeof artist === 'string') return artist;
@@ -168,20 +148,6 @@ const NewAlbums = () => {
                         </span>
                       </div>
 
-                      {/* Nút Play ở giữa card khi hover */}
-                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="icon"
-                          className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 shadow-xl"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handlePlayAlbum(album);
-                          }}
-                        >
-                          <Play className="w-6 h-6" />
-                        </Button>
-                      </div>
                     </div>
                   </div>
 

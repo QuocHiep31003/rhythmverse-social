@@ -1,142 +1,92 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "@/services/api";
+import { apiClient } from "./config";
 
 export const friendsApi = {
   // Backward-compatible: senderId tham số bị bỏ qua theo API mới
   sendRequest: async (_senderId: number, receiverId: number) => {
-    // New API: POST /api/friends/requests  body: { toUserId }
-    const url = `${API_BASE_URL}/friends/requests`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: buildJsonHeaders(),
-      body: JSON.stringify({ toUserId: receiverId }),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
     try {
-      return await response.text();
-    } catch {
-      return 'Friend request sent';
+      const response = await apiClient.post('/friends/requests', { toUserId: receiverId });
+      return response.data || 'Friend request sent';
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to send friend request';
+      throw new Error(errorMsg);
     }
   },
 
   accept: async (requestId: number) => {
-    // New API: POST /api/friends/requests/{id}/accept
-    const response = await fetch(`${API_BASE_URL}/friends/requests/${requestId}/accept`, {
-      method: 'POST',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
     try {
-      return await response.text();
-    } catch {
-      return 'Friend request accepted';
+      const response = await apiClient.post(`/friends/requests/${requestId}/accept`);
+      return response.data || 'Friend request accepted';
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to accept friend request';
+      throw new Error(errorMsg);
     }
   },
 
   // New API: Reject a friend request
   reject: async (requestId: number) => {
-    // POST /api/friends/requests/{id}/reject
-    const response = await fetch(`${API_BASE_URL}/friends/requests/${requestId}/reject`, {
-      method: 'POST',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
     try {
-      return await response.text();
-    } catch {
-      return 'Friend request rejected';
+      const response = await apiClient.post(`/friends/requests/${requestId}/reject`);
+      return response.data || 'Friend request rejected';
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to reject friend request';
+      throw new Error(errorMsg);
     }
   },
 
   // Backward-compatible: userId tham số bị bỏ qua theo API mới
   getFriends: async (_userId?: number) => {
-    // New API: GET /api/friends
-    const response = await fetch(`${API_BASE_URL}/friends`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const response = await apiClient.get('/friends');
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get friends';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 
   // Backward-compatible: thay bằng requests?incoming=true
   getPending: async (_userId?: number) => {
-    const response = await fetch(`${API_BASE_URL}/friends/requests?incoming=true`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const response = await apiClient.get('/friends/requests?incoming=true');
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get pending friend requests';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 
   // Backward-compatible: userId tham số bị bỏ qua theo API mới
   remove: async (_userId: number, friendId: number, opts?: { relationshipId?: number }) => {
-    const headers = buildJsonHeaders();
-
     console.log('[Friends API] Unfriend request:', {
       userId: _userId,
       friendId: friendId,
       relationshipId: opts?.relationshipId
     });
 
-    // Prefer official endpoint: DELETE /api/friends/{friendId}
-    const primaryResponse = await fetch(`${API_BASE_URL}/friends/${friendId}`, {
-      method: "DELETE",
-      headers,
-    });
-
-    if (primaryResponse.ok) {
-      try {
-        const result = await primaryResponse.text();
-        console.log('[Friends API] Unfriend success (primary):', result);
-        return result;
-      } catch {
-        console.log('[Friends API] Unfriend success (primary, no response body)');
-        return "Unfriended";
-      }
-    }
-
-    const primaryError = await parseErrorResponse(primaryResponse);
-    console.warn('[Friends API] Primary endpoint failed:', {
-      status: primaryResponse.status,
-      error: primaryError
-    });
-
-    // Fallback: try relationshipId endpoint if available
-    if (opts?.relationshipId) {
-      console.log('[Friends API] Trying fallback endpoint with relationshipId:', opts.relationshipId);
-      const fallbackResponse = await fetch(`${API_BASE_URL}/friends/relationships/${opts.relationshipId}`, {
-        method: "DELETE",
-        headers,
-      });
-      if (fallbackResponse.ok) {
+    try {
+      // Prefer official endpoint: DELETE /api/friends/{friendId}
+      const response = await apiClient.delete(`/friends/${friendId}`);
+      const result = response.data || "Unfriended";
+      console.log('[Friends API] Unfriend success:', result);
+      return result;
+    } catch (error1: any) {
+      // Fallback: try relationshipId endpoint if available
+      if (opts?.relationshipId) {
         try {
-          const result = await fallbackResponse.text();
+          console.log('[Friends API] Trying fallback endpoint with relationshipId:', opts.relationshipId);
+          const response = await apiClient.delete(`/friends/relationships/${opts.relationshipId}`);
+          const result = response.data || "Unfriended";
           console.log('[Friends API] Unfriend success (fallback):', result);
           return result;
-        } catch {
-          console.log('[Friends API] Unfriend success (fallback, no response body)');
-          return "Unfriended";
+        } catch (error2: any) {
+          const errorMsg = error1.response?.data?.message || error2.response?.data?.message || error1.message || error2.message || "Failed to unfriend";
+          console.error('[Friends API] Both endpoints failed');
+          throw new Error(errorMsg);
         }
       }
-      const fallbackError = await parseErrorResponse(fallbackResponse);
-      console.error('[Friends API] Fallback endpoint also failed:', {
-        status: fallbackResponse.status,
-        error: fallbackError
-      });
-      throw new Error(primaryError || fallbackError || "Failed to unfriend");
+      const errorMsg = error1.response?.data?.message || error1.message || "Failed to unfriend";
+      throw new Error(errorMsg);
     }
-
-    throw new Error(primaryError || "Failed to unfriend");
   },
 };
 
@@ -144,15 +94,14 @@ export const friendsApi = {
 export const friendRequestsApi = {
   // GET /api/friends/requests?incoming=true|false
   list: async (incoming: boolean) => {
-    const qs = new URLSearchParams({ incoming: String(incoming) }).toString();
-    const response = await fetch(`${API_BASE_URL}/friends/requests?${qs}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const qs = new URLSearchParams({ incoming: String(incoming) }).toString();
+      const response = await apiClient.get(`/friends/requests?${qs}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to list friend requests';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 };
 
@@ -168,14 +117,13 @@ export interface PublicProfileDTO {
 export const publicProfileApi = {
   // GET /api/user/{username}/public
   get: async (username: string): Promise<PublicProfileDTO> => {
-    const response = await fetch(`${API_BASE_URL}/user/${encodeURIComponent(username)}/public`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const response = await apiClient.get<PublicProfileDTO>(`/user/${encodeURIComponent(username)}/public`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get public profile';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 };
 
@@ -209,60 +157,56 @@ export interface ToggleInviteLinkResponse {
 export const inviteLinksApi = {
   // Lấy invite link của tôi (mỗi user chỉ có 1 link duy nhất)
   getMyInviteLink: async (): Promise<InviteLinkDTO> => {
-    const response = await fetch(`${API_BASE_URL}/friends/invite/me`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const response = await apiClient.get<InviteLinkDTO>('/friends/invite/me');
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get my invite link';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 
   // Tạo/lấy invite link cho user (backward compatibility - POST endpoint)
   // Endpoint này sẽ gọi getOrCreateInviteLink() giống như GET /me
   create: async (userId: number): Promise<InviteLinkDTO & { shareUrl?: string }> => {
-    const response = await fetch(`${API_BASE_URL}/friends/invite/${userId}`, {
-      method: 'POST',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const response = await apiClient.post<InviteLinkDTO>(`/friends/invite/${userId}`);
+      const data = response.data;
+      // Xử lý cả hai trường hợp: inviteUrl và shareUrl
+      return {
+        ...data,
+        inviteUrl: data.inviteUrl || (data as any).shareUrl,
+        shareUrl: (data as any).shareUrl || data.inviteUrl,
+        isActive: data.isActive !== undefined ? data.isActive : (data as any).active,
+      };
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to create invite link';
+      throw new Error(errorMsg);
     }
-    const data = await response.json();
-    // Xử lý cả hai trường hợp: inviteUrl và shareUrl
-    return {
-      ...data,
-      inviteUrl: data.inviteUrl || data.shareUrl,
-      shareUrl: data.shareUrl || data.inviteUrl,
-      isActive: data.isActive !== undefined ? data.isActive : data.active,
-    };
   },
 
   // Lấy invite link của user khác (public)
   getUserInviteLink: async (userId: number): Promise<InviteLinkDTO> => {
-    const response = await fetch(`${API_BASE_URL}/friends/invite/user/${userId}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const response = await apiClient.get<InviteLinkDTO>(`/friends/invite/user/${userId}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get user invite link';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 
   // Preview invite link
   preview: async (inviteCode: string): Promise<InvitePreviewDTO> => {
     if (!inviteCode) throw new Error('Missing inviteCode');
-    const qs = new URLSearchParams({ inviteCode }).toString();
-    const response = await fetch(`${API_BASE_URL}/friends/invite/preview?${qs}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const qs = new URLSearchParams({ inviteCode }).toString();
+      const response = await apiClient.get<InvitePreviewDTO>(`/friends/invite/preview?${qs}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to preview invite link';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 
   // Accept invite link
@@ -270,31 +214,25 @@ export const inviteLinksApi = {
     if (!inviteCode) {
       throw new Error('Missing inviteCode');
     }
-    const qs = new URLSearchParams({ inviteCode }).toString();
-    const response = await fetch(`${API_BASE_URL}/friends/invite/accept?${qs}`, {
-      method: 'POST',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
     try {
-      return await response.text();
-    } catch {
-      return 'Invite accepted';
+      const qs = new URLSearchParams({ inviteCode }).toString();
+      const response = await apiClient.post(`/friends/invite/accept?${qs}`);
+      return response.data || 'Invite accepted';
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to accept invite';
+      throw new Error(errorMsg);
     }
   },
 
   // Toggle enable/disable invite link
   toggle: async (linkId: number, disable: boolean): Promise<ToggleInviteLinkResponse> => {
-    const qs = new URLSearchParams({ disable: String(disable) }).toString();
-    const response = await fetch(`${API_BASE_URL}/friends/invite/${linkId}/toggle?${qs}`, {
-      method: 'PUT',
-      headers: buildJsonHeaders(),
-    });
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
+    try {
+      const qs = new URLSearchParams({ disable: String(disable) }).toString();
+      const response = await apiClient.put<ToggleInviteLinkResponse>(`/friends/invite/${linkId}/toggle?${qs}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to toggle invite link';
+      throw new Error(errorMsg);
     }
-    return await response.json();
   },
 };

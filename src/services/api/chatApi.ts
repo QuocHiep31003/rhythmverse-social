@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse, buildAuthHeaders } from "./config";
+import { apiClient } from "./config";
 
 export type SharedContentType = "PLAYLIST" | "ALBUM" | "SONG";
 
@@ -73,146 +73,91 @@ export interface PlaylistChatMessageDTO extends ChatMessageDTO {
 
 export const chatApi = {
   sendMessage: async (senderId: number, receiverId: number, content: string): Promise<ChatMessageDTO> => {
-    console.log('[chatApi] Sending message to:', `${API_BASE_URL}/chat/send`, { senderId, receiverId, contentLength: content.length });
-    const res = await fetch(`${API_BASE_URL}/chat/send`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify({ senderId, receiverId, content }),
-    });
-    console.log('[chatApi] Response status:', res.status, res.statusText);
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      console.log('[chatApi] Sending message:', { senderId, receiverId, contentLength: content.length });
+      const response = await apiClient.post<ChatMessageDTO>('/chat/send', { senderId, receiverId, content });
+      console.log('[chatApi] Send message success:', response.data);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to send message';
       console.error('[chatApi] Send message error:', errorMsg);
       throw new Error(errorMsg);
     }
-    const result = await res.json();
-    console.log('[chatApi] Send message success:', result);
-    return result;
   },
   getHistory: async (userId1: number, userId2: number): Promise<ChatMessageDTO[]> => {
-    const res = await fetch(`${API_BASE_URL}/chat/history/${userId1}/${userId2}`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
-    return await res.json();
+    try {
+      const response = await apiClient.get<ChatMessageDTO[]>(`/chat/history/${userId1}/${userId2}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get chat history';
+      throw new Error(errorMsg);
+    }
   },
   sharePlaylist: async (senderId: number, receiverId: number, playlistId: number) => {
-    // First try JSON body (preferred)
-    let res = await fetch(`${API_BASE_URL}/chat/share/playlist`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify({ senderId, receiverId, playlistId }),
-    });
-    if (res.ok) return (await res.json()) as ChatMessageDTO;
-    const jsonErr = await parseErrorResponse(res);
-    // Backward compatibility: try query params if server expects it
-    const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), playlistId: String(playlistId) });
-    res = await fetch(`${API_BASE_URL}/chat/share/playlist?${qs.toString()}`, {
-      method: "POST",
-      headers: buildAuthHeaders(),
-    });
-    if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
-    return (await res.json()) as ChatMessageDTO;
+    try {
+      const response = await apiClient.post<ChatMessageDTO>('/chat/share/playlist', { senderId, receiverId, playlistId });
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to share playlist';
+      throw new Error(errorMsg);
+    }
   },
   shareSong: async (senderId: number, receiverId: number, songId: number) => {
-    let res = await fetch(`${API_BASE_URL}/chat/share/song`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify({ senderId, receiverId, songId }),
-    });
-    if (res.ok) return (await res.json()) as ChatMessageDTO;
-    const jsonErr = await parseErrorResponse(res);
-    const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), songId: String(songId) });
-    res = await fetch(`${API_BASE_URL}/chat/share/song?${qs.toString()}`, {
-      method: "POST",
-      headers: buildAuthHeaders(),
-    });
-    if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
-    return (await res.json()) as ChatMessageDTO;
+    try {
+      const response = await apiClient.post<ChatMessageDTO>('/chat/share/song', { senderId, receiverId, songId });
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to share song';
+      throw new Error(errorMsg);
+    }
   },
   shareAlbum: async (senderId: number, receiverId: number, albumId: number) => {
-    let res = await fetch(`${API_BASE_URL}/chat/share/album`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify({ senderId, receiverId, albumId }),
-    });
-    if (res.ok) return (await res.json()) as ChatMessageDTO;
-    const jsonErr = await parseErrorResponse(res);
-    const qs = new URLSearchParams({ senderId: String(senderId), receiverId: String(receiverId), albumId: String(albumId) });
-    res = await fetch(`${API_BASE_URL}/chat/share/album?${qs.toString()}`, {
-      method: "POST",
-      headers: buildAuthHeaders(),
-    });
-    if (!res.ok) throw new Error(jsonErr || (await parseErrorResponse(res)));
-    return (await res.json()) as ChatMessageDTO;
+    try {
+      const response = await apiClient.post<ChatMessageDTO>('/chat/share/album', { senderId, receiverId, albumId });
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to share album';
+      throw new Error(errorMsg);
+    }
   },
   markConversationRead: async (userId: number, friendId: number): Promise<void> => {
-    // 🔴 DEBUG: Log mỗi lần mark as read được gọi
-    console.log('🔴 [DEBUG] markConversationRead called:', { userId, friendId });
-    console.trace('🔴 [DEBUG] Call stack:');
-    
-    // Try correct endpoint formats theo chuẩn Messenger
-    // Format 1: PUT /api/chat/read/conversation?readerId={userId}&partnerId={friendId} (khuyến nghị)
-    let res = await fetch(`${API_BASE_URL}/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`, {
-      method: "PUT",
-      headers: buildJsonHeaders(),
-    });
-    if (res.ok) {
-      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 1)');
+    try {
+      // Try PUT first (preferred format)
+      await apiClient.put(`/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`);
       return;
+    } catch (error1: any) {
+      try {
+        // Try POST with readerId/partnerId
+        await apiClient.post(`/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`);
+        return;
+      } catch (error2: any) {
+        try {
+          // Try POST with userId/friendId (backward compatible)
+          await apiClient.post(`/chat/read/conversation?userId=${userId}&friendId=${friendId}`);
+          return;
+        } catch (error3: any) {
+          try {
+            // Try legacy endpoint
+            await apiClient.post(`/chat/read/${userId}/${friendId}`);
+            return;
+          } catch (error4: any) {
+            // If all fail, log warning but don't throw (non-critical operation)
+            console.warn('[chatApi] Failed to mark conversation as read:', error4.response?.data?.message || error4.message);
+          }
+        }
+      }
     }
-    
-    // Format 2: POST /api/chat/read/conversation?readerId={userId}&partnerId={friendId}
-    const errorMsg1 = await parseErrorResponse(res);
-    res = await fetch(`${API_BASE_URL}/chat/read/conversation?readerId=${userId}&partnerId=${friendId}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    if (res.ok) {
-      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 2)');
-      return;
-    }
-    
-    // Format 3: POST /api/chat/read/conversation?userId={userId}&friendId={friendId} (backward compatible)
-    const errorMsg2 = await parseErrorResponse(res);
-    res = await fetch(`${API_BASE_URL}/chat/read/conversation?userId=${userId}&friendId=${friendId}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    if (res.ok) {
-      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 3)');
-      return;
-    }
-    
-    // Format 4: Legacy endpoint POST /api/chat/read/{userId}/{friendId}
-    const errorMsg3 = await parseErrorResponse(res);
-    res = await fetch(`${API_BASE_URL}/chat/read/${userId}/${friendId}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    if (res.ok) {
-      console.log('✅ [DEBUG] Marked conversation as read successfully (Format 4)');
-      return;
-    }
-    
-    // If all fail, log warning but don't throw (non-critical operation)
-    const finalError = await parseErrorResponse(res);
-    console.warn('[chatApi] Failed to mark conversation as read:', errorMsg1 || errorMsg2 || errorMsg3 || finalError);
   },
   typingStart: async (roomId: string, userId: number): Promise<void> => {
     if (!userId) {
       console.warn('[chatApi] typingStart: userId is required but was', userId);
       throw new Error('userId is required');
     }
-    console.log('[chatApi] Starting typing:', { roomId, userId });
-    const res = await fetch(`${API_BASE_URL}/chat/rooms/${roomId}/typing/start?userId=${userId}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    console.log('[chatApi] Typing start response:', res.status, res.statusText);
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      console.log('[chatApi] Starting typing:', { roomId, userId });
+      await apiClient.post(`/chat/rooms/${roomId}/typing/start?userId=${userId}`);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to start typing';
       console.warn('[chatApi] Failed to start typing:', errorMsg);
       throw new Error(errorMsg);
     }
@@ -222,107 +167,81 @@ export const chatApi = {
       console.warn('[chatApi] typingStop: userId is required but was', userId);
       throw new Error('userId is required');
     }
-    console.log('[chatApi] Stopping typing:', { roomId, userId });
-    const res = await fetch(`${API_BASE_URL}/chat/rooms/${roomId}/typing/stop?userId=${userId}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    console.log('[chatApi] Typing stop response:', res.status, res.statusText);
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      console.log('[chatApi] Stopping typing:', { roomId, userId });
+      await apiClient.post(`/chat/rooms/${roomId}/typing/stop?userId=${userId}`);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to stop typing';
       console.warn('[chatApi] Failed to stop typing:', errorMsg);
       throw new Error(errorMsg);
     }
   },
   toggleReaction: async (messageId: number, emoji: string, userId: number): Promise<ChatMessageDTO> => {
-    console.log('[chatApi] Toggling reaction:', { messageId, emoji, userId });
-    // Endpoint mới: /api/chat/messages/{messageId}/reactions?userId={userId}&emoji={emoji}
-    const encodedEmoji = encodeURIComponent(emoji);
-    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}/reactions?userId=${userId}&emoji=${encodedEmoji}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    console.log('[chatApi] Toggle reaction response:', res.status, res.statusText);
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      console.log('[chatApi] Toggling reaction:', { messageId, emoji, userId });
+      const encodedEmoji = encodeURIComponent(emoji);
+      const response = await apiClient.post<ChatMessageDTO>(`/chat/messages/${messageId}/reactions?userId=${userId}&emoji=${encodedEmoji}`);
+      console.log('[chatApi] Toggle reaction success:', response.data);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to toggle reaction';
       console.error('[chatApi] Toggle reaction error:', errorMsg);
       throw new Error(errorMsg);
     }
-    const result = await res.json();
-    console.log('[chatApi] Toggle reaction success:', result);
-    return result;
   },
   removeReaction: async (messageId: number, userId: number): Promise<void> => {
-    // Endpoint mới: DELETE /api/chat/messages/{messageId}/reactions/{userId}
-    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}/reactions/${userId}`, {
-      method: "DELETE",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.delete(`/chat/messages/${messageId}/reactions/${userId}`);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to remove reaction';
       console.warn('[chatApi] Failed to remove reaction:', errorMsg);
       throw new Error(errorMsg);
     }
   },
   deleteMessage: async (messageId: number, userId: number): Promise<{ messageId: number; deleted: boolean }> => {
-    console.log('[chatApi] Deleting message:', { messageId, userId });
-    const res = await fetch(`${API_BASE_URL}/chat/messages/${messageId}?userId=${userId}`, {
-      method: "DELETE",
-      headers: buildJsonHeaders(),
-    });
-    console.log('[chatApi] Delete message response:', res.status, res.statusText);
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      console.log('[chatApi] Deleting message:', { messageId, userId });
+      const response = await apiClient.delete<{ messageId: number; deleted: boolean }>(`/chat/messages/${messageId}?userId=${userId}`);
+      console.log('[chatApi] Delete message success:', response.data);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to delete message';
       console.error('[chatApi] Delete message error:', errorMsg);
       throw new Error(errorMsg);
     }
-    const result = await res.json();
-    console.log('[chatApi] Delete message success:', result);
-    return result;
   },
   getUnreadCounts: async (userId: number): Promise<{ userId: number; unreadCounts: Record<string, number>; totalUnread: number }> => {
-    const res = await fetch(`${API_BASE_URL}/chat/unread/${userId}`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
-      console.warn('[chatApi] Failed to get unread counts:', errorMsg);
+    try {
+      const response = await apiClient.get<{ userId: number; unreadCounts: Record<string, number>; totalUnread: number }>(`/chat/unread/${userId}`);
+      return response.data;
+    } catch (error: any) {
+      console.warn('[chatApi] Failed to get unread counts:', error.response?.data?.message || error.message);
       // Return empty if API not available yet (backward compatibility)
       return { userId, unreadCounts: {}, totalUnread: 0 };
     }
-    return await res.json();
   },
 };
 
 export const playlistChatApi = {
   sendText: async (playlistId: number, senderId: number, content: string): Promise<void> => {
-    const payload = { playlistId, senderId, content };
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/send`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post('/playlist-chat/send', { playlistId, senderId, content });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to send text';
       console.error("[playlistChatApi] sendText error:", errorMsg);
       throw new Error(errorMsg);
     }
   },
   shareSong: async (playlistId: number, senderId: number, songId: number): Promise<void> => {
-    const payload = {
-      playlistId,
-      senderId,
-      sharedType: "SONG",
-      sharedContentId: songId,
-    };
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/send`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post('/playlist-chat/send', {
+        playlistId,
+        senderId,
+        sharedType: "SONG",
+        sharedContentId: songId,
+      });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to share song';
       console.error("[playlistChatApi] shareSong error:", errorMsg);
       throw new Error(errorMsg);
     }
@@ -380,65 +299,46 @@ export const playlistChatApi = {
     }
   },
   joinListening: async (playlistId: number, userId: number): Promise<void> => {
-    const payload = { playlistId, userId };
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/join`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post('/playlist-chat/listening/join', { playlistId, userId });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to join listening';
       console.error("[playlistChatApi] joinListening error:", errorMsg);
       throw new Error(errorMsg);
     }
   },
   stopListening: async (playlistId: number, hostId: number): Promise<void> => {
-    const payload = { playlistId, hostId };
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/stop`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post('/playlist-chat/listening/stop', { playlistId, hostId });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to stop listening';
       console.error("[playlistChatApi] stopListening error:", errorMsg);
       throw new Error(errorMsg);
     }
   },
   leaveListening: async (playlistId: number, userId: number): Promise<void> => {
-    const payload = { playlistId, userId };
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/leave`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post('/playlist-chat/listening/leave', { playlistId, userId });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to leave listening';
       console.error("[playlistChatApi] leaveListening error:", errorMsg);
       throw new Error(errorMsg);
     }
   },
   suggestSong: async (playlistId: number, userId: number, songId: number): Promise<void> => {
-    const payload = { playlistId, userId, songId };
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/listening/suggest`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post('/playlist-chat/listening/suggest', { playlistId, userId, songId });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to suggest song';
       console.error("[playlistChatApi] suggestSong error:", errorMsg);
       throw new Error(errorMsg);
     }
   },
   markRoomAsRead: async (playlistId: number, userId: number): Promise<void> => {
-    const res = await fetch(`${API_BASE_URL}/playlist-chat/mark-read/${playlistId}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-      body: JSON.stringify({ userId }),
-    });
-    if (!res.ok) {
-      const errorMsg = await parseErrorResponse(res);
+    try {
+      await apiClient.post(`/playlist-chat/mark-read/${playlistId}`, { userId });
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to mark room as read';
       console.error("[playlistChatApi] markRoomAsRead error:", errorMsg);
       throw new Error(errorMsg);
     }

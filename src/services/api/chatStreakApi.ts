@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from "./config";
+import { apiClient } from "./config";
 
 export interface ChatStreakDTO {
   id: number;
@@ -28,15 +28,13 @@ export const chatStreakApi = {
    * GET /api/chat-streaks/active
    */
   getActive: async (): Promise<ChatStreakDTO[]> => {
-    const res = await fetch(`${API_BASE_URL}/chat-streaks/active`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      throw new Error(await parseErrorResponse(res));
+    try {
+      const response = await apiClient.get<ChatStreakDTO[]>('/chat-streaks/active');
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get active streaks';
+      throw new Error(errorMsg);
     }
-    const data = await res.json();
-    return Array.isArray(data) ? (data as ChatStreakDTO[]) : [];
   },
 
   /**
@@ -49,23 +47,17 @@ export const chatStreakApi = {
       throw new Error("Invalid friend id");
     }
 
-    const params = new URLSearchParams({ friendId: String(id) });
-
-    const res = await fetch(`${API_BASE_URL}/chat-streaks/between?${params.toString()}`, {
-      method: "GET",
-      headers: buildJsonHeaders(),
-    });
-
-    if (res.status === 404) {
-      return null;
+    try {
+      const params = new URLSearchParams({ friendId: String(id) });
+      const response = await apiClient.get<ChatStreakDTO>(`/chat-streaks/between?${params.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to get streak between users';
+      throw new Error(errorMsg);
     }
-
-    if (!res.ok) {
-      throw new Error(await parseErrorResponse(res));
-    }
-
-    const data = (await res.json()) as ChatStreakDTO | null;
-    return data;
   },
 
   /**
@@ -76,14 +68,13 @@ export const chatStreakApi = {
     if (!Number.isFinite(id)) {
       throw new Error("Invalid friend id");
     }
-    const res = await fetch(`${API_BASE_URL}/chat-streaks/increment/${id}`, {
-      method: "POST",
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) {
-      throw new Error(await parseErrorResponse(res));
+    try {
+      const response = await apiClient.post<ChatStreakDTO>(`/chat-streaks/increment/${id}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to increment streak';
+      throw new Error(errorMsg);
     }
-    return (await res.json()) as ChatStreakDTO;
   },
 };
 

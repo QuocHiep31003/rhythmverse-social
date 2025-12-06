@@ -1,13 +1,10 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Sparkles, Play, Music } from "lucide-react";
+import { Sparkles, Music } from "lucide-react";
 import { albumsApi } from "@/services/api/albumApi";
+import { createSlug } from "@/utils/playlistUtils";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import { getAuthToken } from "@/services/api/config";
-import { useMusic } from "@/contexts/MusicContext";
-import { mapToPlayerSong } from "@/lib/utils";
-import { createSlug } from "@/utils/playlistUtils";
 
 interface Album {
   id: number | string;
@@ -25,7 +22,6 @@ interface Album {
 
 const RecommendedAlbumsSection = () => {
   const navigate = useNavigate();
-  const { playSong, setQueue } = useMusic();
   const [recommendedAlbums, setRecommendedAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -176,23 +172,6 @@ const RecommendedAlbumsSection = () => {
     };
   }, [userId]);
 
-  const handlePlayAlbum = async (album: Album) => {
-    try {
-      // Lấy songs của album
-      const albumDetail = await albumsApi.getById(album.id);
-      if (albumDetail?.songs && albumDetail.songs.length > 0) {
-        const songs = albumDetail.songs.map((s: { id: number | string; [key: string]: unknown }) => mapToPlayerSong(s));
-        await setQueue(songs);
-        if (songs.length > 0) {
-          const { playSongWithStreamUrl } = await import('@/utils/playSongHelper');
-          await playSongWithStreamUrl(songs[0], playSong);
-        }
-      }
-    } catch (error) {
-      console.error("Error playing album:", error);
-    }
-  };
-
   const getArtistName = (artist: { id?: number | string; name?: string } | string | undefined): string => {
     if (typeof artist === 'string') return artist;
     if (artist?.name) return artist.name;
@@ -267,21 +246,6 @@ const RecommendedAlbumsSection = () => {
                       <Music className="w-12 h-12 text-muted-foreground" />
                     </div>
                   )}
-                  
-                  {/* Play Button - Hiện khi hover, giống Apple Music */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Button
-                      size="icon"
-                      className="w-12 h-12 rounded-full bg-primary hover:bg-primary/90 shadow-lg"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handlePlayAlbum(album);
-                      }}
-                    >
-                      <Play className="w-6 h-6 fill-current" />
-                    </Button>
-                  </div>
                 </div>
 
                 {/* Album Info - Chỉ tên album và tên nghệ sĩ */}

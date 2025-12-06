@@ -1,4 +1,4 @@
-import { API_BASE_URL, fetchWithAuth } from './config';
+import { apiClient, API_BASE_URL } from './config';
 import { verifyPayosSignature, verifyPayosWebhookPayload } from '@/utils/payosSignatureVerifier';
 
 export interface CreateOrderRequest {
@@ -129,39 +129,11 @@ export const paymentApi = {
     console.log('[paymentApi] API URL:', `${API_BASE_URL}/payments/orders`);
 
     try {
-      const response = await fetchWithAuth(`${API_BASE_URL}/payments/orders`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
+      const response = await apiClient.post<CreateOrderResponse>('/payments/orders', payload);
       console.log('[paymentApi] Response status:', response.status, response.statusText);
+      console.log('[paymentApi] Success response:', response.data);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[paymentApi] Error response:', errorText);
-        let errorMessage = 'Unable to create order';
-        try {
-          const errorData = JSON.parse(errorText);
-          console.error('[paymentApi] Parsed error data:', errorData);
-          errorMessage = errorData.desc || errorData.message || errorData.error || errorMessage;
-          // Nếu có errors object, thêm chi tiết
-          if (errorData.errors) {
-            const errorDetails = Object.entries(errorData.errors)
-              .map(([field, msg]) => `${field}: ${msg}`)
-              .join(', ');
-            errorMessage += ` (${errorDetails})`;
-          }
-        } catch {
-          errorMessage = errorText || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const result: CreateOrderResponse = await response.json();
-      console.log('[paymentApi] Success response:', result);
+      const result = response.data;
       
       if (!result.success) {
         throw new Error(result.desc || 'Unable to create order');
@@ -188,119 +160,79 @@ export const paymentApi = {
    * Endpoint này sẽ đợi webhook từ PayOS (không cần polling)
    */
   getFinalStatus: async (orderCode: number, timeoutMs: number = 20000): Promise<OrderStatus> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/payments/orders/${orderCode}/final-status?timeoutMs=${timeoutMs}`
-    );
+    try {
+      const response = await apiClient.get<OrderStatusResponse>(
+        `/payments/orders/${orderCode}/final-status?timeoutMs=${timeoutMs}`
+      );
 
-      if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = 'Unable to get order status';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.desc || errorData.message || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
+      const result = response.data;
+      
+      if (!result.success) {
+        throw new Error(result.desc || 'Unable to get order status');
       }
+
+      return result.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.desc || error.response?.data?.message || error.message || 'Unable to get order status';
       throw new Error(errorMessage);
     }
-
-    const result: OrderStatusResponse = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.desc || 'Unable to get order status');
-    }
-
-    return result.data;
   },
 
   /**
    * Lấy chi tiết đơn hàng
    */
   getOrderDetail: async (orderCode: number): Promise<OrderHistoryItem> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/payments/orders/${orderCode}`
-    );
+    try {
+      const response = await apiClient.get<OrderDetailResponse>(`/payments/orders/${orderCode}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = 'Unable to get order detail';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.desc || errorData.message || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
+      const result = response.data;
+      
+      if (!result.success) {
+        throw new Error(result.desc || 'Unable to get order detail');
       }
+
+      return result.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.desc || error.response?.data?.message || error.message || 'Unable to get order detail';
       throw new Error(errorMessage);
     }
-
-    const result: OrderDetailResponse = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.desc || 'Unable to get order detail');
-    }
-
-    return result.data;
   },
 
   /**
    * Lấy lịch sử thanh toán
    */
   getHistory: async (page: number = 0, size: number = 10): Promise<OrderHistoryResponse['data']> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/payments/orders/history?page=${page}&size=${size}`
-    );
+    try {
+      const response = await apiClient.get<OrderHistoryResponse>(
+        `/payments/orders/history?page=${page}&size=${size}`
+      );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = 'Unable to get payment history';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.desc || errorData.message || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
+      const result = response.data;
+      
+      if (!result.success) {
+        throw new Error(result.desc || 'Unable to get payment history');
       }
+
+      return result.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.desc || error.response?.data?.message || error.message || 'Unable to get payment history';
       throw new Error(errorMessage);
     }
-
-    const result: OrderHistoryResponse = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.desc || 'Unable to get payment history');
-    }
-
-    return result.data;
   },
 
   /**
    * Đánh dấu đơn hàng là FAILED khi người dùng cancel trên PayOS
    */
   cancelOrder: async (orderCode: number, reason?: string): Promise<void> => {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/payments/orders/${orderCode}/cancel`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reason: reason || 'Payment cancelled by user at PayOS',
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMessage = 'Unable to cancel order';
-      try {
-        const errorData = JSON.parse(errorText);
-        errorMessage = errorData.desc || errorData.message || errorMessage;
-      } catch {
-        errorMessage = errorText || errorMessage;
-      }
+    try {
+      await apiClient.post(`/payments/orders/${orderCode}/cancel`, {
+        reason: reason || 'Payment cancelled by user at PayOS',
+      });
+      // Không cần trả về gì thêm, backend đã mark FAILED
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.desc || error.response?.data?.message || error.message || 'Unable to cancel order';
       throw new Error(errorMessage);
     }
-
-    // Không cần trả về gì thêm, backend đã mark FAILED
   },
 
   /**

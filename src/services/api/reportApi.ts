@@ -1,4 +1,4 @@
-import { API_BASE_URL, buildJsonHeaders, parseErrorResponse } from './config';
+import { apiClient } from './config';
 
 export enum ReportType {
   SONG = 'SONG',
@@ -37,64 +37,118 @@ export const reportApi = {
    */
   create: async (data: CreateReportRequest): Promise<ReportDTO> => {
     // Validate và chuẩn hóa dữ liệu trước khi gửi
-    const requestData = {
-      type: data.type,
-      typeId: Number(data.typeId), // Đảm bảo là number
-      description: data.description?.trim() || '',
-    };
+    let numericTypeId: number;
+    
+    // Convert typeId sang number một cách an toàn
+    if (typeof data.typeId === 'number') {
+      numericTypeId = data.typeId;
+    } else if (typeof data.typeId === 'string') {
+      const parsed = parseInt(data.typeId, 10);
+      if (isNaN(parsed) || !isFinite(parsed)) {
+        throw new Error('ID không hợp lệ. Vui lòng thử lại.');
+      }
+      numericTypeId = parsed;
+    } else {
+      throw new Error('ID không hợp lệ. Vui lòng thử lại.');
+    }
 
-    // Validate typeId
-    if (!Number.isInteger(requestData.typeId) || requestData.typeId <= 0) {
-      throw new Error('Type ID must be a positive integer');
+    // Validate typeId phải là số nguyên dương
+    if (!Number.isInteger(numericTypeId) || numericTypeId <= 0) {
+      throw new Error('ID phải là số nguyên dương hợp lệ.');
     }
 
     // Validate description
-    if (!requestData.description || requestData.description.length === 0) {
-      throw new Error('Description cannot be empty');
+    const trimmedDescription = data.description?.trim() || '';
+    if (!trimmedDescription || trimmedDescription.length === 0) {
+      throw new Error('Mô tả không được để trống.');
     }
 
-    if (requestData.description.length > 2000) {
-      throw new Error('Description must not exceed 2000 characters');
+    if (trimmedDescription.length < 10) {
+      throw new Error('Mô tả phải có ít nhất 10 ký tự.');
     }
+
+    if (trimmedDescription.length > 2000) {
+      throw new Error('Mô tả không được vượt quá 2000 ký tự.');
+    }
+
+    // Validate type
+    if (!data.type || !Object.values(ReportType).includes(data.type as ReportType)) {
+      throw new Error('Loại báo cáo không hợp lệ.');
+    }
+
+    const requestData = {
+      type: data.type,
+      typeId: numericTypeId,
+      description: trimmedDescription,
+    };
 
     console.log('[reportApi] Creating report with data:', requestData);
-
-    const response = await fetch(`${API_BASE_URL}/reports`, {
-      method: 'POST',
-      headers: buildJsonHeaders(),
-      body: JSON.stringify(requestData),
+    console.log('[reportApi] Request data type check:', {
+      type: typeof requestData.type,
+      typeId: typeof requestData.typeId,
+      typeIdValue: requestData.typeId,
+      descriptionLength: requestData.description.length,
     });
 
-    if (!response.ok) {
-      let errorMessage = await parseErrorResponse(response);
+    try {
+      const response = await apiClient.post('/reports', requestData);
+      console.log('[reportApi] Report created successfully:', response.data);
+      return response.data;
+    } catch (error: any) {
       console.error('[reportApi] Error creating report:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorMessage,
+        error,
+        response: error.response?.data,
+        status: error.response?.status,
         requestData,
       });
 
       // Xử lý các lỗi validation phổ biến
-      if (response.status === 400) {
-        // Nếu error message chứa "Invalid input data", thử parse chi tiết hơn
-        if (errorMessage.includes('Invalid input data') || errorMessage.includes('invalid')) {
-          // Kiểm tra từng trường có thể gây lỗi
-          if (!requestData.typeId || requestData.typeId <= 0) {
-            errorMessage = 'ID bài hát không hợp lệ. Vui lòng thử lại.';
-          } else if (!requestData.description || requestData.description.trim().length === 0) {
+      if (error.response?.status === 400) {
+        const errorData = error.response?.data || {};
+        let errorMessage = errorData.message || errorData.error || error.message || 'Dữ liệu không hợp lệ.';
+        
+        // Parse chi tiết lỗi từ backend
+        if (errorData.errors && Array.isArray(errorData.errors)) {
+          const fieldErrors = errorData.errors.map((err: any) => err.defaultMessage || err.message).join(', ');
+          errorMessage = fieldErrors || errorMessage;
+        }
+
+        // Kiểm tra các trường hợp cụ thể
+        if (errorMessage.toLowerCase().includes('typeid') || errorMessage.toLowerCase().includes('type id')) {
+          errorMessage = 'ID bài hát không hợp lệ. Vui lòng thử lại.';
+        } else if (errorMessage.toLowerCase().includes('description') || errorMessage.toLowerCase().includes('mô tả')) {
+          if (errorMessage.toLowerCase().includes('empty') || errorMessage.toLowerCase().includes('trống')) {
             errorMessage = 'Mô tả không được để trống.';
-          } else if (requestData.description.length > 2000) {
-            errorMessage = 'Mô tả không được vượt quá 2000 ký tự.';
-          } else {
-            errorMessage = 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin.';
+          } else if (errorMessage.toLowerCase().includes('length') || errorMessage.toLowerCase().includes('độ dài')) {
+            errorMessage = 'Mô tả không hợp lệ về độ dài.';
           }
         }
+
+        throw new Error(errorMessage);
       }
 
-      throw new Error(errorMessage || 'Không thể gửi báo cáo. Vui lòng thử lại sau.');
-    }
+      // Xử lý lỗi 401 (Unauthorized)
+      if (error.response?.status === 401) {
+        throw new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      }
 
-    return await response.json();
+      // Xử lý lỗi 403 (Forbidden)
+      if (error.response?.status === 403) {
+        throw new Error('Bạn không có quyền thực hiện thao tác này.');
+      }
+
+      // Xử lý lỗi network
+      if (error.message && (error.message.includes('Network') || error.message.includes('timeout'))) {
+        throw new Error('Lỗi kết nối. Vui lòng kiểm tra kết nối mạng và thử lại.');
+      }
+
+      // Lỗi chung
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Không thể gửi báo cáo. Vui lòng thử lại sau.';
+      throw new Error(errorMessage);
+    }
   },
 
   /**
@@ -108,6 +162,7 @@ export const reportApi = {
     status?: ReportStatus;
     type?: ReportType;
   }): Promise<any> => {
+    try {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.append('page', params.page.toString());
     if (params?.size !== undefined) queryParams.append('size', params.size.toString());
@@ -116,34 +171,25 @@ export const reportApi = {
     if (params?.status) queryParams.append('status', params.status);
     if (params?.type) queryParams.append('type', params.type);
 
-    const response = await fetch(`${API_BASE_URL}/reports?${queryParams.toString()}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to fetch reports');
+      const response = await apiClient.get(`/reports?${queryParams.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch reports';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 
   /**
    * Lấy báo cáo theo ID
    */
   getById: async (id: number): Promise<ReportDTO> => {
-    const response = await fetch(`${API_BASE_URL}/reports/${id}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to fetch report');
+    try {
+      const response = await apiClient.get(`/reports/${id}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch report';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 
   /**
@@ -154,39 +200,33 @@ export const reportApi = {
     size?: number;
     sort?: string;
   }): Promise<any> => {
+    try {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.append('page', params.page.toString());
     if (params?.size !== undefined) queryParams.append('size', params.size.toString());
     if (params?.sort) queryParams.append('sort', params.sort);
 
-    const response = await fetch(`${API_BASE_URL}/reports/my-reports?${queryParams.toString()}`, {
-      method: 'GET',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to fetch my reports');
+      const response = await apiClient.get(`/reports/my-reports?${queryParams.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to fetch my reports';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 
   /**
    * Cập nhật status của báo cáo (Admin only)
    */
   updateStatus: async (id: number, status: ReportStatus): Promise<ReportDTO> => {
-    const response = await fetch(`${API_BASE_URL}/reports/${id}/status?status=${status}`, {
-      method: 'PUT',
-      headers: buildJsonHeaders(),
-    });
-
-    if (!response.ok) {
-      const errorMessage = await parseErrorResponse(response);
-      throw new Error(errorMessage || 'Failed to update report status');
+    try {
+      const response = await apiClient.put(`/reports/${id}/status?status=${status}`);
+      return response.data;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || 'Failed to update report status';
+      throw new Error(errorMessage);
     }
-
-    return await response.json();
   },
 };
+
+
 

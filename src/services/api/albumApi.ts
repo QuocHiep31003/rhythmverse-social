@@ -1,5 +1,4 @@
-const API_BASE_URL = "http://localhost:8080/api";
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { apiClient } from './config';
 
 interface PaginationParams {
   page?: number;
@@ -23,6 +22,9 @@ interface PaginatedResponse<T> {
   empty: boolean;
 }
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+
 /** ---------------------------
  * 🎵 ALBUMS API MODULE
  * --------------------------- */
@@ -40,11 +42,8 @@ export const albumsApi = {
       if (params?.artistId !== undefined) queryParams.append("artistId", String(params.artistId));
       if (params?.releaseYear !== undefined) queryParams.append("releaseYear", String(params.releaseYear));
 
-      const response = await fetch(`${API_BASE_URL}/albums?${queryParams.toString()}`);
-      if (!response.ok) throw new Error("Failed to fetch albums");
-
-      const data: PaginatedResponse<any> = await response.json();
-      return data;
+      const response = await apiClient.get(`/albums?${queryParams.toString()}`);
+      return response.data;
     } catch (error) {
       console.error("Error fetching albums:", error);
       await delay(300);
@@ -77,9 +76,8 @@ export const albumsApi = {
       queryParams.append("name", query);
       queryParams.append("artist", query);
 
-      const response = await fetch(`${API_BASE_URL}/albums?${queryParams.toString()}`);
-      if (!response.ok) throw new Error("Failed to search albums");
-      return await response.json();
+      const response = await apiClient.get(`/albums?${queryParams.toString()}`);
+      return response.data;
     } catch (error) {
       console.error("Error searching albums (combined):", error);
       await delay(200);
@@ -100,11 +98,8 @@ export const albumsApi = {
   searchByName: async (name: string) => {
     try {
       // Try a dedicated endpoint if available
-      const response = await fetch(
-        `${API_BASE_URL}/albums/search/name?name=${encodeURIComponent(name)}`
-      );
-      if (!response.ok) throw new Error("Failed to search albums by name");
-      return await response.json();
+      const response = await apiClient.get(`/albums/search/name?name=${encodeURIComponent(name)}`);
+      return response.data;
     } catch (error) {
       console.error("Error searching albums by name:", error);
       await delay(200);
@@ -115,9 +110,8 @@ export const albumsApi = {
   // ✅ Lấy 1 album theo ID
   getById: async (id: string | number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/albums/${id}`);
-      if (!response.ok) throw new Error("Failed to fetch album");
-      return await response.json();
+      const response = await apiClient.get(`/albums/${id}`);
+      return response.data;
     } catch (error) {
       console.error("Error fetching album:", error);
       return null;
@@ -139,18 +133,8 @@ export const albumsApi = {
         payload.cover = data.coverUrl; // compatibility alias
       }
 
-      const response = await fetch(`${API_BASE_URL}/albums`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to create album");
-      }
-
-      return await response.json();
+      const response = await apiClient.post('/albums', payload);
+      return response.data;
     } catch (error) {
       console.error("Error creating album:", error);
       throw error;
@@ -172,18 +156,8 @@ export const albumsApi = {
         payload.cover = data.coverUrl; // compatibility alias
       }
 
-      const response = await fetch(`${API_BASE_URL}/albums/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to update album");
-      }
-
-      return await response.json();
+      const response = await apiClient.put(`/albums/${id}`, payload);
+      return response.data;
     } catch (error) {
       console.error("Error updating album:", error);
       throw error;
@@ -192,11 +166,8 @@ export const albumsApi = {
   // ✅ Tìm kiếm album theo tên nghệ sĩ
   searchByArtist: async (artistName: string) => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/albums/search/artist?artistName=${encodeURIComponent(artistName)}`
-      );
-      if (!response.ok) throw new Error("Failed to search albums by artist");
-      return await response.json();
+      const response = await apiClient.get(`/albums/search/artist?artistName=${encodeURIComponent(artistName)}`);
+      return response.data;
     } catch (error) {
       console.error("Error searching albums by artist:", error);
       await delay(300);
@@ -216,23 +187,54 @@ export const albumsApi = {
     queryParams.append("size", String(params?.size ?? 12));
     queryParams.append("sort", params?.sort ?? "name,asc");
 
-    const response = await fetch(`${API_BASE_URL}/albums/public/search?${queryParams.toString()}`);
-    if (!response.ok) {
-      throw new Error("Failed to load active albums");
-    }
-    return response.json();
+    const response = await apiClient.get(`/albums/public/search?${queryParams.toString()}`);
+    return response.data;
   },
 
 
   // ✅ Xoá album
   delete: async (id: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/albums/${id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to delete album");
+      await apiClient.delete(`/albums/${id}`);
       return { success: true };
     } catch (error) {
       console.error("Error deleting album:", error);
       throw error;
+    }
+  },
+
+  // ✅ Export albums to Excel
+  exportExcel: async () => {
+    try {
+      const response = await apiClient.get('/albums/export', {
+        responseType: 'blob'
+      });
+      const blob = new Blob([response.data]);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "albums_export.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error exporting albums:", error);
+      throw error;
+    }
+  },
+
+  // ✅ Import albums from Excel
+  importExcel: async (file: File) => {
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const response = await apiClient.post('/albums/import', fd);
+      return response.data || "Import albums thành công";
+    } catch (error: any) {
+      console.error("Error importing albums:", error);
+      const errorMsg = error.response?.data?.message || error.response?.data?.error || error.message || "Import failed";
+      throw new Error(errorMsg);
     }
   },
 };

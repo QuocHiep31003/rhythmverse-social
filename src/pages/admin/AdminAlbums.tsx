@@ -89,7 +89,7 @@ interface AlbumResponse {
   number: number;
 }
 
-const API_BASE_URL = "http://localhost:8080/api";
+import { artistsApi } from "@/services/api/artistApi";
 const DEFAULT_IMAGE_URL =
   "https://tse4.mm.bing.net/th/id/OIP.5Xw-6Hc_loqdGyqQG6G2IgHaEr?cb=12&rs=1&pid=ImgDetMain&o=7&rm=3";
 
@@ -157,9 +157,7 @@ const AdminAlbums = () => {
 
   const loadArtists = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/artists?page=0&size=1000`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await artistsApi.getAll({ page: 0, size: 1000 });
       setArtists(data.content || []);
     } catch (e) {
       console.error("Load artists failed:", e);
@@ -195,20 +193,12 @@ const AdminAlbums = () => {
         coverUrl: data.coverUrl || ""
       };
 
-      const method = formMode === "create" ? "POST" : "PUT";
-      const url =
-        formMode === "create"
-          ? `${API_BASE_URL}/albums`
-          : `${API_BASE_URL}/albums/${selectedAlbum?.id}`;
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok)
-        throw new Error(formMode === "create" ? "Tạo album thất bại" : "Cập nhật thất bại");
+      let savedAlbum;
+      if (formMode === "create") {
+        savedAlbum = await albumsApi.create(payload);
+      } else {
+        savedAlbum = await albumsApi.update(selectedAlbum!.id, payload);
+      }
 
       toast({
         title: "Thành công",
@@ -234,10 +224,7 @@ const AdminAlbums = () => {
     if (!selectedAlbum) return;
     try {
       setIsSubmitting(true);
-      const res = await fetch(`${API_BASE_URL}/albums/${selectedAlbum.id}`, {
-        method: "DELETE"
-      });
-      if (!res.ok) throw new Error("Delete failed");
+      await albumsApi.delete(selectedAlbum.id);
 
       toast({
         title: "Thành công",
@@ -258,15 +245,7 @@ const AdminAlbums = () => {
 
   const handleExport = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/albums/export`);
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "albums_export.xlsx";
-      a.click();
-      window.URL.revokeObjectURL(url);
+      await albumsApi.exportExcel();
       toast({ title: "Đã xuất file thành công" });
     } catch {
       toast({
@@ -287,14 +266,7 @@ const AdminAlbums = () => {
     }
     try {
       setIsSubmitting(true);
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(`${API_BASE_URL}/albums/import`, { method: "POST", body: fd });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(err || "Import failed");
-      }
-      const msg = await res.text();
+      const msg = await albumsApi.importExcel(file);
       toast({ title: "Đã import", description: msg || "Import albums thành công" });
       loadAlbums();
     } catch (e: any) {

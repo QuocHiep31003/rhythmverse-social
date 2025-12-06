@@ -1,13 +1,12 @@
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Heart, Music, Clock } from "lucide-react";
-import { createSlug } from "@/utils/playlistUtils";
+import { Heart, Music, Clock } from "lucide-react";
 import { useFavoriteAlbum } from "@/hooks/useFavorites";
 import { useMemo, useState, useEffect } from "react";
 import ShareButton from "@/components/ShareButton";
 import { favoritesApi } from "@/services/api/favoritesApi";
-import { toSeconds, formatTotal } from "@/utils/playlistUtils";
+import { toSeconds, formatTotal, createSlug } from "@/utils/playlistUtils";
 
 interface ControlledFavoriteState {
   isFavorite: boolean;
@@ -31,12 +30,11 @@ interface AlbumCardProps {
     totalDuration?: string;
     likes?: number;
   };
-  onPlay?: () => void;
   formatNumber?: (num: number) => string;
   favoriteState?: ControlledFavoriteState;
 }
 
-export const AlbumCard = ({ album, onPlay, formatNumber, favoriteState }: AlbumCardProps) => {
+export const AlbumCard = ({ album, formatNumber, favoriteState }: AlbumCardProps) => {
   const albumName = album.name || album.title || "Unknown Album";
   const artistName = 
     typeof album.artist === "string" 
@@ -85,39 +83,24 @@ export const AlbumCard = ({ album, onPlay, formatNumber, favoriteState }: AlbumC
   const albumSlug = createSlug(albumName, album.id);
   const albumUrl = `/album/${albumSlug}`;
 
-  const handlePlay = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (onPlay) {
-      onPlay();
-    }
-  };
-
   return (
     <Card className="bg-card/50 border-border/50 hover:bg-card/70 transition-all duration-300 group">
       <CardContent className="p-0">
-        <div className="relative aspect-square group/cover">
-            {cover ? (
-              <img
-                src={cover}
-                alt={albumName}
-                className="w-full h-full object-cover rounded-t-lg"
-              />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg">
-                <Music className="w-16 h-16 text-white/80" />
-              </div>
-            )}
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-            <Button
-              size="icon"
-              className="w-16 h-16 rounded-full bg-primary hover:bg-primary/90 pointer-events-auto"
-              onClick={handlePlay}
-            >
-              <Play className="w-8 h-8" />
-            </Button>
+        <Link to={albumUrl} className="block">
+          <div className="relative aspect-square group/cover">
+              {cover ? (
+                <img
+                  src={cover}
+                  alt={albumName}
+                  className="w-full h-full object-cover rounded-t-lg"
+                />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-primary to-primary-glow flex items-center justify-center rounded-t-lg">
+                  <Music className="w-16 h-16 text-white/80" />
+                </div>
+              )}
           </div>
-        </div>
+        </Link>
 
         <div className="p-4 min-w-0">
           <Link to={albumUrl} className="block min-w-0">
@@ -174,7 +157,7 @@ export const AlbumCard = ({ album, onPlay, formatNumber, favoriteState }: AlbumC
                 title={albumName} 
                 type="album" 
                 albumId={albumNumericId} 
-                url={`${window.location.origin}/album/${albumSlug}`} 
+                url={`${window.location.origin}${albumUrl}`} 
               />
             </div>
           </div>

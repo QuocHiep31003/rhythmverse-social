@@ -27,7 +27,6 @@ import type { Song } from "@/services/api/songApi";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useMusic } from "@/contexts/MusicContext";
 import { mapToPlayerSong } from "@/lib/utils";
-import { apiClient } from "@/services/api/config";
 import { createSlug } from "@/utils/playlistUtils";
 import { toast } from "@/hooks/use-toast";
 import { AddToPlaylistDialog } from "@/components/playlist/AddToPlaylistDialog";
@@ -265,11 +264,11 @@ const SearchResults = () => {
       }
 
       // Gọi play-now endpoint để setup và lấy streamUrl
-      const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+      const response = await songsApi.playNow(songId);
       
       // Kiểm tra lỗi từ response
-      if (response.data?.success === false) {
-        const errorMsg = response.data?.error || 'Không thể phát bài hát';
+      if (response.success === false) {
+        const errorMsg = response.error || 'Không thể phát bài hát';
         if (errorMsg.includes('HLS master playlist not found')) {
           toast({
             title: "Bài hát chưa sẵn sàng",
@@ -296,11 +295,11 @@ const SearchResults = () => {
       
       // Nếu /play-now thành công, đã có streamUrl và playback state đã được setup
       // Chỉ cần set song vào context, không cần gọi playbackApi.playSong() nữa
-      if (response.data?.song) {
-        const formattedSong = mapToPlayerSong(response.data.song);
+      if (response.song) {
+        const formattedSong = mapToPlayerSong(response.song);
         // Đảm bảo UUID được set từ response để MusicPlayer có thể load stream
-        if (response.data.song.uuid) {
-          formattedSong.uuid = response.data.song.uuid;
+        if (response.song.uuid) {
+          formattedSong.uuid = response.song.uuid;
         }
         setQueue([formattedSong]);
         
@@ -526,7 +525,7 @@ const SearchResults = () => {
                   {(detailedResults.albums.length > 0 ? detailedResults.albums : searchResults.albums).slice(0, activeFilter === "all" ? 4 : 20).map((album) => (
                     <Card
                       key={album.id}
-                      onClick={() => navigate(`/album/${createSlug(album.name || album.title || 'album', album.id)}`)}
+                      onClick={() => navigate(`/albums/${album.id}`)}
                       className="bg-card border-border hover:bg-muted/50 transition-colors cursor-pointer"
                     >
                       <CardContent className="p-6 text-center">

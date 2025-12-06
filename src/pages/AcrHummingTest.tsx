@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { arcApi } from '@/services/api';
-import { apiClient } from '@/services/api/config';
+import { songsApi } from '@/services/api/songApi';
 import { useMusic } from '@/contexts/MusicContext';
 import { mapToPlayerSong } from '@/lib/utils';
 import { getAuthToken } from '@/services/api/config';
@@ -257,11 +257,11 @@ const AcrHummingTest: React.FC = () => {
     setTestResult(null);
 
     try {
-      const response = await apiClient.post(`/songs/${testSongId}/play-now`, {});
-      setTestResult(response.data);
+      const response = await songsApi.playNow(testSongId);
+      setTestResult(response);
       
       // Tự động phát nhạc trên simple player nếu có streamUrl
-      if (response.data?.streamUrl) {
+      if (response.streamUrl) {
         loadAndPlayStream(response.data.streamUrl);
       }
     } catch (err: unknown) {

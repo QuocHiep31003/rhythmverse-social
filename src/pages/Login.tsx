@@ -25,6 +25,22 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
 
+  // ✅ Đọc message từ query param khi component mount
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const message = params.get('message');
+      if (message) {
+        setError(decodeURIComponent(message));
+        // Xóa message khỏi URL để không hiển thị lại khi refresh
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    } catch (err) {
+      console.error('Error reading message from URL:', err);
+    }
+  }, []);
+
 
   const [loginData, setLoginData] = useState({
     email: "",
@@ -314,10 +330,10 @@ const Login = () => {
     setResetLoading(true);
     try {
       await authApi.sendResetPasswordOtp(resetEmail);
-      setResetSuccess("OTP đã gửi thành công! Kiểm tra email của bạn.");
+      setResetSuccess("OTP sent successfully! Please check your email.");
       setResetStep(2);
     } catch (err: unknown) {
-      setResetError(err instanceof Error ? err.message : "Gửi OTP thất bại.");
+      setResetError(err instanceof Error ? err.message : "Failed to send OTP.");
     } finally {
       setResetLoading(false);
     }
@@ -330,10 +346,10 @@ const Login = () => {
     setResetLoading(true);
     try {
       await authApi.resetPasswordWithOtp(resetEmail, resetOtp, resetNewPassword);
-      setResetSuccess("Đặt lại mật khẩu thành công! Bạn có thể đăng nhập.");
+      setResetSuccess("Password reset successfully! You can now sign in.");
       setTimeout(() => { setActiveTab("login"); }, 1500);
     } catch (err: unknown) {
-      setResetError(err instanceof Error ? err.message : "Đặt lại mật khẩu lỗi");
+      setResetError(err instanceof Error ? err.message : "Failed to reset password");
     } finally {
       setResetLoading(false);
     }
@@ -380,8 +396,8 @@ const Login = () => {
               className="w-full"
             >
               <TabsList className="w-full grid grid-cols-2">
-                <TabsTrigger value="login">Đăng nhập</TabsTrigger>
-                <TabsTrigger value="register">Đăng ký</TabsTrigger>
+                <TabsTrigger value="login">Sign In</TabsTrigger>
+                <TabsTrigger value="register">Sign Up</TabsTrigger>
               </TabsList>
 
               {/* Fixed-height container to keep layout stable and center content */}
@@ -390,7 +406,7 @@ const Login = () => {
                   <div className="mt-8">
                     <Card>
                       <CardHeader>
-                        <CardTitle>Quên mật khẩu</CardTitle>
+                        <CardTitle>Forgot Password</CardTitle>
                       </CardHeader>
                       <CardContent>
                         {resetStep === 1 && (
@@ -400,39 +416,39 @@ const Login = () => {
                               type="email"
                               value={resetEmail}
                               onChange={e => setResetEmail(e.target.value)}
-                              placeholder="Nhập email đăng ký"
+                              placeholder="Enter your registered email"
                               required
                             />
                             {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
                             {resetSuccess && <div className="text-green-600 text-sm">{resetSuccess}</div>}
-                            <Button type="submit" disabled={resetResetLoading} className="w-full">Gửi mã OTP</Button>
+                            <Button type="submit" disabled={resetResetLoading} className="w-full">Send OTP Code</Button>
                           </form>
                         )}
                         {resetStep === 2 && (
                           <form onSubmit={handleResetWithOtp} className="space-y-4">
-                            <Label>Mã OTP đã gửi về email</Label>
+                            <Label>OTP Code sent to your email</Label>
                             <Input
                               type="text"
                               value={resetOtp}
                               onChange={e => setResetOtp(e.target.value)}
-                              placeholder="Nhập mã OTP"
+                              placeholder="Enter OTP code"
                               required
                             />
-                            <Label>Mật khẩu mới</Label>
+                            <Label>New Password</Label>
                             <Input
                               type="password"
                               value={resetNewPassword}
                               onChange={e => setResetNewPassword(e.target.value)}
-                              placeholder="Nhập mật khẩu mới (>=6 ký tự)"
+                              placeholder="Enter new password (>=6 characters)"
                               required
                             />
                             {resetError && <div className="text-red-600 text-sm">{resetError}</div>}
                             {resetSuccess && <div className="text-green-600 text-sm">{resetSuccess}</div>}
-                            <Button type="submit" disabled={resetResetLoading} className="w-full">Đặt lại mật khẩu</Button>
-                            <Button variant="ghost" type="button" className="w-full" onClick={() => { setResetStep(1); setResetOtp(""); setResetNewPassword(""); }}>Nhập lại email</Button>
+                            <Button type="submit" disabled={resetResetLoading} className="w-full">Reset Password</Button>
+                            <Button variant="ghost" type="button" className="w-full" onClick={() => { setResetStep(1); setResetOtp(""); setResetNewPassword(""); }}>Enter email again</Button>
                           </form>
                         )}
-                        <Button variant="outline" className="w-full mt-4" type="button" onClick={() => { setShowResetPassword(false); setResetError(""); setResetSuccess(""); setResetEmail(""); setResetOtp(""); setResetNewPassword(""); setResetStep(1); }}>Quay lại đăng nhập</Button>
+                        <Button variant="outline" className="w-full mt-4" type="button" onClick={() => { setShowResetPassword(false); setResetError(""); setResetSuccess(""); setResetEmail(""); setResetOtp(""); setResetNewPassword(""); setResetStep(1); }}>Back to Sign In</Button>
                       </CardContent>
                     </Card>
                   </div>

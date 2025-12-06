@@ -1,4 +1,4 @@
-import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse, API_BASE_URL, fetchWithAuth, parseErrorResponse } from './config';
+import { apiClient, createFormDataHeaders, PaginationParams, PaginatedResponse, API_BASE_URL, parseErrorResponse } from './config';
 
 // Interface cho Song data - đồng bộ với BE SongDTO
 export interface Song {
@@ -376,17 +376,11 @@ export const songsApi = {
       appendList("producerIds", data.producerIds);
       appendList("artistIds", data.artistIds);
 
-      const response = await fetchWithAuth(`${API_BASE_URL}/songs`, {
-        method: "POST",
-        body: formData,
+      // Timeout 10 phút cho upload file (có thể mất 5-10 phút để xử lý)
+      const response = await apiClient.post('/songs', formData, {
+        timeout: 600000, // 10 phút = 600000ms
       });
-
-      if (!response.ok) {
-        throw new Error(await parseErrorResponse(response));
-      }
-
-      const responseData = await response.json();
-      return responseData?.song ?? responseData;
+      return response.data?.song ?? response.data;
     } catch (error) {
       console.error("Error creating song with file:", error);
       throw error;
@@ -442,17 +436,11 @@ export const songsApi = {
       if (data.status) formData.append('status', data.status);
       if (data.file) formData.append('file', data.file, data.file.name || 'audio');
 
-      // Use fetch to avoid axios default JSON Content-Type interfering with FormData boundary
-      const res = await fetchWithAuth(`${API_BASE_URL}/songs/${id}/file`, {
-        method: 'PUT',
-        body: formData,
+      // Timeout 10 phút cho upload file (có thể mất 5-10 phút để xử lý)
+      const response = await apiClient.put(`/songs/${id}/file`, formData, {
+        timeout: 600000, // 10 phút = 600000ms
       });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
-      }
-      const json = await res.json();
-      return json as Song;
+      return response.data as Song;
     } catch (error) {
       console.error("Error updating song file:", error);
       throw error;
@@ -897,6 +885,62 @@ export const songsApi = {
       return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error("Error fetching mood recommendations:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Play now - Setup playback và lấy streamUrl
+   * POST /songs/{songId}/play-now
+   */
+  playNow: async (songId: string | number): Promise<{ success: boolean; streamUrl?: string; error?: string; [key: string]: any }> => {
+    try {
+      const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+      return response.data;
+    } catch (error) {
+      console.error("Error playing song now:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Check ACR fingerprint status
+   * GET /songs/test/acr/check?acr_id={acrId}
+   */
+  checkAcrFingerprint: async (acrId: string): Promise<{ success: boolean; state: number; message?: string; error?: string }> => {
+    try {
+      const response = await apiClient.get(`/songs/test/acr/check?acr_id=${encodeURIComponent(acrId)}`);
+      return response.data;
+    } catch (error) {
+      console.error("Error checking ACR fingerprint:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get songs by genre with score (for admin)
+   * GET /songs/by-genre/{genreId}/with-score
+   */
+  getSongsByGenreWithScore: async (genreId: number): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/by-genre/${genreId}/with-score`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching songs by genre with score:", error);
+      return [];
+    }
+  },
+
+  /**
+   * Get songs by mood with score (for admin)
+   * GET /songs/by-mood/{moodId}/with-score
+   */
+  getSongsByMoodWithScore: async (moodId: number): Promise<Song[]> => {
+    try {
+      const response = await apiClient.get(`/songs/by-mood/${moodId}/with-score`);
+      return Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      console.error("Error fetching songs by mood with score:", error);
       return [];
     }
   },

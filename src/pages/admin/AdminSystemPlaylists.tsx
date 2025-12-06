@@ -39,7 +39,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toSeconds } from "@/utils/playlistUtils";
 
-const API_BASE_URL = "http://localhost:8080/api";
+import { adminSystemPlaylistsApi } from "@/services/api/adminApi";
 
 type PlaylistType = "USER_CREATED" | "SYSTEM_GLOBAL";
 
@@ -107,34 +107,8 @@ const AdminSystemPlaylists = () => {
   const loadEditorialPlaylists = useCallback(async () => {
     try {
       setLoading(true);
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      // Load all editorial playlists from dedicated endpoint
-      const res = await fetch(`${API_BASE_URL}/playlists/editorial`, {
-        credentials: 'include',
-        headers
-      });
-
-      if (!res.ok) {
-        if (res.status === 400) {
-          console.warn("No editorial playlists found or database schema issue");
-          setEditorialPlaylists([]);
-          setTotalElements(0);
-          setTotalPages(0);
-          return;
-        }
-        throw new Error("Failed to load editorial playlists");
-      }
-
-      let allPlaylists: SystemPlaylist[] = [];
-      const data = await res.json();
-      allPlaylists = Array.isArray(data) ? data : [];
+      const data = await adminSystemPlaylistsApi.getEditorial();
+      let allPlaylists: SystemPlaylist[] = Array.isArray(data) ? data : [];
 
       // Apply search filter
       if (searchQuery.trim()) {
@@ -189,34 +163,8 @@ const AdminSystemPlaylists = () => {
   const loadGlobalPlaylists = useCallback(async () => {
     try {
       setLoading(true);
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      // Load all global playlists from dedicated endpoint
-      const res = await fetch(`${API_BASE_URL}/playlists/system/global`, {
-        credentials: 'include',
-        headers
-      });
-
-      if (!res.ok) {
-        if (res.status === 400) {
-          console.warn("No global playlists found or database schema issue");
-          setGlobalPlaylists([]);
-          setTotalElements(0);
-          setTotalPages(0);
-          return;
-        }
-        throw new Error("Failed to load global playlists");
-      }
-
-      let allPlaylists: SystemPlaylist[] = [];
-      const data = await res.json();
-      allPlaylists = Array.isArray(data) ? data : [];
+      const data = await adminSystemPlaylistsApi.getGlobal();
+      let allPlaylists: SystemPlaylist[] = Array.isArray(data) ? data : [];
 
       // Apply search filter
       if (searchQuery.trim()) {
@@ -564,25 +512,13 @@ const AdminSystemPlaylists = () => {
         // Không set coverUrl nếu không có - frontend sẽ tự động dùng /placeholder.svg
       }
 
-      const res = await fetch(`${API_BASE_URL}/playlists/editorial`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-        body: JSON.stringify({
-          name: formData.name,
-          description: formData.description || null,
-          coverUrl: coverUrl || null, // Không set URL Cloudinary - frontend sẽ dùng /placeholder.svg
-          visibility: "PUBLIC",
-          songIds: formData.songIds.length > 0 ? formData.songIds : null,
-        }),
+      const createdPlaylist = await adminSystemPlaylistsApi.createEditorial({
+        name: formData.name,
+        description: formData.description || null,
+        coverUrl: coverUrl || null, // Không set URL Cloudinary - frontend sẽ dùng /placeholder.svg
+        visibility: "PUBLIC",
+        songIds: formData.songIds.length > 0 ? formData.songIds : null,
       });
-
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to create editorial playlist");
-      }
-
-      const createdPlaylist = await res.json();
       
       // Ensure we have a valid playlist ID
       if (!createdPlaylist || !createdPlaylist.id) {
@@ -672,24 +608,7 @@ const AdminSystemPlaylists = () => {
   const handleInitializeGlobal = async () => {
     setIsSubmitting(true);
     try {
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(`${API_BASE_URL}/playlists/system/global/initialize`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-      });
-
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to initialize global playlists");
-      }
+      await adminSystemPlaylistsApi.initializeGlobal();
 
       toast({
         title: "Thành công",
@@ -713,24 +632,7 @@ const AdminSystemPlaylists = () => {
   const handleUpdateGlobal = async () => {
     setIsSubmitting(true);
     try {
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(`${API_BASE_URL}/playlists/system/global/update`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-      });
-
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to update global playlists");
-      }
+      await adminSystemPlaylistsApi.updateGlobal();
 
       toast({
         title: "Thành công",
@@ -754,24 +656,7 @@ const AdminSystemPlaylists = () => {
   const handleInitializeGenreMood = async () => {
     setIsSubmitting(true);
     try {
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(`${API_BASE_URL}/playlists/system/genre-mood/initialize`, {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-      });
-
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(error || "Failed to initialize genre/mood playlists");
-      }
+      await adminSystemPlaylistsApi.initializeGenreMood();
 
       toast({
         title: "Thành công",

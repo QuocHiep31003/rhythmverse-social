@@ -1,4 +1,4 @@
-import { apiClient, API_BASE_URL, fetchWithAuth } from './config';
+import { apiClient } from './config';
 
 export interface SongContributor {
   id: number;

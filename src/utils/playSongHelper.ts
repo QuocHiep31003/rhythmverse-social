@@ -1,8 +1,9 @@
-import { apiClient } from '@/services/api/config';
+import { songsApi } from '@/services/api/songApi';
 import { useMusic } from '@/contexts/MusicContext';
 import { mapToPlayerSong } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import type { Song } from '@/services/api/songApi';
+import { clearTokens } from '@/services/api/config';
 
 /**
  * Helper function để phát nhạc đơn giản - chỉ cần gọi /play-now và set song vào context
@@ -19,28 +20,31 @@ export const playSongWithStreamUrl = async (
 ) => {
   // Kiểm tra xem có phải tab đang phát không
   // QUAN TRỌNG: CHỈ CÓ 1 TAB ĐƯỢC PHÁT NHẠC TẠI MỘT THỜI ĐIỂM
-  // Tab chính = tab có currentSong (đang phát nhạc)
+  // Tab chính = tab có currentSong (đang phát nhạc hoặc đã phát nhạc)
   // Tab phụ = tab không có currentSong
-  // Nếu tab không có currentSong → chắc chắn là tab khác, chỉ sửa queue và gửi command qua BroadcastChannel
+  // QUAN TRỌNG: Luôn kiểm tra qua BroadcastChannel để đảm bảo không có tab chính nào đang phát
   const isMainTab = currentSong !== null && currentSong !== undefined;
   
-  // Nếu không phải tab đang phát (tab khác), kiểm tra xem có tab đang phát nào đang phát không
-  if (!isMainTab && typeof window !== 'undefined' && window.BroadcastChannel) {
-    console.log('[playSongHelper] Tab phụ phát hiện, kiểm tra xem có tab đang phát nào đang phát không...');
+  // QUAN TRỌNG: Luôn kiểm tra qua BroadcastChannel trước khi quyết định tab phụ có trở thành tab chính không
+  // Điều này đảm bảo khi đổi danh sách phát, tab phụ không tự phát nhạc nếu có tab chính đang phát
+  let hasMainTabPlaying = false;
+  if (typeof window !== 'undefined' && window.BroadcastChannel) {
+    console.log('[playSongHelper] Kiểm tra xem có tab đang phát nào đang phát nhạc không...');
     
-    // Kiểm tra xem có tab đang phát nào đang phát nhạc không
-    let hasMainTab = false;
     const checkChannel = new BroadcastChannel('player');
     
     const checkPromise = new Promise<boolean>((resolve) => {
       const checkTimeout = setTimeout(() => {
         checkChannel.close();
-        resolve(hasMainTab);
-      }, 200);
+        resolve(hasMainTabPlaying);
+      }, 300); // Tăng timeout lên 300ms để đảm bảo nhận được response
       
       const checkHandler = (event: MessageEvent) => {
-        if (event.data.type === "MAIN_TAB_RESPONSE" && event.data.isPlaying) {
-          hasMainTab = true;
+        if (event.data.type === "MAIN_TAB_RESPONSE") {
+          // Nếu có response từ tab đang phát (dù isPlaying = true hay false), nghĩa là có tab đang phát
+          // QUAN TRỌNG: Chỉ cần có currentSong là đủ, không cần isPlaying = true
+          // Vì tab chính có thể đang pause nhưng vẫn là tab chính
+          hasMainTabPlaying = true;
           clearTimeout(checkTimeout);
           checkChannel.removeEventListener('message', checkHandler);
           checkChannel.close();
@@ -56,11 +60,13 @@ export const playSongWithStreamUrl = async (
       });
     });
     
-    hasMainTab = await checkPromise;
+    hasMainTabPlaying = await checkPromise;
+  }
+  
+  // Nếu không phải tab đang phát (tab khác) VÀ có tab đang phát đang phát, gửi command qua BroadcastChannel
+  if (!isMainTab && hasMainTabPlaying) {
     
-    // Nếu có tab đang phát đang phát, gửi command qua BroadcastChannel
-    if (hasMainTab) {
-      console.log('[playSongHelper] Có tab đang phát đang phát, gửi command qua BroadcastChannel');
+      console.log('[playSongHelper] Có tab đang phát đang phát, tab phụ chỉ gửi command qua BroadcastChannel');
       try {
         // Gọi /play-now để lấy thông tin bài hát
         const songId = typeof song.id === 'string' ? parseInt(song.id, 10) : song.id;
@@ -73,10 +79,10 @@ export const playSongWithStreamUrl = async (
           return;
         }
 
-        const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+        const response = await songsApi.playNow(songId);
         
-        if (response.data?.success === false) {
-          const errorMsg = response.data?.error || 'Không thể phát bài hát';
+        if (response.success === false) {
+          const errorMsg = response.error || 'Không thể phát bài hát';
           toast({
             title: "Lỗi",
             description: errorMsg,
@@ -86,8 +92,8 @@ export const playSongWithStreamUrl = async (
         }
 
         // Format bài hát
-        const formattedSong = response.data?.song 
-          ? mapToPlayerSong(response.data.song)
+        const formattedSong = response.song 
+          ? mapToPlayerSong(response.song)
           : mapToPlayerSong(song);
 
         // Tab phụ: Cập nhật queue trước (nếu có setQueue)
@@ -138,9 +144,22 @@ export const playSongWithStreamUrl = async (
         channel.close();
         
         console.log('[playSongHelper] Tab phụ đã gửi playNewSong command qua BroadcastChannel, tab đang phát sẽ phát bài');
-        return; // KHÔNG phát nhạc ở tab khác
+        return; // QUAN TRỌNG: Tab phụ KHÔNG phát nhạc, chỉ gửi command
       } catch (error) {
-        console.error('[playSongHelper] Lỗi khi gửi command từ tab khác:', error);
+        console.error('[playSongHelper] Lỗi khi gửi command từ tab phụ:', error);
+        const errorResponse = error as { response?: { status?: number } };
+        
+        // ✅ Xử lý lỗi 403 (Access Denied) - chưa đăng nhập, redirect về login
+        if (errorResponse?.response?.status === 403) {
+          clearTokens();
+          setTimeout(() => {
+            const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+            const loginUrl = isAdminPage ? '/admin/login' : '/login';
+            window.location.href = `${loginUrl}?message=${encodeURIComponent('Must login to play songs')}`;
+          }, 100);
+          return;
+        }
+        
         toast({
           title: "Lỗi",
           description: "Không thể gửi yêu cầu phát nhạc. Vui lòng thử lại.",
@@ -148,11 +167,13 @@ export const playSongWithStreamUrl = async (
         });
         return;
       }
-    } else {
-      // Không có tab đang phát đang phát → tab khác này sẽ trở thành tab đang phát và phát nhạc
-      console.log('[playSongHelper] Không có tab đang phát đang phát, tab khác này sẽ trở thành tab đang phát và phát nhạc');
-      // Tiếp tục xử lý như tab đang phát (phần code bên dưới)
-    }
+  }
+  
+  // Chỉ đến đây nếu:
+  // 1. Là tab đang phát (isMainTab = true) → phát nhạc bình thường
+  // 2. Là tab phụ nhưng không có tab đang phát nào → trở thành tab đang phát và phát nhạc
+  if (!isMainTab && !hasMainTabPlaying) {
+    console.log('[playSongHelper] Không có tab đang phát nào, tab phụ này sẽ trở thành tab đang phát và phát nhạc');
   }
   
   // Nếu là tab đang phát, phát nhạc bình thường
@@ -168,11 +189,11 @@ export const playSongWithStreamUrl = async (
     }
 
     // Gọi /play-now endpoint để lấy streamUrl
-    const response = await apiClient.post(`/songs/${songId}/play-now`, {});
+    const response = await songsApi.playNow(songId);
     
     // Kiểm tra lỗi từ response
-    if (response.data?.success === false) {
-      const errorMsg = response.data?.error || 'Không thể phát bài hát';
+    if (response.success === false) {
+      const errorMsg = response.error || 'Không thể phát bài hát';
       if (errorMsg.includes('HLS master playlist not found')) {
         toast({
           title: "Bài hát chưa sẵn sàng",
@@ -198,11 +219,11 @@ export const playSongWithStreamUrl = async (
     }
     
     // Nếu thành công, set song vào context và phát nhạc
-    if (response.data?.song) {
-      const formattedSong = mapToPlayerSong(response.data.song);
+    if (response.song) {
+      const formattedSong = mapToPlayerSong(response.song);
       // Đảm bảo UUID được set từ response
-      if (response.data.song.uuid) {
-        formattedSong.uuid = response.data.song.uuid;
+      if (response.song.uuid) {
+        formattedSong.uuid = response.song.uuid;
       }
       
       // QUAN TRỌNG: Chỉ set queue nếu không có queue được truyền vào hoặc queue rỗng
@@ -253,8 +274,25 @@ export const playSongWithStreamUrl = async (
     }
   } catch (error: unknown) {
     console.error('Error playing song:', error);
-    const errorResponse = error as { response?: { data?: { error?: string; success?: boolean } }; message?: string };
+    const errorResponse = error as { response?: { status?: number; data?: { error?: string; success?: boolean; message?: string } }; message?: string };
+    
+    // ✅ Xử lý lỗi 403 (Access Denied) - chưa đăng nhập, redirect về login
+    if (errorResponse?.response?.status === 403) {
+      // Clear tokens và redirect về login với message "must login to play songs"
+      clearTokens();
+      
+      // Đợi một chút rồi redirect
+      setTimeout(() => {
+        const isAdminPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+        const loginUrl = isAdminPage ? '/admin/login' : '/login';
+        // Thêm query param để hiển thị message
+        window.location.href = `${loginUrl}?message=${encodeURIComponent('Must login to play songs')}`;
+      }, 100);
+      return;
+    }
+    
     const errorMessage = errorResponse?.response?.data?.error 
+      || errorResponse?.response?.data?.message
       || (error instanceof Error ? error.message : 'Không thể phát bài hát');
     
     if (errorMessage.includes('HLS master playlist not found') || 

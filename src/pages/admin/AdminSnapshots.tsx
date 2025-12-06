@@ -4,24 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BarChartHorizontalBig } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { API_BASE_URL, buildJsonHeaders } from "@/services/api/config";
-
-const snapshotApi = {
-  getAll: async (page = 0, size = 20) => {
-    const res = await fetch(`${API_BASE_URL}/admin/snapshots?page=${page}&size=${size}`, {
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) throw new Error("Failed to fetch snapshots");
-    return res.json();
-  },
-  getDetails: async (id: number) => {
-    const res = await fetch(`${API_BASE_URL}/admin/snapshots/${id}/details`, {
-      headers: buildJsonHeaders(),
-    });
-    if (!res.ok) throw new Error("Failed to fetch snapshot details");
-    return res.json();
-  },
-};
+import { adminSnapshotsApi } from "@/services/api/adminApi";
 
 const AdminSnapshots = () => {
   const [snapshots, setSnapshots] = useState<any[]>([]);
@@ -36,7 +19,7 @@ const AdminSnapshots = () => {
   const loadSnapshots = async () => {
     setLoading(true);
     try {
-      const data = await snapshotApi.getAll(currentPage, pageSize);
+      const data = await adminSnapshotsApi.getAll(currentPage, pageSize);
       setSnapshots(data); // [{id, createdAt}]
     } catch { toast({ description: "Không thể tải danh sách snapshot!", variant: "destructive" }); }
     setLoading(false);
@@ -46,7 +29,7 @@ const AdminSnapshots = () => {
     setLoading(true);
     setSelectedSnapshot(id);
     try {
-      const data = await snapshotApi.getDetails(id);
+      const data = await adminSnapshotsApi.getDetails(id);
       setDetails(data); // [{songId, points, rank, songName}]
     } catch { toast({ description: "Không thể tải BXH snapshot!", variant: "destructive" }); }
     setLoading(false);

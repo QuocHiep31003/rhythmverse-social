@@ -302,11 +302,22 @@ const AIPicksSection = () => {
                     e.stopPropagation();
                     // Validate song.id trước khi mở dialog báo cáo
                     const songId = song.id;
-                    const isValidId = typeof songId === 'number' 
-                      ? (Number.isInteger(songId) && songId > 0)
-                      : (typeof songId === 'string' && !isNaN(Number(songId)) && Number(songId) > 0);
                     
-                    if (!isValidId) {
+                    // Convert và validate ID
+                    let validId: number | string | null = null;
+                    if (typeof songId === 'number') {
+                      if (Number.isInteger(songId) && songId > 0) {
+                        validId = songId;
+                      }
+                    } else if (typeof songId === 'string') {
+                      const parsed = parseInt(songId, 10);
+                      if (!isNaN(parsed) && isFinite(parsed) && parsed > 0) {
+                        validId = parsed; // Convert string to number
+                      }
+                    }
+                    
+                    if (!validId) {
+                      console.error('[AIPicksSection] Invalid song ID:', songId, typeof songId);
                       toast({
                         title: "Lỗi",
                         description: "Không thể báo cáo bài hát này do ID không hợp lệ.",
@@ -315,8 +326,14 @@ const AIPicksSection = () => {
                       return;
                     }
                     
-                    setReportSongId(song.id);
-                    setReportSongName(song.songName);
+                    console.log('[AIPicksSection] Opening report dialog for song:', {
+                      originalId: songId,
+                      validId,
+                      songName: song.songName,
+                    });
+                    
+                    setReportSongId(validId);
+                    setReportSongName(song.songName || 'Untitled Track');
                     setReportDialogOpen(true);
                   }}
                   className="text-destructive focus:text-destructive"

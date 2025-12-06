@@ -23,7 +23,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { getAuthToken } from "@/services/api/config";
+import { adminPlaylistsApi } from "@/services/api/adminApi";
+import { playlistsApi, playlistCollaboratorsApi } from "@/services/api/playlistApi";
 
 interface Collaborator {
   userId: number;
@@ -60,8 +61,6 @@ interface Playlist {
   warnedAt?: string | null;
   warnedBy?: { id?: number; name?: string } | null;
 }
-
-const API_BASE_URL = "http://localhost:8080/api";
 
 const AdminPlaylists = () => {
   const navigate = useNavigate();
@@ -128,68 +127,59 @@ const AdminPlaylists = () => {
   const loadPlaylists = useCallback(async () => {
     try {
       setLoading(true);
-      let url = '';
+      let data: any;
       
       // Load theo tab
       if (activeTab === "flagged") {
-        url = `${API_BASE_URL}/playlists/admin/flagged`;
+        data = await adminPlaylistsApi.getFlagged();
+        setPlaylists(Array.isArray(data) ? data : []);
+        setTotalElements(Array.isArray(data) ? data.length : 0);
+        setTotalPages(1);
+        return;
       } else if (activeTab === "banned") {
-        url = `${API_BASE_URL}/playlists/admin/banned`;
+        data = await adminPlaylistsApi.getBanned();
+        setPlaylists(Array.isArray(data) ? data : []);
+        setTotalElements(Array.isArray(data) ? data.length : 0);
+        setTotalPages(1);
+        return;
       } else {
         // Tab "all" - load tất cả với pagination
-      let sortParam = "name,asc";
-      if (sortBy === "name-desc") sortParam = "name,desc";
-      if (sortBy === "date-newest") sortParam = "dateUpdate,desc";
-      if (sortBy === "date-oldest") sortParam = "dateUpdate,asc";
-      if (sortBy === "songs-desc") sortParam = "songCount,desc";
-      if (sortBy === "songs-asc") sortParam = "songCount,asc";
+        let sortParam = "name,asc";
+        if (sortBy === "name-desc") sortParam = "name,desc";
+        if (sortBy === "date-newest") sortParam = "dateUpdate,desc";
+        if (sortBy === "date-oldest") sortParam = "dateUpdate,asc";
+        if (sortBy === "songs-desc") sortParam = "songCount,desc";
+        if (sortBy === "songs-asc") sortParam = "songCount,asc";
 
-      const searchParam = searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : '';
-      const publicParam = filterPublic !== "all" ? `&isPublic=${filterPublic}` : '';
-      const visibilityParam = filterVisibility !== "all" ? `&visibility=${filterVisibility}` : '';
-      const dateParam = filterDate !== "all" ? `&date=${filterDate}` : '';
-      // Chỉ hiển thị USER_CREATED playlists
-      const typeParam = `&type=USER_CREATED`;
+        const params: any = {
+          page: currentPage,
+          size: pageSize,
+          sort: sortParam,
+          type: "USER_CREATED"
+        };
+        if (searchQuery) params.search = searchQuery;
+        if (filterPublic !== "all") params.isPublic = filterPublic === "true";
+        if (filterVisibility !== "all") params.visibility = filterVisibility;
+        if (filterDate !== "all") params.date = filterDate;
 
-        url = `${API_BASE_URL}/playlists?page=${currentPage}&size=${pageSize}&sort=${sortParam}${searchParam}${publicParam}${visibilityParam}${dateParam}${typeParam}`;
-      }
-
-      const token = getAuthToken();
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        try {
+          const response = await playlistsApi.getAll(params);
+          data = response;
+        } catch (error: any) {
+          if (error.response?.status === 403) {
+            console.error("[AdminPlaylists] 403 Forbidden - User does not have ADMIN role");
+            toast({
+              title: "Không có quyền truy cập",
+              description: "Bạn cần đăng nhập với tài khoản ADMIN để truy cập trang này.",
+              variant: "destructive",
+            });
+            navigate("/");
+            return;
+          }
+          throw error;
+        }
       }
       
-      const res = await fetch(url, {
-        credentials: 'include',
-        headers
-      });
-      if (!res.ok) {
-        if (res.status === 403) {
-          console.error("[AdminPlaylists] 403 Forbidden - User does not have ADMIN role");
-          toast({
-            title: "Không có quyền truy cập",
-            description: "Bạn cần đăng nhập với tài khoản ADMIN để truy cập trang này.",
-            variant: "destructive",
-          });
-          navigate("/");
-          return;
-        }
-        if (res.status === 400) {
-          // Try to get error message from response
-          try {
-            const errorData = await res.json();
-            throw new Error(errorData.message || errorData || "Bạn không có quyền truy cập tính năng này");
-          } catch (e) {
-            throw new Error("Bạn không có quyền truy cập tính năng này");
-          }
-        }
-        throw new Error("Không thể tải danh sách playlist");
-      }
-
-      const data = await res.json();
       // Handle different response formats
       const playlistsData = Array.isArray(data) ? data : (data.content || []);
       const mapped = playlistsData.map((p: {
@@ -296,47 +286,20 @@ const AdminPlaylists = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const [bannedRes, flaggedRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/playlists/admin/banned`, {
-          credentials: 'include',
-          headers
-        }),
-        fetch(`${API_BASE_URL}/playlists/admin/flagged`, {
-          credentials: 'include',
-          headers
-        })
-      ]);
-      
-      // Handle 403 errors silently for non-admin users
-      if (bannedRes.status === 403 || flaggedRes.status === 403) {
-        console.warn("[AdminPlaylists] 403 Forbidden - User does not have ADMIN role");
+      try {
+        const [bannedData, flaggedData] = await Promise.all([
+          adminPlaylistsApi.getBanned().catch(() => []),
+          adminPlaylistsApi.getFlagged().catch(() => [])
+        ]);
+        setTotalBanned(Array.isArray(bannedData) ? bannedData.length : 0);
+        setTotalFlagged(Array.isArray(flaggedData) ? flaggedData.length : 0);
+      } catch (error: any) {
+        // Silently handle errors (403, 400, etc.) - user might not have admin permissions
+        if (error.response?.status === 403) {
+          console.warn("[AdminPlaylists] 403 Forbidden - User does not have ADMIN role");
+        }
         setTotalBanned(0);
         setTotalFlagged(0);
-        return;
-      }
-        
-        if (bannedRes.ok) {
-          try {
-            const bannedData = await bannedRes.json();
-            setTotalBanned(Array.isArray(bannedData) ? bannedData.length : 0);
-      } catch (e) {
-            setTotalBanned(0);
-          }
-        } else {
-          // Silently handle errors (403, 400, etc.) - user might not have admin permissions
-          setTotalBanned(0);
-        }
-        
-        if (flaggedRes.ok) {
-          try {
-            const flaggedData = await flaggedRes.json();
-            setTotalFlagged(Array.isArray(flaggedData) ? flaggedData.length : 0);
-          } catch (e) {
-            setTotalFlagged(0);
-          }
-        } else {
-          // Silently handle errors (403, 400, etc.) - user might not have admin permissions
-          setTotalFlagged(0);
       }
     } catch (e) {
       // Silently handle errors - user might not have admin permissions
@@ -379,17 +342,7 @@ const AdminPlaylists = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const res = await fetch(`${API_BASE_URL}/playlists/admin/${selectedPlaylist.id}/ban`, {
-        method: "POST",
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ reason: banReason })
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Lỗi khi ban playlist");
-      }
+      await adminPlaylistsApi.ban(selectedPlaylist.id);
 
       toast({ 
         title: "Thành công", 
@@ -409,18 +362,11 @@ const AdminPlaylists = () => {
           headers['Authorization'] = `Bearer ${token}`;
         }
         
-        const [bannedRes, flaggedRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/playlists/admin/banned`, { 
-            credentials: 'include',
-            headers
-          }),
-          fetch(`${API_BASE_URL}/playlists/admin/flagged`, { 
-            credentials: 'include',
-            headers
-          })
+        const [bannedData, flaggedData] = await Promise.all([
+          adminPlaylistsApi.getBanned().catch(() => []),
+          adminPlaylistsApi.getFlagged().catch(() => [])
         ]);
-        if (bannedRes.ok) {
-          const bannedData = await bannedRes.json();
+        if (Array.isArray(bannedData)) {
           setTotalBanned(Array.isArray(bannedData) ? bannedData.length : 0);
         }
         if (flaggedRes.ok) {
@@ -465,17 +411,7 @@ const AdminPlaylists = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const res = await fetch(`${API_BASE_URL}/playlists/admin/${selectedPlaylist.id}/warn`, {
-        method: "POST",
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ reason: warnReason })
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Lỗi khi cảnh báo playlist");
-      }
+      await adminPlaylistsApi.warn(selectedPlaylist.id);
 
       toast({ 
         title: "Thành công", 
@@ -510,16 +446,7 @@ const AdminPlaylists = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const res = await fetch(`${API_BASE_URL}/playlists/admin/${selectedPlaylist.id}/unban`, {
-        method: "POST",
-        headers,
-        credentials: 'include'
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Lỗi khi unban playlist");
-      }
+      await adminPlaylistsApi.unban(selectedPlaylist.id);
 
       toast({ 
         title: "Thành công", 
@@ -553,16 +480,7 @@ const AdminPlaylists = () => {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const res = await fetch(`${API_BASE_URL}/playlists/admin/${selectedPlaylist.id}/unwarn`, {
-        method: "POST",
-        headers,
-        credentials: 'include'
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Lỗi khi gỡ cảnh báo playlist");
-      }
+      await adminPlaylistsApi.unwarn(selectedPlaylist.id);
 
       toast({ 
         title: "Thành công", 
@@ -595,13 +513,8 @@ const AdminPlaylists = () => {
         if (playlist.id) {
           loadingSet.add(playlist.id);
           try {
-            const res = await fetch(`${API_BASE_URL}/playlists/invites/collaborators/${playlist.id}`);
-            if (res.ok) {
-              const data: Collaborator[] = await res.json();
-              newMap[playlist.id] = Array.isArray(data) ? data : [];
-            } else {
-              newMap[playlist.id] = [];
-            }
+            const data = await playlistCollaboratorsApi.getByPlaylist(playlist.id);
+            newMap[playlist.id] = Array.isArray(data) ? data : [];
           } catch {
             newMap[playlist.id] = [];
           } finally {

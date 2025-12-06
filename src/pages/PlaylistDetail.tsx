@@ -30,7 +30,8 @@ import { useMusic, Song } from "@/contexts/MusicContext";
 import { playlistsApi, PlaylistDTO, playlistCollabInvitesApi, playlistCollaboratorsApi, PlaylistPermissionError } from "@/services/api/playlistApi";
 import { songsApi } from "@/services/api/songApi";
 import { songMoodApi } from "@/services/api/songMoodApi";
-import { buildJsonHeaders, API_BASE_URL, authApi } from "@/services/api";
+import { authApi } from "@/services/api";
+import { API_BASE_URL } from "@/services/api/config";
 import { mapToPlayerSong } from "@/lib/utils";
 import { friendsApi } from "@/services/api/friendsApi";
 import { userApi } from "@/services/api/userApi";
@@ -2486,28 +2487,7 @@ const PlaylistDetail = () => {
                         
                         if (meId) body.ownerId = meId;
                         
-                        const headers = buildJsonHeaders();
-                        const res = await fetch(`${API_BASE_URL}/playlists`, {
-                          method: "POST",
-                          headers,
-                          body: JSON.stringify(body),
-                        });
-                        
-                        if (!res.ok) {
-                          const errorText = await res.text();
-                          let errorMessage = "Failed to create playlist";
-                          try {
-                            const errorJson = JSON.parse(errorText);
-                            errorMessage = errorJson.message || errorJson.error || errorMessage;
-                          } catch {
-                            errorMessage = errorText || errorMessage;
-                          }
-                          const error = new Error(errorMessage);
-                          (error as any).status = res.status;
-                          throw error;
-                        }
-                        
-                        const data = await res.json();
+                        const data = await playlistsApi.create(body);
                         toast({ title: 'Playlist created successfully!' });
                         // Navigate to the new playlist - it will load in view mode, not edit mode
                         navigate(`/playlist/${createSlug(data.name || "playlist", data.id)}`);

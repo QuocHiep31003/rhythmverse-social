@@ -23,7 +23,7 @@ import TrendingSongsSection from "@/components/ui/TrendingSongsSection"; // ✅ 
 import PopularSongsSection from "@/components/ui/PopularSongsSection"; // ✅ Popular songs cho guest
 import ArtistFanSection from "@/components/ui/ArtistFanSection"; // ✅ Artist fan recommendations
 import RecentListeningSection from "@/components/ui/RecentListeningSection"; // ✅ Nghe gần đây
-import TopArtistSection from "@/components/ui/TopArtistSection"; // ✅ Ca sĩ nổi bật
+
 import TopGenreMoodSection from "@/components/ui/TopGenreMoodSection"; // ✅ Genre/Mood nổi bật
 import RecommendedArtistsSection from "@/components/ui/RecommendedArtistsSection"; // ✅ Gợi ý ca sĩ dựa trên lịch sử nghe
 import RecommendedAlbumsSection from "@/components/ui/RecommendedAlbumsSection"; // ✅ Gợi ý album dựa trên lịch sử nghe

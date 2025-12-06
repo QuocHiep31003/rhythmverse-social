@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { API_BASE_URL, buildJsonHeaders } from "@/services/api/config";
+import { adminTrendingApi } from "@/services/api/adminApi";
 
 interface ResultMeta {
   id: number;
@@ -25,8 +25,7 @@ const AdminTrending = () => {
 
   // Fetch result meta list
   useEffect(() => {
-    fetch(`${API_BASE_URL}/admin/results`, { headers: buildJsonHeaders() })
-      .then((res) => res.json())
+    adminTrendingApi.getResults()
       .then(setResults)
       .catch(() => toast.error('Không thể tải danh sách BXH result'));
   }, []);
@@ -36,8 +35,7 @@ const AdminTrending = () => {
     setLoading(true);
     setSelectedResult(id);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/results/${id}/details`, { headers: buildJsonHeaders() });
-      const data = await res.json();
+      const data = await adminTrendingApi.getResultDetails(id);
       setDetails(data);
     } catch {
       toast.error('Không thể tải chi tiết BXH');

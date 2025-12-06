@@ -101,8 +101,7 @@ const FavoriteAlbumCardInline = ({
     "from-[#f97316] via-[#ef4444] to-[#7c2d12]",
   ][gradientIndex];
 
-  const albumSlug = createSlug(album.name || "album", album.id);
-  const albumUrl = `/album/${albumSlug}`;
+  const albumUrl = `/albums/${album.id}`;
 
   return (
     <Link to={albumUrl} className="block h-full">
@@ -190,20 +189,6 @@ const FavoriteAlbumCardInline = ({
               </div>
             </div>
 
-            {/* Nút Play ở giữa card khi hover */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button
-                size="icon"
-                className="pointer-events-auto w-12 h-12 rounded-full bg-white text-black hover:bg-white/90 shadow-xl"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  navigate(albumUrl);
-                }}
-              >
-                <Play className="w-6 h-6" />
-              </Button>
-            </div>
             </div>
           </div>
 

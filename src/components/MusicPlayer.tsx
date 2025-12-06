@@ -6,7 +6,7 @@ import { Play, Pause, Volume2, VolumeX, MoreHorizontal, X, SkipForward, SkipBack
 import { cn } from "@/lib/utils";
 import { useMusic, type Song } from "@/contexts/MusicContext";
 import { toast } from "@/hooks/use-toast";
-import { apiClient } from "@/services/api/config";
+import { songsApi } from "@/services/api/songApi";
 import { getAuthToken, decodeToken } from "@/services/api";
 import { listeningHistoryApi } from "@/services/api/listeningHistoryApi";
 import Hls from "hls.js";
@@ -118,7 +118,7 @@ const QueueItem = memo(({
       {isCurrent ? (
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-          <span className="text-xs text-primary font-medium">Đang phát</span>
+          <span className="text-xs text-primary font-medium">Playing</span>
         </div>
       ) : (
         // Menu 3 chấm cho từng bài trong queue
@@ -141,7 +141,7 @@ const QueueItem = memo(({
                 // ví dụ: favoritesApi.addSongToFavorites(song.id)
               }}
             >
-              Thêm vào danh sách yêu thích
+              Add to Favorites
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={(e) => {
@@ -149,7 +149,7 @@ const QueueItem = memo(({
                 onRemove();
               }}
             >
-              Xóa khỏi danh sách chờ
+              Remove from queue
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -223,7 +223,7 @@ const Controls = memo(({
             ? "text-primary bg-primary/10 hover:bg-primary/20 border border-primary/30" 
             : "hover:bg-accent"
         )}
-        title={isShuffled ? "Tắt phát ngẫu nhiên" : "Bật phát ngẫu nhiên"}
+        title={isShuffled ? "Disable shuffle" : "Enable shuffle"}
       >
         <Shuffle className={cn(
           "w-5 h-5 transition-all",
@@ -237,7 +237,7 @@ const Controls = memo(({
         onClick={onPrevious}
         disabled={isLoading || !canGoPrevious}
         className={cn("rounded-full", !canGoPrevious && "opacity-50 cursor-not-allowed")}
-        title={!canGoPrevious ? "Chế độ lặp đang tắt" : "Bài trước"}
+        title={!canGoPrevious ? "Repeat is off" : "Previous"}
       >
         <SkipBack className="w-5 h-5" />
       </Button>
@@ -264,7 +264,7 @@ const Controls = memo(({
         onClick={onNext}
         disabled={isLoading}
         className="rounded-full"
-        title="Bài tiếp theo"
+        title="Next"
       >
         <SkipForward className="w-5 h-5" />
       </Button>
@@ -282,10 +282,10 @@ const Controls = memo(({
         )}
         title={
           repeatMode === "off"
-            ? "Bật lặp lại"
+            ? "Enable repeat"
             : repeatMode === "all"
-            ? "Lặp lại tất cả"
-            : "Lặp lại một bài"
+            ? "Repeat all"
+            : "Repeat one"
         }
       >
         {repeatMode === "one" ? (
@@ -435,7 +435,7 @@ const QueueMenu = memo(({
           variant="ghost"
           size="icon"
           className="h-9 w-9"
-          title="Danh sách chờ"
+          title="Queue"
         >
           <List className="w-5 h-5" />
         </Button>
@@ -445,7 +445,7 @@ const QueueMenu = memo(({
         <div className="overflow-y-auto flex-1 py-2">
           {queue.length === 0 ? (
             <div className="px-4 py-8 text-sm text-muted-foreground text-center">
-              Danh sách chờ trống
+              Queue is empty
             </div>
           ) : (
             <div className="py-2">
@@ -483,7 +483,7 @@ QueueMenu.displayName = 'QueueMenu';
 
 const MusicPlayer = () => {
   const location = useLocation();
-  const { currentSong, queue, playNext, playPrevious, removeFromQueue, playSong, repeatMode, isShuffled, toggleShuffle, setRepeatMode, togglePlay, updatePosition, setQueue, addToQueue, moveQueueItem } = useMusic();
+  const { currentSong, queue, playNext, playPrevious, removeFromQueue, playSong, repeatMode, isShuffled, toggleShuffle, setRepeatMode, togglePlay, updatePosition, setQueue, addToQueue, moveQueueItem, resetPlayer } = useMusic();
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -505,6 +505,9 @@ const MusicPlayer = () => {
   const sessionIdRef = useRef<string>(`session_${Date.now()}_${Math.random().toString(36).substring(7)}`);
   const lastUpdateTimeRef = useRef<number>(0);
   const trackingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const songStartTimeRef = useRef<number | null>(null); // Track when song started playing for accurate duration
+  const isUpdatingOnEndRef = useRef<boolean>(false); // Flag to prevent duplicate updates when song ends
+  const lastRecordedDurationRef = useRef<number>(0); // Track last recorded duration to avoid unnecessary updates
   // Lấy hoặc tạo tabId chung cho tab này (dùng sessionStorage để đảm bảo cùng tabId cho cả ControlMusicPlayer và MusicPlayer)
   const getOrCreateTabId = () => {
     if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -1143,17 +1146,47 @@ const MusicPlayer = () => {
               break;
             case "playNewSong": {
               // Yêu cầu phát bài hát mới (không có trong queue hiện tại)
-              // Nếu tab này đã có currentSong → chắc chắn là tab đang phát, phát nhạc
-              // Nếu tab này chưa có currentSong → kiểm tra xem có tab nào khác đang phát không
-              // Nếu flag "no main tab" = true → tab này sẽ phát nhạc và trở thành tab đang phát
-              // Nếu không có tab đang phát → tab này sẽ phát nhạc và trở thành tab đang phát
+              // QUAN TRỌNG: Nếu tab này đang phát nhạc (có currentSong) và nhận được command từ tab khác
+              // → Tab này phải dừng nhạc và trở thành tab phụ, để tab khác trở thành tab chính mới
               const hasCurrentSong = currentSong !== null && currentSong !== undefined;
               
               if (hasCurrentSong) {
-                // Tab này đã có currentSong → chắc chắn là tab đang phát, phát nhạc
-                console.log('[MusicPlayer] Nhận được playNewSong command, tab này đã có currentSong, phát nhạc');
-                // Đánh dấu đây là tab đang phát
-                setIsMainTab(true);
+                // Tab này đang phát nhạc nhưng nhận được command từ tab khác
+                // → Dừng nhạc và trở thành tab phụ
+                console.log('[MusicPlayer] Nhận được playNewSong command từ tab khác, tab này đang phát nhạc → dừng nhạc và trở thành tab phụ');
+                
+                // Dừng nhạc đang phát
+                if (audioRef.current && !audioRef.current.paused) {
+                  audioRef.current.pause();
+                }
+                setIsPlaying(false);
+                
+                // Reset player để trở thành tab phụ
+                // Gọi resetPlayer để clear currentSong và các state khác
+                resetPlayer();
+                
+                // Đánh dấu đây không còn là tab chính
+                setIsMainTab(false);
+                
+                // Cập nhật queue từ tab khác (nếu có)
+                if (data.queue && data.queue.length > 0) {
+                  const queueSongs: Song[] = data.queue.map((q: { id: string | number; title?: string; name?: string; artist?: string; cover?: string }) => ({
+                    id: String(q.id),
+                    name: q.title || q.name || "Unknown Song",
+                    songName: q.title || q.name || "Unknown Song",
+                    title: q.title || q.name || "Unknown Song",
+                    artist: q.artist || "Unknown Artist",
+                    album: "",
+                    duration: 0,
+                    cover: q.cover || "",
+                  }));
+                  await setQueue(queueSongs);
+                  console.log('[MusicPlayer] Tab phụ đã cập nhật queue từ tab chính mới, queue length:', queueSongs.length);
+                }
+                
+                // Bỏ qua command này - không phát nhạc ở tab này
+                console.log('[MusicPlayer] Tab này đã trở thành tab phụ, bỏ qua command phát nhạc');
+                break;
               } else {
                 // Tab này chưa có currentSong → kiểm tra xem có tab nào đang phát nhạc không
                 // QUAN TRỌNG: Chỉ có 1 tab được phát nhạc tại một thời điểm
@@ -1438,12 +1471,13 @@ const MusicPlayer = () => {
         }
       } else if (data.type === "MAIN_TAB_CHECK") {
         // Tab khác đang kiểm tra xem có tab đang phát nào đang phát nhạc không
-        // Nếu tab này đang phát nhạc (isPlaying = true và có currentSong), gửi response
-        if (currentSong && isPlaying) {
-          console.log('[MusicPlayer] Nhận được MAIN_TAB_CHECK, tab này đang phát nhạc, gửi response');
+        // QUAN TRỌNG: Chỉ cần có currentSong là đủ để xác định đây là tab chính
+        // Không cần isPlaying = true, vì tab chính có thể đang pause nhưng vẫn là tab chính
+        if (currentSong) {
+          console.log('[MusicPlayer] Nhận được MAIN_TAB_CHECK, tab này có currentSong (tab chính), gửi response, isPlaying:', isPlaying);
           channel.postMessage({
             type: "MAIN_TAB_RESPONSE",
-            isPlaying: true,
+            isPlaying: isPlaying, // Gửi trạng thái isPlaying để tab khác biết
           });
         }
       } else if (data.type === "ABOUT_TO_PLAY") {
@@ -1632,103 +1666,109 @@ const MusicPlayer = () => {
       return;
     }
 
-        // Gọi /play-now để lấy stream URL
+        // Nếu đã có uuid từ lần /play-now trước đó, dùng ngay để tránh gọi API lần 2
+        const existingUuid = (currentSong as any)?.uuid;
+        const existingStreamUrl = existingUuid
+          ? `${window.location.origin}/api/songs/${songId}/stream-proxy/${existingUuid}_128kbps.m3u8`
+          : null;
+
         let response;
-        try {
-          response = await apiClient.post(`/songs/${songId}/play-now`, {});
-        } catch (error: unknown) {
-          // Xử lý lỗi 404 - không có UUID trên S3
-          const err = error as { 
-            response?: { 
-              status?: number; 
-              data?: { 
-                message?: string; 
-                error?: string;
-              } 
-            }; 
-            message?: string 
-          };
-          const errorMessage = err?.response?.data?.error 
-            || err?.response?.data?.message 
-            || err?.message 
-            || '';
-          
-          // Kiểm tra các loại lỗi liên quan đến HLS/stream
-          if (err?.response?.status === 404 || 
-              errorMessage.includes('HLS master playlist not found') ||
-              errorMessage.includes('missing uuid')) {
+        let streamUrl = existingStreamUrl;
+
+        if (!streamUrl) {
+          // Chưa có uuid/streamUrl → gọi /play-now
+          try {
+            const playNowResponse = await songsApi.playNow(songId);
+            response = { data: playNowResponse };
+          } catch (error: unknown) {
+            // Xử lý lỗi 404 - không có UUID trên S3
+            const err = error as {
+              response?: {
+                status?: number;
+                data?: {
+                  message?: string;
+                  error?: string;
+                }
+              };
+              message?: string
+            };
+            const errorMessage = err?.response?.data?.error
+              || err?.response?.data?.message
+              || err?.message
+              || '';
+
+            // Kiểm tra các loại lỗi liên quan đến HLS/stream
+            if (err?.response?.status === 404 ||
+                errorMessage.includes('HLS master playlist not found') ||
+                errorMessage.includes('missing uuid')) {
+              const songName = currentSong.title || currentSong.name || 'bài hát này';
+              toast({
+                title: "Không thể phát bài hát",
+                description: `Không thể phát ${songName} ngay lúc này. Đang chuyển sang bài tiếp theo...`,
+                variant: "destructive",
+              });
+              setIsLoading(false);
+              setIsPlaying(false);
+              // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
+              await removeFromQueue(currentSong.id);
+              // Luôn cố gắng phát bài tiếp theo (playNext sẽ tự kiểm tra queue)
+              await playNext();
+              return;
+            }
+
+            // Lỗi khác - báo lỗi chi tiết
             const songName = currentSong.title || currentSong.name || 'bài hát này';
-      toast({
-              title: "Không thể phát bài hát",
-              description: `Không thể phát ${songName} ngay lúc này. Đang chuyển sang bài tiếp theo...`,
+            const detailedError = errorMessage || 'Không thể phát bài hát';
+            toast({
+              title: "Lỗi phát nhạc",
+              description: `Không thể phát ${songName}: ${detailedError}`,
               variant: "destructive",
             });
             setIsLoading(false);
             setIsPlaying(false);
             // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
             await removeFromQueue(currentSong.id);
-            // Luôn cố gắng phát bài tiếp theo (playNext sẽ tự kiểm tra queue)
-            await playNext();
-      return;
-    }
-          
-          // Lỗi khác - báo lỗi chi tiết
-          const songName = currentSong.title || currentSong.name || 'bài hát này';
-          const detailedError = errorMessage || 'Không thể phát bài hát';
-    toast({
-            title: "Lỗi phát nhạc",
-            description: `Không thể phát ${songName}: ${detailedError}`,
-            variant: "destructive",
-          });
-          setIsLoading(false);
-          setIsPlaying(false);
-          // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
-          await removeFromQueue(currentSong.id);
-          await playNext();
-      return;
-    }
-        
-        // Kiểm tra response có lỗi hoặc thiếu UUID
-        if (response.data?.success === false || !response.data?.song?.uuid) {
-          const errorMsg = response.data?.error || response.data?.message || '';
-          const songName = currentSong.title || currentSong.name || 'bài hát này';
-          
-          // Kiểm tra nếu là lỗi HLS/stream
-          if (errorMsg.includes('HLS master playlist not found') || 
-              errorMsg.includes('missing uuid')) {
-        toast({
-              title: "Không thể phát bài hát",
-              description: `Không thể phát ${songName} ngay lúc này. Đang chuyển sang bài tiếp theo...`,
-          variant: "destructive",
-        });
-        setIsLoading(false);
-            // isPlaying được cập nhật tự động từ context qua Firebase
-            // Xóa bài hát khỏi queue và chuyển sang bài tiếp theo
-            await removeFromQueue(currentSong.id);
-            // Luôn cố gắng phát bài tiếp theo (playNext sẽ tự kiểm tra queue)
             await playNext();
             return;
           }
-          
-          // Lỗi khác
-          toast({
-            title: "Không thể phát bài hát",
-            description: `Không thể phát ${songName} ngay lúc này.`,
-            variant: "destructive",
-          });
-          setIsLoading(false);
-          // isPlaying được cập nhật tự động từ context qua Firebase
-          return;
-        }
 
-        const songUuid = response.data.song.uuid;
-        const streamUrl = `${window.location.origin}/api/songs/${songId}/stream-proxy/${songUuid}_128kbps.m3u8`;
+          // Kiểm tra response có lỗi hoặc thiếu UUID
+          if (response.data?.success === false || !response.data?.song?.uuid) {
+            const errorMsg = response.data?.error || response.data?.message || '';
+            const songName = currentSong.title || currentSong.name || 'bài hát này';
+
+            // Kiểm tra nếu là lỗi HLS/stream
+            if (errorMsg.includes('HLS master playlist not found') ||
+                errorMsg.includes('missing uuid')) {
+              toast({
+                title: "Không thể phát bài hát",
+                description: `Không thể phát ${songName} ngay lúc này. Đang chuyển sang bài tiếp theo...`,
+                variant: "destructive",
+              });
+            } else {
+              toast({
+                title: "Lỗi phát nhạc",
+                description: `Không thể phát ${songName}.`,
+                variant: "destructive",
+              });
+            }
+
+            setIsLoading(false);
+            setIsPlaying(false);
+            return;
+          }
+
+          const songUuid = response.data.song.uuid;
+          streamUrl = `${window.location.origin}/api/songs/${songId}/stream-proxy/${songUuid}_128kbps.m3u8`;
+        }
         
-        // QUAN TRỌNG: Cập nhật currentSong với thông tin đầy đủ từ API response
+        // QUAN TRỌNG: Cập nhật currentSong với thông tin đầy đủ từ API response (nếu có)
         // Đảm bảo tên bài hát và avatar hiển thị đúng
-        if (response.data.song) {
+        const songDataFromApi = response?.data?.song;
+        const songDataForUpdate = songDataFromApi || currentSong;
+        if (songDataFromApi) {
           const { mapToPlayerSong } = await import('@/lib/utils');
-          const updatedSongData = mapToPlayerSong(response.data.song);
+          const updatedSongData = mapToPlayerSong(songDataFromApi);
           // Convert PlayerSong sang Song format cho MusicContext
           const updatedSong: Song = {
             id: updatedSongData.id,
@@ -1907,7 +1947,10 @@ const MusicPlayer = () => {
           setIsPlaying(false);
           
           // Update listening history khi bài hát kết thúc
-          if (listeningHistoryIdRef.current && currentSong) {
+          // QUAN TRỌNG: Chỉ update một lần, tránh duplicate records
+          if (listeningHistoryIdRef.current && currentSong && !isUpdatingOnEndRef.current) {
+            isUpdatingOnEndRef.current = true; // Set flag để tránh duplicate updates
+            
             try {
               const token = getAuthToken();
               if (token) {
@@ -1915,25 +1958,46 @@ const MusicPlayer = () => {
                 if (decoded && decoded.sub) {
                   const userId = parseInt(decoded.sub, 10);
                   if (!isNaN(userId)) {
-                    const listenedDuration = Math.floor(duration); // Đã nghe hết bài
+                    // Tính duration chính xác từ start time (nếu có) hoặc dùng duration hiện tại
+                    let listenedDuration: number;
+                    if (songStartTimeRef.current) {
+                      // Tính duration từ start time (chính xác hơn)
+                      const actualDuration = Math.floor((Date.now() - songStartTimeRef.current) / 1000);
+                      // Lấy giá trị nhỏ hơn giữa actualDuration và duration để tránh vượt quá
+                      listenedDuration = Math.min(actualDuration, Math.floor(duration));
+                    } else {
+                      // Fallback: dùng duration hiện tại
+                      listenedDuration = Math.floor(duration);
+                    }
+                    
                     const songDuration = duration > 0 ? Math.floor(duration) : undefined;
                     
-                    await listeningHistoryApi.updateDuration(
-                      listeningHistoryIdRef.current,
-                      listenedDuration,
-                      songDuration
-                    );
-                    console.log('[MusicPlayer] ✅ Updated listening history on song end:', listenedDuration, 's');
+                    // Chỉ update nếu duration khác với lần update cuối (tránh update không cần thiết)
+                    if (Math.abs(listenedDuration - lastRecordedDurationRef.current) >= 3) {
+                      await listeningHistoryApi.updateDuration(
+                        listeningHistoryIdRef.current,
+                        listenedDuration,
+                        songDuration
+                      );
+                      lastRecordedDurationRef.current = listenedDuration;
+                      console.log('[MusicPlayer] ✅ Updated listening history on song end:', listenedDuration, 's');
+                    }
                   }
                 }
               }
             } catch (error) {
               console.error('[MusicPlayer] ❌ Failed to update listening history on song end:', error);
+            } finally {
+              // Reset tracking và flag sau khi update xong
+              listeningHistoryIdRef.current = null;
+              songStartTimeRef.current = null;
+              lastRecordedDurationRef.current = 0;
+              sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+              // Reset flag sau một chút để tránh race condition
+              setTimeout(() => {
+                isUpdatingOnEndRef.current = false;
+              }, 1000);
             }
-            
-            // Reset tracking
-            listeningHistoryIdRef.current = null;
-            sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
           }
           
           setCurrentTime(0);
@@ -1983,6 +2047,14 @@ const MusicPlayer = () => {
 
         const handlePlay = () => {
           setIsPlaying(true);
+          // Lưu start time khi bắt đầu phát (nếu chưa có)
+          if (!songStartTimeRef.current) {
+            songStartTimeRef.current = Date.now();
+            // Nếu có currentTime > 0, tính ngược lại start time
+            if (currentTime > 0) {
+              songStartTimeRef.current = Date.now() - (currentTime * 1000);
+            }
+          }
         };
 
         const handlePause = () => {
@@ -2085,7 +2157,18 @@ const MusicPlayer = () => {
         const songId = typeof currentSong.id === 'string' ? parseInt(currentSong.id, 10) : currentSong.id;
         if (isNaN(songId)) return;
 
-        const listenedDuration = Math.floor(currentTime);
+        // Tính duration chính xác từ start time (nếu có) hoặc dùng currentTime
+        let listenedDuration: number;
+        if (songStartTimeRef.current) {
+          // Tính duration từ start time (chính xác hơn, ~3s accuracy)
+          const actualDuration = Math.floor((Date.now() - songStartTimeRef.current) / 1000);
+          // Lấy giá trị nhỏ hơn giữa actualDuration và currentTime để tránh vượt quá
+          listenedDuration = Math.min(actualDuration, Math.floor(currentTime));
+        } else {
+          // Fallback: dùng currentTime
+          listenedDuration = Math.floor(currentTime);
+        }
+        
         const songDuration = duration > 0 ? Math.floor(duration) : undefined;
 
         // Nếu chưa có listening history ID, tạo record mới
@@ -2107,25 +2190,34 @@ const MusicPlayer = () => {
             });
             if (historyRecord?.id) {
               listeningHistoryIdRef.current = historyRecord.id;
+              // Lưu start time khi tạo record mới (nếu chưa có)
+              if (!songStartTimeRef.current) {
+                songStartTimeRef.current = Date.now() - (listenedDuration * 1000); // Tính ngược lại start time
+              }
+              lastRecordedDurationRef.current = listenedDuration;
               console.log('[MusicPlayer] ✅ Created listening history record, ID:', historyRecord.id);
             }
           } catch (error) {
             console.error('[MusicPlayer] ❌ Failed to create listening history:', error);
           }
         } else {
-          // Update record hiện có định kỳ (mỗi 15s)
+          // Update record hiện có định kỳ (mỗi 15s) - chỉ update nếu duration thay đổi đáng kể (>= 3s)
           const now = Date.now();
           if (now - lastUpdateTimeRef.current >= 15000) { // Update mỗi 15 giây
-            try {
-              await listeningHistoryApi.updateDuration(
-                listeningHistoryIdRef.current,
-                listenedDuration,
-                songDuration
-              );
-              lastUpdateTimeRef.current = now;
-              console.log('[MusicPlayer] ✅ Updated listening history duration:', listenedDuration, 's');
-            } catch (error) {
-              console.error('[MusicPlayer] ❌ Failed to update listening history:', error);
+            // Chỉ update nếu duration khác với lần update cuối ít nhất 3 giây
+            if (Math.abs(listenedDuration - lastRecordedDurationRef.current) >= 3) {
+              try {
+                await listeningHistoryApi.updateDuration(
+                  listeningHistoryIdRef.current,
+                  listenedDuration,
+                  songDuration
+                );
+                lastUpdateTimeRef.current = now;
+                lastRecordedDurationRef.current = listenedDuration;
+                console.log('[MusicPlayer] ✅ Updated listening history duration:', listenedDuration, 's');
+              } catch (error) {
+                console.error('[MusicPlayer] ❌ Failed to update listening history:', error);
+              }
             }
           }
         }
@@ -2134,6 +2226,11 @@ const MusicPlayer = () => {
       }
     };
 
+    // Lưu start time khi bắt đầu phát bài hát mới
+    if (isPlaying && !songStartTimeRef.current) {
+      songStartTimeRef.current = Date.now();
+    }
+    
     // Track ngay lập tức khi bắt đầu phát
     trackListeningHistory();
 
@@ -2150,11 +2247,18 @@ const MusicPlayer = () => {
     };
   }, [currentSong, isPlaying, currentTime, duration]);
 
-  // Update listening history khi pause hoặc bài hát kết thúc
+  // Update listening history khi pause (KHÔNG update khi song ends - đã xử lý trong handleEnded)
   useEffect(() => {
     if (!currentSong || !listeningHistoryIdRef.current) return;
+    
+    // QUAN TRỌNG: Bỏ qua nếu đang update khi song ends (tránh duplicate)
+    if (isUpdatingOnEndRef.current) return;
+    
+    // QUAN TRỌNG: Bỏ qua nếu bài hát đã kết thúc (currentTime >= duration - 1)
+    // Vì handleEnded đã xử lý rồi
+    if (currentTime >= duration - 1) return;
 
-    const updateOnPauseOrEnd = async () => {
+    const updateOnPause = async () => {
       try {
         const token = getAuthToken();
         if (!token) return;
@@ -2162,36 +2266,42 @@ const MusicPlayer = () => {
         const decoded = decodeToken(token);
         if (!decoded || !decoded.sub) return;
 
-        const listenedDuration = Math.floor(currentTime);
+        // Tính duration chính xác từ start time (nếu có) hoặc dùng currentTime
+        let listenedDuration: number;
+        if (songStartTimeRef.current && isPlaying === false) {
+          // Khi pause, tính duration từ start time đến bây giờ
+          const actualDuration = Math.floor((Date.now() - songStartTimeRef.current) / 1000);
+          // Lấy giá trị nhỏ hơn giữa actualDuration và currentTime để tránh vượt quá
+          listenedDuration = Math.min(actualDuration, Math.floor(currentTime));
+        } else {
+          // Fallback: dùng currentTime
+          listenedDuration = Math.floor(currentTime);
+        }
+        
         const songDuration = duration > 0 ? Math.floor(duration) : undefined;
 
-        // Update record khi pause hoặc bài hát kết thúc
-        if (!isPlaying || currentTime >= duration - 1) {
+        // Chỉ update khi pause (không phải khi đang play) và duration khác với lần update cuối
+        if (!isPlaying && Math.abs(listenedDuration - lastRecordedDurationRef.current) >= 3) {
           try {
             await listeningHistoryApi.updateDuration(
               listeningHistoryIdRef.current,
               listenedDuration,
               songDuration
             );
-            console.log('[MusicPlayer] ✅ Final update listening history:', listenedDuration, 's');
-            
-            // Reset listening history ID khi bài hát kết thúc
-            if (currentTime >= duration - 1) {
-              listeningHistoryIdRef.current = null;
-              sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-            }
+            lastRecordedDurationRef.current = listenedDuration;
+            console.log('[MusicPlayer] ✅ Updated listening history on pause:', listenedDuration, 's');
           } catch (error) {
-            console.error('[MusicPlayer] ❌ Failed to final update listening history:', error);
+            console.error('[MusicPlayer] ❌ Failed to update listening history on pause:', error);
           }
         }
       } catch (error) {
-        console.error('[MusicPlayer] ❌ Error updating listening history on pause/end:', error);
+        console.error('[MusicPlayer] ❌ Error updating listening history on pause:', error);
       }
     };
 
     // Chỉ update khi pause (không phải khi đang play)
     if (!isPlaying) {
-      updateOnPauseOrEnd();
+      updateOnPause();
     }
   }, [isPlaying, currentSong, currentTime, duration]);
 
@@ -2199,6 +2309,9 @@ const MusicPlayer = () => {
   useEffect(() => {
     listeningHistoryIdRef.current = null;
     lastUpdateTimeRef.current = 0;
+    songStartTimeRef.current = null;
+    lastRecordedDurationRef.current = 0;
+    isUpdatingOnEndRef.current = false;
     sessionIdRef.current = `session_${Date.now()}_${Math.random().toString(36).substring(7)}`;
   }, [currentSong?.id]);
 
@@ -2552,7 +2665,7 @@ const MusicPlayer = () => {
                     variant="ghost"
                     size="icon"
                     className="h-9 w-9 rounded-full bg-gradient-to-br from-pink-500/25 via-fuchsia-500/20 to-purple-500/25 border border-pink-400/50 text-pink-100 shadow-[0_0_14px_rgba(236,72,153,0.7)] hover:bg-pink-500/35 hover:text-white transition-all"
-                    title="Lời bài hát"
+                    title="Lyrics"
                   >
                     <Mic className="w-4 h-4" />
                   </Button>
@@ -2567,7 +2680,7 @@ const MusicPlayer = () => {
                       ))
                     ) : (
                       <p className="text-muted-foreground text-center py-6">
-                        Chưa có lời bài hát cho bài này.
+                        Lyrics not available for this song.
                       </p>
                     )}
                   </div>
@@ -2579,7 +2692,8 @@ const MusicPlayer = () => {
               variant="ghost"
               size="icon"
               className="h-9 w-9"
-              title="Danh sách chờ"
+        title="Queue"
+            title="Queue"
               onClick={() => setShowQueue(!showQueue)}
             >
               <List className="w-5 h-5" />
